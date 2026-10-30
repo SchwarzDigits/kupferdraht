@@ -649,6 +649,10 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **Public repository** — Kupferdraht is published at
+  github.com/SchwarzDigits/kupferdraht since 2026-10-30 as a single
+  snapshot of the retained private history (open.md §78 closed).
+
 - **BREAKING: `FileSharingPolicy` is `Disabled | Enabled`** — the
   `EnabledSome(Vec<String>)` variant and the `config.allowedTypes` field
   it parsed are gone: Wire's `fileSharing` feature carries only a

@@ -253,7 +253,8 @@ graph and the trademark note.
 enumerates every crate Kupferdraht links against, grouped by license,
 plus a hand-kept section for the two components outside the crate
 graph: the vendored SQLite3MC engine (MIT) and the git-pinned
-`sqlite-remote-vfs` (Apache-2.0), which cargo-about skips as private.
+`sqlite-remote-vfs` (Apache-2.0), which cargo-about skips as an
+unpublished crate (`publish = false`).
 Regenerate it when the dependency graph changes:
 
 ```sh

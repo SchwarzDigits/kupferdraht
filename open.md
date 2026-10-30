@@ -609,17 +609,17 @@ the development history stays private. These steps happen when the
 snapshot is built, in this order, and each is checked off before the
 public repository receives its first push.
 
-- [ ] **Build from a clean clone of `main`**, never from a working copy:
+- [x] **Build from a clean clone of `main`**, never from a working copy:
       `git clone` into a fresh directory, `git checkout --orphan public`,
       `git add -A`, one commit. `git rev-list --count HEAD` must print `1`.
       A clean clone guarantees that ignored files (`scripts/smoke.env`,
       `reference/wire.swagger.json`, `.claude/settings.local.json`,
       `target/`) cannot leak in.
-- [ ] **Leave `.mailmap` out** (`git rm .mailmap` before the commit). It
+- [x] **Leave `.mailmap` out** (`git rm .mailmap` before the commit). It
       maps the placeholder identity of one private-history commit to a
       maintainer's internal address; without the history it is useless and
       the address is the only internal one in the tree.
-- [ ] **Grep gates on the snapshot tree** (`git grep -IEn`, `vendor/`
+- [x] **Grep gates on the snapshot tree** (`git grep -IEn`, `vendor/`
       excluded): the retired device identity — the user-id prefix and the
       client id kept in the maintainer's private notes, never quoted here —
       must have no hit at all. `onstackit|digits\.schwarz|mail\.schwarz`
@@ -635,24 +635,24 @@ public repository receives its first push.
       its rule, CHANGELOG, LEARNINGS) and in ADR-0006's mention of
       libsodium; nowhere else. Measured 2026-10-09 on a dry run of this
       procedure: exactly these hits.
-- [ ] **Author of the snapshot commit** is the maintainer's own identity,
+- [x] **Author of the snapshot commit** is the maintainer's own identity,
       the one the retained history carries, with the name spelled as in
       the README copyright line. The copyright holder named there is
       Schwarz Digits KG whoever authors the commit. Signed with the SSH
       key registered on the maintainer's GitHub account, so the commit
       shows as verified.
-- [ ] **Dangling pointers are accepted, not fixed:** the archived plan
+- [x] **Dangling pointers are accepted, not fixed:** the archived plan
       headers name commit SHAs of the private history, and PLAN.md cites
       PR numbers. The README says the history is retained privately and
       answers provenance questions; nothing else needs rewriting.
-- [ ] **Regenerate `docs/THIRD_PARTY_LICENSES.html`** against the final
+- [x] **Regenerate `docs/THIRD_PARTY_LICENSES.html`** against the final
       `Cargo.lock` (`cargo about generate about.hbs`) and refresh
       `THIRD-PARTY-NOTICES` (command in its last section) — or confirm
       with `git log` that `Cargo.lock` has not changed since both were
       generated. The five gates plus the two wasm32 checks must be green
       on the commit the snapshot is built from; CI on `main` counts, the
       tree is identical but for `.mailmap`.
-- [ ] **GitHub settings, in this order:** the empty repository has
+- [x] **GitHub settings, in this order:** the empty repository has
       `main` as default branch and no Actions secrets or variables. Push
       the snapshot, confirm that license detection shows GPL-3.0 and that
       the first `Compliance` run is green, then make the repository
@@ -664,7 +664,7 @@ public repository receives its first push.
       pull request; nothing to configure per repository. Security reports
       go to the program's address (SECURITY.md), so no repository-level
       advisory setup is needed.
-- [ ] **After the push:** `cargo deny check` and CI green on the public
+- [x] **After the push:** `cargo deny check` and CI green on the public
       repository; the README's build instructions tried once from a clean
       machine without access to any Schwarz infrastructure. The first
       `Compliance` run reviewed and then made a required status check.
@@ -679,6 +679,29 @@ public repository receives its first push.
       the planted fake token, verified against the full history. The ORT
       scanner stays disabled until the central workflow works with ORT 96
       (§79).
+
+Closed 2026-10-30. Measured on the snapshot: fresh clone of the private
+`main`, orphan branch, one commit (`git rev-list --count HEAD` = 1),
+`.mailmap` out, 746 files; grep gates exactly the hits listed above;
+author the maintainer's identity, SSH-signed, shown as verified; the
+third-party reports regenerated against the final `Cargo.lock`; the five
+gates plus the two wasm32 checks green on the pinned toolchain on the
+commit the snapshot was built from. GitHub: `main` default, no secrets
+or variables, license detection GPL-3.0, first Compliance run green
+(Gitleaks and Trivy clean, evaluator without rule violations); made
+public the same day together with the repository of the git dependency
+`sqlite-remote-vfs`, which had been private since 2026-10-14 and had
+kept the three CI jobs red on the private `main` since 2026-10-20 (cargo
+resolves git dependencies for every target, and the runner holds no
+credential); CI green on the public `main` after that; the README's
+build tried once from a fresh clone with an empty cargo home and no
+credentials. Ruleset "protect main" after natrium's model with
+`license/cla`, the two Compliance jobs and the three CI jobs as required
+checks, merge commits only and signed commits required (a contributor's
+signed commits stay as they are; squash and rebase would replace them
+with commits GitHub signs or leaves unsigned), no approvals yet (one
+maintainer; two admins who can review); secret scanning, push
+protection and private vulnerability reporting on.
 
 ## 79) Compliance workflow — two upstream issues reported to the OSS Committee (2026-10-08)
 
