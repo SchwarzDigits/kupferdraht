@@ -1,0 +1,142 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 Schwarz Digits KG -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+
+<!--
+  Step 94 (ADR-0026) — the multi-tab smoke: every tab of this origin works.
+  The page hosts one candidate worker (`tabs-worker.js`) through
+  `kupferdraht-tabs`; the tab whose worker wins the lease is the leader, every
+  other tab reads and sends through it over BroadcastChannel. Open this page
+  in several tabs: each shows who leads; close the leader tab and watch the
+  next one take over without a dialog. "Use here" is the ADR-0023 override
+  for a hung leader.
+
+  Serve the repository root (e.g. `python3 -m http.server 8000`) after a
+  `wasm-pack build --target web --out-dir ../bindings/web/opfs-smoke/pkg`
+  from `kupferdraht-core/`, then open http://localhost:8000/bindings/web/opfs-smoke/tabs.html.
+  With the backend's API URL in the form, the login vertical runs through the proxy
+  — from whichever tab you submit it, in the leader's worker.
+
+  Scripted (`?scenario=tabs`, headless): the page plays two tabs — hosts A
+  and B on one page (Web Locks and BroadcastChannel are shared across
+  same-origin contexts). B reads through A's leader, a read is put in flight
+  and A is closed: B is promoted and the read re-issues; B reads again as the
+  leader. The verdict is beaconed as a same-origin GET (`./smoke-verdict?…`)
+  so the dev server's access log carries it: `TABS-OK`.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Kupferdraht tabs smoke</title>
+  <style>
+    body { font: 14px/1.4 system-ui, sans-serif; margin: 2rem; max-width: 60rem; }
+    pre { background: #f4f4f4; padding: 1rem; white-space: pre-wrap; }
+    input { width: 28rem; }
+    #role { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Kupferdraht — many tabs, one instance</h1>
+  <p>This tab: <span id="role">electing…</span></p>
+  <p><button id="takeover">Use here (take over from a hung leader)</button>
+     <button id="accounts">accounts() through the leader</button></p>
+  <form id="login">
+    <label>API base URL <input name="api" placeholder="https://…"></label><br>
+    <label>email <input name="email"></label><br>
+    <label>password <input name="password" type="password"></label><br>
+    <label>room id for a test message <input name="room"></label><br>
+    <button>login → send → list messages (through the proxy)</button>
+  </form>
+  <pre id="log">starting…</pre>
+  <script type="module">
+    import { createTabHost, LeaderChangedError } from '../kupferdraht-tabs/index.js';
+    const log = document.getElementById('log');
+    const say = (m) => { log.textContent += '\n' + m; };
+    const beacon = (v) => fetch(`./smoke-verdict?${encodeURIComponent(v)}`).catch(() => {});
+    const worker = () => new Worker('./tabs-worker.js', { type: 'module' });
+
+    const scripted = new URL(location.href).searchParams.get('scenario') === 'tabs';
+    if (scripted) {
+      const once = (target, type, predicate = () => true, timeoutMs = 15000) => new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`timeout waiting for ${type}`)), timeoutMs);
+        const handler = (e) => { if (!predicate(e)) return; clearTimeout(timer); target.removeEventListener(type, handler); resolve(e); };
+        target.addEventListener(type, handler);
+      });
+      const leaderOf = (host, tabId) => host.leaderTabId === tabId ? Promise.resolve() : once(host, 'leader-changed', (e) => e.detail.leaderTabId === tabId);
+      (async () => {
+        const verdict = {};
+        try {
+          const a = createTabHost({ worker });
+          a.addEventListener('error', (e) => say(`[A] error: ${e.detail.name}: ${e.detail.message}`));
+          await leaderOf(a, a.tabId);
+          say(`[A] leads (epoch ${a.epoch})`);
+          const b = createTabHost({ worker });
+          b.addEventListener('error', (e) => say(`[B] error: ${e.detail.name}: ${e.detail.message}`));
+          await leaderOf(b, a.tabId);
+          say(`[B] thin client of A`);
+          const viaA = await b.kupferdraht.accounts();
+          say(`[B] accounts() through A: ${JSON.stringify(viaA)}`);
+          verdict.readThroughA = Array.isArray(viaA);
+          const promoted = once(b, 'leader-changed', (e) => e.detail.isSelf);
+          const inFlight = b.kupferdraht.accounts();  // idempotent: must survive the leader change
+          a.close();                             // the leader tab "closes": its worker dies, the lease is released
+          say('[A] closed');
+          const e = await promoted;
+          say(`[B] promoted to leader (epoch ${e.detail.epoch})`);
+          verdict.promoted = b.state === 'leader' && e.detail.epoch > 1;
+          const reissued = await inFlight;
+          say(`[B] in-flight accounts() re-issued on B: ${JSON.stringify(reissued)}`);
+          verdict.reissued = Array.isArray(reissued);
+          const viaB = await b.kupferdraht.accounts();
+          verdict.readAsLeader = Array.isArray(viaB);
+          const engineProbe = await b.kupferdraht.resume('nobody@example.invalid').then(() => 'resolved', (err) => err.message);
+          say(`[B] resume(unknown) through the proxy: ${engineProbe}`);
+          verdict.remoteErrorSurfaced = /unknown account/.test(engineProbe);
+          b.close();
+        } catch (err) {
+          say(`scenario failed: ${err}`);
+          verdict.failed = String(err);
+        }
+        const ok = verdict.readThroughA && verdict.promoted && verdict.reissued && verdict.readAsLeader && verdict.remoteErrorSurfaced && !verdict.failed;
+        say(`[page] tabs scenario: ${JSON.stringify(verdict)}`);
+        await beacon(`TABS-${ok ? 'OK' : 'FAILED'} ${JSON.stringify(verdict)}`);
+      })();
+    } else {
+      const host = createTabHost({ worker });
+      globalThis.kupferdrahtTabs = host; // for the console and for driving the page from WebDriver
+      const role = document.getElementById('role');
+      const show = () => { role.textContent = `${host.state} — leader ${host.leaderTabId ?? '?'} (epoch ${host.epoch}), me ${host.tabId}`; };
+      host.addEventListener('leader-changed', (e) => { show(); say(`leader-changed: ${JSON.stringify(e.detail)}`); });
+      host.addEventListener('evicted', () => { show(); say('evicted: another tab took over; re-queued as a thin client'); });
+      host.addEventListener('leader-unresponsive', () => say('leader-unresponsive (missed heartbeats — a hint)'));
+      host.addEventListener('error', (e) => say(`error: ${e.detail.name}: ${e.detail.message}`));
+      host.addEventListener('sync', (e) => say(`sync: ${JSON.stringify(e.detail)}`));
+      host.addEventListener('message', (e) => say(`message: ${JSON.stringify(e.detail)}`));
+      show();
+      document.getElementById('takeover').addEventListener('click', () => host.takeOver());
+      document.getElementById('accounts').addEventListener('click', async () => {
+        try { say(`accounts(): ${JSON.stringify(await host.kupferdraht.accounts())}`); } catch (err) { say(`accounts() failed: ${err.name}: ${err.message}`); }
+      });
+      document.getElementById('login').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const f = Object.fromEntries(new FormData(e.target).entries());
+        try {
+          const pending = await host.kupferdraht.login(f.api, '', '', f.email, f.password, undefined, 'tabs-smoke');
+          say(`login: ${pending.userId}`);
+          const client = await pending.registerDevice();
+          say(`registerDevice: ok — storageEngine ${JSON.stringify(await client.storageEngine())}`);
+          client.startSync((m) => say(`onMessage: ${JSON.stringify(m)}`), undefined, () => say('onExpired'), (s) => say(`onSync: ${JSON.stringify(s)}`));
+          if (f.room) {
+            const handle = await client.sendText(f.room, `tabs smoke ${new Date().toISOString()}`);
+            say(`sendText: ${JSON.stringify(handle)}`);
+            say(`messages(${f.room}, 5): ${JSON.stringify(await client.messages(f.room, 5))}`);
+          }
+          say('smoke: LOGIN-OK — open this page in another tab and read the same account through the leader');
+        } catch (err) {
+          say(`login vertical failed: ${err.name}: ${err.message}${err instanceof LeaderChangedError ? ' (the leader changed mid-call; retry deliberately)' : ''}`);
+        }
+      });
+    }
+  </script>
+</body>
+</html>

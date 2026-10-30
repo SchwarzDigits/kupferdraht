@@ -1,0 +1,6 @@
+# Vendored third-party build inputs (vendor/README.md): keep the 13 MB C
+# amalgamation and the generated bindings out of diffs and language stats.
+vendor/sqlite3mc/*.c linguist-vendored -diff
+vendor/sqlite3mc/*.h linguist-vendored -diff
+vendor/libsqlite3-sys/sqlite3/bindgen_bundled_version.rs linguist-vendored -diff
+vendor/libsqlite3-sys/** linguist-vendored

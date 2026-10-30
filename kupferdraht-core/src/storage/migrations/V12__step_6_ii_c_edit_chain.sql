@@ -1,0 +1,31 @@
+-- Step 6-II-c — `current_edit_event_id` for Wire's edit-chain.
+--
+-- Surfaced during 6-II-c live smoke (findings §34). Wire's edit
+-- semantics chain: every successive `MessageEdit` event references
+-- the **previous edit-event's `message_id`**, not the original
+-- message's id.
+--
+-- Sodium keeps the row's `message_id` stable (so consumers can
+-- track items across edits, and `reply_to_id` references stay
+-- valid). We track the chain pointer in a separate column.
+-- After applying each edit:
+--
+--   current_edit_event_id := <edit_event_id>
+--
+-- Subsequent edit lookups match via:
+--
+--   WHERE message_id = ?replacing OR current_edit_event_id = ?replacing
+--
+-- so the first edit on a fresh message finds the row by original
+-- id, and every subsequent chain link finds it by the previously-
+-- stored event id.
+--
+-- **Caveat:** rows that were edited BEFORE V12 shipped have
+-- `current_edit_event_id = NULL` permanently. Their next chain
+-- edit cannot be located (the previous edit-event-id was lost).
+-- Going forward, fresh edit chains work end-to-end. Old chains
+-- only "rejoin" if the edit happens to reference the original
+-- message_id, which Wire-Web does not do once an edit chain has
+-- started.
+
+ALTER TABLE timeline_events ADD COLUMN current_edit_event_id TEXT;

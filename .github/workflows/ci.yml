@@ -1,0 +1,159 @@
+# SPDX-FileCopyrightText: 2026 Schwarz Digits KG
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Debug info dominates the target-dir size and nobody attaches a
+  # debugger to CI — dropping it keeps the 14 GB hosted runner from
+  # filling up (the 2026-07-19 "No space left on device" failure).
+  # The test profile inherits from dev.
+  CARGO_PROFILE_DEV_DEBUG: 0
+
+jobs:
+  check:
+    name: fmt + clippy + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      # dtolnay/rust-toolchain@master needs the toolchain named: read the
+      # channel from rust-toolchain.toml, the one place it is pinned.
+      - name: Pinned toolchain
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+          components: rustfmt, clippy
+
+      # The hosted image ships ~15 GB of toolchains this job never
+      # touches; plain `rm` instead of a third-party action keeps the
+      # supply chain flat.
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          df -h /
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace --all-targets
+
+  wasm:
+    # Step 91 (ADR-0022, W2): the browser target compiles and its storage
+    # pins run for real. Compile check first — gap-B.28 (a non-exhaustive
+    # match) was red for weeks because nothing here built wasm32 — then
+    # the wasm-bindgen tests in headless Firefox (OPFS needs a real
+    # browser; Node has none). The SQLite3MC C is compiled for wasm by
+    # `cc`, so the job needs a wasm-capable clang (the runner's clang has
+    # the WebAssembly backend). Firefox + geckodriver ship on the hosted
+    # image; scripts/wasm-test.sh drives wasm-bindgen-test-runner per
+    # test file (the crate's unit-test harness is native-only).
+    name: wasm32 check + browser tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      # dtolnay/rust-toolchain@master needs the toolchain named: read the
+      # channel from rust-toolchain.toml, the one place it is pinned.
+      - name: Pinned toolchain
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+          targets: wasm32-unknown-unknown
+          components: clippy
+
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          df -h /
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32
+
+      # `cc` compiles the SQLite3MC C with clang and archives it with
+      # llvm-ar. Ubuntu's `clang`/`lld` packages ship only versioned
+      # binaries (`llvm-ar-NN`); the unversioned `llvm-ar` comes with the
+      # `llvm` package — and if that ever changes, the newest versioned
+      # one is picked instead of failing inside the build script
+      # (the first run failed exactly there: "failed to find tool llvm-ar").
+      - name: wasm-capable C toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm
+          clang --print-targets | grep -i wasm32
+          ar_bin="$(command -v llvm-ar || ls /usr/bin/llvm-ar-* | sort -V | tail -1)"
+          test -x "$ar_bin"
+          echo "using $ar_bin"
+          echo "CC_wasm32_unknown_unknown=clang" >> "$GITHUB_ENV"
+          echo "AR_wasm32_unknown_unknown=$ar_bin" >> "$GITHUB_ENV"
+
+      - name: cargo check (wasm32)
+        run: cargo check -p kupferdraht-core --target wasm32-unknown-unknown
+
+      - name: cargo clippy (wasm32)
+        run: >
+          cargo clippy -p kupferdraht-core --target wasm32-unknown-unknown --lib
+          --test step_108_remote_vfs_spike --test step_111a_local_vfs_storage --test step_111a_eviction_reason
+          --test step_91_main_thread_refused --test step_92_single_active_tab
+          --test step_94_leader_tab --test step_115_browser_push_doorbell --test step_118_browser_sync_pace
+          --test step_119_takeover_event --test step_122_browser_surface
+          --test step_110_browser_error_names
+          --test indexeddb_keystore --test wasm_fetch -- -D warnings
+
+      # The runner must match the lockfile's wasm-bindgen exactly.
+      - name: Install wasm-bindgen-test-runner
+        run: |
+          version="$(awk '/^name = "wasm-bindgen"$/{getline; sub(/version = "/, ""); sub(/"/, ""); print; exit}' Cargo.lock)"
+          cargo install --locked wasm-bindgen-cli --version "$version"
+
+      - name: Browser tests (headless Firefox)
+        run: scripts/wasm-test.sh
+
+  audit:
+    # Same tool and policy as the local pre-commit gate (CLAUDE.md
+    # phase 8): deny.toml carries the curated, signed-off advisory
+    # ignores. cargo-audit scanned the raw lockfile (flagging crates
+    # no target compiles) and was muted with continue-on-error —
+    # which would also have swallowed a real advisory in shipped
+    # code. This job fails the build like the local gate does.
+    name: cargo deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # dtolnay/rust-toolchain@master needs the toolchain named: read the
+      # channel from rust-toolchain.toml, the one place it is pinned.
+      - name: Pinned toolchain
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny
+      - name: cargo deny check
+        run: cargo deny check

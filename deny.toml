@@ -1,0 +1,150 @@
+# cargo-deny configuration.
+#
+# Run locally via `cargo deny check` — must be green on every commit
+# that lands on `main`. A CI job wiring the same check into the
+# merge gate is tracked as future work.
+#
+# The allow-list is deliberately conservative: any dependency whose
+# license is not on the list (or not covered by an `exceptions` rule
+# below) blocks the build. That is how we discover surprise-GPL
+# transitive pulls before they land.
+
+[graph]
+# No target narrowing — check every platform Kupferdraht compiles for.
+all-features = false
+
+[output]
+feature-depth = 1
+
+# ---------------------------------------------------------------------
+# Licenses
+# ---------------------------------------------------------------------
+[licenses]
+# The workspace crates themselves are `publish = false` and carry
+# Kupferdraht's own license (`GPL-3.0-only`, see LICENSE / ADR-0016);
+# they are excluded here so the allow-list below stays a pure
+# *dependency* policy.
+private = { ignore = true }
+# Crates whose license expression is a subset of this list are allowed
+# unconditionally: the dependency graph must stay all-permissive so
+# Kupferdraht remains the only copyleft component in the combined work —
+# see `CLAUDE.md` rationale for `not Kalium`.
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "MPL-2.0",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "Zlib",
+    # `webpki-roots` (Mozilla's root-CA list, pulled in via reqwest's
+    # rustls stack) uses this permissive license. It's the standard
+    # license for the CDLA `data` track and contains no copyleft
+    # triggers.
+    "CDLA-Permissive-2.0",
+]
+
+# Threshold for crates whose license cannot be confidently detected
+# from the source tree. `1.0` means "only accept crates whose license
+# file matches a canonical license exactly"; anything lower drops the
+# bar and is not appropriate for a security-sensitive crate.
+confidence-threshold = 0.93
+
+# ---------------------------------------------------------------------
+# GPL-3.0 — denied unconditionally (ADR-0010, Step 9e merged 2026-05-05).
+#
+# Through Step 8 Kupferdraht temporarily linked against three Wire-origin
+# GPL-3.0 crates (`proteus-wasm` / `proteus-traits` / `cbor-codec`)
+# for the Proteus prekey-bundle generation at `POST /v14/clients`.
+# Step 9 replaced them with the in-tree `encryption::prekeys` module
+# built on top of `ed25519-dalek` and Kupferdraht's existing permissive-
+# licensed crypto stack. With those exceptions removed the
+# `[licenses.allow]` list above is the complete allow-list — any
+# future GPL-licensed dependency (direct or transitive) blocks the
+# build. Kupferdraht's own license (`GPL-3.0-only`, ADR-0016 — resolving
+# the deferral in ADR-0010 §Decision) is out of scope here via
+# `private.ignore`; this file only enforces what's allowed in the
+# dependency graph, so the GPL posture stays a free choice, never a
+# dependency-forced one.
+# ---------------------------------------------------------------------
+
+# ---------------------------------------------------------------------
+# Advisories (RustSec)
+# ---------------------------------------------------------------------
+[advisories]
+version = 2
+# Any known vulnerability in the dependency graph blocks the build.
+# "warn" is not enough — unfixed CVEs in a crypto library are a ship-
+# stopper, not a follow-up.
+yanked = "deny"
+# `unmaintained` defaults to "all" → all unmaintained advisories are
+# blocking. We downgrade to "warn" via the `ignore` list on a
+# case-by-case basis: unmaintained-but-not-vulnerable crates are not
+# a ship-stopper, they are future work.
+ignore = [
+    # `proc-macro-error2` was confirmed unmaintained in 2026 with no safe
+    # upgrade. It reaches us only as a *build-time* proc-macro through
+    # openmls's libcrux/hax formal-verification tooling; the Step-76
+    # openmls 0.9 bump (2026-09-09) did NOT shed it — libcrux-sha3
+    # 0.0.10 still pulls hax-lib-macros. Not a vulnerability and not
+    # in the shipped runtime; revisit when libcrux/hax drops it.
+    { id = "RUSTSEC-2026-0173", reason = "unmaintained build-time proc-macro, transitive via openmls/libcrux; not a vuln, no fix available" },
+    # `basic-toml` was declared unmaintained (RUSTSEC-2026-0374, archived
+    # 2025-03) with no safe upgrade. It reaches us only as a *build-time*
+    # proc-macro dependency: askama_derive 0.13, the template engine of
+    # uniffi_bindgen 0.29, parses its configuration with it. Not a
+    # vulnerability and not in the shipped runtime; revisit with the next
+    # uniffi bump.
+    { id = "RUSTSEC-2026-0374", reason = "unmaintained build-time proc-macro via askama_derive/uniffi_bindgen; not a vuln, no fix available" },
+    # `crypto-bigint` 0.5 (RUSTSEC-2026-0387, 2026-10-23): several
+    # operations meant to be constant-time can branch on secret data
+    # (subtraction, zero counting, division, Montgomery multiplication,
+    # limb equality). The fix is 0.7.6+, which only the RustCrypto 0.14
+    # line takes (elliptic-curve 0.14, p256 0.14, ecdsa 0.17); our P-256
+    # comes through openmls_rust_crypto 0.6 and openmls_basic_credential
+    # 0.6 (p256 ^0.13, hpke-rs-rust-crypto ^0.7) and voprf 0.5 (p256
+    # ^0.13), none of which has a release on 0.14 yet — hpke-rs-rust-crypto
+    # 0.8 has. Our ciphersuite is MLS_128_DHKEMP256_AES128GCM_SHA256_P256,
+    # so the affected scalar arithmetic is on the HPKE and signing path.
+    # Accepted for now with the upgrade path tracked in open.md §81: the
+    # crates cannot move independently, and the alternative is no build at
+    # all until openmls follows. Remove this entry with that upgrade.
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 pinned by p256 0.13 via openmls_rust_crypto/openmls_basic_credential/voprf; fix only on the RustCrypto 0.14 line, upgrade path upstream (open.md §81)" },
+]
+
+# ---------------------------------------------------------------------
+# Bans
+# ---------------------------------------------------------------------
+[bans]
+# Single-version policy is nice but not enforceable while transitive
+# deps pull duplicate versions. Warn-only is signal without blocking.
+multiple-versions = "warn"
+wildcards = "deny"
+# Path dependencies inside the workspace (`kupferdraht-cli → kupferdraht-core`)
+# are wildcards to cargo-deny. Legitimate.
+allow-wildcard-paths = true
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow = []
+deny = []
+skip = []
+skip-tree = []
+
+# ---------------------------------------------------------------------
+# Sources
+# ---------------------------------------------------------------------
+[sources]
+# Only crates.io is a fully-known registry. Step 9e (ADR-0010)
+# removed Kupferdraht's last git-source dependency (`proteus-wasm` from
+# the Wire GitHub); any future git-source pull is a warn (we
+# investigate before allow-listing).
+unknown-registry = "deny"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Step 111 (ADR-0035): sqlite-remote-vfs (SchwarzDigits, Apache-2.0,
+# public; not on crates.io) — the browser's storage VFS.
+allow-git = ["https://github.com/SchwarzDigits/sqlite-remote-vfs"]

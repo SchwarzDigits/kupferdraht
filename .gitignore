@@ -1,0 +1,26 @@
+/target
+.DS_Store
+.VS_Code
+.idea
+.claude/worktrees/
+.claude/settings.local.json
+
+# Live smoke scripts: only the baseline is checked in. Per-step smokes
+# (scripts/smoke-step*.sh) are temporary working files — kept locally
+# while a Step is in flight, never committed.
+/scripts/smoke-step*.sh
+
+
+# Local smoke environment: instance URL + test-user credentials for the
+# self-hosted backend. Secrets and the instance URL never enter the
+# repo (public GitHub) — copy scripts/smoke.env.example to
+# scripts/smoke.env and fill it in locally.
+/scripts/smoke.env
+
+# Wire's v14 OpenAPI document is Wire's, not ours: fetched on demand by
+# scripts/fetch-wire-swagger.sh, never committed (reference/README.md).
+/reference/wire.swagger.json
+
+# A standalone cargo run on the vendored stand-in (the compliance scanner
+# does one) writes its own lockfile; the workspace lockfile is the one.
+/vendor/libsqlite3-sys/Cargo.lock

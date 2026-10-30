@@ -1,0 +1,7 @@
+# Build outputs of build-jvm.sh — regenerated, never committed.
+/src/main/kotlin/uniffi/
+/src/main/resources/
+
+# Gradle.
+/.gradle/
+/build/

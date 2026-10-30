@@ -1,0 +1,25 @@
+-- Step 6-II-d — `redacted_at_ms` column on `timeline_events`.
+--
+-- Set when an inbound or outbound `MessageDelete` retired the
+-- row. Nullable: most rows are not deleted.
+--
+-- Like edit, the model is **mutate the row in place** — the
+-- timeline doesn't grow when a delete lands. The body_ct gets
+-- cleared (the plaintext is discarded), the row stays so
+-- `Room::messages` can render a tombstone (`<redacted>`) and
+-- `reply_to_id` references that point at this row keep
+-- resolving (the parent still exists, just hidden).
+--
+-- Idempotence guard for redelivery: same shape as
+-- `edited_at_ms` — `redacted_at_ms IS NULL OR redacted_at_ms < ?`
+-- so a redelivered older delete cannot roll back a newer one.
+-- (In practice "older" is meaningless once the row is deleted,
+-- but the SQL guard is harmless and consistent.)
+--
+-- Lookup uses the same chain pointer (V12) as `apply_message_edit`:
+-- a delete targeting an already-edited message references the
+-- latest edit-event-id rather than the original. The
+-- `(message_id = ? OR current_edit_event_id = ?)` clause covers
+-- both starting from the original and any chain-link target.
+
+ALTER TABLE timeline_events ADD COLUMN redacted_at_ms INTEGER;

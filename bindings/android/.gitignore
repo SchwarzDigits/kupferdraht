@@ -1,0 +1,8 @@
+# Build outputs of build-android.sh — regenerated, never committed.
+/src/main/kotlin/uniffi/
+/src/main/jniLibs/
+/local.properties
+
+# Gradle.
+/.gradle/
+/build/

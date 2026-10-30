@@ -1,0 +1,56 @@
+Kupferdraht
+Copyright (C) 2026 Schwarz Digits KG
+
+Kupferdraht (the code in this repository) is licensed under the GNU
+General Public License, version 3 only (GPL-3.0-only). See the LICENSE
+file.
+
+----------------------------------------------------------------------
+Wire GenericMessage schema — Copyright (C) 2021 Wire Swiss GmbH
+
+kupferdraht-core/proto/generic_message.proto is a modified subset of
+Wire's GenericMessage schema
+(https://github.com/wireapp/generic-message-proto), which Wire Swiss
+GmbH publishes under the GNU General Public License, version 3 or (at
+your option) any later version. Wire's notice, as reproduced from the
+copy that wireapp/kalium vendors at revision 9ccecabb, and Kupferdraht's
+modification notice are in that file. The subset is distributed under
+GPL-3.0-only as part of Kupferdraht, as the or-later grant permits.
+
+Attribution policy: where Wire's work is incorporated, Kupferdraht
+keeps Wire's notice, as the schema above shows. Anyone who finds Wire's
+expression elsewhere in this tree without such a notice is asked to
+report it to opensource@digits.schwarz; the notice will be added.
+
+Sources: Kupferdraht is written from Wire's published API description
+(the OpenAPI document every wire-server deployment serves), RFC 9420
+and live observation of self-hosted wire-server deployments. Wire's
+open-source repositories, chiefly wireapp/kalium at revision 9ccecabb,
+were read to observe protocol behaviour; every such reading is listed
+with its source in docs/wire/kalium-readings.md. The Proteus prekey
+format is implemented from its public specification; the public API
+follows the conceptual model of matrix-rust-sdk (below).
+
+----------------------------------------------------------------------
+Third-party components
+
+Kupferdraht links and compiles third-party components under permissive
+licenses, vendors the SQLite3 Multiple Ciphers amalgamation (MIT) with
+SQLite (public domain), and uses a few components at build time only.
+The complete list with licenses, authors and repositories is
+THIRD-PARTY-NOTICES; the license texts are docs/THIRD_PARTY_LICENSES.html.
+
+Kupferdraht's public API follows the conceptual model of matrix-rust-sdk
+(Apache-2.0, https://github.com/matrix-org/matrix-rust-sdk); no code was
+taken from it.
+
+----------------------------------------------------------------------
+Trademarks
+
+"Wire" is a trademark of Wire Swiss GmbH. Kupferdraht is an independent
+project that implements the Wire v14 protocol and is not affiliated with,
+endorsed by or supported by Wire Swiss GmbH; the name is used only to
+describe compatibility. "Kupferdraht" and the other marks of Schwarz
+Digits KG are covered by the Schwarz Digits trademark policy
+(https://github.com/SchwarzDigits/.github/blob/main/TRADEMARKS.md); the
+GPL grants no rights to use them.

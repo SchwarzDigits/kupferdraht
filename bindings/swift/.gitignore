@@ -1,0 +1,4 @@
+# Build outputs of build-xcframework.sh — regenerated, never committed.
+/kupferdrahtFFI.xcframework/
+/Sources/Kupferdraht/kupferdraht.swift
+/.build/

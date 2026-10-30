@@ -1,0 +1,259 @@
+[package]
+name = "kupferdraht-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+# Not (yet) published to crates.io. The bindings layer ships through
+# UniFFI to each platform's native package manager (Maven / CocoaPods
+# / npm) rather than through cargo. Toggle this flag when a crates.io
+# release is planned.
+publish = false
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+name = "kupferdraht"
+
+[dependencies]
+uniffi = { version = "0.29", features = ["tokio"] }
+# Base features are wasm-safe; native adds `rustls-tls`/`cookies`/`stream`
+# (see the `cfg(not(wasm32))` block below). On wasm reqwest uses the browser
+# `fetch` backend, which provides TLS itself and ignores those features.
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+# Only sync/macros/io-util/rt/time exist on wasm; native adds
+# `rt-multi-thread`/`fs` below. The single-thread `rt` + `time` cover the
+# wasm build's needs.
+tokio = { version = "1", features = ["macros", "sync", "rt", "time", "io-util"] }
+# Step 11c: ReaderStream adapter for file-streamed multipart upload
+# bodies (`Body::wrap_stream(ReaderStream::new(file))`). Required so
+# Kupferdraht streams 100 MB assets without inflating process RSS, per
+# ADR-0011 §Streaming model.
+tokio-util = { version = "0.7", features = ["io"] }
+# Step 14b: ReceiverStream wraps tokio::sync::mpsc::Receiver as a
+# futures::Stream for Client::sync_stream.
+tokio-stream = "0.1"
+# Step 11c: stream combinators (chain, iter) for assembling the
+# multipart/mixed body's header + ciphertext + trailer parts.
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+# Step 117: Kupferdraht's subscriber that hands its events to the app's listener
+# (registry + layer only; the CLI keeps its own fmt subscriber).
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"] }
+url = "2"
+dirs = "5"
+base64 = "0.22"
+# Storage abstraction: make the `Store` trait object-safe so a consumer
+# can inject a custom backend (`Arc<dyn Store>`). Native async-fn-in-trait
+# is not `dyn`-compatible; `async_trait` boxes the returned futures
+# (matrix-rust-sdk uses the same pattern).
+async-trait = "0.1"
+# SQLite persistence (Step 1+), on EVERY target since Step 91 (ADR-0022).
+# `bundled` compiles the sys crate's C — which the root `[patch.crates-io]`
+# makes the SQLite3MC amalgamation (whole-DB ChaCha20-Poly1305, ADR-0021):
+# no system sqlite, no OpenSSL, no pkg-config anywhere (Android/iOS/CI). On
+# wasm32 the stand-in re-exports `sqlite-wasm-rs` (declared in the wasm block
+# below), which compiles the SAME vendored amalgamation for the browser.
+rusqlite = { version = "0.37", features = ["bundled"] }
+# Schema migrations (Step 1+); one file per step under storage/migrations/.
+refinery = { version = "0.9", features = ["rusqlite"] }
+# Persistent openmls state backed by the shared `rusqlite` (Step 1c.5) —
+# `mls.db` on native and, over OPFS, in the browser (Step 91).
+openmls_sqlite_storage = "0.3"
+# Step 1c: MLS (RFC 9420). Wire targets ciphersuite 0x0002
+# (MLS_128_DHKEMP256_AES128GCM_SHA256_P256) with ECDSA_SECP256R1_SHA256
+# signatures so iOS clients can back keys with Secure Enclave (LEARNINGS §1.2).
+# The `0-8-1-storage-format` feature is deliberately off: ADR-0041 wiped
+# every installation, so no 0.8.1-format mls.db exists that would have to
+# stay readable, and for Kupferdraht's self-describing JsonCodec both
+# feature states wrote identical bytes anyway (observations §73).
+openmls = "0.9"
+openmls_rust_crypto = "0.6"
+openmls_traits = "0.6"
+openmls_basic_credential = "0.6"
+tls_codec = { version = "0.5", features = ["derive"] }
+# Step 4: Wire's text-message envelope is a Protobuf
+# `GenericMessage`. `prost` + the build-time `prost-build` plugin
+# generate Rust types directly from
+# `kupferdraht-core/proto/generic_message.proto` (a minimal subset of
+# Wire's full schema; see CLAUDE.md "Wire Message Types").
+prost = "0.13"
+uuid = { version = "1", features = ["v4"] }
+# Step 6-II-b: compute Wire's `Quote.quoted_message_sha256` digest
+# (SHA-256 of `0xFEFF || body_utf16_be || timestamp_seconds_be`).
+# Without it Wire's clients render the reply as a plain message
+# instead of a quote (see observations.md §33).
+sha2 = "0.10"
+# ADR-0035: in the browser an account's database keys derive from the
+# account's seed (HKDF-SHA-256, `storage::account_keys`).
+hkdf = "0.12"
+# ADR-0006 / THREAT_MODEL.md G4: compiler-enforced zeroization of
+# sensitive material. Today wraps Wire access + refresh tokens
+# inside `Client`; Step 7's DEK / KEK will use ZeroizeOnDrop derives
+# on top of the same crate.
+zeroize = "1"
+# Step 11 (ADR-0011): AES-256-CBC for asset content encryption.
+# Wire's deployed asset protocol uses CBC + PKCS7 + an out-of-band
+# SHA-256 (carried in `Asset.RemoteData.sha256`) for integrity —
+# see ADR-0011 §Crypto construction. The `aes` block cipher and
+# `cbc` mode-of-operation crates are the RustCrypto stack's
+# canonical pairing; both are Apache-2.0/MIT.
+aes = "0.8"
+cbc = { version = "0.1", features = ["std"] }
+# Step 11 (ADR-0011): Content-MD5 transport-level header on the
+# `POST /v14/assets` multipart body. Wire's nginx validates the
+# header and rejects mismatched bodies (live-validated against
+# Wire's backend); not a security primitive, just transport hygiene.
+md-5 = "0.10"
+# Step 7a: OS-CSPRNG for fresh DEK + per-field nonce generation.
+# 0.8 is what `aes-gcm` 0.10 already pulls in transitively; pinning
+# the same major keeps cargo's resolution single-version.
+rand = "0.8"
+# Step 9 (ADR-0010): Ed25519 keypair generation for the GPL-free
+# Wire-compatible prekey module (`encryption::prekeys`), which
+# hand-emits the CBOR prekey bundle Wire's `POST /clients`
+# expects. `zeroize` is a default feature but
+# named explicitly (Step 70 / THREAT_MODEL G4): the SigningKey wipe
+# must survive a future `default-features = false`.
+ed25519-dalek = { version = "2", features = ["zeroize"] }
+# Step 112 (ADR-0035): recovery data — the account's seed sealed with a PIN.
+# The OPRF of RFC 9497 (mode OPRF, P256-SHA256) with the PIN service
+# (`voprf` over the `p256` curve's `voprf` feature), Argon2id of the PIN,
+# AES-256-GCM (already in the tree through openmls), the local PIN check
+# (HMAC-SHA256) and Unicode NFC of the PIN. No own cryptography.
+voprf = { version = "0.5", default-features = false, features = ["alloc"] }
+# Step 124: the receipts the PIN service gives attempts back for are ECDSA
+# over P-256 (`ecdsa` — already compiled in through openmls's P-256 suite).
+p256 = { version = "0.13", features = ["voprf", "hash2curve", "ecdsa"] }
+argon2 = { version = "0.5", default-features = false, features = ["alloc", "zeroize"] }
+aes-gcm = "0.10"
+hmac = "0.12"
+unicode-normalization = "0.1"
+# NB: `keyring` (desktop OS secret store — macOS/Windows/Linux native) is
+# native-only; it has no wasm backend. It lives in the `cfg(not(wasm32))`
+# block below. On wasm the DB keys go to a WebCrypto/IndexedDB store (W2, a
+# later step).
+
+# ── wasm32 (browser) target — Step 44 ──────────────────────────────────────
+# `getrandom` (pulled transitively via `rand`/`uuid`) has no default entropy
+# source on wasm and hard-errors unless its `js` backend (Web Crypto) is
+# enabled. Native uses the OS CSPRNG and must NOT pull the js backend.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+# uuid 1.x needs an explicit randomness source on wasm (it no longer picks up
+# getrandom's js backend implicitly). `js` routes uuid v4 through Web Crypto.
+uuid = { version = "1", features = ["js"] }
+# OpenMLS needs JS APIs for secure randomness + current time on wasm; its `js`
+# feature wires those (and pulls the wasm timer). Native uses OS entropy/clock.
+openmls = { version = "0.9", features = ["js"] }
+# Step 91 (ADR-0022) — the browser runs the same SQLite3MC store as native.
+# `sqlite-wasm-rs` compiles the vendored amalgamation for wasm (the root
+# `.cargo/config.toml` points SQLITE_WASM_RS_SOURCE_DIR at it) and is reached
+# by rusqlite through the libsqlite3-sys stand-in's wasm arm; its
+# `wasm-bindgen` feature supplies the host hooks (clock, entropy).
+sqlite-wasm-rs = { version = "0.6.1", default-features = false, features = ["sqlite3mc", "wasm-bindgen"] }
+# Step 111 (ADR-0035) — the browser's databases on sqlite-remote-vfs
+# (SchwarzDigits, Apache-2.0, public; not on crates.io): the local mode keeps
+# them in IndexedDB (111a), the server mode on a sqlite-remote-server (111b).
+# One VFS registration per database; SQLite3MC encrypts above it.
+sqlite-remote-vfs = { git = "https://github.com/SchwarzDigits/sqlite-remote-vfs", rev = "2c6930f" }
+# refinery stamps `applied_on` with `time::OffsetDateTime::now_utc()`; on
+# wasm32-unknown-unknown that needs time's `wasm-bindgen` backend (js Date) —
+# without it `SystemTime::now()` panics inside the first migration run.
+time = { version = "0.3", features = ["wasm-bindgen"] }
+# W2 (Step 46) — the browser keystore's IndexedDB half (`IndexedDbKeyStore`:
+# the WebCrypto wrap key + wrapped secrets). Keystore-only since Step 91;
+# `serde-wasm-bindgen` marshals the wasm surface's view structs.
+idb = "0.6"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+serde-wasm-bindgen = "0.6"
+# W4 — browser timer for `crate::time::sleep` (no tokio timer driver on wasm).
+gloo-timers = { version = "0.3", features = ["futures"] }
+# W4 — hold a `!Send` JS callback in the `Send + Sync` `EventHandler` trait
+# object (the browser is single-threaded, so the wrapper never actually crosses
+# threads). Confines the hack to the binding layer instead of relaxing the core
+# trait bound.
+send_wrapper = "0.6"
+# Surface Rust panics in the browser console instead of an opaque `unreachable`.
+console_error_panic_hook = "0.1"
+# W2 (Step 45) — WebCrypto for the persistent keystore's non-extractable wrap key.
+web-sys = { version = "0.3", features = [
+    "Window",
+    "WorkerGlobalScope",
+    # Step 92: the dedicated-worker check before the instance lease.
+    "DedicatedWorkerGlobalScope",
+    "Crypto",
+    "SubtleCrypto",
+    "CryptoKey",
+    "AesKeyGenParams",
+    "AesGcmParams",
+    "console",
+    # Step 115: the browser push socket (doorbell for the live-sync loop).
+    "WebSocket",
+    "MessageEvent",
+    "CloseEvent",
+    "ErrorEvent",
+    "BinaryType",
+] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+# W5 smoke test: drive reqwest's browser `fetch` backend directly (same features
+# as the wasm build) + read the harness origin for a same-origin, CORS-free call.
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+web-sys = { version = "0.3", features = ["Window", "Location"] }
+
+# ── native (non-wasm) target ───────────────────────────────────────────────
+# Crates that don't build for wasm32 (C SQLite, desktop keyring) plus
+# the tokio/reqwest features that only exist off-wasm. The wasm build replaces
+# the storage/keystore/HTTP paths with browser-native backends (later steps).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Desktop KEK/DB-key store (Step 7a). `keyring` 3.x ships a *mock* backend by
+# default (silent no-op); the platform-native backends are mandatory:
+# apple-native (Keychain) / windows-native (Credential Manager) / linux-native.
+# NB: `linux-native` is the kernel keyring (keyutils) only — in memory, lost on
+# reboot and when the persistent keyring expires. Secret Service (libsecret /
+# D-Bus) would be `sync-secret-service`; switching is open.md §71 B4 (deferred).
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
+# Native reqwest TLS + cookie jar + streaming bodies (wasm uses fetch instead).
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "stream"] }
+# Threaded runtime + filesystem (unavailable on wasm); `net` for the
+# TcpStream under the Step-62 events WebSocket.
+tokio = { version = "1", features = ["rt-multi-thread", "fs", "net"] }
+# Step 62: `/v14/events` push transport (backend-spec §11.2). rustls +
+# webpki roots — no native-tls anywhere in the tree (Stack rule), same
+# TLS posture as reqwest above.
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+
+# Native integration-test deps (httpmock → tokio `net` → mio, tempfile, the
+# multi-thread test runtime, direct rusqlite) don't build for wasm, so they are
+# native-only. The wasm tests use `wasm-bindgen-test` (declared under the wasm
+# target above) and drive the browser backends directly.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+# Step 112: a deterministic OPRF blind, to reproduce the PIN service's
+# interop values (`danger` exposes it; tests only).
+voprf = { version = "0.5", default-features = false, features = ["alloc", "danger"] }
+# Mocked HTTP server for integration tests against the wire::http client
+# without touching live Wire staging.
+httpmock = "0.8"
+tempfile = "3"
+# `net` for the in-process WebSocket server the Step-62a tests run
+# (`TcpListener` on loopback — httpmock cannot speak WS).
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "test-util"] }
+# Used by `tests/step_1c_mls_storage_path.rs` to reopen `mls.db`
+# directly and assert on openmls's internal tables without coupling
+# tests to `openmls_sqlite_storage` internals. Same feature as the
+# dependency site — the patched sys crate is one build. `hooks`: the
+# Step-97c tests count commits per MLS operation (`commit_hook`).
+rusqlite = { version = "0.37", features = ["bundled", "hooks"] }
+
+[build-dependencies]
+# Step 4: compile `proto/generic_message.proto` into Rust at build
+# time. `protoc-bin-vendored` ships a binary so no system `protoc`
+# install is required on Android / iOS / CI hosts (CLAUDE.md
+# Prerequisites: "protoc is bundled so no system dependency").
+prost-build = "0.13"
+protoc-bin-vendored = "3"

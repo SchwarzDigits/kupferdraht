@@ -1,0 +1,357 @@
+/*
+ * Wire
+ * Copyright (C) 2021 Wire Swiss GmbH
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see http://www.gnu.org/licenses/.
+ *
+ */
+//
+// Modified for Kupferdraht. Copyright (C) 2026 Schwarz Digits KG.
+//
+// This file is a modified subset of Wire's `GenericMessage` schema
+// (wireapp/generic-message-proto, GPL-3.0-or-later). It was transcribed
+// in April 2026 from the copy of that schema which wireapp/kalium vendors
+// at revision 9ccecabb as tools/protobuf-codegen/src/main/proto/messages.proto,
+// whose notice is reproduced above. Modification dates (GPL-3.0 §5(a)):
+// 2026-04-22 subset transcribed; 2026-07-17 `task` (262000) added;
+// 2026-08-21 `case` (262001) added; 2026-08-26 `task_list_marker`
+// (262002) added; comments revised through 2026-10. Changes against
+// Wire's file:
+//
+//   - only the messages and enums Kupferdraht emits or decodes are
+//     declared; everything else is left out;
+//   - the `package` is Kupferdraht's own, and so is every comment;
+//   - three envelope fields (`task` = 262000, `case` = 262001,
+//     `task_list_marker` = 262002) and their payload messages and
+//     enums are Kupferdraht additions that do not exist in Wire's
+//     schema.
+//
+// Field names, numbers, types, labels and defaults of the shared
+// declarations are identical to Wire's, as interoperability requires:
+// Wire's clients must decode what Kupferdraht sends and vice versa.
+// Wire's notice above is its grant for those declarations; Kupferdraht
+// as a whole is distributed under GPL-3.0-only (see LICENSE).
+//
+// Every variant that is not declared here decodes to an unset `content`
+// and takes the tolerated-unknown path: decode the envelope, log,
+// discard (CLAUDE.md "Wire Message Types"). The catalogue of Wire's
+// full vocabulary, with a scope verdict per variant, is
+// docs/wire/message-types.md.
+syntax = "proto2";
+
+package kupferdraht.messages;
+
+message GenericMessage {
+    // A random id the sending client chooses (a UUID). Delivery receipts, edits,
+    // deletes, reactions and quotes refer to a message by this id.
+    required string message_id = 1;
+    // Exactly one content variant. Kupferdraht's scope per variant is
+    // docs/wire/message-types.md.
+    oneof content {
+        Text text = 2;
+        Knock knock = 4; // nudge / ping
+        Asset asset = 11; // off-MLS file reference (ADR-0011)
+        Location location = 13; // shared map point
+        MessageDelete deleted = 14; // delete for everyone
+        MessageEdit edited = 15; // replace an earlier text
+        Confirmation confirmation = 16; // delivered / read receipt
+        Reaction reaction = 17; // the sender's emoji set
+        Ephemeral ephemeral = 18; // self-deleting wrapper
+    }
+    // Kupferdraht extension (ADR-0014): the full state of one task,
+    // deliberately OUTSIDE the `content` oneof. In an ordinary room a
+    // task message also sets `Text`, the human-readable fallback that
+    // Wire's clients render; in a dedicated task-list room the oneof
+    // stays unset and those clients treat the message as unknown.
+    // Receivers check this field before the oneof. The field number
+    // sits far above Wire's occupied range, outside protobuf's reserved
+    // 19000–19999 and below the four-byte-tag boundary at 262144; the
+    // collision strategy is docs/wire/mls-deviations.md.
+    optional TaskPayload task = 262000;
+    // Kupferdraht extension (ADR-0018): a full snapshot of the room's
+    // case, sibling of `task` and likewise OUTSIDE the oneof. Never
+    // paired with a `Text` fallback; Wire's clients discard the unknown
+    // payload. Receivers check `case`, then `task`, then the oneof; a
+    // message carries at most one of the Kupferdraht fields.
+    optional CasePayload case = 262001;
+    // Kupferdraht extension (ADR-0020): the room's task-list marker,
+    // third sibling OUTSIDE the oneof and never paired with a `Text`
+    // fallback. Any member sets or clears it; receivers fold
+    // last-writer-wins in event order, with no admin gate and no
+    // revision.
+    optional TaskListMarkerPayload task_list_marker = 262002;
+}
+
+// Kupferdraht extension (ADR-0018): the full snapshot of one case.
+// Create and update are the same message; receivers fold
+// last-writer-wins by `revision`, server delivery order breaking ties,
+// and accept snapshots only from senders who are room admins at
+// receive time. The schema grows by field addition; old clients ignore
+// unknown fields.
+message CasePayload {
+    // Monotonic per (room, case_ref); the fold key.
+    required uint64 revision = 1;
+    // Stable per-room case identity. Deliberately not the envelope
+    // `message_id`, and independent of the room id: a room may one day
+    // carry more than one case.
+    required string case_ref = 2;
+    // File number or id in the leading external system.
+    optional string external_ref = 3;
+    optional string title = 4;
+    // Deployment-defined classification (a string, not an enum).
+    optional string case_type = 5;
+    // An unknown value decodes to OPEN (= 0): a snapshot from a newer
+    // Kupferdraht stays visible, and the next snapshot heals it.
+    required CaseState state = 6;
+    optional string state_detail = 7;
+    optional QualifiedUserId assignee = 8;
+    optional int64 due_at_ms = 9;
+    optional CasePriority priority = 10;
+    optional int64 opened_at_ms = 11;
+    optional int64 closed_at_ms = 12;
+    // Deployment-defined identifier of the responsible authority or
+    // tenant.
+    optional string authority_ref = 13;
+    // Display-only extras: no semantics, no authorization weight
+    // (ADR-0018 §Decision 3).
+    map<string, string> extensions = 100;
+}
+
+enum CaseState {
+    CASE_STATE_OPEN = 0;
+    CASE_STATE_ACTIVE = 1;
+    CASE_STATE_WAITING = 2;
+    CASE_STATE_RESOLVED = 3;
+    CASE_STATE_CLOSED = 4;
+    CASE_STATE_CANCELLED = 5;
+}
+
+enum CasePriority {
+    CASE_PRIORITY_LOW = 0;
+    CASE_PRIORITY_NORMAL = 1;
+    CASE_PRIORITY_HIGH = 2;
+    CASE_PRIORITY_URGENT = 3;
+}
+
+// Kupferdraht extension (ADR-0014): the full state of one task. Create
+// and update are the same message; receivers fold last-writer-wins per
+// `task_id` in server delivery order, and an unknown `task_id` upserts.
+message TaskPayload {
+    // Stable task identity (a UUID). Deliberately not the envelope
+    // `message_id`, which edit chains replace.
+    required string task_id = 1;
+    required string title = 2;
+    // An unknown value decodes to OPEN (= 0): a task from a newer
+    // Kupferdraht stays visible, and the next full-state update heals it.
+    required TaskStatus status = 3;
+    optional string description = 4;
+    optional QualifiedUserId assignee = 5;
+    optional int64 due_at_ms = 6;
+    optional TaskPriority priority = 7;
+    // Lexicographic fractional index (the LexoRank principle): a manual
+    // move touches exactly one task.
+    optional string sort_key = 8;
+}
+
+// Kupferdraht extension (ADR-0020): the room's task-list marker.
+// `marked = true` declares the room a dedicated task list, `false`
+// clears it. Folds last-writer-wins in event order like tasks; no
+// revision, no role capture.
+message TaskListMarkerPayload {
+    required bool marked = 1;
+}
+
+enum TaskStatus {
+    TASK_STATUS_OPEN = 0;
+    TASK_STATUS_IN_PROGRESS = 1;
+    TASK_STATUS_DONE = 2;
+    TASK_STATUS_CANCELLED = 3;
+}
+
+enum TaskPriority {
+    TASK_PRIORITY_LOW = 0;
+    TASK_PRIORITY_MEDIUM = 1;
+    TASK_PRIORITY_HIGH = 2;
+    TASK_PRIORITY_URGENT = 3;
+}
+
+// A text message. Further fields of Wire's `Text` are out of
+// Kupferdraht's scope (docs/wire/message-types.md); undeclared fields
+// are skipped on decode.
+message Text {
+    required string content = 1;
+    repeated Mention mentions = 4; // @-mentions as UTF-16 spans into `content`
+    optional Quote quote = 5; // the message this one replies to
+}
+
+// A nudge ("ping"). `hot_knock` marks a repeated nudge.
+message Knock {
+    required bool hot_knock = 1 [default = false];
+}
+
+// A shared map point. `name` is a human-readable label, `zoom` the map
+// zoom level.
+message Location {
+    required float  longitude = 1;
+    required float  latitude  = 2;
+    optional string name      = 3;
+    optional int32  zoom      = 4;
+}
+
+// Wire's self-deleting wrapper. `expire_after_millis` is the timer the
+// sender chose; every receiving client runs its own countdown and
+// deletes its copy — the server never sees or enforces it. Kupferdraht
+// declares only the `Text` inner arm; any other inner content decodes
+// to an unset `content` and takes the tolerated-unknown path.
+message Ephemeral {
+    required int64 expire_after_millis = 1;
+    oneof content {
+        Text text = 2;
+    }
+}
+
+message Mention {
+    // UTF-16 code-unit offset and length into `Text.content`: Wire's
+    // clients index the body the way NSString and Java's String do.
+    // Kupferdraht converts its UTF-8 byte positions before serializing.
+    required int32 start  = 1;
+    required int32 length = 2;
+    // Legacy unqualified user id. Kupferdraht never emits it; it stays
+    // declared so decoding accepts mentions from older counterparts.
+    oneof mention_type {
+        string user_id = 3;
+    }
+    // Qualified (federated) user id, the only form Kupferdraht emits;
+    // an unqualified id is ambiguous in a federated room.
+    optional QualifiedUserId qualified_user_id = 4;
+}
+
+// A user id in its two parts: `<id>@<domain>`.
+message QualifiedUserId {
+    required string id     = 1;
+    required string domain = 2;
+}
+
+message Confirmation {
+    enum Type {
+        DELIVERED = 0;
+        READ = 1;
+    }
+
+    // One receipt acknowledges one or more of the counterpart's
+    // messages; `type` says whether they arrived or were read.
+    // Kupferdraht's scope per type is docs/wire/message-types.md.
+    required string first_message_id = 1;
+    required Type   type             = 2;
+    repeated string more_message_ids = 3;
+}
+
+message Reaction {
+    // The sender's CURRENT full set of reactions on the parent message
+    // after this toggle, comma-separated; an empty string clears them
+    // all. Receivers split on `,`, trim, drop blanks and replace the
+    // sender's set: the message is a state, not a delta.
+    optional string emoji = 1;
+    // `message_id` of the message reacted to (Wire's web client sends
+    // the latest id of an edit chain here).
+    required string message_id = 2;
+}
+
+message MessageDelete {
+    // `message_id` of the message to delete for everyone.
+    required string message_id = 1;
+}
+
+message MessageEdit {
+    // `message_id` of the message being replaced.
+    required string replacing_message_id = 1;
+    // Kupferdraht edits text only; other inner content decodes to an
+    // unset `content` and takes the tolerated-unknown path.
+    oneof content {
+        Text text = 2;
+    }
+}
+
+message Quote {
+    required string quoted_message_id = 1;
+    // Wire's schema marks the digest optional, but Wire's clients render
+    // the reply as a plain message without it, so Kupferdraht always
+    // computes and emits
+    //
+    //   sha256( 0xFE 0xFF || body_utf16_be || timestamp_seconds_be )
+    //
+    // with the parent's send time in seconds as a big-endian i64
+    // (observations.md §33).
+    optional bytes quoted_message_sha256 = 2;
+}
+
+// A file attachment (ADR-0011). The content itself travels off-MLS
+// through the `/assets` REST endpoint, AES-256-CBC encrypted with a
+// one-time random key; this message carries the reference (key,
+// content hash, locator) through MLS like any other content variant.
+// Kupferdraht reads image dimensions only; other media metadata, the
+// preview and the legal-hold status are out of scope
+// (docs/wire/message-types.md) and are skipped on decode.
+message Asset {
+    message Original {
+        required string mime_type = 1;
+        required uint64 size      = 2;
+        optional string name      = 3;
+        oneof meta_data {
+            ImageMetaData image = 4;
+        }
+        optional string source  = 7;  // decoded, not consumed
+        optional string caption = 8;  // decoded, not consumed
+    }
+
+    message ImageMetaData {
+        required int32  width  = 1;
+        required int32  height = 2;
+        optional string tag    = 3;
+    }
+
+    enum NotUploaded {
+        CANCELLED = 0;
+        FAILED    = 1;
+    }
+
+    // The off-MLS reference. Receivers fetch
+    // `GET /assets/{asset_domain}/{asset_id}`, sending `Asset-Token:
+    // <asset_token>` when present, verify SHA-256 over the whole
+    // encrypted blob (iv || ciphertext), then decrypt with `otr_key`
+    // per `encryption` (AES_CBC when unset).
+    message RemoteData {
+        required bytes  otr_key      = 1;
+        required bytes  sha256       = 2;
+        optional string asset_id     = 3;
+        optional string asset_token  = 5;
+        optional string asset_domain = 7;
+        optional EncryptionAlgorithm encryption = 6;
+    }
+
+    optional Original original = 1;
+    oneof status {
+        NotUploaded not_uploaded = 3;
+        RemoteData  uploaded     = 4;
+    }
+    optional bool expects_read_confirmation = 6 [default = false];
+}
+
+// Cipher of `Asset.RemoteData`. Kupferdraht emits only `AES_CBC`; an
+// inbound `AES_GCM` asset is surfaced as unsupported, never as a
+// failure of the whole message (ADR-0011).
+enum EncryptionAlgorithm {
+    AES_CBC = 0;
+    AES_GCM = 1;
+}

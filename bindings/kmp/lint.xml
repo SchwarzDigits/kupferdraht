@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!--
+        The UniFFI-generated binding (uniffi/kupferdraht/kupferdraht.kt) references
+        java.lang.ref.Cleaner (added in API 33), but guards it at runtime:
+        UniffiCleaner.create() does Class.forName("java.lang.ref.Cleaner") and
+        falls back to the JNA cleaner (com.sun.jna.internal.Cleaner, all API
+        levels) on a ClassNotFoundException, so JavaLangRefCleaner is only
+        instantiated on API >= 33. With minSdk 26 this is safe at runtime;
+        lint's NewApi cannot see the guard, so it is a false positive here.
+        Scoped to the generated package only — real NewApi misuse elsewhere
+        is still reported.
+    -->
+    <issue id="NewApi">
+        <ignore path="**/uniffi/**" />
+    </issue>
+</lint>

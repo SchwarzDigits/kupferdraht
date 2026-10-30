@@ -1,0 +1,61 @@
+# Kupferdraht's `libsqlite3-sys` 0.35.0 stand-in (Step 90, ADR-0021): the upstream
+# crate (rusqlite/rusqlite, MIT) reduced to its `bundled` path, compiling the
+# SQLite3MC amalgamation in `../sqlite3mc/` in place of vanilla SQLite.
+# Reached ONLY through the root `Cargo.toml` `[patch.crates-io]` entry —
+# never published, never a workspace member. Same name + version as
+# upstream, so rusqlite 0.37, refinery 0.9 and openmls_sqlite_storage 0.3
+# all resolve to it unchanged.
+#
+# Everything but the `bundled` build path is stripped (no pkg-config /
+# vcpkg / bindgen / OpenSSL). The feature names rusqlite 0.37 forwards to
+# its sys crate are declared so cargo's feature resolution keeps working;
+# the ones that are not `bundled` / `bundled_bindings` are inert here.
+#
+# Maintenance (vendor/README.md): a rusqlite/libsqlite3-sys bump refreshes
+# `src/` + `sqlite3/bindgen_bundled_version.rs` from the new upstream
+# release and bumps `version`; an SQLite3MC release replaces `../sqlite3mc/`
+# per its PROVENANCE.txt.
+[package]
+name = "libsqlite3-sys"
+version = "0.35.0"
+edition = "2021"
+license = "MIT"
+links = "sqlite3"
+build = "build.rs"
+publish = false
+description = "Kupferdraht stand-in: libsqlite3-sys 0.35.0 bundling the SQLite3MC amalgamation (vendor/sqlite3mc)"
+
+[lib]
+name = "libsqlite3_sys"
+path = "src/lib.rs"
+
+[features]
+default = ["min_sqlite_version_3_14_0"]
+min_sqlite_version_3_14_0 = []
+bundled = ["cc", "bundled_bindings"]
+bundled_bindings = []
+# rusqlite 0.37 pass-through names — inert in this stand-in.
+buildtime_bindgen = []
+bundled-sqlcipher = []
+bundled-sqlcipher-vendored-openssl = []
+bundled-windows = []
+column_metadata = []
+in_gecko = []
+loadable_extension = []
+preupdate_hook = []
+session = []
+sqlcipher = []
+unlock_notify = []
+wasm32-wasi-vfs = []
+with-asan = []
+
+# wasm32-unknown-unknown arm (Step 91): the engine is sqlite-wasm-rs — the
+# same SQLite3MC amalgamation (SQLITE_WASM_RS_SOURCE_DIR → ../sqlite3mc/),
+# compiled for wasm with its libc shim. `bundled` is inert on this target
+# (build.rs returns early); rusqlite 0.37 sees the bindings re-exported by
+# src/wasm.rs.
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+sqlite-wasm-rs = { version = "0.6.1", default-features = false, features = ["sqlite3mc", "wasm-bindgen"] }
+
+[build-dependencies]
+cc = { version = "1", optional = true }

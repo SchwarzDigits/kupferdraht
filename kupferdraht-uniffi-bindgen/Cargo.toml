@@ -1,0 +1,20 @@
+# Standalone UniFFI bindings generator (Step 20a).
+#
+# A tiny wrapper around `uniffi::uniffi_bindgen_main()`. Kept as its own
+# workspace member — rather than a `[[bin]]` in `kupferdraht-core` — so the
+# UniFFI `cli` feature (which pulls in clap etc.) stays out of the
+# library / CLI builds. This is the matrix-rust-sdk-ffi pattern.
+#
+# Usage (after building the cdylib):
+#   cargo run -p kupferdraht-uniffi-bindgen -- generate \
+#     --library target/debug/libkupferdraht.dylib \
+#     --language kotlin --out-dir <dir>
+[package]
+name = "kupferdraht-uniffi-bindgen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+uniffi = { version = "0.29", features = ["cli"] }

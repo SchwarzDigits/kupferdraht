@@ -1,0 +1,32 @@
+SQLite3 Multiple Ciphers — vendored amalgamation provenance (Step 90, ADR-0021)
+
+sqlite3mc-version: 2.5.1
+sqlite-version: 3.53.4
+release: https://github.com/utelle/SQLite3MultipleCiphers/releases/tag/v2.5.1 (published 2026-08-27)
+asset: sqlite3mc-2.5.1-sqlite-3.53.4-amalgamation.zip
+asset-sha256: 4125f8ff275ea953dabb3289331b20a0e76d4fc060f57148f4a5df3bf3b0d5e0
+sqlite3mc_amalgamation.c sha256: 59e30889a7b0106152e6d4fc3c18ac1592f252cb4defbb0a7e618fdecf1a221c
+sqlite3mc_amalgamation.h sha256: 034c22a23268735059850aa22ea79333865c093c90c32287cc03cc606dcbc177
+license: MIT (LICENSE next to this file, from the v2.5.1 tag); SQLite itself is public domain
+
+Verification performed at vendoring (2026-09-24):
+- asset-sha256 recomputed locally (`shasum -a 256`) equals the asset's line in the
+  release's `sqlite3mc-2.5.1-SHA256SUMS`.
+- The SHA256SUMS signature (`sqlite3mc-2.5.1-SHA256SUMS.sig`, Sigstore keyless:
+  base64-encoded DER ECDSA) verifies with `openssl dgst -sha256 -verify` against the
+  public key of the accompanying certificate (`sqlite3mc-2.5.1-SHA256SUMS.pem`,
+  base64-encoded PEM): "Verified OK". Certificate: issuer O=sigstore.dev,
+  CN=sigstore-intermediate; serial 44DFC0C5A4707D0335EF13E047598F1C1D72F851;
+  validity 2026-08-27T16:50:03Z – 17:00:03Z; SAN URI
+  https://github.com/utelle/SQLite3MultipleCiphers/.github/workflows/build-reusable.yml@refs/heads/main;
+  SHA-256 fingerprint 4A:21:6C:D3:55:F9:6B:3E:92:C3:2A:81:15:EE:2B:39:28:4C:03:8F:16:7E:9B:BD:25:6E:B0:7A:33:7F:E2:2E.
+- NOT verified locally (no cosign on the vendoring machine): the certificate chain to
+  the Fulcio root and the Rekor transparency-log inclusion. `cosign verify-blob` on a
+  machine that has it closes that gap.
+- Both files are vendored byte-for-byte from the zip. Not vendored (not build inputs):
+  shell3mc_amalgamation.c, sqlite3.h, sqlite3ext.h, README.md.
+
+Re-vendoring (an SQLite3MC release bump): download the new amalgamation zip plus
+SHA256SUMS / .sig / .pem, verify as above, replace the two files, update every line of
+this record, then run `cargo test -p kupferdraht-core --test step_90_sqlite3mc_engine` — it
+pins the header's version defines and the SHA-256 of both files against this record.

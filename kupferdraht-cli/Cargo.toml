@@ -1,0 +1,24 @@
+[package]
+name = "kupferdraht-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+# Internal test + smoke-harness binary. Not a crates.io candidate.
+publish = false
+
+[[bin]]
+name = "kupferdraht-cli"
+path = "src/main.rs"
+
+[dependencies]
+kupferdraht-core = { path = "../kupferdraht-core" }
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rpassword = "7"
+dirs = "5"
+base64 = "0.22"
+# Human-facing timestamp rendering + `--due` ISO-8601 parsing. Already
+# in the tree transitively (rustls chain) — no new crate for `deny`.
+time = { version = "0.3", features = ["formatting", "parsing", "macros", "local-offset"] }

@@ -1,0 +1,26 @@
+# Single source of truth for the iOS minimum deployment target.
+#
+# The Apple `*-apple-ios*` builds (and the C build scripts they pull in, e.g.
+# the SQLite3MC amalgamation via the `cc` crate) need this pinned: without it
+# the toolchain defaults to a very old iOS and the device link fails on the
+# version skew. It is also the version we test and release against, so it must
+# not vary per caller.
+#
+# Living here (cargo config, not a Gradle file) makes it the one place that
+# governs *every* cargo invocation — gobley's build, natrium's
+# `buildKupferdrahtNatives`/`captureKupferdrahtNatives` tasks, and plain `cargo build` —
+# so no shell env or CI step can build against an untested version. `force`
+# makes it win even over an already-set ambient value.
+[env]
+IPHONEOS_DEPLOYMENT_TARGET = { value = "15.0", force = true }
+
+# Step 91 (ADR-0022): one SQLite3MC amalgamation on every target. On
+# wasm32-unknown-unknown the engine is compiled by `sqlite-wasm-rs`, which
+# reads its C source from this directory instead of its bundled copy (the
+# two are byte-identical at 2.5.1 — the pin is the config, not the
+# coincidence). Resolved relative to the workspace root → vendor/sqlite3mc/,
+# the same PROVENANCE-pinned file the native stand-in compiles. The
+# wasm-capable C compiler is NOT configured here (machine-specific): export
+# CC_wasm32_unknown_unknown / AR_wasm32_unknown_unknown in the shell — see
+# docs/bindings.md "Web — wasm-pack".
+SQLITE_WASM_RS_SOURCE_DIR = { value = "vendor/sqlite3mc", relative = true }

@@ -1,0 +1,31 @@
+# Gitleaks allowlist for Kupferdraht. The Schwarz Digits compliance
+# workflow runs `gitleaks detect --source .` without a config of its own,
+# so this file extends the default rules for this repository. Every entry
+# names a value that only looks like a credential; a real secret has no
+# place in this tree (CLAUDE.md "Sensitive Material", tests/step_101).
+
+title = "Kupferdraht"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-answer vectors and synthetic test values, never credentials"
+regexTarget = "line"
+regexes = [
+  # PIN-service interop vectors in recovery/receipt.rs and recovery/oprf.rs:
+  # fixed seeds, the keys derived from them and the service's signature over
+  # them — published test data that the tests reproduce, no live key.
+  '''^\s*(secret|refund_seed|refund_private_key|refund_key|secret_key|blind|blinded_element|evaluated_element|output|signature|attempt_id): "[A-Za-z0-9+/=]+",\s*$''',
+  # tests/step_101_no_secrets_in_logs.rs plants a labelled fake token and
+  # asserts that it never reaches the log.
+  '''zuid-SECRET-101''',
+  # docs/THREAT_MODEL.md: "raw-key mode: ChaCha20-Poly1305 …" names a cipher.
+  '''raw-key mode: ChaCha20-Poly1305''',
+]
+paths = [
+  # Wire's OpenAPI document was committed once in April 2026 and is fetched
+  # on demand since (reference/README.md); its schema examples look like
+  # keys to the generic rule. History only.
+  '''docs/wire\.swagger\.json''',
+]

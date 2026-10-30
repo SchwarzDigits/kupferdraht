@@ -1,0 +1,176 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 Schwarz Digits KG -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+
+<!--
+  Step 91/92 (ADR-0022/0023) — the browser storage smoke: a page that hosts
+  Kupferdraht in a dedicated Web Worker (the storage blocks, which the main
+  thread may not) and reports what the worker saw. Reload the page: `Kupferdraht.open`
+  succeeding a second time on the same origin means the databases AND
+  the IndexedDB/WebCrypto keystore survived the session (a wrong or missing
+  key would fail the open with "file is not a database").
+
+  Second tab (ADR-0023): open this page in another tab — its worker's open
+  fails with "already open in another tab". Its "Use here" button takes the
+  instance over: the first tab's worker reports EVICTED and the page
+  terminates it; the second worker's open then succeeds.
+
+  Since Step 111a the page must be served cross-origin isolated
+  (`Cross-Origin-Opener-Policy: same-origin`,
+  `Cross-Origin-Embedder-Policy: require-corp`): the storage blocks on a
+  SharedArrayBuffer. Serve the repository root with those headers after a
+  `wasm-pack build --target web --out-dir ../bindings/web/opfs-smoke/pkg`
+  from `kupferdraht-core/`, then open http://localhost:8000/bindings/web/opfs-smoke/.
+  For the full login vertical put the backend's API URL into the form. Scripted
+  (no driver): the worker also GETs `./smoke-verdict?<verdict>` on the same
+  origin, so a headless browser run leaves the verdict in the dev server's
+  access log — run it twice on one profile to see the second open succeed.
+
+  Scripted login vertical (`?scenario=login`, Step 110): the page reads
+  `{ api, ws?, email, password, room }` from `/smoke-login.json` and hands it
+  to the worker once Kupferdraht is open (`ws`, Step 118: the push socket's base;
+  without it the browser polls). A local dev proxy serves that file and the
+  backend API same-origin (cookie domain host-only, path `/`) — it is not part
+  of the repository, and the credentials never are. `?scenario=resume`
+  resumes the first registered account instead (after a login run on the
+  same profile). `&storage=server` (Step 111b) keeps the account databases
+  on a storage server: the worker reads `{ url, tokenExchangeUrl }` from
+  `/smoke-storage.json`, which the dev proxy serves from its configuration.
+  `?scenario=hold` / `?scenario=takeover` (Step 111c) play two browsers with
+  the same account (a copied profile): the first resumes and keeps working,
+  the second logs in, meets HeldElsewhere at registerDevice, takes over,
+  and the first reports onEvicted("device"). Since Step 111d a copied
+  profile shares the home id and so the storage instance id: it takes the
+  lease back silently instead — the scenario needs two browsers with their
+  own home ids, which recovery data gives: `?scenario=enable` (Step 112b)
+  resumes the first account, makes its recovery data with the PIN from
+  `/smoke-login.json` (`recoveryPin`) and PUTs the bytes to
+  `/smoke-recovery`; `?scenario=recover` in a fresh profile logs in, tries
+  a wrong PIN, restores with the right one and takes the databases over
+  from a browser that holds them (`hold`). The worker reads
+  `pinServiceUrl` with the storage addresses. `?scenario=purge-device`
+  (Step 114) resumes the first account and logs out with `purgeDevice`;
+  `?scenario=purge-local` logs in, registers (after a `purge-device` with
+  empty databases: recovery disabled) and logs out with `purgeLocal`, then
+  shows that a new login finds no keys. `&reload=1` (Step 111d)
+  reloads the page once right after a successful resume: the second resume
+  meets the first page's lease, which a stable instance id takes back.
+  `?scenario=outage` (Step 113) logs in and keeps syncing while the dev
+  server stops and restarts a relay in front of the storage server: the
+  storage state goes "reconnecting" and back to "online", sends fail during
+  the outage and go through after it. `&log=<level>` (Step 117) is the
+  level the worker's `onLog` receives (default warn; `&log=none` passes no
+  `onLog`, and Kupferdraht stays silent): every event shows in the page log, the
+  first of each level and every warning are beaconed (`LOG-FIRST`, `LOG`),
+  and a target that is not Kupferdraht's as `LOG-FOREIGN`. `?scenario=idle`
+  (Step 118) resumes the first account, starts the live sync and stays idle
+  for 12 minutes, beaconing every minute how often the room list and the
+  queue were fetched, and every message and room change as it arrives.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Kupferdraht storage smoke</title>
+  <style>
+    body { font: 14px/1.4 system-ui, sans-serif; margin: 2rem; max-width: 60rem; }
+    pre { background: #f4f4f4; padding: 1rem; white-space: pre-wrap; }
+    input { width: 28rem; }
+  </style>
+</head>
+<body>
+  <h1>Kupferdraht — SQLite3MC on sqlite-remote-vfs smoke</h1>
+  <p>Worker log (reload the page to check session survival; open a second
+  tab to see the lease refuse it, then take over from there):</p>
+  <pre id="log">starting worker…</pre>
+  <p><button id="takeover">Use here (take over the origin's instance)</button></p>
+  <form id="login">
+    <label>API base URL <input name="api" placeholder="https://…"></label><br>
+    <label>email <input name="email"></label><br>
+    <label>password <input name="password" type="password"></label><br>
+    <label>room id for a test message <input name="room"></label><br>
+    <button>login → send → list messages (in the worker)</button>
+  </form>
+  <script type="module">
+    const log = document.getElementById('log');
+    const pageParams = new URL(location.href).searchParams;
+    const storage = pageParams.get('storage') === 'server' ? '&storage=server' : '';
+    // Step 117: the log level the worker hands to Kupferdraht's onLog (`&log=`).
+    const logParam = pageParams.get('log') ? `&log=${encodeURIComponent(pageParams.get('log'))}` : '';
+    let worker = null;
+    const start = (takeOver) => {
+      if (worker) { worker.terminate(); log.textContent += '\n[page] previous worker terminated'; }
+      worker = new Worker(`./worker.js?takeOver=${takeOver ? 1 : 0}${storage}${logParam}`, { type: 'module' });
+      worker.onmessage = (e) => {
+        if (e.data.log) log.textContent += '\n' + e.data.log;
+        if (e.data.evicted) {
+          // The contract of ADR-0023: the embedder terminates the evicted worker.
+          worker.terminate();
+          worker = null;
+          log.textContent += '\n[page] evicted worker terminated — the other tab now holds the origin';
+        }
+      };
+      worker.onerror = (e) => { log.textContent += '\nworker error: ' + e.message; };
+    };
+    // Scripted two-tab scenario (`?scenario=twotab`, headless): the page
+    // plays both tabs — worker A holds the lease, worker B is refused,
+    // worker B' takes over, A reports EVICTED and is terminated. Web Locks
+    // are shared by every same-origin context, so one page can play two.
+    const scripted = new URL(location.href).searchParams.get('scenario') === 'twotab';
+    if (scripted) {
+      const beacon = (v) => fetch(`./smoke-verdict?${encodeURIComponent(v)}`).catch(() => {});
+      const run = (takeOver) => new Promise((resolve) => {
+        const w = new Worker(`./worker.js?takeOver=${takeOver ? 1 : 0}`, { type: 'module' });
+        let verdict = null;
+        w.onmessage = (e) => {
+          if (e.data.log) log.textContent += '\n' + e.data.log;
+          if (e.data.log && e.data.log.startsWith('smoke: OPEN-')) { verdict = e.data.log; resolve({ w, verdict }); }
+          if (e.data.evicted) {
+            // The ADR-0023 contract, played by this page as the evicted
+            // tab: terminate the worker AT ONCE — that is what frees the
+            // database locks the taking-over worker is waiting for.
+            w.evicted = true;
+            w.terminate();
+          }
+        };
+      });
+      (async () => {
+        const a = await run(false);
+        const b = await run(false);           // refused: A holds the lease
+        const bTakeOver = await run(true);    // evicts A (terminated above), then installs
+        const aEvicted = a.w.evicted === true;
+        b.w.terminate();
+        const ok = a.verdict === 'smoke: OPEN-OK' && b.verdict === 'smoke: OPEN-FAILED'
+          && bTakeOver.verdict === 'smoke: OPEN-OK' && aEvicted;
+        log.textContent += `\n[page] two-tab scenario: A=${a.verdict} B=${b.verdict} B'=${bTakeOver.verdict} A.evicted=${aEvicted}`;
+        await beacon(`TWOTAB-${ok ? 'OK' : 'FAILED'} A=${a.verdict} B=${b.verdict} Bprime=${bTakeOver.verdict} Aevicted=${aEvicted}`);
+      })();
+    } else if (['login', 'resume', 'hold', 'takeover', 'outage', 'enable', 'recover', 'purge-device', 'purge-local', 'idle', 'echo'].includes(pageParams.get('scenario'))) {
+      start(false);
+      const opened = worker.onmessage;
+      const scenario = pageParams.get('scenario');
+      worker.onmessage = async (e) => {
+        opened(e);
+        if (e.data.log === 'smoke: RESUME-OK' && pageParams.get('reload') === '1') {
+          const again = new URL(location.href);
+          again.searchParams.set('reload', '2');
+          location.replace(again.href);
+          return;
+        }
+        if (e.data.log === 'smoke: READY') {
+          const login = await (await fetch('/smoke-login.json')).json();
+          worker.postMessage(scenario === 'login' ? { login } : { [scenario]: true, room: login.room, login });
+        }
+      };
+    } else {
+      start(false);
+    }
+    document.getElementById('takeover').addEventListener('click', () => start(true));
+    document.getElementById('login').addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!worker) { log.textContent += '\n[page] no live worker — take over first'; return; }
+      const f = new FormData(e.target);
+      worker.postMessage({ login: Object.fromEntries(f.entries()) });
+    });
+  </script>
+</body>
+</html>

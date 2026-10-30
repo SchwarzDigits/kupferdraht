@@ -1,0 +1,9 @@
+# The one Rust toolchain every build uses — local and CI alike (review
+# 2026-09-25, process finding: CI ran "latest stable" while a stale local
+# stable showed false reds). rustup picks this up automatically; CI reads
+# the channel from here and hands it to dtolnay/rust-toolchain@master. Bump
+# deliberately, in its own commit, with the gate green on the new version.
+[toolchain]
+channel = "1.98"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]

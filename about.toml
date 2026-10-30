@@ -1,0 +1,30 @@
+# cargo-about configuration — kept in sync with `deny.toml`'s license
+# allow-list. Any drift between the two is a review defect.
+#
+# Used to generate `docs/THIRD_PARTY_LICENSES.html` via
+# `cargo about generate about.hbs > docs/THIRD_PARTY_LICENSES.html`
+# (see README's "Building" section).
+
+# The workspace crates (`publish = false`) carry Kupferdraht's own license
+# (`GPL-3.0-only`, ADR-0016) and are not third-party — exclude them,
+# mirroring `deny.toml`'s `private.ignore`.
+private = { ignore = true }
+
+# The report covers the crates Kupferdraht links against. Test-only
+# dependencies (httpmock and what it pulls, tempfile, …) ship in no
+# artifact and are left out; `cargo deny` still checks them.
+ignore-dev-dependencies = true
+
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "MPL-2.0",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "Zlib",
+    "CDLA-Permissive-2.0",
+]
