@@ -1741,6 +1741,14 @@ is no skill for it — it is this short procedure:
 
 ### Security
 
+- **Two lock-file bumps for the public repository's first Dependabot
+  alerts** — `quinn-proto` 0.11.14 → 0.11.19 (RUSTSEC-2026-0185,
+  CVE-2026-25800, remote memory exhaustion; in the lock only through
+  reqwest's optional HTTP/3 feature, which no target enables, so nothing
+  shipped contained it) and `rpassword` 7.4.0 → 7.5.4
+  (GHSA-2p6r-x3vv-xqm2; the CLI's password prompt could reveal part of
+  an interrupted input). No manifest change.
+
 - **Four dependency updates for RustSec advisories of 2026-10-23/26, two
   accepted without a fix** — `tokio` 1.52.1 → 1.54.1 (RUSTSEC-2026-0386,
   `AsyncFd` constructors violating I/O safety), `rustls-webpki` 0.103.15 →
