@@ -489,7 +489,7 @@ Components licensed under the Apache License 2.0
   prost-derive 0.13.5, prost-derive 0.14.4 (browser target only), prost-types
   0.13.5 — Dan Burkert; Lucio Franco; Casper Meijn and others —
   https://github.com/tokio-rs/prost
-- rpassword 7.4.0 (native targets only) — Conrad Kleinespel —
+- rpassword 7.5.4 (native targets only) — Conrad Kleinespel —
   https://github.com/conradkleinespel/rpassword
 - rtoolbox 0.0.5 (native targets only) — Conrad Kleinespel —
   https://github.com/conradkleinespel/rtoolbox
