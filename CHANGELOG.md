@@ -34,77 +34,19 @@ is no skill for it — it is this short procedure:
 
 ## [Unreleased]
 
-### Security
-
-- **A Rust consumer can no longer link vanilla SQLite under Kupferdraht
-  by accident.** The SQLite3MC engine was reached through a root
-  `[patch.crates-io]`, which Cargo honours only in the root manifest of
-  the build: a consumer that did not repeat the entry got crates.io's
-  `libsqlite3-sys`, and with it plain SQLite, which accepts the key
-  pragmas as unknown pragmas and writes the databases in plaintext —
-  without an error, measured on 2026-10-31 (the first embedder had hit
-  it and carried the patch since). Now `rusqlite`, `refinery` and
-  `openmls_sqlite_storage` come from SchwarzDigits forks whose
-  `libsqlite3-sys` bundles the SQLite3MC amalgamation, as git
-  dependencies by tag that every consumer inherits (ADR-0042). A second,
-  crates.io `rusqlite` in a consumer's graph is a build error now
-  (`links = "sqlite3"` twice), not a silently unencrypted store.
+### Added
 
 ### Changed
 
-- **The SQLite3MC build line moves out of the tree** — the vendored
-  `libsqlite3-sys` stand-in and the root `[patch]` are gone; the forks
-  (github.com/SchwarzDigits/rusqlite `v0.37.0-sqlite3mc-2.5.1`,
-  github.com/SchwarzDigits/refinery `v0.9.1-sqlite3mc`,
-  github.com/SchwarzDigits/openmls `sqlite_storage-v0.3.0-sqlite3mc`) are
-  upstream's code with manifest changes, the wasm arm lives in the
-  rusqlite fork's sys crate, and `vendor/sqlite3mc/` stays as the
-  provenance pin that the fork's copy is checked against byte for byte.
-  Same engine, same versions, same at-rest format; `docs/library.md`
-  "Consuming from Rust" has the one dependency line and the one
-  constraint (an application's own SQLite takes `rusqlite` from the same
-  fork). The compliance workflow's exclusion of the stand-in goes with it.
+### Deprecated
+
+### Removed
 
 ### Fixed
 
-- **An asset upload response without `domain` falls back to the user's
-  own backend domain** — not to Wire's hosted domain, which the fallback
-  had hard-coded. Current v14 servers always send the field, so the path
-  was dead in practice; on a self-hosted deployment that ever omitted it,
-  peers would have been told to download from the wrong backend.
+### Security
 
-- **Compliance analyzer, second round** — the stand-in and the JVM
-  binding build are excluded from ORT's analyzer (the Cargo plugin fails
-  on the stand-in's wasm32-only dependencies, the Gradle Inspector
-  resolves no plugin in the container); the ORT scanner is disabled
-  because the central workflow names a scanner ORT 96 no longer ships.
-  Both upstream issues are open.md §79.
-
-- **The compliance workflow's license analysis runs through** — the
-  vendored `libsqlite3-sys` stand-in is excluded from the Cargo workspace
-  so `cargo metadata` resolves it on its own; a pre-analyzer script pins
-  Gradle to the runner's JDK 17 inside the ORT container; the Swift
-  manifest (a local binary target only) and the Android and Multiplatform
-  builds (Android SDK and cargo at configuration time, neither available
-  in the container) are excluded from the analyzer, and
-  THIRD-PARTY-NOTICES lists the components the Kotlin bindings' consumers
-  resolve from Maven Central.
-
-- **The third-party license report lists the vendored engine and the git
-  dependency** — `docs/THIRD_PARTY_LICENSES.html` gains a hand-kept section
-  for SQLite3 Multiple Ciphers (MIT, `vendor/sqlite3mc/`) and
-  `sqlite-remote-vfs` (Apache-2.0, git-pinned, `publish = false`), which
-  cargo-about skips as private. The section lives in `about.hbs`, so a
-  regeneration keeps it.
-
-- **A profile change is remembered, not only sent** — Step 126. `set_handle`
-  and `set_display_name` now write the persisted `self_user` row after the
-  backend accepts the change, so a `resume` reports the new handle or name
-  instead of the one this device last logged in with. Before, the change was
-  invisible to the SDK until the next login: `Account` is immutable and a
-  resume rebuilds it from that row, which only the post-login persistence
-  wrote. The live `Account` of the running session is unchanged — a consumer
-  that just made the call knows the value.
+## [0.1.0] - 2026-10-31
 
 ### Added
 
@@ -679,6 +621,19 @@ is no skill for it — it is this short procedure:
   (Step 17, PR #45)
 
 ### Changed
+
+- **The SQLite3MC build line moves out of the tree** — the vendored
+  `libsqlite3-sys` stand-in and the root `[patch]` are gone; the forks
+  (github.com/SchwarzDigits/rusqlite `v0.37.0-sqlite3mc-2.5.1`,
+  github.com/SchwarzDigits/refinery `v0.9.1-sqlite3mc`,
+  github.com/SchwarzDigits/openmls `sqlite_storage-v0.3.0-sqlite3mc`) are
+  upstream's code with manifest changes, the wasm arm lives in the
+  rusqlite fork's sys crate, and `vendor/sqlite3mc/` stays as the
+  provenance pin that the fork's copy is checked against byte for byte.
+  Same engine, same versions, same at-rest format; `docs/library.md`
+  "Consuming from Rust" has the one dependency line and the one
+  constraint (an application's own SQLite takes `rusqlite` from the same
+  fork). The compliance workflow's exclusion of the stand-in goes with it.
 
 - **Public repository** — Kupferdraht is published at
   github.com/SchwarzDigits/kupferdraht since 2026-10-30 as a single
@@ -1330,8 +1285,6 @@ is no skill for it — it is this short procedure:
   recorded late — resolves the former `open.md` §53 proposal, which
   this change implemented verbatim.
 
-### Deprecated
-
 ### Removed
 
 - **The CLI's `-b` / `--backend production|staging` presets** — `--api-url`
@@ -1359,6 +1312,45 @@ is no skill for it — it is this short procedure:
   unchanged. A test pins that the feature stays off. Resolves open.md §76.
 
 ### Fixed
+
+- **An asset upload response without `domain` falls back to the user's
+  own backend domain** — not to Wire's hosted domain, which the fallback
+  had hard-coded. Current v14 servers always send the field, so the path
+  was dead in practice; on a self-hosted deployment that ever omitted it,
+  peers would have been told to download from the wrong backend.
+
+- **Compliance analyzer, second round** — the stand-in and the JVM
+  binding build are excluded from ORT's analyzer (the Cargo plugin fails
+  on the stand-in's wasm32-only dependencies, the Gradle Inspector
+  resolves no plugin in the container); the ORT scanner is disabled
+  because the central workflow names a scanner ORT 96 no longer ships.
+  Both upstream issues are open.md §79.
+
+- **The compliance workflow's license analysis runs through** — the
+  vendored `libsqlite3-sys` stand-in is excluded from the Cargo workspace
+  so `cargo metadata` resolves it on its own; a pre-analyzer script pins
+  Gradle to the runner's JDK 17 inside the ORT container; the Swift
+  manifest (a local binary target only) and the Android and Multiplatform
+  builds (Android SDK and cargo at configuration time, neither available
+  in the container) are excluded from the analyzer, and
+  THIRD-PARTY-NOTICES lists the components the Kotlin bindings' consumers
+  resolve from Maven Central.
+
+- **The third-party license report lists the vendored engine and the git
+  dependency** — `docs/THIRD_PARTY_LICENSES.html` gains a hand-kept section
+  for SQLite3 Multiple Ciphers (MIT, `vendor/sqlite3mc/`) and
+  `sqlite-remote-vfs` (Apache-2.0, git-pinned, `publish = false`), which
+  cargo-about skips as private. The section lives in `about.hbs`, so a
+  regeneration keeps it.
+
+- **A profile change is remembered, not only sent** — Step 126. `set_handle`
+  and `set_display_name` now write the persisted `self_user` row after the
+  backend accepts the change, so a `resume` reports the new handle or name
+  instead of the one this device last logged in with. Before, the change was
+  invisible to the SDK until the next login: `Account` is immutable and a
+  resume rebuilds it from that row, which only the post-login persistence
+  wrote. The live `Account` of the running session is unchanged — a consumer
+  that just made the call knows the value.
 
 - **Browser: a login that meets a replaced device resets the browser** —
   Step 121 (ADR-0040). Only `resume` forgot the account's keys when the
@@ -1775,6 +1767,20 @@ is no skill for it — it is this short procedure:
   instead of identical ones. (Step 41, PR #35)
 
 ### Security
+
+- **A Rust consumer can no longer link vanilla SQLite under Kupferdraht
+  by accident.** The SQLite3MC engine was reached through a root
+  `[patch.crates-io]`, which Cargo honours only in the root manifest of
+  the build: a consumer that did not repeat the entry got crates.io's
+  `libsqlite3-sys`, and with it plain SQLite, which accepts the key
+  pragmas as unknown pragmas and writes the databases in plaintext —
+  without an error, measured on 2026-10-31 (the first embedder had hit
+  it and carried the patch since). Now `rusqlite`, `refinery` and
+  `openmls_sqlite_storage` come from SchwarzDigits forks whose
+  `libsqlite3-sys` bundles the SQLite3MC amalgamation, as git
+  dependencies by tag that every consumer inherits (ADR-0042). A second,
+  crates.io `rusqlite` in a consumer's graph is a build error now
+  (`links = "sqlite3"` twice), not a silently unencrypted store.
 
 - **Two lock-file bumps for the public repository's first Dependabot
   alerts** — `quinn-proto` 0.11.14 → 0.11.19 (RUSTSEC-2026-0185,
