@@ -1995,3 +1995,24 @@ Kupferdraht surfaces it as `BackendRejected` and changes nothing — no local
 state depends on the failed send. Watch for it; if it recurs, it is a
 backend race between applying an external commit and accepting a message
 of the new epoch, and a single retry of the send would cover it.
+
+## 93) The Swift and Kotlin binding tests stopped compiling with Step 39 (2026-10-31)
+
+Measured while checking the Apple build line after Step 127, on a machine
+with the Command Line Tools only (no `xcodebuild -create-xcframework`, no
+XCTest). The generated Swift binding (`kupferdraht-uniffi-bindgen`, 14,928
+lines) compiles and links against `libkupferdraht.a` built with the
+SchwarzDigits rusqlite fork; a hand-assembled macOS-only
+`kupferdrahtFFI.xcframework` (an `Info.plist` with one `macos-arm64`
+slice) is accepted by SwiftPM with the repository's `Package.swift`
+unchanged. The repository's test file does not compile: `PinnedSyncListener`
+does not conform to `SyncListener`, which requires `onSessionExpired()`
+since Step 39 (2026-06-19, PR #33). The Kotlin test carries the same pin
+with the same gap. Both files were last changed by the rename and the
+SPDX pass; PLAN.md's "re-validated 2026-06-15" predates Step 39 by four
+days. With the stub added and the five tests ported to Swift Testing (the
+framework the Command Line Tools ship), all five pass, including
+`Kupferdraht.open` keying `global.db` through a Swift `SecureKeyStore`
+over SQLite3MC from the fork. Fix: the stub in both pins; the structural
+gap is the missing macOS CI job (Step 20e) — only the web track runs in
+CI, every UniFFI track is hand-run.

@@ -803,3 +803,37 @@ OPRF either a `voprf` release on 0.14 or our own RFC 9497 client over
 `p256` 0.14's `hash2curve` (blind, unblind, finalize — a small module,
 checked against the PIN-service interop vectors, §77); then the MLS
 conformance tests, and remove the ignore entry.
+
+Addendum 2026-10-31: a third option exists. `voprf-ng` 0.6.0
+(2026-10-27, github.com/raphaelrobert/voprf-ng, an openmls maintainer's
+fork of `voprf` 0.6.0-pre.1) is on the 0.14 line — `elliptic-curve` 0.14,
+`hash2curve` 0.14, `digest` 0.11, `p256` 0.14 in its tests — with the
+RFC 9497 vector file identical to upstream's and a mechanical diff
+otherwise; `privacypass` 0.6 and phnx-im/air take it. Trust check: a
+single maintainer, no release tags, no audit — acceptable for the PIN
+path once the openmls crates move, to be re-checked at that bump.
+
+## 82) The SQLite3MC fork line: branch policy and the next bump (2026-10-31)
+
+Since Step 127 (ADR-0042) the engine comes from three SchwarzDigits forks
+consumed by git tag: rusqlite `v0.37.0-sqlite3mc-2.5.1` (branch
+`sqlite3mc/0.37`), refinery `v0.9.1-sqlite3mc` (`sqlite3mc/0.9`), openmls
+`sqlite_storage-v0.3.0-sqlite3mc` (`sqlite3mc/sqlite_storage-0.3`). The
+openmls and SQLite3MultipleCiphers forks of the organisation are also the
+staging area for upstream pull requests, so a long-lived downstream
+branch now sits beside the PR heads; the forks' `main` stays identical
+to upstream. GitHub's "ahead/behind" on that branch measures against
+upstream `main`, while the branch tracks the `openmls-v0.9.0` release
+tag, which is not on `main`: seven of the eight "ahead" commits are
+upstream's own release-branch commits, and `main`'s `sqlite_storage` is
+unreleased code (async storage, rusqlite 0.40, refinery 0.10). The branch
+is not rebased onto `main` on purpose; the next branch comes from the
+next release tag.
+
+Open: the branch policy is to be confirmed with the maintainer of those
+forks; the first Rust embedder drops its own `[patch.crates-io]` entry
+(Cargo warns "unused patch" until it does); the next bump — when
+`openmls_sqlite_storage` releases on rusqlite 0.40 — goes rusqlite fork →
+refinery and openmls branches → `kupferdraht-core/Cargo.toml` → gate
+(`vendor/README.md` recipe), and a rusqlite ≥ 0.38 can retire the fork's
+wasm arm for its own `ffi-sqlite-wasm-rs`.

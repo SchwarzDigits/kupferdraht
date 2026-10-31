@@ -2054,3 +2054,27 @@ touched it.
   about a hundred valid pointers. The rule now says what is true: a
   sub-step code is a pointer like a step number, and only the dated
   narrative and the "V1" wording go.
+
+- **A root `[patch]` is a promise only the root can keep.** Cargo honours
+  `[patch]` in the build's root manifest alone, so a library that reaches
+  its database engine through one ships a silent default: a consumer that
+  does not repeat the entry links vanilla SQLite, the key pragmas are
+  ignored as unknown pragmas, and the databases land in plaintext while
+  every call returns Ok. Git dependencies are inherited; forks consumed
+  by tag put the engine where every consumer gets it, and a second
+  rusqlite in the graph is a build error instead of an unencrypted store
+  (Step 127, ADR-0042).
+- **Gate against what the consumer fetches, not against the working
+  tree.** Cargo fetches a git source's tag even when `[patch."<url>"]`
+  redirects it to a local path, so the pre-push gate ran on temporary path
+  dependencies and the three source pins stayed red by design until the
+  tags existed. The lockfile is the test subject: the step's pin reads the
+  six `source =` lines, not the manifest. A `version` beside `tag` is not
+  decoration either: cargo-deny counts a git dependency without one, in a
+  public crate, as a wildcard.
+- **A compile-time pin only pins what somebody compiles.** The Swift and
+  Kotlin binding tests carry a `PinnedSyncListener` as the contract pin
+  of `SyncListener`; Step 39 added `onSessionExpired` and nothing compiled
+  the pins again for four months, because no UniFFI track runs in CI and
+  the Rust gate compiles the exports, not the generated code
+  (observations §93). A pin outside the gate is a note, not a test.

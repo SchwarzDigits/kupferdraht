@@ -200,7 +200,7 @@ forks are upstream's code with manifest changes, rebased per release.
 - Related: ADR-0016 (GPL-3.0-only; the forks stay MIT / MIT OR Apache-2.0).
 - rusqlite PR #1726 "Added sqlite3mc (bundled) support", declined
   2025-08-23. SQLite3 Multiple Ciphers, "Architecture overview": the
-  amalgamation patches. Step 127, `docs/plan/127-sqlite3mc-through-forks.md`.
+  amalgamation patches. Step 127, `docs/plan/archive/127-sqlite3mc-through-forks.md`.
 
 ## Revision History
 

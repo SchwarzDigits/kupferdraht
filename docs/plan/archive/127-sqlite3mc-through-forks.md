@@ -1,9 +1,13 @@
 # Step 127 — SQLite3MC through the SchwarzDigits forks, not a root `[patch]`
 
-**Status: in progress 2026-10-31** — commissioned by Volker the same day,
+**Status: MERGED 2026-10-31** — commissioned by Volker the same day,
 after the first Rust embedder (a TUI; its open.md §21) reported that it had
-to carry Kupferdraht's `[patch.crates-io]` entry itself. Decision:
-ADR-0042. No surface change, no CLI command, no smoke (build glue).
+to carry Kupferdraht's `[patch.crates-io]` entry itself. `613aac9`. Merged
+to `main` as PR #3 (`70fc378`); CI green, the runners fetching the three
+forks by tag. No surface change, no CLI command, no smoke (build glue).
+Scope shipped: rusqlite, refinery and openmls_sqlite_storage from the
+SchwarzDigits forks by git tag, the vendored stand-in and the root
+`[patch]` gone, ADR-0042 with its rule. Archived with this header.
 
 ## Problem
 
