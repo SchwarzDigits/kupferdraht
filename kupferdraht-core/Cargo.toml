@@ -50,17 +50,22 @@ base64 = "0.22"
 # (matrix-rust-sdk uses the same pattern).
 async-trait = "0.1"
 # SQLite persistence (Step 1+), on EVERY target since Step 91 (ADR-0022).
-# `bundled` compiles the sys crate's C — which the root `[patch.crates-io]`
-# makes the SQLite3MC amalgamation (whole-DB ChaCha20-Poly1305, ADR-0021):
-# no system sqlite, no OpenSSL, no pkg-config anywhere (Android/iOS/CI). On
-# wasm32 the stand-in re-exports `sqlite-wasm-rs` (declared in the wasm block
-# below), which compiles the SAME vendored amalgamation for the browser.
-rusqlite = { version = "0.37", features = ["bundled"] }
+# rusqlite from the SchwarzDigits fork whose `bundled` feature compiles the
+# SQLite3MC amalgamation (whole-DB ChaCha20-Poly1305, ADR-0021) instead of
+# vanilla SQLite — a git dependency by tag, which a consumer of this crate
+# inherits (ADR-0042; a root `[patch]` it would not): no system sqlite, no
+# OpenSSL, no pkg-config anywhere (Android/iOS/CI). On wasm32 the fork's sys
+# crate re-exports `sqlite-wasm-rs` (declared in the wasm block below), which
+# compiles the SAME vendored amalgamation for the browser. refinery and
+# openmls_sqlite_storage come from the sibling forks: the graph holds one
+# rusqlite (`links = "sqlite3"`), so every site names the same tag.
+rusqlite = { git = "https://github.com/SchwarzDigits/rusqlite", tag = "v0.37.0-sqlite3mc-2.5.1", version = "0.37", features = ["bundled"] }
 # Schema migrations (Step 1+); one file per step under storage/migrations/.
-refinery = { version = "0.9", features = ["rusqlite"] }
+refinery = { git = "https://github.com/SchwarzDigits/refinery", tag = "v0.9.1-sqlite3mc", version = "0.9", features = ["rusqlite"] }
 # Persistent openmls state backed by the shared `rusqlite` (Step 1c.5) —
-# `mls.db` on native and, over OPFS, in the browser (Step 91).
-openmls_sqlite_storage = "0.3"
+# `mls.db` on native and, over sqlite-remote-vfs, in the browser (Step 91,
+# Step 111). The fork branch is upstream's 0.3.0 over the two forks above.
+openmls_sqlite_storage = { git = "https://github.com/SchwarzDigits/openmls", tag = "sqlite_storage-v0.3.0-sqlite3mc", version = "0.3" }
 # Step 1c: MLS (RFC 9420). Wire targets ciphersuite 0x0002
 # (MLS_128_DHKEMP256_AES128GCM_SHA256_P256) with ECDSA_SECP256R1_SHA256
 # signatures so iOS clients can back keys with Secure Enclave (LEARNINGS §1.2).
@@ -150,8 +155,9 @@ openmls = { version = "0.9", features = ["js"] }
 # Step 91 (ADR-0022) — the browser runs the same SQLite3MC store as native.
 # `sqlite-wasm-rs` compiles the vendored amalgamation for wasm (the root
 # `.cargo/config.toml` points SQLITE_WASM_RS_SOURCE_DIR at it) and is reached
-# by rusqlite through the libsqlite3-sys stand-in's wasm arm; its
-# `wasm-bindgen` feature supplies the host hooks (clock, entropy).
+# by rusqlite through the fork's sys crate, whose wasm arm re-exports it
+# (ADR-0042); its `wasm-bindgen` feature supplies the host hooks (clock,
+# entropy).
 sqlite-wasm-rs = { version = "0.6.1", default-features = false, features = ["sqlite3mc", "wasm-bindgen"] }
 # Step 111 (ADR-0035) — the browser's databases on sqlite-remote-vfs
 # (SchwarzDigits, Apache-2.0, public; not on crates.io): the local mode keeps
@@ -245,10 +251,10 @@ tempfile = "3"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "test-util"] }
 # Used by `tests/step_1c_mls_storage_path.rs` to reopen `mls.db`
 # directly and assert on openmls's internal tables without coupling
-# tests to `openmls_sqlite_storage` internals. Same feature as the
-# dependency site — the patched sys crate is one build. `hooks`: the
+# tests to `openmls_sqlite_storage` internals. Same source and feature as
+# the dependency site — the fork's sys crate is one build. `hooks`: the
 # Step-97c tests count commits per MLS operation (`commit_hook`).
-rusqlite = { version = "0.37", features = ["bundled", "hooks"] }
+rusqlite = { git = "https://github.com/SchwarzDigits/rusqlite", tag = "v0.37.0-sqlite3mc-2.5.1", version = "0.37", features = ["bundled", "hooks"] }
 
 [build-dependencies]
 # Step 4: compile `proto/generic_message.proto` into Rust at build

@@ -23,7 +23,7 @@ Client layer only — a Wire-compatible client, not a Wire replacement. Kalium (
 
 ## Stack
 
-Rust 2024 · UniFFI 0.29 (tokio feature) · openmls 0.9 (crates.io; no proteus — ADR-0010) · SQLite3MC (vendored, ADR-0021/0022) · reqwest 0.12 (rustls, no native-tls) · tokio 1, serde 1, thiserror 2, tracing 0.1 · cargo-ndk (Android) · wasm-pack (WASM).
+Rust 2024 · UniFFI 0.29 (tokio feature) · openmls 0.9 (crates.io; no proteus — ADR-0010) · SQLite3MC (vendored amalgamation, compiled by the SchwarzDigits rusqlite fork — ADR-0021/0022/0042) · reqwest 0.12 (rustls, no native-tls) · tokio 1, serde 1, thiserror 2, tracing 0.1 · cargo-ndk (Android) · wasm-pack (WASM).
 
 ## Architecture (ADR-0009)
 
@@ -128,7 +128,7 @@ cargo clippy -p kupferdraht-core --target wasm32-unknown-unknown --lib -- -D war
 ./scripts/wasm-test.sh                       # the browser tests; needs Firefox + geckodriver
 ```
 
-The first two are cheap and belong in the gate. `wasm-test.sh` runs the wasm integration tests in headless Firefox; a change a native test cannot reach should not wait for CI to find out — Step 125's rename was confirmed by `step_94_leader_tab`, not by anything native. All three need a wasm-capable clang (`CC_wasm32_unknown_unknown` / `AR_wasm32_unknown_unknown`; Apple clang has no WebAssembly backend) — see [`docs/bindings.md`](docs/bindings.md).
+The first two are cheap and belong in the gate. `wasm-test.sh` runs the wasm integration tests in headless Firefox; a change a native test cannot reach should not wait for CI to find out — Step 125's rename was confirmed by `step_94_leader_tab`, not by anything native. All three need a clang with the WebAssembly backend — Apple clang 21 (Xcode 26) and Homebrew LLVM have it, an older Apple clang has not; only then point cargo at Homebrew's via `CC_wasm32_unknown_unknown` / `AR_wasm32_unknown_unknown` — see [`docs/bindings.md`](docs/bindings.md).
 
 ### Design
 
@@ -215,7 +215,7 @@ One branch per Step/sub-step: `step/{N}-{slug}`, sub-steps `step/{N}{letter}-{sl
 
 - Don't copy Kalium's API names, scope nesting, or module structure — protocol observation only (ADR-0009).
 - Don't target Wire API < v14 — v5 event stream retired (ADR-0008).
-- Whole-DB encryption is SQLite3MC with ChaCha20-Poly1305 (ADR-0021, supersedes ADR-0013; landed with Step 90) — don't reintroduce SQLCipher/vendored OpenSSL, libsqlite3-sys's `SQLITE3_LIB_DIR` route, or per-field DEK (ADR-0003 superseded).
+- Whole-DB encryption is SQLite3MC with ChaCha20-Poly1305 (ADR-0021, supersedes ADR-0013; landed with Step 90) — don't reintroduce SQLCipher/vendored OpenSSL, libsqlite3-sys's `SQLITE3_LIB_DIR` route, a root `[patch]` for the engine (ADR-0042: the SchwarzDigits forks by tag, one rusqlite in the graph), or per-field DEK (ADR-0003 superseded).
 - Don't write a JavaScript port — WASM only (ADR-0015). Don't add a JVM CLI path — CLI is Rust (ADR-0007).
 - Don't implement Proteus encryption/decryption — prekeys generated at registration, uploaded, forgotten.
 - Don't add ADRs or rewrite docs autonomously — observations to `docs/observations.md`; doc changes go through discussion.

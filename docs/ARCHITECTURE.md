@@ -118,11 +118,13 @@ Kalium-style lifecycle-scope nesting (ADR-0009).
 - **`bindings/`, `kupferdraht-uniffi-bindgen/`** — the UniFFI-generated
   Kotlin / Swift surface and its packaging scripts.
 - **`vendor/`** — third-party build inputs, not Kupferdraht code: the
-  SQLite3MC amalgamation (pinned by `PROVENANCE.txt`) and the
-  `libsqlite3-sys` stand-in the root `[patch.crates-io]` routes rusqlite's
-  `bundled` feature to (ADR-0021, `vendor/README.md`); on wasm32 the
-  stand-in's arm re-exports `sqlite-wasm-rs`, which compiles the same
-  amalgamation for the browser (ADR-0022).
+  SQLite3MC amalgamation (pinned by `PROVENANCE.txt`, `vendor/README.md`).
+  Natively it is compiled by the `libsqlite3-sys` of the SchwarzDigits
+  rusqlite fork, a git dependency by tag that carries a byte-identical copy
+  (ADR-0042; refinery and `openmls_sqlite_storage` come from sibling forks
+  so the graph holds one rusqlite); on wasm32 the fork's sys crate
+  re-exports `sqlite-wasm-rs`, which compiles the amalgamation from
+  `vendor/sqlite3mc/` for the browser (ADR-0022).
 - **Web** — `wasm-pack build --target web` over `kupferdraht-core/src/wasm/`
   (hand-written wasm-bindgen, **not** UniFFI-generated — ADR-0015,
   which also carries the WASM-only delivery decision forward from the
@@ -406,10 +408,12 @@ On every target — native since Step 90, the browser since Step 91
 **SQLite3MC** (SQLite3 Multiple Ciphers) in its `chacha20` scheme —
 ChaCha20-Poly1305, sqleet format, a 16-byte Poly1305 tag per page
 (ADR-0021, `rules/0021-sqlite3mc-engine-chacha20.md`; supersedes the
-SQLCipher engine of ADR-0013). The engine is compiled from the vendored
-amalgamation (`vendor/sqlite3mc/`, pinned by version + SHA-256 in its
-`PROVENANCE.txt`) through the `libsqlite3-sys` stand-in the root
-`[patch.crates-io]` points at — no OpenSSL, no system SQLite, no
+SQLCipher engine of ADR-0013). The engine is the vendored amalgamation
+(`vendor/sqlite3mc/`, pinned by version + SHA-256 in its `PROVENANCE.txt`),
+compiled by the `libsqlite3-sys` of the SchwarzDigits rusqlite fork, which
+Kupferdraht takes as a git dependency by tag together with the refinery
+and openmls_sqlite_storage forks on it (ADR-0042) — no root `[patch]` a
+consumer would have to repeat, no OpenSSL, no system SQLite, no
 pkg-config anywhere in the build. Each database file has its **own**
 independently generated key (no key sharing):
 
@@ -455,7 +459,7 @@ consumer knob. See THREAT_MODEL.md G3.
 ADR-0022; the VFS since Step 111, ADR-0035 — rules `0022` and `0035`):
 `sqlite-wasm-rs` compiles the vendored amalgamation for wasm32 (the root
 `.cargo/config.toml` points `SQLITE_WASM_RS_SOURCE_DIR` at it) and rusqlite
-reaches it through the stand-in's wasm arm. `storage/browser.rs` registers
+reaches it through the wasm arm of the SchwarzDigits rusqlite fork's sys crate (ADR-0042). `storage/browser.rs` registers
 one `sqlite-remote-vfs` per database — the VFS allows one database per
 registration and one connection per database — in an async *prepare* step
 before the synchronous open, which names that VFS's SQLite3MC encrypting

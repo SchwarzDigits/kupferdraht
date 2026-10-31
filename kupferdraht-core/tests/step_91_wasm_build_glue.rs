@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 91 — SQLite3MC in the browser (ADR-0022): the native half of the
 //! pins. The build glue that makes the wasm target run the same store
-//! (one amalgamation, the stand-in's wasm arm, the CI job), and the
+//! (one amalgamation, the fork's wasm arm — ADR-0042 —, the CI job), and the
 //! cross-target fixture the browser test opens: a `kupferdraht.db` written by
 //! the native `SqliteStore` under a known key, closed in rollback-journal
 //! mode (the OPFS `sahpool` VFS has no shared-memory WAL).
@@ -160,19 +160,61 @@ fn lockfile_pins_the_wasm_engine_and_vfs_lines() {
     );
 }
 
-/// The stand-in's wasm arm: rusqlite 0.37 reaches `sqlite-wasm-rs` through
-/// it, the two deprecated stubs resolve, and the one FFI call has a safe
-/// wrapper there — never in kupferdraht-core.
+/// The manifest directory of `package` from `source` as the workspace
+/// resolves it (`cargo metadata` on the committed lockfile, offline).
+fn resolved_manifest_dir(package: &str, source: &str) -> PathBuf {
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["metadata", "--format-version", "1", "--locked", "--offline"])
+        .current_dir(workspace_path("."))
+        .output()
+        .expect("run cargo metadata");
+    assert!(
+        output.status.success(),
+        "cargo metadata: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("cargo metadata is JSON");
+    let manifest = metadata["packages"]
+        .as_array()
+        .expect("packages")
+        .iter()
+        .find(|p| {
+            p["name"] == package && p["source"].as_str().is_some_and(|s| s.starts_with(source))
+        })
+        .unwrap_or_else(|| panic!("{package} from {source} is not in the resolved graph"))
+        ["manifest_path"]
+        .as_str()
+        .expect("manifest_path")
+        .to_owned();
+    PathBuf::from(manifest)
+        .parent()
+        .expect("manifest dir")
+        .to_path_buf()
+}
+
+/// The fork's wasm arm (ADR-0042): rusqlite 0.37 reaches `sqlite-wasm-rs`
+/// through the resolved sys crate, the two deprecated stubs resolve, and
+/// the one FFI call has a safe wrapper there — never in kupferdraht-core.
 #[test]
-fn stand_in_carries_the_wasm_arm() {
-    let manifest = workspace_file("vendor/libsqlite3-sys/Cargo.toml");
+fn the_forks_sys_crate_carries_the_wasm_arm() {
+    let sys_dir = resolved_manifest_dir(
+        "libsqlite3-sys",
+        "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.5.1",
+    );
+    let read = |rel: &str| {
+        let path = sys_dir.join(rel);
+        std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read the fork's {}: {e}", path.display()))
+    };
+    let manifest = read("Cargo.toml");
     assert!(
         manifest.contains(
             "[target.'cfg(all(target_family = \"wasm\", target_os = \"unknown\"))'.dependencies]"
         ) && manifest.contains("sqlite-wasm-rs"),
-        "the stand-in must depend on sqlite-wasm-rs on wasm32-unknown-unknown"
+        "the fork's sys crate must depend on sqlite-wasm-rs on wasm32-unknown-unknown"
     );
-    let arm = workspace_file("vendor/libsqlite3-sys/src/wasm.rs");
+    let arm = read("src/wasm.rs");
     for symbol in [
         "pub use sqlite_wasm_rs::*",
         "pub unsafe fn sqlite3_trace",
@@ -181,7 +223,7 @@ fn stand_in_carries_the_wasm_arm() {
     ] {
         assert!(
             arm.contains(symbol),
-            "vendor/libsqlite3-sys/src/wasm.rs lacks `{symbol}`"
+            "the fork's libsqlite3-sys/src/wasm.rs lacks `{symbol}`"
         );
     }
     let core_src = workspace_path("kupferdraht-core/src");
@@ -195,7 +237,7 @@ fn stand_in_carries_the_wasm_arm() {
                 let src = std::fs::read_to_string(&path).expect("read source");
                 assert!(
                     !src.contains("sqlite3mc_vfs_create"),
-                    "{}: the raw FFI call belongs in the vendored stand-in, not in kupferdraht-core",
+                    "{}: the raw FFI call belongs in the fork's sys crate, not in kupferdraht-core",
                     path.display()
                 );
             }

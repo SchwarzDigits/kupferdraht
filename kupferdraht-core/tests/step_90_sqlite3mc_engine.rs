@@ -6,8 +6,10 @@
 //!
 //! The Step-88 harness (`spike/sqlite3mc/`, P1/P2) becomes the swap's
 //! pins here: the build glue (lockfile without OpenSSL, `libsqlite3-sys`
-//! as the vendored stand-in, plain `bundled`, the amalgamation pinned by
-//! `vendor/sqlite3mc/PROVENANCE.txt`), the engine identity
+//! as the SchwarzDigits rusqlite fork's sys crate by tag — ADR-0042 —,
+//! plain `bundled`, the amalgamation pinned by
+//! `vendor/sqlite3mc/PROVENANCE.txt` and the fork's copy byte-identical to
+//! it), the engine identity
 //! (`sqlite3mc_version()` equals the vendored release), the five P2 byte
 //! assertions on a production `SqliteStore` file in the `chacha20`
 //! scheme, the encrypted-header control (a mis-linked SQLite is a red
@@ -169,29 +171,138 @@ fn lock_block(lock: &str, package: &str) -> String {
     block.join("\n")
 }
 
-/// `libsqlite3-sys` resolves to the vendored stand-in (a path source, no
-/// registry checksum) through the root `[patch.crates-io]` — a silent
-/// fallback to crates.io's vanilla SQLite is a red test.
+/// The git sources of the SQLite3MC build line (ADR-0042): the SchwarzDigits
+/// forks, by tag. The lockfile completes each with the resolved commit.
+const RUSQLITE_SOURCE: &str =
+    "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.5.1";
+const REFINERY_SOURCE: &str = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc";
+const OPENMLS_STORAGE_SOURCE: &str =
+    "git+https://github.com/SchwarzDigits/openmls?tag=sqlite_storage-v0.3.0-sqlite3mc";
+
+/// `libsqlite3-sys` is the SchwarzDigits rusqlite fork's sys crate, reached
+/// through rusqlite as a git dependency by tag — never crates.io's vanilla
+/// SQLite, and through no root `[patch]`, which a consumer of the library
+/// could not inherit (ADR-0042). rusqlite, refinery and
+/// openmls_sqlite_storage come from the same forks, so the graph holds one
+/// rusqlite; a second one would collide on `links = "sqlite3"`.
 #[test]
-fn lockfile_libsqlite3_sys_is_the_vendored_stand_in() {
-    let block = lock_block(&workspace_file("Cargo.lock"), "libsqlite3-sys");
-    assert!(
-        !block.contains("source ="),
-        "libsqlite3-sys must be a path source (vendor/libsqlite3-sys), got:\n{block}"
-    );
+fn lockfile_resolves_the_sqlite3mc_line_to_the_forks() {
+    let lock = workspace_file("Cargo.lock");
+    for (package, source) in [
+        ("libsqlite3-sys", RUSQLITE_SOURCE),
+        ("rusqlite", RUSQLITE_SOURCE),
+        ("refinery", REFINERY_SOURCE),
+        ("refinery-core", REFINERY_SOURCE),
+        ("refinery-macros", REFINERY_SOURCE),
+        ("openmls_sqlite_storage", OPENMLS_STORAGE_SOURCE),
+    ] {
+        let block = lock_block(&lock, package);
+        assert!(
+            block.contains(&format!("source = \"{source}#")),
+            "{package} must resolve to the SchwarzDigits fork by tag, got:\n{block}"
+        );
+    }
+    let block = lock_block(&lock, "libsqlite3-sys");
     assert!(
         block.contains("version = \"0.35.0\""),
-        "the stand-in keeps upstream's version so rusqlite 0.37 resolves to it:\n{block}"
+        "the fork keeps upstream's sys version so rusqlite 0.37 resolves to it:\n{block}"
     );
+    for package in ["libsqlite3-sys", "rusqlite"] {
+        assert_eq!(
+            lock.matches(&format!("name = \"{package}\"\n")).count(),
+            1,
+            "exactly one {package} in the graph"
+        );
+    }
     let root = workspace_file("Cargo.toml");
     assert!(
-        root.contains("[patch.crates-io]"),
-        "root Cargo.toml lacks [patch.crates-io]"
+        !root.contains("[patch."),
+        "root Cargo.toml must carry no [patch] — a consumer could not inherit it"
     );
     assert!(
-        root.contains("libsqlite3-sys = { path = \"vendor/libsqlite3-sys\" }"),
-        "root Cargo.toml must patch libsqlite3-sys to vendor/libsqlite3-sys"
+        !workspace_path("vendor/libsqlite3-sys").exists(),
+        "the stand-in left with ADR-0042; the fork carries the sys crate"
     );
+    let manifest = workspace_file("kupferdraht-core/Cargo.toml");
+    for (dep, source) in [
+        ("rusqlite", RUSQLITE_SOURCE),
+        ("refinery", REFINERY_SOURCE),
+        ("openmls_sqlite_storage", OPENMLS_STORAGE_SOURCE),
+    ] {
+        let (url, tag) = source
+            .trim_start_matches("git+")
+            .split_once("?tag=")
+            .expect("url?tag=");
+        let line = format!("{dep} = {{ git = \"{url}\", tag = \"{tag}\"");
+        assert!(
+            manifest.contains(&line),
+            "kupferdraht-core/Cargo.toml must pin {dep} to the fork's tag: {line}"
+        );
+    }
+    let deny = workspace_file("deny.toml");
+    for source in [RUSQLITE_SOURCE, REFINERY_SOURCE, OPENMLS_STORAGE_SOURCE] {
+        let url = source
+            .trim_start_matches("git+")
+            .split_once('?')
+            .expect("url")
+            .0;
+        assert!(
+            deny.contains(&format!("\"{url}\"")),
+            "deny.toml allow-git must name {url}"
+        );
+    }
+}
+
+/// The manifest directory of `package` from `source` as the workspace
+/// resolves it (`cargo metadata` on the committed lockfile, offline).
+fn resolved_manifest_dir(package: &str, source: &str) -> PathBuf {
+    let output = std::process::Command::new(env!("CARGO"))
+        .args(["metadata", "--format-version", "1", "--locked", "--offline"])
+        .current_dir(workspace_path("."))
+        .output()
+        .expect("run cargo metadata");
+    assert!(
+        output.status.success(),
+        "cargo metadata: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("cargo metadata is JSON");
+    let manifest = metadata["packages"]
+        .as_array()
+        .expect("packages")
+        .iter()
+        .find(|p| {
+            p["name"] == package && p["source"].as_str().is_some_and(|s| s.starts_with(source))
+        })
+        .unwrap_or_else(|| panic!("{package} from {source} is not in the resolved graph"))
+        ["manifest_path"]
+        .as_str()
+        .expect("manifest_path")
+        .to_owned();
+    PathBuf::from(manifest)
+        .parent()
+        .expect("manifest dir")
+        .to_path_buf()
+}
+
+/// The sys crate the lockfile resolves to compiles the amalgamation
+/// `vendor/sqlite3mc/PROVENANCE.txt` pins, byte for byte — read off the
+/// resolved checkout, never trusted from the build.
+#[test]
+fn forks_amalgamation_matches_the_provenance_record() {
+    let sys_dir = resolved_manifest_dir("libsqlite3-sys", RUSQLITE_SOURCE);
+    let provenance = workspace_file("vendor/sqlite3mc/PROVENANCE.txt");
+    for file in ["sqlite3mc_amalgamation.c", "sqlite3mc_amalgamation.h"] {
+        let path = sys_dir.join("sqlite3mc").join(file);
+        let bytes = std::fs::read(&path)
+            .unwrap_or_else(|e| panic!("read the fork's {}: {e}", path.display()));
+        assert_eq!(
+            hex(&Sha256::digest(&bytes)),
+            provenance_value(&provenance, &format!("{file} sha256")),
+            "the fork's sqlite3mc/{file} differs from vendor/sqlite3mc/PROVENANCE.txt"
+        );
+    }
 }
 
 /// Both `rusqlite` sites (dependency + dev-dependency) use plain

@@ -917,7 +917,7 @@ it binds.
 
 ### Web — wasm-pack
 ```
-export CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang     # a wasm-capable clang
+export CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang     # only if `clang --print-targets` lacks wasm32
 export AR_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/llvm-ar
 wasm-pack build --target web
 ```
@@ -926,9 +926,10 @@ glue from the `wasm/` module. There is no `bindings/wasm/` build script
 yet — the invocation above is the whole build (run from the
 `kupferdraht-core` crate directory). Since Step 91 the build compiles the
 SQLite3MC C for wasm (`sqlite-wasm-rs` over `vendor/sqlite3mc/`), so it
-needs a clang with the WebAssembly backend: Apple's clang has none
+needs a clang with the WebAssembly backend: Apple clang 21 (Xcode 26)
+has it, so the two exports above are only for an older Apple clang
 (`brew install llvm`, paths as above — machine-specific, never
-committed); distro clang and the GitHub runners' clang do. The browser
+committed); distro clang and the GitHub runners' clang have it too. The browser
 tests run through `scripts/wasm-test.sh` (headless Firefox via
 geckodriver; the storage tests in a dedicated worker — the test runner
 serves the page cross-origin isolated) — the same script CI runs;

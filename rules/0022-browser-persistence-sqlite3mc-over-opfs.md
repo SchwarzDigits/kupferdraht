@@ -18,10 +18,11 @@ wasm-bindgen surface) stay in force there.
   the root `.cargo/config.toml`; pin `sqlite3mc_version()` against
   `PROVENANCE.txt` on wasm as on native. Don't let the crate's bundled
   copy or a second stand-in become the engine.
-- **rusqlite stays on the 0.37 line;** the browser path is the
-  `libsqlite3-sys` stand-in's wasm arm (re-export of `sqlite-wasm-rs`, the
-  two deprecated stubs, the safe `sqlite3mc_wrap_vfs`). The one `unsafe`
-  FFI call lives in `vendor/`, never in `kupferdraht-core`.
+- **rusqlite stays on the 0.37 line;** the browser path is the wasm arm
+  of the SchwarzDigits rusqlite fork's `libsqlite3-sys` (re-export of
+  `sqlite-wasm-rs`, the two deprecated stubs, the safe
+  `sqlite3mc_wrap_vfs`; since ADR-0042 — before, the vendored stand-in's).
+  The one `unsafe` FFI call lives in the fork, never in `kupferdraht-core`.
 - **Dedicated worker or nothing:** `wasm::Kupferdraht::open` **fails closed**
   outside a dedicated worker — no silent in-memory fallback. (The OPFS pool
   it installed is gone with ADR-0035.)
