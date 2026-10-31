@@ -2173,9 +2173,12 @@ dependencies = [
 [[package]]
 name = "libsqlite3-sys"
 version = "0.35.0"
+source = "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.5.1#0a490c3f1622b63cb2057d447887a57482c9f3f2"
 dependencies = [
  "cc",
+ "pkg-config",
  "sqlite-wasm-rs",
+ "vcpkg",
 ]
 
 [[package]]
@@ -2500,8 +2503,7 @@ dependencies = [
 [[package]]
 name = "openmls_sqlite_storage"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7a48acaffbed1bbed61c5030193e374ff4914331ed5f4a604bd5a4692c0a713"
+source = "git+https://github.com/SchwarzDigits/openmls?tag=sqlite_storage-v0.3.0-sqlite3mc#952e7d7ce84ef6ca037f0e72fb3be5d1baec8a62"
 dependencies = [
  "openmls_traits",
  "refinery",
@@ -3108,8 +3110,7 @@ dependencies = [
 [[package]]
 name = "refinery"
 version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee5133e5b207e5703c2a4a9dc9bd8c8f2cc74c4ac04ca5510acaa907012c77ac"
+source = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc#538b722ea1115f66fc0187fd0bb28493f38034c1"
 dependencies = [
  "refinery-core",
  "refinery-macros",
@@ -3118,8 +3119,7 @@ dependencies = [
 [[package]]
 name = "refinery-core"
 version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "023a2a96d959c9b5b5da78e965bfdb1363b365bf5e84531a67d0eee827a702a3"
+source = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc#538b722ea1115f66fc0187fd0bb28493f38034c1"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -3138,8 +3138,7 @@ dependencies = [
 [[package]]
 name = "refinery-macros"
 version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c56c2e960c8e47c7c5c30ad334afea8b5502da796a59e34d640d6239d876d924"
+source = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc#538b722ea1115f66fc0187fd0bb28493f38034c1"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -3278,8 +3277,7 @@ dependencies = [
 [[package]]
 name = "rusqlite"
 version = "0.37.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "165ca6e57b20e1351573e3729b958bc62f0e48025386970b6e4d29e7a7e71f3f"
+source = "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.5.1#0a490c3f1622b63cb2057d447887a57482c9f3f2"
 dependencies = [
  "bitflags",
  "fallible-iterator",
@@ -4518,6 +4516,12 @@ name = "valuable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
+
+[[package]]
+name = "vcpkg"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "version_check"

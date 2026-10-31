@@ -296,3 +296,7 @@ native targets run, over the OPFS `sahpool` VFS**, in this shape:
 - 2026-10-08: Amendment, not a supersession — the sister project that
   served as the template is no longer named; its repository, file paths
   and note ids are internal. The decisions are untouched.
+- 2026-10-31: The stand-in's wasm arm moved, unchanged, into the
+  `libsqlite3-sys` of the SchwarzDigits rusqlite fork (ADR-0042, Step
+  127); `vendor/sqlite3mc/` stays the amalgamation `sqlite-wasm-rs`
+  compiles. The decisions are untouched.

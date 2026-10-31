@@ -1,6 +1,6 @@
 # ADR-0021: Adopt SQLite3MC with ChaCha20-Poly1305 as the whole-DB encryption engine
 
-**Status:** Accepted
+**Status:** Accepted (build glue replaced by ADR-0042)
 **Date:** 2026-09-16
 **Deciders:** Volker Zöpfel
 
@@ -293,3 +293,11 @@ For the swap step (the NEXT step, not this ADR):
 - 2026-10-08: Amendment, not a supersession — the sister project that
   served as the I1 template is no longer named; its repository and file
   paths are internal. The decision is untouched.
+- 2026-10-31: Build glue replaced by ADR-0042 "Bundle SQLite3MC through
+  forked rusqlite, refinery and openmls_sqlite_storage, not through a root
+  `[patch]`" (Step 127): the `[patch.crates-io]` stand-in in `vendor/` is
+  gone; the engine is compiled by the SchwarzDigits rusqlite fork's
+  `libsqlite3-sys`, a git dependency by tag that a consumer inherits.
+  The engine, scheme, key handling and pragma order decided here are
+  untouched; the Implementation Notes' "Build glue" bullet reads with
+  ADR-0042.

@@ -147,4 +147,13 @@ unknown-git = "warn"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # Step 111 (ADR-0035): sqlite-remote-vfs (SchwarzDigits, Apache-2.0,
 # public; not on crates.io) — the browser's storage VFS.
-allow-git = ["https://github.com/SchwarzDigits/sqlite-remote-vfs"]
+# Step 127 (ADR-0042): the SchwarzDigits forks of rusqlite (MIT; its
+# libsqlite3-sys bundles SQLite3MC), refinery (MIT OR Apache-2.0) and
+# openmls (MIT; its sqlite_storage over those two) — consumed by tag, the
+# one rusqlite of the graph.
+allow-git = [
+    "https://github.com/SchwarzDigits/sqlite-remote-vfs",
+    "https://github.com/SchwarzDigits/rusqlite",
+    "https://github.com/SchwarzDigits/refinery",
+    "https://github.com/SchwarzDigits/openmls",
+]

@@ -189,7 +189,9 @@ there is no preset for Wire's own hosted service, whose Terms of Use
 restrict third-party clients (see "Known limitations"). The full
 command reference is
 [`docs/cli.md`](docs/cli.md); for embedding Kupferdraht as a library see
-[`docs/library.md`](docs/library.md) (Rust) and
+[`docs/library.md`](docs/library.md) (Rust — its "Consuming from Rust"
+section has the one dependency line and the one constraint: Kupferdraht
+brings its own rusqlite) and
 [`docs/bindings.md`](docs/bindings.md) (Kotlin / Swift / browser).
 
 ## Building
@@ -210,11 +212,12 @@ cargo build --workspace
 ```
 
 Browser build (wasm-bindgen surface, from `kupferdraht-core/`; the SQLite3MC
-C needs a clang with the WebAssembly backend — Apple's has none, Homebrew
-LLVM does):
+C needs a clang with the WebAssembly backend — Apple clang 21 (Xcode 26)
+and Homebrew LLVM have it; an older Apple clang has not, then point cargo
+at Homebrew's):
 
 ```sh
-export CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang
+export CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang   # only if `clang --print-targets` lacks wasm32
 export AR_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/llvm-ar
 wasm-pack build --target web
 scripts/wasm-test.sh            # the browser tests, headless Firefox
@@ -250,7 +253,9 @@ embedder reproduces: every component with license, authors and
 repository, grouped by license, plus the components outside the crate
 graph and the trademark note.
 [`docs/THIRD_PARTY_LICENSES.html`](docs/THIRD_PARTY_LICENSES.html)
-enumerates every crate Kupferdraht links against, grouped by license,
+enumerates every crate Kupferdraht links against, grouped by license
+(the SchwarzDigits forks of rusqlite, refinery and openmls that carry the
+SQLite3MC build line are git dependencies and listed like any crate),
 plus a hand-kept section for the two components outside the crate
 graph: the vendored SQLite3MC engine (MIT) and the git-pinned
 `sqlite-remote-vfs` (Apache-2.0), which cargo-about skips as an

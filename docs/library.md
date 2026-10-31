@@ -18,6 +18,49 @@ task.
 
 ---
 
+## Consuming from Rust
+
+`kupferdraht-core` is not on crates.io (`publish = false`); a Rust
+consumer takes it from the repository by revision or tag:
+
+```toml
+[dependencies]
+kupferdraht-core = { git = "https://github.com/SchwarzDigits/kupferdraht", rev = "<revision>" }
+```
+
+That one line is the whole integration. Kupferdraht brings its own
+SQLite: `rusqlite`, `refinery` and `openmls_sqlite_storage` come from the
+SchwarzDigits forks whose `libsqlite3-sys` compiles the SQLite3 Multiple
+Ciphers amalgamation (whole-database ChaCha20-Poly1305, ADR-0021; the
+forks are git dependencies by tag, ADR-0042), and Cargo resolves them
+transitively — nothing to patch, nothing to configure.
+
+The one constraint that follows: **a dependency graph holds one
+`libsqlite3-sys`** (its `links = "sqlite3"`). An application that keeps
+its own SQLite database beside Kupferdraht takes `rusqlite` from the same
+fork, at the same tag Kupferdraht names in `kupferdraht-core/Cargo.toml`:
+
+```toml
+rusqlite = { git = "https://github.com/SchwarzDigits/rusqlite", tag = "v0.37.0-sqlite3mc-2.5.1", version = "0.37", features = ["bundled"] }
+```
+
+A crates.io `rusqlite` in the same graph fails the build with Cargo's
+"multiple packages link to native library `sqlite3`" — loudly, which is
+the point: before ADR-0042 the engine was reached through a root
+`[patch.crates-io]`, which Cargo honours only in the root manifest of the
+build, and a consumer that did not repeat it linked vanilla SQLite and
+wrote its databases in plaintext without an error (the key pragmas are
+unknown pragmas there, which SQLite ignores). A leftover `[patch.crates-io]
+libsqlite3-sys = …` in a consumer is harmless now (Cargo warns that it is
+unused) and can go.
+
+The forks are upstream's code with manifest changes only; their README
+files name the branch and the bump recipe. On the browser target nothing
+of this is visible: the fork's sys crate re-exports `sqlite-wasm-rs`
+there (`docs/bindings.md`).
+
+---
+
 ## Module layout
 
 Feature-based (matrix-rust-sdk style), not Kalium-style lifecycle-scope

@@ -34,6 +34,37 @@ is no skill for it — it is this short procedure:
 
 ## [Unreleased]
 
+### Security
+
+- **A Rust consumer can no longer link vanilla SQLite under Kupferdraht
+  by accident.** The SQLite3MC engine was reached through a root
+  `[patch.crates-io]`, which Cargo honours only in the root manifest of
+  the build: a consumer that did not repeat the entry got crates.io's
+  `libsqlite3-sys`, and with it plain SQLite, which accepts the key
+  pragmas as unknown pragmas and writes the databases in plaintext —
+  without an error, measured on 2026-10-31 (the first embedder had hit
+  it and carried the patch since). Now `rusqlite`, `refinery` and
+  `openmls_sqlite_storage` come from SchwarzDigits forks whose
+  `libsqlite3-sys` bundles the SQLite3MC amalgamation, as git
+  dependencies by tag that every consumer inherits (ADR-0042). A second,
+  crates.io `rusqlite` in a consumer's graph is a build error now
+  (`links = "sqlite3"` twice), not a silently unencrypted store.
+
+### Changed
+
+- **The SQLite3MC build line moves out of the tree** — the vendored
+  `libsqlite3-sys` stand-in and the root `[patch]` are gone; the forks
+  (github.com/SchwarzDigits/rusqlite `v0.37.0-sqlite3mc-2.5.1`,
+  github.com/SchwarzDigits/refinery `v0.9.1-sqlite3mc`,
+  github.com/SchwarzDigits/openmls `sqlite_storage-v0.3.0-sqlite3mc`) are
+  upstream's code with manifest changes, the wasm arm lives in the
+  rusqlite fork's sys crate, and `vendor/sqlite3mc/` stays as the
+  provenance pin that the fork's copy is checked against byte for byte.
+  Same engine, same versions, same at-rest format; `docs/library.md`
+  "Consuming from Rust" has the one dependency line and the one
+  constraint (an application's own SQLite takes `rusqlite` from the same
+  fork). The compliance workflow's exclusion of the stand-in goes with it.
+
 ### Fixed
 
 - **An asset upload response without `domain` falls back to the user's

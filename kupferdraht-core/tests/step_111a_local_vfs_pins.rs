@@ -44,10 +44,14 @@ fn the_vfs_is_pinned_to_a_reviewed_revision() {
         ),
         "sqlite-remote-vfs v0.5.0 (a failed commit is resent)"
     );
+    let deny = workspace_file("deny.toml");
+    let allow_git = deny
+        .split_once("allow-git = [")
+        .map(|(_, rest)| rest.split_once(']').expect("allow-git list closes").0)
+        .expect("deny.toml has an allow-git list");
     assert!(
-        workspace_file("deny.toml")
-            .contains(r#"allow-git = ["https://github.com/SchwarzDigits/sqlite-remote-vfs"]"#),
-        "cargo deny allows that source"
+        allow_git.contains("\"https://github.com/SchwarzDigits/sqlite-remote-vfs\""),
+        "cargo deny allows that source: {allow_git}"
     );
 }
 

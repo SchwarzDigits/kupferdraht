@@ -70,15 +70,6 @@ excludes:
         plugins at configuration time and needs the Android SDK; the ORT
         container offers neither (its rustup directory is read-only). Its
         third-party dependencies are listed in THIRD-PARTY-NOTICES.
-    - pattern: "vendor/libsqlite3-sys/**"
-      reason: "OTHER"
-      comment: |
-        The libsqlite3-sys stand-in is reached through the root workspace's
-        [patch] and is resolved, with its license and its one build
-        dependency, as part of the root Cargo graph. Analyzed on its own
-        manifest, ORT's Cargo plugin fails on the wasm32-only dependencies
-        the stand-in declares (`js-sys … is missing in the map`), and the
-        standalone result would only duplicate the root graph.
     - pattern: "bindings/kotlin/**"
       reason: "OTHER"
       comment: |

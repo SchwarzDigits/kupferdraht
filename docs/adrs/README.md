@@ -41,8 +41,8 @@ See `_template.md` for the format.
 | 0018 | Represent room case state as event-sourced snapshot messages | Accepted | 2026-08-17 | [→](0018-case-state-as-event-sourced-snapshots.md) |
 | 0019 | Auto-negotiate the push transport across /v14/events and legacy /await | Accepted (items 2–3 superseded by ADR-0030; reconnect backoff by ADR-0039) | 2026-08-21 | [→](0019-auto-negotiate-push-transport.md) |
 | 0020 | Mark task-list rooms and re-broadcast full state on invite | Accepted | 2026-08-24 | [→](0020-task-list-marker-and-invite-state-rebroadcast.md) |
-| 0021 | Adopt SQLite3MC with ChaCha20-Poly1305 as the whole-DB encryption engine | Accepted | 2026-09-16 | [→](0021-sqlite3mc-engine-chacha20.md) |
-| 0022 | Persist browser data in SQLite3MC over OPFS instead of IndexedDB per-record encryption | Accepted (item 7 superseded by ADR-0023; item 3 by ADR-0035) | 2026-09-24 | [→](0022-browser-persistence-sqlite3mc-over-opfs.md) |
+| 0021 | Adopt SQLite3MC with ChaCha20-Poly1305 as the whole-DB encryption engine | Accepted (build glue replaced by ADR-0042) | 2026-09-16 | [→](0021-sqlite3mc-engine-chacha20.md) |
+| 0022 | Persist browser data in SQLite3MC over OPFS instead of IndexedDB per-record encryption | Accepted (item 7 superseded by ADR-0023; item 3 by ADR-0035; the stand-in's wasm arm lives in the fork since ADR-0042) | 2026-09-24 | [→](0022-browser-persistence-sqlite3mc-over-opfs.md) |
 | 0023 | Enforce one active Kupferdraht instance per browser origin with a Web Locks lease and explicit takeover | Accepted | 2026-09-24 | [→](0023-single-active-kupferdraht-instance-per-origin.md) |
 | 0024 | Guard the native critical sections with a per-account advisory file lock, fail-fast | Accepted | 2026-09-24 | [→](0024-native-cross-process-lock-per-account.md) |
 | 0025 | Scope keystore ids and the login cookie label per home with a persisted home id | Accepted | 2026-09-25 | [→](0025-scope-keystore-ids-and-cookie-label-per-home.md) |
@@ -62,3 +62,4 @@ See `_template.md` for the format.
 | 0039 | Drive sync by triggers, with timers only as safety nets | Accepted | 2026-10-02 | [→](0039-drive-sync-by-triggers-timers-only-as-safety-nets.md) |
 | 0040 | Keep one remote device per user, held as a slot on the storage server | Accepted | 2026-10-02 | [→](0040-one-remote-device-per-user-storage-slot.md) |
 | 0041 | Rename Sodium to Kupferdraht as a clean cut | Accepted | 2026-10-07 | [→](0041-rename-sodium-to-kupferdraht-as-a-clean-cut.md) |
+| 0042 | Bundle SQLite3MC through forked rusqlite, refinery and openmls_sqlite_storage, not through a root `[patch]` | Accepted | 2026-10-31 | [→](0042-sqlite3mc-via-forked-rusqlite-not-a-root-patch.md) |

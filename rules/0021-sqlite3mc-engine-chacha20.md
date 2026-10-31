@@ -22,9 +22,12 @@ tree with Step 90 (engine swap, 2026-09-24).
   order; no `cipher_salt`.
 - **Engine identity via `SELECT sqlite3mc_version()`**, not
   `PRAGMA cipher_version`; keep an at-rest ciphertext control test.
-- **Build:** `[patch.crates-io]` on `libsqlite3-sys` to a stand-in that
-  bundles the amalgamation, pinned by version + SHA-256 from the signed
-  release sums; upstream's `bundled` flags + `SQLITE_TEMP_STORE=2`.
+- **Build: superseded by ADR-0042** (2026-10-31) — the SchwarzDigits
+  rusqlite fork's `libsqlite3-sys` bundles the amalgamation (pinned by
+  version + SHA-256 from the signed release sums in `vendor/sqlite3mc/`),
+  upstream's `bundled` flags + `SQLITE_TEMP_STORE=2`; current rule:
+  `rules/0042-sqlite3mc-via-forked-rusqlite-not-a-root-patch.md`. **Don't**
+  bring the `[patch.crates-io]` stand-in back.
   **Don't** pass `SQLITE_EXTRA_INIT=sqlite3mc_initialize` on 2.5.x.
   **Don't** reintroduce vendored OpenSSL. **Don't** use libsqlite3-sys's
   non-bundled `SQLITE3_LIB_DIR` route (`openmls_sqlite_storage` forces
