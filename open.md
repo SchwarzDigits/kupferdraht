@@ -46,14 +46,6 @@ Pre-existing over-cap files outside Step 29's scope: `login_pipeline.rs`
 
 ---
 
-## 61) Residuals from the WASM/ADR-0005 divergence finding (2026-07-16; narrowed 2026-09-10)
-
-One residual of the finding (the rest went into ADR-0015 and Step 82):
-
-- **SSO option-β decision** (Step 17) is ADR-shaped but lives only
-  in the archived plan doc (`docs/plan/archive/17-saml-sso.md`) —
-  `new-adr` candidate, undecided.
-
 ## Backlog — decided work, not yet shipped
 
 > Folded in 2026-06-30 from the former `docs/v1-*-audit.md` trackers. Gaps,
@@ -127,6 +119,7 @@ Additive unless noted.
 - **gap-B.13** Live `/feature-configs` fixture not captured (tests use a synthesised one).
 - **gap-B.14** Wire-Web→Kupferdraht inbound asset never live-validated.
 - **gap-B.15** `WIRE_RECEIPT_MODE` off-path smoke not run against a live backend.
+- **gap-B.36** The SSO login (ADR-0043) was never run end to end against a backend with a configured identity provider; four facts are assumptions pinned by tests (`docs/wire/api-notes.md` §2b: unversioned `/sso/*` paths, the cookie as a query parameter on the success redirect, `POST /access` from a bare `zuid`, `/sso/settings` as the discovery source).
 - **gap-B.16** 4xx httpmock coverage not symmetric (assets / feature-configs / properties / token-refresh covered, not all endpoints).
 - **gap-B.7 residual** — the low-pool live drain of the key-package top-up (Step 63) is untested until a claim source exists (observations §66).
 - **gap-B.25 residual** — the removal flush (`sync/removal_flush.rs`, Step 74; observations §69/§70) keeps its pending set in memory: a restart loses it; queued proposals persist in openmls storage and commit on the room's next activity (see also §73).

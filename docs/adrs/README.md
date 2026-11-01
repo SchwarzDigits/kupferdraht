@@ -63,3 +63,4 @@ See `_template.md` for the format.
 | 0040 | Keep one remote device per user, held as a slot on the storage server | Accepted | 2026-10-02 | [→](0040-one-remote-device-per-user-storage-slot.md) |
 | 0041 | Rename Sodium to Kupferdraht as a clean cut | Accepted | 2026-10-07 | [→](0041-rename-sodium-to-kupferdraht-as-a-clean-cut.md) |
 | 0042 | Bundle SQLite3MC through forked rusqlite, refinery and openmls_sqlite_storage, not through a root `[patch]` | Accepted | 2026-10-31 | [→](0042-sqlite3mc-via-forked-rusqlite-not-a-root-patch.md) |
+| 0043 | Drive Wire's SSO login from the client (SP-driven, option β) | Accepted | 2026-11-01 (decision 2026-07-08) | [→](0043-sso-login-is-sp-driven.md) |

@@ -59,6 +59,13 @@ is no skill for it — it is this short procedure:
   and registry entry stay, so the next login reuses the device. Before, the
   registry kept naming the account active and a consumer discovered the
   dead session only through a failing `resume`.
+- **ADR-0043 records the SSO decision** of 2026-07-08 (Step 17): SSO login
+  is SP-driven — Kupferdraht drives Wire's `/sso/initiate-login` and
+  discovers the code through `/sso/settings`, the application opens the
+  URL and captures the `zuid` cookie off the redirect, `finalize_sso`
+  runs the existing login pipeline; no SAML in the library. With its rule
+  file; the never-run live verification is now an open test-coverage gap
+  instead of a note in an archived plan.
 - **Non-goals have their own home** — `docs/non-goals.md` lists every
   decided scope cut with its reason; `open.md` keeps open questions and
   backlog only. New there: no contact discovery and no direct contact
