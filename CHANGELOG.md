@@ -78,6 +78,13 @@ is no skill for it — it is this short procedure:
   a `doctor` command); the rest was asked for by no consumer or
   contradicted ADR-0009's matrix-rust-sdk mirroring, and the cache verbs
   moved into Step 84's plan.
+- **The production-readiness review's residuals are steps** (open.md §71
+  dissolved, 2026-11-01): the cheap hardening items are Step 132, the
+  documentation claims the review measured against the code are Step 133
+  (THREAT_MODEL 0.7), DB-key rotation with `secure_delete` is Step 134.
+  The Linux desktop keystore limit is a non-goal until Linux is a target
+  (NG-24; the docs that named §71 point there), the iOS notification
+  extension is NG-23, the never-made future-epoch probe is gap-B.37.
 - **Non-goals have their own home** — `docs/non-goals.md` lists every
   decided scope cut with its reason; `open.md` keeps open questions and
   backlog only. New there: no contact discovery and no direct contact

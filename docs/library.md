@@ -1676,7 +1676,7 @@ Credential Manager), base64-encoded under the service prefix. **Linux:
 only the kernel keyring (keyutils) today** — it is in memory and lost on
 reboot (and when the kernel's persistent keyring expires), after which
 the local databases cannot be opened again. Not for production use on
-Linux until `open.md` §71 B4 (Secret Service) is done. Construct with a service prefix:
+Linux (`docs/non-goals.md` NG-24: no Secret Service backend before Linux is a target). Construct with a service prefix:
 
 ```rust
 let store = kupferdraht::keystore::KeyringStore::new("kupferdraht");

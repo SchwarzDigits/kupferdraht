@@ -63,3 +63,28 @@ limitations".
   another user). Not planned (Markus, 2026-09-30): the browser deployment
   has one account per browser; revisit only if several accounts on one
   backend become a use case.
+- **NG-23** No iOS notification service extension (NSE) — noted 2026-09-28
+  while designing ADR-0031, whose Consequences hold the technical list. A
+  second process started by a push, with a hard time and memory budget and
+  killed without warning, needs more than ADR-0031: a receive-only drain
+  mode (no own commits, no healing, stop before what needs the app), a
+  time budget, database keys readable while the device is locked (a shared
+  keychain access group, `kSecAttrAccessibleAfterFirstUnlock`, ADR-0029),
+  and care with iOS terminating a suspended process that holds a file lock
+  in a shared container (`0xdead10cc`) — `kupferdraht.lock` is held across
+  `POST /access`. Not planned; an iOS consumer that needs it reopens the
+  question with that list.
+- **NG-24** Linux desktop is not a supported target of the keystore yet —
+  `keyring`'s `linux-native` feature is the kernel keyring (keyutils): in
+  memory, lost on reboot and when the persistent keyring expires, after
+  which the account's databases cannot be opened on that machine
+  (ADR-0029 never replaces a key; a re-login registers a new device and the
+  local history is gone). Decided 2026-11-01 (Volker): no step until Linux
+  is actually used; Markus had deferred it on 2026-09-27. The route when it
+  is: `keyring`'s `linux-native-sync-persistent` + `crypto-rust` features
+  (Secret Service over the sync libdbus backend — the async one can block
+  inside tokio), `libdbus-1-dev` in CI or the crate's `vendored` feature
+  (AFL-2.1 into `deny.toml`), and an ADR for headless Linux without a
+  Secret Service (unsupported, a passphrase keystore, or systemd-creds /
+  TPM). `Cargo.toml`, `keystore/`, `docs/library.md` and the threat model
+  point here.

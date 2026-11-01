@@ -222,7 +222,8 @@ web-sys = { version = "0.3", features = ["Window", "Location"] }
 # apple-native (Keychain) / windows-native (Credential Manager) / linux-native.
 # NB: `linux-native` is the kernel keyring (keyutils) only — in memory, lost on
 # reboot and when the persistent keyring expires. Secret Service (libsecret /
-# D-Bus) would be `sync-secret-service`; switching is open.md §71 B4 (deferred).
+# D-Bus) would be `sync-secret-service`; not before Linux is a target
+# (docs/non-goals.md NG-24).
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
 # Native reqwest TLS + cookie jar + streaming bodies (wasm uses fetch instead).
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "stream"] }

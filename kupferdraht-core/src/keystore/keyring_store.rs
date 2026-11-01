@@ -4,7 +4,7 @@
 //! `KeyringStore` — desktop default `SecureKeyStore` backed by the
 //! `keyring` crate (macOS Keychain, Windows Credential Manager; on
 //! Linux only the kernel keyring, which does not survive a reboot —
-//! open.md §71 B4).
+//! `docs/non-goals.md` NG-24).
 //!
 //! The database key material (a raw 32-byte key, ADR-0021) is stored
 //! **directly** under a Kupferdraht-namespaced service id — no KEK, no
