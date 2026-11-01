@@ -1,4 +1,4 @@
-# Open — Questions, Backlog & Non-Goals
+# Open — Questions & Backlog
 
 Everything still on the table. Two kinds of entry: **open questions /
 unknowns** (the numbered §N findings log below) and **backlog** (decided work
@@ -48,36 +48,32 @@ Pre-existing over-cap files outside Step 29's scope: `login_pipeline.rs`
 
 ## Backlog — decided work, not yet shipped
 
-> Folded in 2026-06-30 from the former `docs/v1-*-audit.md` trackers. Gaps,
-> improvements, and defects that are decided but unbuilt — none blocking, all
-> quality. Step-sequenced delivery still goes through `PLAN.md`; an item
-> graduates into a numbered Step when picked up.
+> Folded in 2026-06-30 from the former `docs/v1-*-audit.md` trackers; checked
+> against the code on 2026-11-01. Gaps and improvements that are decided but
+> unbuilt — none blocking, all quality. Step-sequenced delivery still goes
+> through `PLAN.md`; an item graduates into a numbered Step when picked up.
+> Candidates that are not decided yet live in §64, not here.
 
 ### Caller ergonomics
 
-Login/resume/persistence forces multi-step ceremony; accessors return `Option`
-where identity is always present; some messages / CLI verbs could be friendlier.
-Additive unless noted.
+Some accessors return `Option` where identity is always present; some
+messages / CLI verbs could be friendlier. Additive unless noted.
 
 *Convenience APIs (additive; the explicit steps stay):*
-- **erg-A.1** `ClientBuilder::login_and_unlock(email, pw, 2fa?)` → `Arc<Client>` in one call.
-- **erg-A.3** `ClientBuilder::resume_and_sync()` — chain open-store + resume + unlock + initial sync.
-- **erg-A.4** `ClientBuilder::with_persistence(path)` — open `path/kupferdraht.db` + set the storage path in one call.
+- **erg-A.1** a one-call login for the common case: `ClientBuilder::login` → `PendingLogin::register_device` → `Arc<Client>` behind one wrapper (the two-step shape stays, since the device cap surfaces from `register_device`).
+- **erg-A.3** `ClientBuilder::resume_and_sync()` — resume + initial sync in one call.
 
-*Infallible accessors (add alongside the `Option` ones):*
-- **erg-B.1** `authenticated_user_id() -> &UserId` (today only `user_id() -> Option<&UserId>`).
+*Infallible accessors (add alongside the `Option` ones; `Client::account()` already answers the user id infallibly):*
 - **erg-B.2** `device_id() -> &str` (today `Option<&str>`).
 - **erg-B.3** borrowing / `Result` access-token getter (today `access_token() -> Option<String>` allocates).
-- **erg-B.4** `qualified_user_id() -> &str` direct (today reached via `user_id()`).
 - **erg-B.5** `server_config() -> &ServerConfig` (one accessor vs. separate `homeserver_url` / `websocket_url` / `server_title`).
 
 *Error messages:*
 - **erg-C.1** `pipeline.rs` "{op}: {room_id} not in cache" — add an actionable hint ("run sync / load_rooms_from_store").
 - **erg-C.2** `pipeline.rs` "has no group_id — run sync_metadata first" is misleading (the real fix is to join); mirror the typed `KupferdrahtError::MlsGroupMissing` text.
-- **erg-C.3** `login_pipeline.rs` "no devices row for {user}/{device}" → "device was unregistered — re-login".
 - **erg-C.4** `sqlite/mod.rs` "storage column … not valid UTF-8" → add a corruption / recovery hint.
-- **erg-C.5** ~244 `"{op}: {e}"` sites bubble raw errors with no layered context — add a hand-rolled error-context trait (no `anyhow`), applied at layer boundaries.
-- **erg-C.6** `looks_like_uuid` shape-check in `resolve_room_for_message` with a distinct "doesn't look like a message id" message.
+- **erg-C.5** errors cross layers as `"{op}: {e}"` strings with no typed context — add a hand-rolled error-context trait (no `anyhow`), applied at layer boundaries.
+- **erg-C.6** a `looks_like_uuid` shape-check in the CLI's `resolve_room_for_message` (`cli/timeline.rs`) with a distinct "doesn't look like a message id" message.
 
 *CLI UX:*
 - **erg-D.1** `send-file --mime` optional, auto-derive from extension (`mime_guess`); explicit flag overrides.
@@ -93,8 +89,6 @@ Additive unless noted.
 - **erg-D.11** `doctor` health-check (session valid? device registered? MLS state present? key-package pool depth?).
 - **erg-D.12** *(deferred)* group per-message ops under a `msg` subcommand.
 
-*Won't-fix:* per-endpoint-group HTTP wrappers vs. a single `http()` accessor — the 9 `http_*` wrappers are fine; no change.
-
 ### Known gaps (capability / lifecycle / test coverage)
 
 *Protocol / capability:*
@@ -109,7 +103,7 @@ Additive unless noted.
 - **gap-B.26** `ClientBuilder::login()` resolves the keystore (and writes the cookie label into it) BEFORE `HttpClient::new` validates the URL scheme — on a Keychain-less macOS sandbox the `http_hardening` rejection test blocks on the Keychain for ~30 min instead of failing fast (observations §76). Reorder: validate the URL before any keystore I/O; `KUPFERDRAHT_DEV_KEYSTORE` is the workaround meanwhile.
 - **gap-B.27** mls.db migrations are not atomic — `openmls_sqlite_storage` 0.3.0 runs refinery non-grouped (`storage_provider.rs:62-65`, not configurable from outside), so a crash between a migration's SQL commit and its history-row commit re-applies it on the next open; V2+ of its migrations are re-apply-fatal. Step 87 closed the same window for kupferdraht.db (`set_grouped(true)`); mls.db waits for the upstream fix (issue draft: `docs/plan/87-atomic-migrations.md`) — or, since Step 127, for the SchwarzDigits fork of `openmls_sqlite_storage` (§82) to carry `set_grouped(true)` ahead of upstream. Blast radius is smaller than kupferdraht.db's: a bricked mls.db can be discarded and the groups rejoined by external commit; the account store cannot.
 - **gap-B.35** The wasm `Client.rooms()` / `messages()` read the in-memory room cache, which is **cold after `resume()`** until the first `syncOnce` (or `load_rooms_from_store`): `rooms()` returns `[]` and `messages(roomId)` fails "unknown room" for a room the store holds (seen live 2026-09-25 by the promoted leader tab). The doc comment says "read from the store" — native has `room_or_load` (Step 14g) for exactly this; the wasm binding should hydrate on a cold miss (`room_or_load`, or `load_rooms_from_store` on resume) and the doc should say what it reads. Not a Step-94 change (surface semantics).
-- **gap-B.30** `kupferdraht-core`'s unit-test harness is native-only: `#[cfg(test)]` modules pull `httpmock` / `tempfile` without a target gate, so `cargo test --target wasm32-unknown-unknown` (and `wasm-pack test`) cannot build the lib tests — only the wasm integration tests run (`scripts/wasm-test.sh`). Gating those modules (`cfg(all(test, not(target_arch = "wasm32")))`, the sister project's pattern) would let the pure-Rust unit tests run in the browser too; not needed by any step yet.
+- **gap-B.30** three unit-test modules still pull `httpmock` without a target gate (`wire/websocket.rs`, `wire/http/groups.rs`, `wire/http/users.rs`), so `cargo test --target wasm32-unknown-unknown` (and `wasm-pack test`) cannot build the lib tests — only the wasm integration tests run (`scripts/wasm-test.sh`). The other fourteen carry `cfg(all(test, not(target_arch = "wasm32")))` already; gating these three would let the pure-Rust unit tests run in the browser too. Not needed by any step yet.
 - **gap-B.32** Self-room establishment (Step 86) Adds every key package Wire hands out for the user's *other* registered devices (`claim … skip_own`, the `create_room` rule) — dead devices of unreadable homes included, so the self group's roster carries leaves nobody will ever operate until Wire's device-deletion Remove proposals clear them (observations §69/§70). Harmless for confidentiality (those devices are the user's own), but the roster is not "live devices"; a stale-snapshot establish race (another device commits first) is handled by discard + retry, not by a pre-flight `mls-self` fetch. `JoinSummary` deliberately gained no `established` counter (minimal API) — an established self room counts under `joined`.
 - **gap-B.33** `ConvType 3` is mapped to `Channel` and `group_conv_type` is not read (`rooms/room.rs`, `conversation_type` mapping). Wire treats type 3 as a pending-connection 1:1 and signals channels through `group_conv_type: "channel"` (side finding of the 2026-10 provenance audit, `docs/wire/provenance-audit-2026-10.md`). Verify against a live v14 backend, then fix the mapping; consumers that key on `RoomType::Channel` need the note.
 
@@ -148,16 +142,13 @@ Additive unless noted.
 *Schema / process hygiene:*
 - **gap-B.17** Hand-written migrations only (V1–V30 by hand).
 
-*Defects (wrong references, not shortcuts):*
-- **def-D.2** Preview ADR unwritten (NG-2, consumer-demand-triggered); the asset-deletion half is written in **Step 84**.
-
 ### Code quality / maintainability
 
 Correct code that is hard to read / navigate. The baseline safety rules (no
 `unsafe` / `unwrap` / `println!` / `macro_rules!`; clean build / clippy /
 `cargo deny`) are re-checked each gate run — not tracked here.
 
-- **cq-A.1** Files over the 200-code-line cap. Remaining offenders **as of the 2026-06-16 sweep — re-count before acting** (Steps 34–42 have since moved code): the three Step-29 residues `client/membership.rs` · `client/rooms.rs` · `client/sync.rs` (see §60), plus `rooms/room.rs`, `client/login_pipeline.rs`, `sync/service.rs`, and pre-existing `wire/http/conversations.rs`, `ffi/timeline.rs`, `wire/dto.rs`, `wire/proto.rs`, `storage/records.rs`, `manager/mod.rs`.
+- **cq-A.1** Files over the 200-code-line cap (CLAUDE.md): 58 on 2026-11-01, counted without tests, blank lines and comments; the largest are `wasm/manager.rs`, `sync/service.rs`, `storage/sqlite/mod.rs`, `storage/records.rs` and `ffi/timeline.rs`, and the three Step-29 residues of §60 are among them. Re-count before acting; split by responsibility, not by size.
 - **cq-A.2** `process_inbound_message` — forbidden `process` prefix. `MlsClient::process_inbound_message` (`encryption/messages.rs`) decodes / absorbs an inbound MLS message → name it for the effect (`decode_inbound_message` / `absorb_inbound_message`).
 - **cq-A.3** Three `#[allow(clippy::struct_field_names)]` over renamable fields: `rooms/room.rs` (`room_type`→`kind`), `client/mod.rs` (`mls_client:`→`mls`), `ffi/sync.rs` (FFI `Message` `message_*` fields).
 - **cq-A.4** Redundant `_with_storage` suffix on `MlsClient::new_fresh_with_storage` / `resume_with_storage` — pure rename (the in-memory `new_fresh` wraps the `_with_storage` variant; not dead).
@@ -167,7 +158,6 @@ Correct code that is hard to read / navigate. The baseline safety rules (no
 
 ### Blocked on the Wire API (no endpoint yet)
 
-- **Step 12 — Key backup (mnemonic):** blocked — Wire v14 exposes no backup endpoint (`docs/observations.md` §62).
 - **Step 62 — `/v14/events` push (dormant):** wire-server
   hard-codes `consumableNotifications: false` since chart 5.30 (PR
   #5116 hard-codes the flag, no public timeline — observations
@@ -178,38 +168,6 @@ Correct code that is hard to read / navigate. The baseline safety rules (no
   `smoke-step62` flow (its 7 stages are documented in
   `docs/plan/archive/62-events-websocket.md`).
 
-### Proposed steps (need Volker's OK before a PLAN.md row)
-
-- **`LastRead` cross-device read position over the self room** —
-  proposed 2026-09-24 (Step 86 retro): send + fold Wire's `LastRead`
-  in the self conversation so `mark_as_read` on one device moves the
-  read marker on the user's others (§64 "Conversation daily life").
-- **Draft sync over the self room** — proposed 2026-09-24: per-room
-  drafts as self-room messages (client-local drafts first).
-- **Personal task list → self room, incl. the Step-89 `DeleteForMe`
-  path** — proposed 2026-09-24: move ADR-0014's "own list" from the
-  1-member workaround group into the self conversation and route the
-  receiver-side ephemeral expiry's `DeleteForMe` through it
-  (`docs/plan/archive/89-ephemeral-messages.md`).
-- **Idempotency keys for wasm mutations (leader-change retry)** —
-  proposed 2026-09-25 (Step 94 retro, ADR-0026 L3-C): today a mutation in
-  flight when the leader tab changes fails `LeaderChanged` and is never
-  retried by `kupferdraht-tabs`, because the module cannot know whether the
-  old leader's send reached the backend. A client-chosen idempotency key
-  per mutating call (`sendText`, `sendReply`, `sendFile`, `createRoom`,
-  …) stored with the outcome in the leader's store would let the proxy
-  retry safely on the new leader (the same key returns the stored
-  handle or re-runs). Small on the wasm surface (one optional argument
-  or an options object per mutation), a new table + a dedup lookup in
-  the core; the Step-79 resend path (not on wasm yet) is the honest
-  interim.
-- **kupferdraht-tui Ctrl-R onto the SDK resend API** — proposed 2026-09-24
-  (Step 79 retro, consumer repo): replace the TUI's `PendingKind`
-  re-drive (Text / Reply / File) with `Room::failed_sends` +
-  `Timeline::resend_failed` on the first successful sync iteration
-  after a reconnect, plus a per-row `Timeline::resend` for Ctrl-R;
-  `PendingKind::Edit` stays TUI-side (a failed edit is not a row).
-
 ## 64) Chat-system basics — the post-Step-60 gap map (2026-07-19; re-cut 2026-11-01)
 
 Roadmap discussion after tasks shipped: what a daily-driver messenger
@@ -219,17 +177,17 @@ referenced, not duplicated. Re-cut 2026-11-01: contact discovery and
 direct contact initiation are non-goals by Kupferdraht's purpose
 (`docs/non-goals.md` NG-18); push registration, new-device history and
 presence are recorded there too (NG-19 to NG-21); link previews
-contradicted NG-4 and are gone.
+contradicted NG-4 and are gone. The self-room follow-ups of the Step 86
+retrospective are Step 129 (`LastRead`, personal task list) since
+2026-11-01; draft sync stays here.
 
 ### Conversation daily life
 
 - **Mute / archive** — Wire carries `muted_status` / `archived` per
   conversation; small step, high everyday value.
-- **Cross-device read position** — Wire syncs "read up to" via
-  `LastRead` through the self-conversation; the channel exists since
-  Step 86 (2026-09-24) — next rail (Proposed steps).
 - **Drafts** — per-room draft persistence (client-local first;
-  Wire-style sync rides the self-conversation too).
+  Wire-style sync rides the self-conversation, the rail Step 129
+  builds). Waits for a consumer that has drafts.
 - **Local search** — under E2EE only the client can search;
   SQLCipher + FTS5 native, own path needed for IndexedDB. At a few
   thousand messages this stops being a luxury.
@@ -254,10 +212,8 @@ contradicted NG-4 and are gone.
 
 ### Priority thesis
 
-1. **The self-room follow-ups** (personal task list, `LastRead`
-   cross-device read sync, draft sync) — under Proposed steps.
-2. **Mute/archive** — daily comfort.
-3. **Local search** as a filler between steps.
+1. **Mute/archive** — daily comfort.
+2. **Local search** as a filler between steps.
 
 ## 66) External code review triaged — 18 findings verified, dispositions assigned (2026-08-13)
 
@@ -549,62 +505,6 @@ by name, accepts the other three only as alternatives of `OR`
 expressions whose Apache-2.0 or MIT branch is on its list (ORT, unlike
 cargo-deny, reports every alternative), and reads `stringmetrics`'s
 license file where ORT reports NOASSERTION.
-
-## 81) crypto-bigint 0.5: timing advisory without an upgrade path (2026-10-30)
-
-RUSTSEC-2026-0387 (2026-10-23): `crypto-bigint` 0.5 can branch on secret
-data in subtraction, zero counting, division, Montgomery multiplication
-and limb equality, depending on compiler and CPU. Patched in 0.7.6, and
-0.7 is taken only by the RustCrypto 0.14 line (`elliptic-curve` 0.14,
-`p256` 0.14, `ecdsa` 0.17). Kupferdraht reaches `crypto-bigint` 0.5
-through `p256` 0.13 from three places: `openmls_rust_crypto` 0.6 (HPKE
-over `hpke-rs-rust-crypto` 0.7, the key-package and Welcome path of
-ciphersuite MLS_128_DHKEMP256_AES128GCM_SHA256_P256), `openmls_basic_credential`
-0.6 (the ECDSA P-256 signatures on MLS messages) and `voprf` 0.5 (the
-PIN service's OPRF, RFC 9497 with P-256). None of the three has a release
-on the 0.14 line; `hpke-rs-rust-crypto` 0.8.0 (2026-10-07) has moved.
-
-Accepted 2026-10-30 as a `deny.toml` ignore with the reason recorded
-there, because the crates cannot move independently and the alternative
-is no build until openmls follows. The advisory concerns side channels
-an attacker must be able to observe on the device running Kupferdraht;
-nothing in the protocol or the stored data changes.
-
-Upstream state on 2026-10-30: openmls `main` migrated its crypto crates
-to `p256` 0.14 and `hpke-rs-rust-crypto` 0.8 on 2026-10-02 (PR #2249),
-unreleased — the next `openmls_rust_crypto` / `openmls_basic_credential`
-release carries it. `voprf` has not moved: 0.6.0-pre.1 (2026-04-06) and
-its `main` still pin `p256` 0.13, and 0.5.0 is from 2024, so the PIN
-path would keep `crypto-bigint` 0.5 after the openmls bump.
-
-To do: bump `openmls_rust_crypto` and `openmls_basic_credential` to the
-release on `p256` 0.14 (watch `openmls` releases after 0.9.2); for the
-OPRF either a `voprf` release on 0.14 or our own RFC 9497 client over
-`p256` 0.14's `hash2curve` (blind, unblind, finalize — a small module,
-checked against the PIN-service interop vectors, §77); then the MLS
-conformance tests, and remove the ignore entry.
-
-Addendum 2026-10-31: a third option exists. `voprf-ng` 0.6.0
-(2026-10-27, github.com/raphaelrobert/voprf-ng, an openmls maintainer's
-fork of `voprf` 0.6.0-pre.1) is on the 0.14 line — `elliptic-curve` 0.14,
-`hash2curve` 0.14, `digest` 0.11, `p256` 0.14 in its tests — with the
-RFC 9497 vector file identical to upstream's and a mechanical diff
-otherwise; `privacypass` 0.6 and phnx-im/air take it. Trust check: a
-single maintainer, no release tags, no audit — acceptable for the PIN
-path once the openmls crates move, to be re-checked at that bump.
-
-Measured 2026-10-31, as a step candidate (not decided): the forks of
-§82 can carry the migration ahead of an openmls release — an openmls
-fork branch from the `openmls-v0.9.0` tag with upstream PR #2249 and the
-three `hpke-rs` 0.8 lines of #2261 (`openmls_traits` and
-`openmls_memory_storage` from crates.io), plus Kupferdraht on `p256`
-0.14, `voprf-ng` 0.6 and `rand_core` 0.10 (two code changes: an RNG
-adapter for `blind`, `to_sec1_point` for the verifying key), builds,
-passes the core tests and the wasm32 check, and leaves no
-`crypto-bigint` 0.5 in the lock, so the ignore entry can go. Open risks
-before taking it: the live HPKE interop of the classical DHKEM-P256
-suite, `ed25519-dalek` 3 on the signing path, and more duplicate crates
-in the graph until openmls releases.
 
 ## 82) The SQLite3MC fork line: branch policy and the next bump (2026-10-31)
 

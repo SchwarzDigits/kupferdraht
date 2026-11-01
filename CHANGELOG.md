@@ -66,6 +66,14 @@ is no skill for it — it is this short procedure:
   runs the existing login pipeline; no SAML in the library. With its rule
   file; the never-run live verification is now an open test-coverage gap
   instead of a note in an archived plan.
+- **`open.md`'s backlog holds only open, decided work** (2026-11-01): the
+  entries were checked against the code and the done or stale ones left
+  (`ClientBuilder::base_dir`, the infallible `Client::account()` accessors,
+  a vanished error message, a June file list); the former "Proposed steps"
+  became Steps 129 (self-room rails: `LastRead` and the personal task list)
+  and 130 (idempotency keys for wasm mutations), and the crypto-bigint
+  advisory tracking (§81) became Step 128 — `deny.toml`'s ignore for
+  RUSTSEC-2026-0387 now points there.
 - **Non-goals have their own home** — `docs/non-goals.md` lists every
   decided scope cut with its reason; `open.md` keeps open questions and
   backlog only. New there: no contact discovery and no direct contact

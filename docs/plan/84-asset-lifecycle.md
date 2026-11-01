@@ -1,8 +1,8 @@
 # Step 84 — Asset deletion API + cache orphan cleanup
 
 **Status: commissioned 2026-09-10** (transferred from open.md
-gap-B.3 + gap-B.5; def-D.2 names the missing mini-ADR this step
-writes first).
+gap-B.3 + gap-B.5 and its defect entry def-D.2, which named the
+missing mini-ADR this step writes first).
 
 ## Problem
 
