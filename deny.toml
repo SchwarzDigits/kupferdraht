@@ -109,10 +109,11 @@ ignore = [
     # ^0.13), none of which has a release on 0.14 yet — hpke-rs-rust-crypto
     # 0.8 has. Our ciphersuite is MLS_128_DHKEMP256_AES128GCM_SHA256_P256,
     # so the affected scalar arithmetic is on the HPKE and signing path.
-    # Accepted for now with the upgrade path tracked in open.md §81: the
+    # Accepted for now with the upgrade path as Step 128
+    # (`docs/plan/128-crypto-bigint-advisory.md`): the
     # crates cannot move independently, and the alternative is no build at
     # all until openmls follows. Remove this entry with that upgrade.
-    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 pinned by p256 0.13 via openmls_rust_crypto/openmls_basic_credential/voprf; fix only on the RustCrypto 0.14 line, upgrade path upstream (open.md §81)" },
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 pinned by p256 0.13 via openmls_rust_crypto/openmls_basic_credential/voprf; fix only on the RustCrypto 0.14 line, upgrade path is Step 128 (docs/plan/128-crypto-bigint-advisory.md)" },
 ]
 
 # ---------------------------------------------------------------------

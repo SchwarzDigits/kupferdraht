@@ -14,7 +14,7 @@
 //!
 //! - [`KeyringStore`] — desktop default backed by the `keyring` crate
 //!   (macOS Keychain, Windows Credential Manager; on Linux only the
-//!   kernel keyring, lost on reboot — open.md §71 B4). Exercised at
+//!   kernel keyring, lost on reboot — `docs/non-goals.md` NG-24). Exercised at
 //!   smoke-test time on the maintainer's machine.
 //! - [`InMemoryKeyStore`] — process-scoped, used by `cargo test`. CI
 //!   doesn't have a desktop session, so a keyring-rs-backed

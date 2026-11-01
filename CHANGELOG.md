@@ -36,7 +36,78 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **Native sign-out and account purge** (Step 78; the browser's purge of
+  ADR-0035, adopted natively): `Kupferdraht::logout(&client, PurgeOptions,
+  password)` revokes the session and marks the account signed out —
+  `active_account()` is `None` afterwards and the manager drops the client;
+  `purge_device` deletes the device at the backend first, `purge_local`
+  forgets the account on this device. `Kupferdraht::forget_account(account_id)`
+  drops an account's databases, keystore entries and registry row without a
+  session (`InvalidInput` for an unknown or already forgotten account; the
+  device at the backend stays). `PurgeOptions` is public and re-exported at
+  the crate root. Kotlin and Swift get `Kupferdraht.logout(client, options,
+  password)` and `Kupferdraht.forget_account(account_id)`; the CLI gets
+  `logout --purge-local` and `account-forget --id <account>`. A consumer no
+  longer needs to know a file or a keystore id to leave an account cleanly.
+
 ### Changed
+
+- **A plain `logout` signs the account out** (Step 78): after
+  `Kupferdraht::logout` without a purge, and after the browser's
+  `Client.logout()` without options, the account is no longer the active
+  account and the manager no longer hands the client out; its keys, databases
+  and registry entry stay, so the next login reuses the device. Before, the
+  registry kept naming the account active and a consumer discovered the
+  dead session only through a failing `resume`.
+- **ADR-0043 records the SSO decision** of 2026-07-08 (Step 17): SSO login
+  is SP-driven — Kupferdraht drives Wire's `/sso/initiate-login` and
+  discovers the code through `/sso/settings`, the application opens the
+  URL and captures the `zuid` cookie off the redirect, `finalize_sso`
+  runs the existing login pipeline; no SAML in the library. With its rule
+  file; the never-run live verification is now an open test-coverage gap
+  instead of a note in an archived plan.
+- **`open.md`'s backlog holds only open, decided work** (2026-11-01): the
+  entries were checked against the code and the done or stale ones left
+  (`ClientBuilder::base_dir`, the infallible `Client::account()` accessors,
+  a vanished error message, a June file list); the former "Proposed steps"
+  became Steps 129 (self-room rails: `LastRead` and the personal task list)
+  and 130 (idempotency keys for wasm mutations), and the crypto-bigint
+  advisory tracking (§81) became Step 128 — `deny.toml`'s ignore for
+  RUSTSEC-2026-0387 now points there. The caller-ergonomics wish list of
+  the June audit is down to two items (three misleading error messages,
+  a `doctor` command); the rest was asked for by no consumer or
+  contradicted ADR-0009's matrix-rust-sdk mirroring, and the cache verbs
+  moved into Step 84's plan.
+- **The production-readiness review's residuals are steps** (open.md §71
+  dissolved, 2026-11-01): the cheap hardening items are Step 132, the
+  documentation claims the review measured against the code are Step 133
+  (THREAT_MODEL 0.7), DB-key rotation with `secure_delete` is Step 134.
+  The Linux desktop keystore limit is a non-goal until Linux is a target
+  (NG-24; the docs that named §71 point there), the iOS notification
+  extension is NG-23, the never-made future-epoch probe is gap-B.37.
+- **`open.md`'s known-gaps list is a live-verification backlog now**
+  (2026-11-01): the code gaps joined Step 132 (the builder's keystore-before-URL
+  order, `ConvType 3`, the wasm cold room cache after `resume`, AES-CBC
+  known-answer vectors, a loud ciphersuite mismatch check, the removal-flush
+  queue of §73), the cache size policy is Step 84's, the self-room roster
+  note Step 129's, the mls.db migration window §82's; one ciphersuite
+  (NG-25) and no processed-ids journal for the pull path (NG-26) are
+  non-goals. What is left are seven live checks for the next smoke session.
+- **Non-goals have their own home** — `docs/non-goals.md` lists every
+  decided scope cut with its reason; `open.md` keeps open questions and
+  backlog only. New there: no contact discovery and no direct contact
+  initiation (NG-18, by Kupferdraht's purpose), no Wire push registration
+  (NG-19), no history for a new device (NG-20), no presence (NG-21),
+  one account per browser in the server mode (NG-22).
+  `open.md` lost its closed sections (the publication checklist, whose
+  record moved to the 0.1.0 entry below, and the provenance audit) and
+  its stale items.
+- **`kupferdraht-cli logout --purge-device` no longer wipes the home.** It
+  deletes the device at the backend and keeps the local data; `--purge-local`
+  forgets the account (its databases, keys and registry row — other accounts
+  of the home are untouched), and both together are the old "clean slate".
+  The output names what stays, what the backend keeps and what the next
+  `login` does.
 
 ### Deprecated
 
@@ -788,6 +859,18 @@ is no skill for it — it is this short procedure:
   claim as practised: no Wire source code in the tree, Wire's
   repositories consulted for protocol observation only, every observation
   recorded with its source.
+  Published 2026-10-30 as `SchwarzDigits/kupferdraht`, following the
+  checklist that open.md carried until then: a fresh clone of the private
+  `main`, an orphan branch, one commit (746 files, `.mailmap` left out),
+  the grep gates on the tree with exactly the expected hits, the
+  maintainer's SSH-signed identity as author, the third-party reports
+  regenerated against the final `Cargo.lock`, the five gates plus the two
+  wasm32 checks green on the pinned toolchain; made public together with
+  the git dependency `sqlite-remote-vfs`; CI green on the public `main`,
+  the README's build tried from a fresh clone with an empty cargo home.
+  Ruleset "protect main" (`license/cla`, the two Compliance jobs and the
+  three CI jobs required, merge commits only, signed commits), secret
+  scanning, push protection and private vulnerability reporting on.
 
 - **BREAKING: Sodium is now Kupferdraht** — a clean cut, no migration.
   The old name was taken: the library built as `libsodium.{so,dylib,a}`,

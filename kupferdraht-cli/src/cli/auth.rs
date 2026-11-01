@@ -10,8 +10,8 @@ use kupferdraht::storage::{
     StorageEngineInfo, Store,
 };
 use kupferdraht::{
-    Client, ClientBuilder, Kupferdraht, KupferdrahtError, PendingLogin, ServerConfig, UserId,
-    now_ms,
+    Client, ClientBuilder, Kupferdraht, KupferdrahtError, PendingLogin, PurgeOptions, ServerConfig,
+    UserId, now_ms,
 };
 
 use super::{
@@ -328,11 +328,18 @@ pub(crate) async fn change_password() -> Result<(), KupferdrahtError> {
     Ok(())
 }
 
+/// `logout` through the device manager (Step 78): the session ends at the
+/// backend and the account is signed out here; the purge flags map onto
+/// `PurgeOptions`. The SDK deletes what a purge deletes — the CLI touches
+/// no file and no keystore entry itself.
 pub(crate) async fn logout(
     purge_device: bool,
+    purge_local: bool,
     password_stdin: bool,
 ) -> Result<(), KupferdrahtError> {
-    let client = resume_client().await?;
+    let app = open_manager()?;
+    let (client, _store) = resume_active(&app).await?;
+    let account_id = client.account().user_id().as_str().to_owned();
     let device_id = client.device_id().unwrap_or_default().to_string();
     let password = if purge_device {
         let pw = read_password(password_stdin)
@@ -346,32 +353,54 @@ pub(crate) async fn logout(
     } else {
         None
     };
-    client.logout(purge_device, password.as_deref()).await?;
-    let home = kupferdraht_home()?;
-    if purge_device && home.exists() {
-        std::fs::remove_dir_all(&home).map_err(|e| {
-            KupferdrahtError::Environment(format!("rm -rf {}: {e}", home.display()))
-        })?;
-    }
+    let options = PurgeOptions {
+        purge_device,
+        purge_local,
+    };
+    app.logout(&client, options, password.as_deref()).await?;
     println!("logout ok");
+    println!("  account_id:   {account_id}");
     println!("  device_id:    {device_id}");
     println!("  purge_device: {purge_device}");
-    println!("{}", local_state_lines(purge_device, &home));
+    println!("  purge_local:  {purge_local}");
+    println!("{}", local_state_lines(options));
     Ok(())
 }
 
-/// The `logout` local-state lines: with `--purge-device` the home that was
-/// actually wiped — `$KUPFERDRAHT_HOME` or the platform default, never a fixed
-/// path — else the preservation note. Pure, so the format is unit-tested.
-pub(crate) fn local_state_lines(purge_device: bool, home: &std::path::Path) -> String {
-    if purge_device {
-        format!(
-            "  local state:  wiped ({})\n  next login:   will register a fresh device + MLS identity",
-            home.display()
-        )
+/// The `logout` local-state lines, truthful for every combination of the
+/// purge flags: what stays on this device, what the backend still has, and
+/// what the next `login` does. Pure, so the format is unit-tested.
+pub(crate) fn local_state_lines(options: PurgeOptions) -> String {
+    let local = if options.purge_local {
+        "  local state:  forgotten (databases, keys and registry row of the account)"
     } else {
-        "  local state:  preserved (next login reuses this device)".to_owned()
-    }
+        "  local state:  preserved (signed out; other accounts untouched)"
+    };
+    let device = if options.purge_device {
+        "  device:       deleted at the backend"
+    } else {
+        "  device:       still registered at the backend"
+    };
+    let next = if options.purge_device || options.purge_local {
+        "  next login:   will register a fresh device + MLS identity"
+    } else {
+        "  next login:   reuses this device"
+    };
+    format!("{local}\n{device}\n{next}")
+}
+
+/// `account-forget` (Step 78): forget an account on this device without a
+/// session — its databases, keystore entries and registry row.
+pub(crate) async fn account_forget(account_id: String) -> Result<(), KupferdrahtError> {
+    let app = open_manager()?;
+    app.forget_account(&account_id).await?;
+    println!("account-forget ok");
+    println!("  account_id:   {account_id}");
+    println!("  local state:  forgotten (databases, keys and registry row of the account)");
+    println!(
+        "  device:       still registered at the backend (delete it with device-delete from another device)"
+    );
+    Ok(())
 }
 
 pub(crate) async fn status() -> Result<(), KupferdrahtError> {
@@ -462,6 +491,7 @@ pub(crate) fn kupferdraht_db_exists() -> Result<bool, KupferdrahtError> {
 
 #[cfg(test)]
 mod tests {
+    use kupferdraht::PurgeOptions;
     use kupferdraht::storage::StorageEngineInfo;
 
     use super::{home_lines, local_state_lines, storage_line};
@@ -499,19 +529,39 @@ mod tests {
         );
     }
 
-    /// `logout --purge-device` names the home it wiped — the configured
-    /// one, not a fixed `~/.kupferdraht/`.
+    /// Step 78: `logout` names what stays here, what the backend keeps and
+    /// what the next login does, for every combination of the purge flags.
     #[test]
-    fn local_state_lines_name_the_wiped_home_or_the_preservation() {
-        let home = std::path::Path::new("/tmp/kupferdraht-smoke-3b");
+    fn local_state_lines_name_the_outcome_of_every_purge_combination() {
+        let lines = |purge_device, purge_local| {
+            local_state_lines(PurgeOptions {
+                purge_device,
+                purge_local,
+            })
+        };
         assert_eq!(
-            local_state_lines(true, home),
-            "  local state:  wiped (/tmp/kupferdraht-smoke-3b)\n  \
+            lines(false, false),
+            "  local state:  preserved (signed out; other accounts untouched)\n  \
+             device:       still registered at the backend\n  \
+             next login:   reuses this device"
+        );
+        assert_eq!(
+            lines(true, false),
+            "  local state:  preserved (signed out; other accounts untouched)\n  \
+             device:       deleted at the backend\n  \
              next login:   will register a fresh device + MLS identity"
         );
         assert_eq!(
-            local_state_lines(false, home),
-            "  local state:  preserved (next login reuses this device)"
+            lines(false, true),
+            "  local state:  forgotten (databases, keys and registry row of the account)\n  \
+             device:       still registered at the backend\n  \
+             next login:   will register a fresh device + MLS identity"
+        );
+        assert_eq!(
+            lines(true, true),
+            "  local state:  forgotten (databases, keys and registry row of the account)\n  \
+             device:       deleted at the backend\n  \
+             next login:   will register a fresh device + MLS identity"
         );
     }
 

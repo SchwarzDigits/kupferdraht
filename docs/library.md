@@ -577,7 +577,8 @@ registry read failure.
 The account id last marked active, if any — the account a
 `register_device` / `PendingAccount::activate` / `Kupferdraht::resume`
 call most recently wrote as active in the registry. `None` before any
-account has been logged in / resumed on this device.
+account has been logged in / resumed on this device, and again after
+`Kupferdraht::logout` signed the active account out (Step 78).
 `KupferdrahtError::Storage` on a registry read failure.
 
 ### `Kupferdraht::home_id(&self) -> &str`
@@ -633,6 +634,51 @@ returns the cached `Arc<Client>` instead of racing a second `zuid`
 rebind against the first; a torn-down instance (every other `Arc` has
 been dropped) is rebuilt. Marks the account active in the registry on
 success. Otherwise surfaces whatever `ClientBuilder::resume` returns.
+
+### Signing out and forgetting an account (Step 78)
+
+Two manager-level calls, matrix-rust-sdk's `logout` / `forget` vocabulary
+(ADR-0009): `logout` is the act at the backend plus the registry's "signed
+out"; `forget_account` drops what this device stores about an account. The
+consumer touches no file and no keystore id — the per-account ids are
+Kupferdraht's (`kupferdraht.<home-id>.account-<id>`, `…-mls`, `…-seed`).
+
+### `Kupferdraht::logout(&self, client: &Arc<Client>, options: PurgeOptions, password: Option<&str>) -> Result<(), KupferdrahtError>`
+
+Revoke the session at the backend (`Client::logout`: `POST /access/logout`,
+with `purge_device` a `DELETE /clients/{id}` first), then mark the account
+signed out: it is no longer the active account (`active_account()` returns
+`None`), and the manager drops the client from its cache. Without a purge
+everything else stays — the registry entry, the databases, the keys — so
+the next `login` reuses the registered device (Step 7e) and the data.
+With a purge the client is closed afterwards (its store refuses with
+`SessionExpired`; drop it): `purge_device` deletes the device at the backend
+(the password is required), `purge_local` forgets the account on this
+device as `forget_account` does. Both together leave a device for good.
+The backend comes first: `InvalidInput` for `purge_device` without a
+password and `BackendRejected` for a wrong one (or, without `purge_device`,
+for an already revoked session) change nothing locally, and the call can
+be repeated. Storage and keystore errors of the purge surface as such.
+
+### `Kupferdraht::forget_account(&self, account_id: &str) -> Result<(), KupferdrahtError>`
+
+Forget `account_id` on this device without a session: a client this
+manager still holds (from `resume`) is closed first, then the account's
+directory under `base_dir/accounts/` goes (databases, locks, asset cache),
+its keystore entries (the two database keys, the seed and storage-login
+key where a browser home has them), its registry entry, and the active
+account when it was this one. Other accounts of the home are untouched.
+The device at the backend stays registered — releasing it needs a session
+(`logout` with `purge_device`, or `Client::delete_device` from another
+device) — and the next `login` registers a fresh device. An account whose
+directory is already gone is finished, not refused. `InvalidInput` for an
+account the registry does not know, an already forgotten one included.
+
+### `PurgeOptions { purge_device: bool, purge_local: bool }`
+
+What a `logout` removes besides the session (ADR-0035; the browser's
+`{ purgeDevice, purgeLocal }`). `Default` is the plain logout. Re-exported
+at the crate root; a `uniffi::Record` for the bindings.
 
 ### KupferdrahtBuilder
 
@@ -1630,7 +1676,7 @@ Credential Manager), base64-encoded under the service prefix. **Linux:
 only the kernel keyring (keyutils) today** — it is in memory and lost on
 reboot (and when the kernel's persistent keyring expires), after which
 the local databases cannot be opened again. Not for production use on
-Linux until `open.md` §71 B4 (Secret Service) is done. Construct with a service prefix:
+Linux (`docs/non-goals.md` NG-24: no Secret Service backend before Linux is a target). Construct with a service prefix:
 
 ```rust
 let store = kupferdraht::keystore::KeyringStore::new("kupferdraht");

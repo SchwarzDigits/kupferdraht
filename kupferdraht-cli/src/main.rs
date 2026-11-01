@@ -355,6 +355,17 @@ enum Command {
     Status,
     /// List the accounts registered on this device (no unlock needed).
     Accounts,
+    /// Forget an account on this device without a session (Step 78):
+    /// deletes its databases, its keystore entries and its registry row;
+    /// other accounts of the home are untouched. The device stays
+    /// registered at Wire — delete it with `device-delete` from another
+    /// device, or sign in and use `logout --purge-device` instead.
+    AccountForget {
+        /// Qualified account id (`<uuid>@<domain>`), as printed by
+        /// `kupferdraht-cli accounts`.
+        #[arg(long)]
+        id: String,
+    },
     /// Refresh the rooms snapshot in `kupferdraht.db` from a persisted
     /// session — no password required.
     ///
@@ -803,24 +814,30 @@ enum Command {
         #[arg(long)]
         before: Option<String>,
     },
-    /// Sign out of the backend (Step 6e-2). Revokes the `zuid` refresh
-    /// cookie server-side via `POST /v{N}/access/logout`. With
-    /// `--purge-device`, **also** issues
-    /// `DELETE /v{N}/clients/{device_id}` to remove the registered
+    /// Sign out of the backend (Step 6e-2; through the device manager
+    /// since Step 78). Revokes the `zuid` refresh cookie server-side via
+    /// `POST /v{N}/access/logout` and marks the account signed out: it is
+    /// no longer the active account, so the next command asks for a
+    /// `login`. With `--purge-device`, **also** issues
+    /// `DELETE /v{N}/clients/{device_id}` first to remove the registered
     /// device from Wire entirely (frees a slot in the 7-device cap)
-    /// — Wire requires the user's password for that step.
+    /// — Wire requires the user's password for that step. With
+    /// `--purge-local`, forgets the account on this device: its
+    /// databases, its keystore entries, its registry row; other accounts
+    /// of the home are untouched.
     ///
-    /// Local DB cleanup: with `--purge-device`, the CLI also wipes
-    /// `~/.kupferdraht/` so the next `login` starts from a clean slate.
-    /// Without `--purge-device`, the local DB is preserved and the
-    /// next `login` reuses the existing device via the Step 7e
-    /// reuse path.
+    /// Without either flag the local data is preserved and the next
+    /// `login` reuses the existing device via the Step 7e reuse path.
     Logout {
         /// Also delete this device from Wire's clients list.
-        /// Requires the user's password (prompt or
-        /// `--password-stdin`). Wipes `~/.kupferdraht/` afterwards.
+        /// Requires the user's password (prompt or `--password-stdin`).
         #[arg(long)]
         purge_device: bool,
+        /// Also forget the account on this device (databases, keys,
+        /// registry row). The device stays registered at Wire unless
+        /// `--purge-device` is given too.
+        #[arg(long)]
+        purge_local: bool,
         /// Read the password from stdin (only relevant with
         /// `--purge-device`).
         #[arg(long)]
@@ -1192,6 +1209,7 @@ async fn async_main() -> ExitCode {
         },
         Command::Status => cli::auth::status().await,
         Command::Accounts => cli::auth::accounts().await,
+        Command::AccountForget { id } => cli::auth::account_forget(id).await,
         Command::Sync => cli::sync::sync().await,
         Command::SyncMetadata => cli::sync::sync_metadata().await,
         Command::Rooms => cli::rooms::rooms().await,
@@ -1245,8 +1263,9 @@ async fn async_main() -> ExitCode {
         Command::Timeline { id, limit, before } => cli::timeline::timeline(id, limit, before).await,
         Command::Logout {
             purge_device,
+            purge_local,
             password_stdin,
-        } => cli::auth::logout(purge_device, password_stdin).await,
+        } => cli::auth::logout(purge_device, purge_local, password_stdin).await,
         Command::JoinLinkGenerate { id, password } => {
             let pw = if password {
                 match read_password(false) {

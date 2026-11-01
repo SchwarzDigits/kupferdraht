@@ -40,7 +40,7 @@ end-to-end encrypted with MLS (RFC 9420):
   - device-limit recovery during login (list / free a slot, then continue on the same handle)
   - multi-account device registry with offline resume
   - two processes on one home coexist (per-account cross-process lock around token refresh and key creation, fail-fast; databases wait for each other's writes)
-  - logout, optionally purging the device
+  - sign-out through the device manager (`Kupferdraht::logout`, optionally purging the device at the backend and the account on this device) and `forget_account` for an account without a session
   - password / e-mail / display-name / handle changes
 - **Devices**
   - list, rename, and revoke registered devices
@@ -123,6 +123,8 @@ How it all fits together is described in
   messaging only. Also out of scope: asset preview thumbnails,
   AES-GCM asset emission, and federation across non-Wire backends.
   The MLS stack is RFC 9420 only, with no security-disabling options.
+  Every decided scope cut, with its reason, is listed in
+  [`docs/non-goals.md`](docs/non-goals.md).
 - **Wire's hosted service is for Wire's official apps.** Wire is a
   trademark of Wire Swiss GmbH; Kupferdraht is an independent project,
   not affiliated with, endorsed by or supported by Wire Swiss GmbH.

@@ -1391,7 +1391,8 @@ impl Client {
     /// cookie jar's `zuid` is invalidated by Wire. `options` is
     /// `{ purgeDevice?: boolean, password?: string, purgeLocal?: boolean }`
     /// (ADR-0035): without options the account's keys and data stay, so the
-    /// next login needs no recovery data; `purgeDevice` also deletes this
+    /// next login needs no recovery data — only `activeAccount` is cleared
+    /// and the manager drops the client (Step 78); `purgeDevice` also deletes this
     /// device at the backend (the password is required) and, in the server
     /// mode, its databases there; `purgeLocal` forgets the account in this
     /// browser — its keys, local databases and registry entry (recovery data
@@ -1407,7 +1408,7 @@ impl Client {
             purge_local: options.purge_local,
         };
         self.manager
-            .logout_client(&self.inner, purge, password.as_ref().map(|p| p.as_str()))
+            .logout(&self.inner, purge, password.as_ref().map(|p| p.as_str()))
             .await
             .map_err(|e| to_js(&e))
     }

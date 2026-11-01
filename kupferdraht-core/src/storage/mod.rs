@@ -4,7 +4,6 @@
 // Crash-safe file replacement (Step 77 / Step 93). `std::fs` on every
 // target: the dev `FileKeyStore` is compiled everywhere; the browser's own
 // files live in the OPFS pool.
-#[cfg(any(target_arch = "wasm32", test))]
 mod account_files;
 pub(crate) mod account_keys;
 mod atomic_file;
@@ -45,8 +44,9 @@ pub use records::{
 };
 pub use sqlite::SqliteStore;
 
+pub(crate) use account_files::delete_account_databases;
 #[cfg(any(target_arch = "wasm32", test))]
-pub(crate) use account_files::{delete_account_databases, delete_leftover_account_databases};
+pub(crate) use account_files::delete_leftover_account_databases;
 pub(crate) use atomic_file::write_atomically;
 #[cfg(target_arch = "wasm32")]
 pub(crate) use browser::{

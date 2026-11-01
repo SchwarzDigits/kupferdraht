@@ -547,14 +547,18 @@ in the account's `kupferdraht.db`). `PendingLogin::recover` opens recovery data
 with the login's token, stores the seed durably and continues on the
 registration path; the manager keeps the recovery services (token
 exchange + PIN service, from `Kupferdraht.open`'s `pinServiceUrl`) beside its
-keystore and home. Leaving a browser (Step 114) is `manager/purge.rs`:
-`logout` with `purgeDevice` / `purgeLocal` runs the native logout first (a
-refused password changes nothing), then closes the account's two databases
+keystore and home. Signing out and forgetting an account — leaving a
+browser (Step 114) and the same natively (Step 78) — is `manager/purge.rs`:
+`Kupferdraht::logout` with `purge_device` / `purge_local` runs
+`Client::logout` first (a refused password changes nothing), marks the
+account signed out (the active account is cleared, the client dropped from
+the manager's cache), then with a purge closes the account's two databases
 (`Store::close` and `MlsClient::close_storage` swap each connection for an
 empty in-memory one — the VFS deletes only a closed database), deletes them
-where they are the device's (the storage server with `purgeDevice`, the
-local mode with `purgeLocal`), forgets seed, keys and registry entry with
-`purgeLocal`, and drops the client from the manager's cache.
+where they are the device's (natively and in the browser's local mode with
+`purge_local`, on the storage server with `purge_device`), and forgets seed,
+keys and registry entry with `purge_local`. `Kupferdraht::forget_account`
+does the local part for an account without a session.
 
 ### 6.3 Key storage — the keystore boundary
 

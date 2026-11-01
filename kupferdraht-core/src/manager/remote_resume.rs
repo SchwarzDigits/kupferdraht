@@ -44,7 +44,7 @@ impl Kupferdraht {
         // browser's keys are a replaced device's. Forget them: the next login
         // offers recovery or a new setup.
         if let Err(KupferdrahtError::DeviceRetired(_)) = &resumed {
-            self.forget_account(account_id).await?;
+            self.forget_secrets_and_entry(account_id).await?;
         }
         let client = resumed?;
         label_device_slot(&self.home, &client);

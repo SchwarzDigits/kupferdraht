@@ -160,7 +160,7 @@ Several commands therefore call `sync_once` internally
 
 | Scenario | Command sequence | Notes |
 |---|---|---|
-| **Fresh install** (first login, or after `logout --purge-device`, or `rm -rf ~/.kupferdraht`) | `login` → `sync` → `rooms-join-all` → `sync-stream` | No local MLS state — every cached room is bootstrapped via external commit. |
+| **Fresh install** (first login, or after `logout --purge-device --purge-local`, or `rm -rf ~/.kupferdraht`) | `login` → `sync` → `rooms-join-all` → `sync-stream` | No local MLS state — every cached room is bootstrapped via external commit. |
 | **Daily use** (kupferdraht.db preserved, same device_id) | `login` → `sync` → `sync-stream` | Step 7e's reuse path detects the existing device on Wire and rebinds an access token without registering a new client. MLS state is already consistent. |
 | **Re-login after device replacement** (kupferdraht.db preserved, but Wire returned a *new* `device_id` because the old client was deleted server-side) | `login` → `sync` → `rejoin-all` → `sync-stream` | Step 7e's recovery path. `rejoin-all` finds rooms whose `own_leaf` belongs to the prior device_id and re-joins each via external commit. |
 | **One-shot send** | `login` → `send --id <room>` | Several commands (`send`, `room-invite`, `room-kick`, `room-leave`, `room-create`) call `sync_once` internally so a fresh metadata refresh is not strictly necessary; an explicit `sync` first is still the cleanest pattern. |
@@ -1681,39 +1681,47 @@ task mark ok
 
 ### `logout`
 
-Sign out of the backend (Step 6e-2). Issues
-`POST /v{N}/access/logout` to revoke the `zuid` refresh cookie
-server-side. With `--purge-device`, **also** issues
-`DELETE /v{N}/clients/{device_id}` first to remove the registered
-device entirely (frees a 7-cap slot) — Wire requires the user's
-password for that. With `--purge-device`, the CLI then wipes the
-home it runs on — `$KUPFERDRAHT_HOME`, else the platform default directory
-(see [Storage layout](#storage-layout)) — so the next `login` starts
-from a clean slate. That wipe is the whole home: every account's
-databases and `home.id`; the home's keystore entries stay behind
-until Step 78 (the next `login` creates a new home id and fresh keys).
+Sign out of the backend (Step 6e-2; through the device manager since
+Step 78 — `Kupferdraht::logout`). Issues `POST /v{N}/access/logout` to
+revoke the `zuid` refresh cookie server-side and marks the account
+signed out: it is no longer the active account, so the next command
+answers "no persisted account — run `kupferdraht-cli login` first". With
+`--purge-device`, **also** issues `DELETE /v{N}/clients/{device_id}`
+first to remove the registered device entirely (frees a 7-cap slot) —
+Wire requires the user's password for that. With `--purge-local`, the SDK
+forgets the account on this device: its directory under
+`accounts/<id>/` (databases, locks, asset cache), its keystore entries and
+its registry row; other accounts of the home, `global.db` and `home.id`
+are untouched. The CLI itself deletes no file and no keystore entry.
 
 ```bash
-# Soft logout — kills the refresh cookie, keeps the device:
+# Sign out — kills the refresh cookie, keeps the device and the data:
 kupferdraht-cli logout
 
-# Full logout — also deletes the device + wipes local DB:
+# Also delete the device at the backend (the data stays here):
 pbpaste | kupferdraht-cli logout --purge-device --password-stdin
+
+# Leave this device for good — device deleted, account forgotten here:
+pbpaste | kupferdraht-cli logout --purge-device --purge-local --password-stdin
 ```
 
 | Flag                 | Required | Description                                                                              |
 |----------------------|----------|------------------------------------------------------------------------------------------|
-| `--purge-device`     | no       | Also delete the device + wipe the home (`$KUPFERDRAHT_HOME` or the platform default).       |
+| `--purge-device`     | no       | Also delete the device at the backend (password required).                               |
+| `--purge-local`      | no       | Also forget the account on this device: databases, keys, registry row.                   |
 | `--password-stdin`   | no       | Read password from stdin. Only relevant with `--purge-device`. Without it, the CLI prompts. |
 
 Output:
 
 ```
 logout ok
+  account_id:   <uuid>@<domain>
   device_id:    <client_id>
   purge_device: true | false
-  local state:  wiped (<the home's path>) | preserved (next login reuses this device)
-  next login:   will register a fresh device + MLS identity        # purge only
+  purge_local:  true | false
+  local state:  preserved (signed out; other accounts untouched) | forgotten (databases, keys and registry row of the account)
+  device:       still registered at the backend | deleted at the backend
+  next login:   reuses this device | will register a fresh device + MLS identity
 ```
 
 Common errors:
@@ -1721,13 +1729,47 @@ Common errors:
   invalid (e.g. previously logged out). Surfaced as
   `BackendRejected`.
 - `403 invalid-credentials` (delete-device) — wrong password.
-  Surfaced as `BackendRejected`. The logout step is not attempted
-  in this case (delete-device runs first).
+  Surfaced as `BackendRejected`. Nothing local changes in this case
+  (delete-device runs first); the call can be repeated.
 
 Notes:
-- Without `--purge-device`, local state is preserved and the
-  next `login` reuses this device via the Step 7e reuse path
-  (no extra 7-cap slot consumed).
+- Without either purge flag, local state is preserved and the next
+  `login` reuses this device via the Step 7e reuse path (no extra
+  7-cap slot consumed).
+- `--purge-local` alone leaves the device registered at the backend —
+  the next `login` registers a fresh one, and the old device keeps its
+  slot until `device-delete` removes it.
+
+### `account-forget`
+
+Forget an account on this device without a session (Step 78 —
+`Kupferdraht::forget_account`): its directory under `accounts/<id>/`,
+its keystore entries and its registry row go; other accounts of the
+home are untouched. Reads only the device registry — no account unlock
+and no network call. The device stays registered at the backend: delete
+it with `device-delete` from another device, or sign in and use
+`logout --purge-device` instead.
+
+```bash
+kupferdraht-cli account-forget --id <uuid>@<domain>
+```
+
+| Flag       | Required | Description                                                  |
+|------------|----------|--------------------------------------------------------------|
+| `--id`     | yes      | Qualified account id, as printed by `kupferdraht-cli accounts`. |
+
+Output:
+
+```
+account-forget ok
+  account_id:   <uuid>@<domain>
+  local state:  forgotten (databases, keys and registry row of the account)
+  device:       still registered at the backend (delete it with device-delete from another device)
+```
+
+Common errors:
+- `InvalidInput: unknown account: …` — the registry does not know the
+  id (never logged in here, or already forgotten).
 - The access token expires naturally within its remaining ~15 min
   TTL; logout only kills the refresh cookie that would otherwise
   rebind it.

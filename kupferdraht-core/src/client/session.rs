@@ -136,13 +136,12 @@ impl Client {
             .await
     }
 
-    /// Close the account's two databases (Step 114, a browser purge): the
+    /// Close the account's two databases (a purge, Step 114 / Step 78): the
     /// store refuses every later operation with `SessionExpired`, and MLS
     /// operations find no group. The client is done afterwards.
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` when a database cannot be closed.
-    #[cfg(any(target_arch = "wasm32", test))]
     pub(crate) fn close_storage(&self) -> Result<(), KupferdrahtError> {
         if let Some(store) = &self.store {
             store.close()?;

@@ -1,8 +1,8 @@
 # Step 84 — Asset deletion API + cache orphan cleanup
 
 **Status: commissioned 2026-09-10** (transferred from open.md
-gap-B.3 + gap-B.5; def-D.2 names the missing mini-ADR this step
-writes first).
+gap-B.3 + gap-B.5 and its defect entry def-D.2, which named the
+missing mini-ADR this step writes first).
 
 ## Problem
 
@@ -34,11 +34,17 @@ writes first).
 5. Note: the cache path/id handling must land AFTER Step 80
    (inbound-id path hardening) — the sweep walks the cache dir and
    must not be confused by hostile names.
+6. CLI verbs for the cache beside `delete-asset` (from open.md's
+   former erg-D.9, 2026-11-01): `cache list | size | clear` — `clear`
+   is the sweep of item 3 over every row, `size` the sum of the `.enc`
+   files, `list` the rows with their cache state.
+7. The cache size policy (open.md's former gap-B.4): the cache grows
+   unbounded today. Phase 1 decides whether a size cap with LRU eviction
+   ships with the sweep, and its default.
 
 ## Out of scope
 
-- gap-B.4 (LRU eviction / size cap) — needs a sizing policy
-  decision; stays in open.md's backlog.
+- Previews of assets (`docs/non-goals.md` NG-2).
 
 ## TDD sketch
 

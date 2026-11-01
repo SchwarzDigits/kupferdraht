@@ -57,7 +57,7 @@ pub use client::{
 };
 pub use error::KupferdrahtError;
 pub use identity::UserId;
-pub use manager::{Kupferdraht, KupferdrahtBuilder, PendingAccount, PendingLogin};
+pub use manager::{Kupferdraht, KupferdrahtBuilder, PendingAccount, PendingLogin, PurgeOptions};
 pub use rooms::{
     DeviceCredential, JoinLink, Room, RoomAccess, RoomDevice, RoomDevicesChange,
     RoomDevicesListener, RoomMember, RoomMemberRole, RoomType,

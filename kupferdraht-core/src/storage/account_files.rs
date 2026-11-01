@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Removing an account's databases (Step 110a, ADR-0035): what a first
-//! setup finds left without a seed by an earlier build, and what a
-//! cancelled first setup created. Only ever before the account's stores
+//! Removing an account's databases: what a purge deletes (Step 114 /
+//! Step 78), what a first setup finds left without a seed by an earlier
+//! build (Step 110a, ADR-0035), and what a cancelled first setup created. Only ever before the account's stores
 //! are open, or after they were dropped. On the storage server (Step 111b)
 //! a new seed is a new storage-login key, whose subject holds nothing:
 //! there is nothing left over to remove.
@@ -59,6 +59,7 @@ pub(crate) fn delete_account_databases(
 ///
 /// # Errors
 /// As [`delete_account_databases`].
+#[cfg(any(target_arch = "wasm32", test))]
 pub(crate) fn delete_leftover_account_databases(
     home: &KupferdrahtHome,
     account_id: &str,

@@ -61,7 +61,12 @@ object identity)
   per home, so two homes of one user on one keystore keep both
   sessions), `accounts()`, `active_account()`, `login(server, email,
   password, second_factor_code?) -> PendingLogin`, `resume(account_id) ->
-  Client`, `register(server, name, email, password) -> PendingClient`,
+  Client`, `logout(client, options: PurgeOptions, password?)` and
+  `forget_account(account_id)` (Step 78 — sign the account out: it is no
+  longer active and the manager drops the client; `purge_device` /
+  `purge_local` as natively; `forget_account` drops the account's
+  databases, keys and registry row without a session, the device at the
+  backend stays), `register(server, name, email, password) -> PendingClient`,
   `initiate_sso(server, code, success_redirect, error_redirect) -> String`
   (Step 17β — validates the SSO code and returns the interactive initiate URL
   to open in a browser; wasm: `initiateSso`),
@@ -482,6 +487,9 @@ calls throw `InvalidInput`.
 
 - **No options** — the native logout: the session ends, the account's keys
   and data stay in this browser, so the next login needs no recovery data.
+  Since Step 78 the account is signed out as well: `activeAccount` is
+  cleared and the manager drops the client — the app learns at its next
+  start that nobody is signed in instead of resuming into a dead session.
 - **`purgeDevice`** (with the password, as natively) — deletes this device
   at the backend and, in the server mode, the account's databases on the
   storage server (with the VFS's cache). Another browser that holds the

@@ -23,16 +23,14 @@
 //! login pipeline integration and 10d's event dispatch — can iterate
 //! over per-feature entries without per-feature deserialisation here.
 //!
-//! # TODO(gap-B.1: ciphersuite ADR, number TBD): consume `mls.config.*`
+//! # One ciphersuite, not negotiated
 //!
 //! Step 10's generic store accepts `mls.config.defaultCipherSuite` and
 //! `mls.config.allowedCipherSuites` like every other config, but
-//! Kupferdraht currently hardcodes `MlsClient::MLS_CIPHERSUITE` to P-256.
-//! A team whose feature config requires a different ciphersuite will
-//! see silent group-add failures. Ciphersuite negotiation is deferred
-//! to a future ciphersuite ADR (open.md gap-B.1); see
-//! `docs/plan/archive/10-server-feature-configs.md`
-//! §Implementation notes for the path forward.
+//! Kupferdraht runs one ciphersuite, `MlsClient::MLS_CIPHERSUITE` (P-256),
+//! and negotiates none (`docs/non-goals.md` NG-25). A backend whose
+//! default differs fails on the first group add today; the loud check at
+//! login is Step 132.
 
 use serde_json::Value;
 use tracing::debug;
