@@ -57,3 +57,9 @@ limitations".
   v14). Consumers should state the limit to their users.
 - **NG-21** No presence / "online" status — Wire barely has it, and
   privacy argues against it.
+- **NG-22** One account per browser in the server mode — the browser
+  keeps one `zuid` per backend domain, so `resume` of an account other
+  than the last one logged in is `SessionExpired` (the cookie names
+  another user). Not planned (Markus, 2026-09-30): the browser deployment
+  has one account per browser; revisit only if several accounts on one
+  backend become a use case.

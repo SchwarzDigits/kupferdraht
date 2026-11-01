@@ -63,7 +63,8 @@ is no skill for it — it is this short procedure:
   decided scope cut with its reason; `open.md` keeps open questions and
   backlog only. New there: no contact discovery and no direct contact
   initiation (NG-18, by Kupferdraht's purpose), no Wire push registration
-  (NG-19), no history for a new device (NG-20), no presence (NG-21).
+  (NG-19), no history for a new device (NG-20), no presence (NG-21),
+  one account per browser in the server mode (NG-22).
   `open.md` lost its closed sections (the publication checklist, whose
   record moved to the 0.1.0 entry below, and the provenance audit) and
   its stale items.

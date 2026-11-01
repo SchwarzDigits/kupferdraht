@@ -44,18 +44,11 @@ Pre-existing over-cap files outside Step 29's scope: `login_pipeline.rs`
 > boundaries proposed above predate that growth — re-derive them when
 > the step is picked up.
 
-Branch `step/29-client-runtime-split`.
-
 ---
 
 ## 61) Residuals from the WASM/ADR-0005 divergence finding (2026-07-16; narrowed 2026-09-10)
 
-The core finding is resolved (ADR-0015 supersedes ADR-0005 in
-full). Items 1 (THREAT_MODEL leftovers incl. the browser at-rest
-model) and 3 (two stale CLAUDE.md stack lines — openmls from
-crates.io, the event-stream line vs. shipped ADR-0019) moved to
-**Step 82** (`docs/plan/82-threat-model-refresh.md`). Still open
-here:
+One residual of the finding (the rest went into ADR-0015 and Step 82):
 
 - **SSO option-β decision** (Step 17) is ADR-shaped but lives only
   in the archived plan doc (`docs/plan/archive/17-saml-sso.md`) —
@@ -76,7 +69,6 @@ Additive unless noted.
 
 *Convenience APIs (additive; the explicit steps stay):*
 - **erg-A.1** `ClientBuilder::login_and_unlock(email, pw, 2fa?)` → `Arc<Client>` in one call.
-- ~~**erg-A.2** `ClientBuilder::production()` / `staging()` presets~~ — decided against 2026-10-08: no preset for Wire's hosted service anywhere, CLI or core; the CLI presets were removed before publication (Wire's Terms of Use restrict third-party clients there).
 - **erg-A.3** `ClientBuilder::resume_and_sync()` — chain open-store + resume + unlock + initial sync.
 - **erg-A.4** `ClientBuilder::with_persistence(path)` — open `path/kupferdraht.db` + set the storage path in one call.
 
@@ -135,9 +127,9 @@ Additive unless noted.
 - **gap-B.13** Live `/feature-configs` fixture not captured (tests use a synthesised one).
 - **gap-B.14** Wire-Web→Kupferdraht inbound asset never live-validated.
 - **gap-B.15** `WIRE_RECEIPT_MODE` off-path smoke not run against a live backend.
-- **gap-B.16** 4xx httpmock coverage not symmetric (assets / feature-configs / properties / token-refresh covered, not all endpoints). (The Step-73 residual — the legacy drain's error split — is pinned since Step 97b: `step_97b_push_doorbell.rs::a_failing_drain_reconnects_the_socket`.)
-- **gap-B.7 residual** — Step 63 shipped pool top-up; the low-pool live drain is untested until a claim source exists (observations §66).
-- **gap-B.25 residual** — Step 74 shipped signal-then-flush (`sync/removal_flush.rs`; observations §69/§70). A restart still loses the in-memory pending set; queued proposals persist in openmls storage and commit on the room's next activity.
+- **gap-B.16** 4xx httpmock coverage not symmetric (assets / feature-configs / properties / token-refresh covered, not all endpoints).
+- **gap-B.7 residual** — the low-pool live drain of the key-package top-up (Step 63) is untested until a claim source exists (observations §66).
+- **gap-B.25 residual** — the removal flush (`sync/removal_flush.rs`, Step 74; observations §69/§70) keeps its pending set in memory: a restart loses it; queued proposals persist in openmls storage and commit on the room's next activity (see also §73).
 - **gap-B.23** Pull crash-window double-dispatch (review S8
   residual, 2026-08-14): the Step-64 dedup catches only a notification
   whose id equals the page cursor (the push-symmetric case). The
@@ -172,7 +164,7 @@ Correct code that is hard to read / navigate. The baseline safety rules (no
 `unsafe` / `unwrap` / `println!` / `macro_rules!`; clean build / clippy /
 `cargo deny`) are re-checked each gate run — not tracked here.
 
-- **cq-A.1** Files over the 200-code-line cap. Steps 29 / 30 / 32 / 33 retired the four biggest (`client/runtime.rs`, `timeline/send.rs`, `sync/dispatch.rs`, `kupferdraht-cli/src/main.rs`). Remaining offenders **as of the 2026-06-16 sweep — re-count before acting** (Steps 34–42 have since moved code): the three Step-29 residues `client/membership.rs` · `client/rooms.rs` · `client/sync.rs` (see §60), plus `rooms/room.rs`, `client/login_pipeline.rs`, `sync/service.rs`, and pre-existing `wire/http/conversations.rs`, `ffi/timeline.rs`, `wire/dto.rs`, `wire/proto.rs`, `storage/records.rs`, `manager/mod.rs`.
+- **cq-A.1** Files over the 200-code-line cap. Remaining offenders **as of the 2026-06-16 sweep — re-count before acting** (Steps 34–42 have since moved code): the three Step-29 residues `client/membership.rs` · `client/rooms.rs` · `client/sync.rs` (see §60), plus `rooms/room.rs`, `client/login_pipeline.rs`, `sync/service.rs`, and pre-existing `wire/http/conversations.rs`, `ffi/timeline.rs`, `wire/dto.rs`, `wire/proto.rs`, `storage/records.rs`, `manager/mod.rs`.
 - **cq-A.2** `process_inbound_message` — forbidden `process` prefix. `MlsClient::process_inbound_message` (`encryption/messages.rs`) decodes / absorbs an inbound MLS message → name it for the effect (`decode_inbound_message` / `absorb_inbound_message`).
 - **cq-A.3** Three `#[allow(clippy::struct_field_names)]` over renamable fields: `rooms/room.rs` (`room_type`→`kind`), `client/mod.rs` (`mls_client:`→`mls`), `ffi/sync.rs` (FFI `Message` `message_*` fields).
 - **cq-A.4** Redundant `_with_storage` suffix on `MlsClient::new_fresh_with_storage` / `resume_with_storage` — pure rename (the in-memory `new_fresh` wraps the `_with_storage` variant; not dead).
@@ -183,7 +175,7 @@ Correct code that is hard to read / navigate. The baseline safety rules (no
 ### Blocked on the Wire API (no endpoint yet)
 
 - **Step 12 — Key backup (mnemonic):** blocked — Wire v14 exposes no backup endpoint (`docs/observations.md` §62).
-- **Step 62 — `/v14/events` push (shipped, dormant):** wire-server
+- **Step 62 — `/v14/events` push (dormant):** wire-server
   hard-codes `consumableNotifications: false` since chart 5.30 (PR
   #5116 hard-codes the flag, no public timeline — observations
   §68). The transport is merged + archived as opt-in, self-guarded by
@@ -269,58 +261,40 @@ contradicted NG-4 and are gone.
 
 ### Priority thesis
 
-1. ~~**Self-conversation step** (§63)~~ — **shipped as Step 86
-   (2026-09-24)**: the channel exists; the triple leverage (personal
-   task list, `LastRead` cross-device read sync, draft sync) is now
-   three follow-ups under Proposed steps.
-2. **Mute/archive** — daily comfort (unread counts shipped 2026-08-14).
-3. Local search as a filler between steps (ephemeral toleration
-   shipped with Step 89, 2026-09-17).
+1. **The self-room follow-ups** (personal task list, `LastRead`
+   cross-device read sync, draft sync) — under Proposed steps.
+2. **Mute/archive** — daily comfort.
+3. **Local search** as a filler between steps.
 
 ## 66) External code review triaged — 18 findings verified, dispositions assigned (2026-08-13)
 
-An external review (18 findings, S1–S18, re-checked against
-`f17abbd`) was verified finding-by-finding against the source.
-Result: 15 confirmed, 3 partially confirmed (mechanics right, impact
-overstated), 0 refuted. The review's one systematic gap: it does not
-follow the MLS consequence chains to the end — Step 38's
-`recover_room` self-healing and MLS's skipped-generation tolerance
-soften S1 ("critical" → high: messages lost until heal, no permanent
-ratchet brick) and S3 (send failure is caller-visible, receivers
-tolerate generation gaps — no action needed).
-
-Still open: **S11** (task-cache monotonicity) is a design question —
-ADR-0014's last-writer-wins means *event order*; a wall-clock guard would
-change semantics; revisit if cursor-reset replays become a real flow.
-Everything else is shipped (Steps 64 / 65 / 66 / 70 / 71 / 85, the S15
-docs chore — `docs/plan/archive/`, `CHANGELOG.md`) or needs no action
-(S3: documented, caller-visible, MLS-tolerated; S14: IndexedDB task
-no-ops — ARCHITECTURE §7).
+Of the 18 findings one is still open: **S11** (task-cache
+monotonicity) is a design question — ADR-0014's last-writer-wins means
+*event order*; a wall-clock guard would change semantics; revisit if
+cursor-reset replays become a real flow. (The dispositions of the
+others: `docs/plan/archive/`, `CHANGELOG.md`.)
 
 
 ## 68) `invite_members` freshness is a contract, not enforced (2026-08-26)
 
 The ADR-0020 invite hook hands the invitees this client's *current*
 fold of case/marker/tasks — state the inviter has not drained is
-permanently missing for the joiner (MLS has no history). Live-caught
-in the Step-75 smoke: the one-shot CLI invited before folding a
-pending task; the late joiner's board was short. Fixed for the CLI
-(`room-invite` now runs a full `sync_once` first) and documented as
-a contract on `invite_members` (push-loop consumers are always
-fresh). Open decision: should `invite_members` drain notifications
-itself (core-side enforcement — costs a sync round-trip on every
-invite, duplicates the consumer's loop) or stay a documented
-contract? Revisit if a second consumer trips over it.
+permanently missing for the joiner (MLS has no history). Today that is
+a documented contract on `invite_members` (the CLI drains first;
+push-loop consumers are always fresh). Open decision: should
+`invite_members` drain notifications itself (core-side enforcement —
+costs a sync round-trip on every invite, duplicates the consumer's
+loop) or stay a documented contract? Revisit if a second consumer
+trips over it.
 
 ## 69) Kalium-audit residuals — checked, accepted, not commissioned (2026-09-10)
 
 The Kalium-JVM production-readiness audit was cross-checked against
 Kupferdraht (Steps 77–80 commissioned from the real findings; the
 blocker class does not transfer — one Rust core, SQLCipher
-everywhere, calling out of scope). Three minors were verified and
+everywhere, calling out of scope). Two minors were verified and
 deliberately left as residuals rather than steps:
 
-- ~~No `busy_timeout` / `synchronous` pragmas~~ — resolved by Step 85: both set explicitly on every native open path (observations §84: the busy_timeout residual never existed as stated).
 - **DB files carry umask default modes**, not 0600 (no
   `OpenOptions`/`set_permissions` anywhere in the storage layer).
   Accepted because the content is SQLCipher ciphertext and the keys
@@ -340,9 +314,8 @@ Kupferdraht's hardening.
 
 ## 70) Step 95c residuals — cache-lock `expect`s, payload length caps, function-length debt (2026-09-26)
 
-Step 95c turned every assertion on runtime data into a typed error
-(`docs/plan/archive/95-inbound-message-integrity.md` "As built"). Left open —
-the first two deliberately, as plan D4 foresaw:
+Left open by Step 95c (`docs/plan/archive/95-inbound-message-integrity.md`),
+the first two deliberately:
 
 - **About 26 `.expect("… poisoned")` on in-memory cache locks** — the
   rooms cache, event-handler and listener registries, typing state
@@ -367,31 +340,12 @@ the first two deliberately, as plan D4 foresaw:
 
 ## 71) Production-readiness review — open findings (review 2026-09-25 at `e85b438`, re-checked 2026-09-26 at `5f7eef4`)
 
-A production-readiness review commissioned by Markus (four parallel
-code audits — MLS/crypto, local secrets, network/sync,
-state/concurrency — with every blocker and high finding read in the
-code) concluded: **not production
-ready as a security product in the sense of THREAT_MODEL.md.** The base
-is sound (architecture, openmls without unsafe settings, verified DB
-keys, rustls-only, atomic migrations, Step-80 path hardening).
-Recommended order: blockers 1–3 → 4–5 → 6–8 → transport → threat model
-and process.
-
-**Done by Step 95:** blockers 1–3 (MLS-authenticated sender, ADR-0027;
-sender-bound edit/delete, ADR-0028; no panics on foreign data), plus
-three findings 95c fixed on the way — conversations listed in 1000-id
-chunks, asset URL path segments validated, runtime-data asserts
-(e.g. resume after `SessionExpired`). The ghost-device risk is now at
-least visible (95d, room devices + MLS thumbprints).
-
-**Done by Steps 96–106** (merged 2026-09-28/29, archived under
-`docs/plan/archive/`, recorded in `CHANGELOG.md`): B5 (Step 96,
-ADR-0029), B6 (97b, ADR-0030), B7 (97a), B8 (97c, 97d — ADR-0031), B9
-(97e, ADR-0032; the two-write events by Step 105), H1 (98), H2 (99), H3
-(102), H4 (106, ADR-0034), H6 (101), H7 part 1 (104), H8 (103; push as
-the default where a target has one, ADR-0033).
-
-**Still open** (each re-verified at `5f7eef4`):
+What the production-readiness review commissioned by Markus (four
+parallel code audits — MLS/crypto, local secrets, network/sync,
+state/concurrency) left open after Steps 95–106 closed its blockers 1–3
+and 5–9 and findings H1–H4, H6, H7 part 1 and H8 (the record:
+`docs/plan/archive/`, `CHANGELOG.md`). Each item re-verified at
+`5f7eef4` and again on 2026-11-01:
 
 *Data loss (blockers):*
 - **B4 — Linux desktop loses the DB keys on reboot.** `keyring` 3.6.3
@@ -448,8 +402,7 @@ the default where a target has one, ADR-0033).
 - **M4** — Windows: `is_path_safe_id` passes `:`, reserved names
   (`CON`, `NUL`) and a trailing dot or space.
 - **M5** — `global.db` has no schema version; `PRAGMA secure_delete` is
-  set nowhere. (That logout left all local data behind is closed by
-  Step 78.)
+  set nowhere.
 
 *Zeroization (not a blocker; the claim is the problem):* keys and
 credentials in their holders are `Zeroizing`, but "compiler-enforced"
@@ -476,9 +429,7 @@ test pins have not compiled since Step 39 — observations §93; Step 20e's
 macOS job is the structural answer); `v0.1.0` is tagged (2026-11-01)
 without an API-stability promise (Step 20e); licensing for proprietary
 consumers (GPL-3.0-only; contributions come in under the Schwarz Digits
-CLA) and the Wire ToU question are business decisions. Closed since the
-review: `SECURITY.md` names the reporting channel and the supported
-line; the toolchain is pinned (`rust-toolchain.toml`, Rust 1.98).
+CLA) and the Wire ToU question are business decisions.
 
 ## 72) Browser server mode — residuals of Step 111b (2026-09-30)
 
@@ -498,12 +449,6 @@ open, none of it blocking the step:
   for exactly this; the browser gets no `forgetAccount` yet — adding it
   means a tabs-proxy mirror (Step 94's parity) and a browser test, so it
   waits for an embedder that needs it.
-- **One login cookie per backend.** The browser keeps one `zuid` per
-  backend domain: in the server mode `resume` of an account other than the
-  last one logged in is `SessionExpired` (the cookie names another user).
-  Not planned (Markus, 2026-09-30): the browser deployment has one account
-  per browser; revisit only if several accounts on one backend become a
-  use case.
 
 ## 73) A failed removal flush is lost with the client (2026-10-01)
 
