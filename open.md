@@ -338,98 +338,125 @@ the first two deliberately:
   `rebind_access_token` 68, `create_dm` 62) are older debt. Split them
   when the module is next touched.
 
-## 71) Production-readiness review — open findings (review 2026-09-25 at `e85b438`, re-checked 2026-09-26 at `5f7eef4`)
+## 71) Production-readiness review — what is still open, and how much it weighs (review 2026-09-25 at `e85b438`; re-graded 2026-11-01)
 
-What the production-readiness review commissioned by Markus (four
-parallel code audits — MLS/crypto, local secrets, network/sync,
-state/concurrency) left open after Steps 95–106 closed its blockers 1–3
-and 5–9 and findings H1–H4, H6, H7 part 1 and H8 (the record:
-`docs/plan/archive/`, `CHANGELOG.md`). Each item re-verified at
-`5f7eef4` and again on 2026-11-01:
+The review commissioned by Markus (four parallel code audits — MLS/crypto,
+local secrets, network/sync, state/concurrency) found real data-loss
+blockers; Steps 95–106 closed them (blockers 1–3 and 5–9, findings
+H1–H4, H6, H7 part 1, H8 — the record: `docs/plan/archive/`,
+`CHANGELOG.md`). Its verdict "not production ready as a security product
+in the sense of THREAT_MODEL.md" named the gap between the threat model's
+claims and the code, not an exploitable weakness. What is left, each
+item re-verified in the code on 2026-11-01 and weighed by what happens
+to a real user: no known exploitable weakness in the cryptographic core
+or the storage; one platform-bound data-loss limit (B4, Linux desktop),
+one consumer-side threading contract (H5), a handful of cheap hardening
+items, and a set of documentation claims to narrow.
 
-*Data loss (blockers):*
+*Data loss, platform-bound:*
 - **B4 — Linux desktop loses the DB keys on reboot.** `keyring` 3.6.3
-  with `linux-native` pulls only `linux-keyutils` (kernel keyring, not
-  persistent — also lost when the kernel's persistent keyring expires
-  after a few days logged out). Together with B5 a reboot makes the
-  account unusable on that machine. **Deferred for now, not
-  permanently** (Markus, 2026-09-27): taken up after the
-  platform-independent blockers. Until then the docs say so
-  (`Cargo.toml`, `keystore/`, `docs/library.md`, THREAT_MODEL). Fix
-  sketch: the crate's own combination feature
-  `linux-native-sync-persistent` (= `linux-native` + `sync-secret-service`,
-  the sync libdbus backend — the async one can block inside tokio) plus
-  `crypto-rust`; build/CI need `libdbus-1-dev` or the `vendored` feature
-  (AFL-2.1 into `deny.toml`). Open decision (ADR):
+  with `linux-native` pulls only `linux-keyutils` (the kernel keyring,
+  not persistent — also lost when the persistent keyring expires after a
+  few days logged out); with ADR-0029 a reboot then makes the account
+  unusable on that machine (a re-login registers a new device, the local
+  history is gone). *Weight: real, Linux desktop only — macOS, Windows,
+  iOS, Android and the browser are not affected.* Deferred, not
+  permanently (Markus, 2026-09-27); the docs say so (`Cargo.toml`,
+  `keystore/`, `docs/library.md`, THREAT_MODEL). Fix sketch: the crate's
+  combination feature `linux-native-sync-persistent` (= `linux-native` +
+  `sync-secret-service`, the sync libdbus backend — the async one can
+  block inside tokio) plus `crypto-rust`; build/CI need `libdbus-1-dev` or
+  the `vendored` feature (AFL-2.1 into `deny.toml`). Open decision (ADR):
   headless Linux without a Secret Service — unsupported, a passphrase
   keystore, or systemd-creds / TPM.
-- **iOS notification extension (NSE)** — not planned; noted 2026-09-28
-  while designing ADR-0031. A second process started by a push, with a
-  hard time and memory budget and killed without warning, needs more
-  than ADR-0031: a receive-only drain mode (no own commits, no healing,
-  stop before what needs the app), a time budget, the database keys
-  readable while the device is locked (shared keychain access group,
-  `kSecAttrAccessibleAfterFirstUnlock`, ADR-0029), and care with iOS
-  terminating a suspended process that holds a file lock in a shared
-  container (`0xdead10cc`) — `kupferdraht.lock` is held across `POST
-  /access`. B9 becomes likely with it.
-- **Residuals of B7 and B9.** The wasm `send_bytes` path
-  (`timeline/asset_send.rs`) emits no `Append` for its own row — only the
-  settling `UpdateAt` (found in 97a). Custom `Store` implementations stay
-  non-atomic until they override the combined writes of Step 105.
 
-*High (before wide use):*
-- **Residual of H4** — whether the backend itself refuses messages for a
-  future epoch was not verified (no server source; a live probe was not
-  made).
-- **H5** — blocking work in async code: SQLite, fsync, crypto and
+*Consumer contract:*
+- **H5 — blocking work in async code.** SQLite, fsync, crypto and
   generating 100 key packages run without `spawn_blocking`; UniFFI polls
-  on the caller's thread (ANR risk on Android — derived from UniFFI
-  internals, not measured).
-- **Residuals of H6** — UniFFI generates the Kotlin `toString` / Swift
-  `description` of FFI records itself: `AssetMeta.assetToken` still
-  prints there (a consumer logging the record leaks it; N3 of the threat
-  model puts that on the consumer); and a sentence "Kupferdraht writes no
-  secrets into its own logs" for `docs/THREAT_MODEL.md` is proposed for
-  the owner's review.
+  on the caller's thread, so a Kotlin consumer calling from the main
+  thread risks an ANR (derived from UniFFI internals, not measured).
+  *Weight: medium, avoided by the consumer — a background dispatcher is
+  standard practice; the browser runs in a worker, the CLI has no UI
+  thread.* To do: state the threading contract in `docs/bindings.md`;
+  `spawn_blocking` for the key-package generation is the one place
+  worth it in the core.
 
-*Medium / low:*
-- **M1** — WebSocket: no connect timeout; pongs are ignored (liveness
-  rests on a failed ping send).
-- **M2** — redirects: reqwest's default policy follows https→http, and
-  on 307/308 re-sends the login body with the password to another host.
-- **M3** — `ws://` is accepted without `permit_http`.
-- **M4** — Windows: `is_path_safe_id` passes `:`, reserved names
-  (`CON`, `NUL`) and a trailing dot or space.
-- **M5** — `global.db` has no schema version; `PRAGMA secure_delete` is
-  set nowhere.
+*Cheap hardening (one small step):*
+- **M2 — redirects:** reqwest's default policy follows redirects,
+  https→http included, and on 307/308 re-sends the login body with the
+  password to the host it was redirected to. Only the configured backend
+  can issue the redirect, so it needs a hostile or misconfigured server.
+  *Weight: low; the fix is one policy line (no redirects, or same-host
+  https only).*
+- **M3 — `ws://`** is accepted without `permit_http` (the CLI derives
+  `wss://` from the required https `--api-url`; a library consumer can
+  pass `ws://` explicitly). *Weight: low; gate it like http.*
+- **M1 — WebSocket:** no connect timeout; pongs are ignored (liveness
+  rests on a failed ping send), so a hung connection is noticed one ping
+  interval late; the polling fallback covers delivery. *Weight: low.*
+- **H6 residuals:** UniFFI generates the Kotlin `toString` / Swift
+  `description` of FFI records itself, so `AssetMeta.assetToken` prints
+  there (a consumer logging the record leaks a short-lived download
+  token; N3 of the threat model puts that on the consumer). *Weight:
+  low.*
+- **Residuals of B7 and B9:** the wasm `send_bytes` path
+  (`timeline/asset_send.rs`) emits no `Append` for its own row — only the
+  settling `UpdateAt`, so the sender sees its own asset on the next
+  timeline read; custom `Store` implementations stay non-atomic until
+  they override the combined writes of Step 105 (the shipped SQLite store
+  is atomic). *Weight: low.*
+- **H4 residual:** whether the backend itself refuses messages for a
+  future epoch was not verified (no server source; a live probe was not
+  made). *Weight: low, robustness not security.*
+- **M4 — Windows:** `is_path_safe_id` passes `:`, reserved names (`CON`,
+  `NUL`) and a trailing dot or space. *Weight: low; Windows is not a
+  supported target yet (no Windows CI).*
+- **M5:** `global.db` has no schema version (an `ALTER TABLE` guarded by
+  a column check is the migration path until it gets one); `PRAGMA
+  secure_delete` is set nowhere, so a deleted message's ciphertext stays
+  in free pages until overwritten — readable only with the key and the
+  file. *Weight: low; belongs with DB-key rotation (gap-B.10) and the G4
+  claim below.*
 
-*Zeroization (not a blocker; the claim is the problem):* keys and
-credentials in their holders are `Zeroizing`, but "compiler-enforced"
-(README, CLAUDE.md, THREAT_MODEL G4/G6) overstates it — tokens leave as
-plain `String` copies (`current_access_token()`, public
-`access_token()`), the login body copies the password into a
-`serde_json::Value`, `SessionRecord` holds plain tokens, and message
-plaintext on the send and receive paths is never zeroized (only the
-resend payload is). Either narrow the claim to "best-effort
-zeroization of keys and credentials" or add a non-`Clone` secret type
-with redacted `Debug` end to end.
+*Documentation claims to narrow (the substance of the review's verdict):*
+- **Zeroization:** keys and credentials in their holders are
+  `Zeroizing`, but "compiler-enforced" (README, CLAUDE.md, THREAT_MODEL
+  G4/G6) overstates it — tokens leave as plain `String` copies
+  (`current_access_token()`, public `access_token()`), the login body
+  copies the password into a `serde_json::Value`, `SessionRecord` holds
+  plain tokens, and message plaintext on the send and receive paths is
+  never zeroized (only the resend payload is). Either narrow the claim to
+  "best-effort zeroization of keys and credentials" or add a non-`Clone`
+  secret type with redacted `Debug` end to end. *Weight: the wording, not
+  a weakness.*
+- **Threat model vs. code:** G4 "forward secrecy in local storage"
+  needs `secure_delete` (M5) and key rotation (gap-B.10); the auth modes
+  `PasswordProtected` / `PasswordOnly` / `DeviceBound` do not exist in
+  code; "reproducible builds" do not exist; with Basic credentials the
+  backend is the key directory and can inject a device — "does not trust
+  the server with content" must be stated as an assumption (95d makes a
+  device visible, it does not prevent it; the same holds for every Wire
+  client without e2ei). *Weight: truthfulness of the document.*
 
-*Threat model vs. code:* G4 "forward secrecy in local storage" needs
-`secure_delete`; the auth modes `PasswordProtected` / `PasswordOnly` /
-`DeviceBound` do not exist in code; "reproducible builds" do not exist;
-with Basic credentials the backend is the key directory and can inject
-a device — "does not trust the server with content" must be stated as
-an assumption (95d makes the device visible, it does not prevent it).
+*Not a defect — a design note:* an **iOS notification extension (NSE)**
+is not planned (noted 2026-09-28 while designing ADR-0031). A second
+process started by a push, with a hard time and memory budget and killed
+without warning, needs more than ADR-0031: a receive-only drain mode (no
+own commits, no healing, stop before what needs the app), a time budget,
+the database keys readable while the device is locked (shared keychain
+access group, `kSecAttrAccessibleAfterFirstUnlock`, ADR-0029), and care
+with iOS terminating a suspended process that holds a file lock in a
+shared container (`0xdead10cc`) — `kupferdraht.lock` is held across
+`POST /access`. B9 becomes likely with it.
 
-*Operations and process (re-checked 2026-11-01):* no external audit;
-no fuzzing, no property tests, no automated interop tests against Wire;
-CI runs on Ubuntu only, without the Kotlin / Swift binding tests (their
-test pins have not compiled since Step 39 — observations §93; Step 20e's
-macOS job is the structural answer); `v0.1.0` is tagged (2026-11-01)
-without an API-stability promise (Step 20e); licensing for proprietary
-consumers (GPL-3.0-only; contributions come in under the Schwarz Digits
-CLA) and the Wire ToU question are business decisions.
+*Process maturity, not defects (re-checked 2026-11-01):* no external
+audit; no fuzzing, no property tests, no automated interop tests against
+Wire; CI runs on Ubuntu only, without the Kotlin / Swift binding tests
+(their test pins have not compiled since Step 39 — observations §93;
+Step 20e's macOS job is the structural answer); `v0.1.0` is tagged
+(2026-11-01) without an API-stability promise (Step 20e); licensing for
+proprietary consumers (GPL-3.0-only; contributions come in under the
+Schwarz Digits CLA) and the Wire ToU question are business decisions.
 
 ## 72) Browser server mode — residuals of Step 111b (2026-09-30)
 
