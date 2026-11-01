@@ -504,8 +504,9 @@ the default where a target has one, ADR-0033).
 - **M3** — `ws://` is accepted without `permit_http`.
 - **M4** — Windows: `is_path_safe_id` passes `:`, reserved names
   (`CON`, `NUL`) and a trailing dot or space.
-- **M5** — `global.db` has no schema version; logout leaves all local
-  data (Step 78, known); `PRAGMA secure_delete` is set nowhere.
+- **M5** — `global.db` has no schema version; `PRAGMA secure_delete` is
+  set nowhere. (That logout left all local data behind is closed by
+  Step 78.)
 
 *Zeroization (not a blocker; the claim is the problem):* keys and
 credentials in their holders are `Zeroizing`, but "compiler-enforced"
@@ -547,11 +548,13 @@ open, none of it blocking the step:
   until the client exists. The first renewal is due after half the
   storage token's lifetime (30 minutes), so this only matters for a login
   left open that long.
-- **A purge needs a live client (Step 114).** `logout({ purgeLocal })`
-  runs on a `Client`: an account whose session expired is logged in again
-  (its keys are here), then logged out with the purge. A manager-level
-  purge by account id — Step 78's `destroy_account` — would spare the
-  login; it is the native purge's design question, not the browser's.
+- **A purge needs a live client in the browser (Step 114).**
+  `logout({ purgeLocal })` runs on a `Client`: an account whose session
+  expired is logged in again (its keys are here), then logged out with the
+  purge. Natively Step 78 added `Kupferdraht::forget_account(account_id)`
+  for exactly this; the browser gets no `forgetAccount` yet — adding it
+  means a tabs-proxy mirror (Step 94's parity) and a browser test, so it
+  waits for an embedder that needs it.
 - **One login cookie per backend.** The browser keeps one `zuid` per
   backend domain: in the server mode `resume` of an account other than the
   last one logged in is `SessionExpired` (the cookie names another user).
@@ -837,3 +840,28 @@ forks; the first Rust embedder drops its own `[patch.crates-io]` entry
 refinery and openmls branches → `kupferdraht-core/Cargo.toml` → gate
 (`vendor/README.md` recipe), and a rusqlite ≥ 0.38 can retire the fork's
 wasm arm for its own `ffi-sqlite-wasm-rs`.
+
+## 83) The login path does not enter the manager's client cache (2026-11-01)
+
+Found by Step 78's `forget_account_closes_a_live_client`: only
+`Kupferdraht::resume` records a `Weak<Client>` in the manager's cache
+(Step 39's "one live `Client` per account"). A client that
+`PendingLogin::register_device` or `PendingAccount::activate` returns is the
+caller's alone — the manager does not know it. Two consequences:
+
+- `Kupferdraht::forget_account` closes the storage of a client it holds,
+  so a client from `login` in the same process keeps working on the
+  deleted directory until it is dropped (POSIX unlinks under it; the
+  consumer is expected to drop it first, as the TUI's picker does by
+  running without a session).
+- A `resume` right after `login` in the same process builds a second live
+  `Client` for the account — the `zuid` race Step 39's cache was meant to
+  prevent — because the cache has nothing to hand out.
+
+The fix is one of: `PendingLogin` / `PendingAccount` get a handle to the
+cache (an `Arc` around the map, threaded through `ManagerConfig`) and
+insert the client when the registration completes; or `Kupferdraht::login`
+returns a manager-aware wrapper. Not done in Step 78 (not needed by it:
+every consumer today either runs one process per command or keeps the one
+client it logged in with). The Step 78 tests hold their client through
+`resume` and say so.

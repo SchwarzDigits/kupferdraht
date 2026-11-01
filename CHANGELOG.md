@@ -36,7 +36,35 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **Native sign-out and account purge** (Step 78; the browser's purge of
+  ADR-0035, adopted natively): `Kupferdraht::logout(&client, PurgeOptions,
+  password)` revokes the session and marks the account signed out —
+  `active_account()` is `None` afterwards and the manager drops the client;
+  `purge_device` deletes the device at the backend first, `purge_local`
+  forgets the account on this device. `Kupferdraht::forget_account(account_id)`
+  drops an account's databases, keystore entries and registry row without a
+  session (`InvalidInput` for an unknown or already forgotten account; the
+  device at the backend stays). `PurgeOptions` is public and re-exported at
+  the crate root. Kotlin and Swift get `Kupferdraht.logout(client, options,
+  password)` and `Kupferdraht.forget_account(account_id)`; the CLI gets
+  `logout --purge-local` and `account-forget --id <account>`. A consumer no
+  longer needs to know a file or a keystore id to leave an account cleanly.
+
 ### Changed
+
+- **A plain `logout` signs the account out** (Step 78): after
+  `Kupferdraht::logout` without a purge, and after the browser's
+  `Client.logout()` without options, the account is no longer the active
+  account and the manager no longer hands the client out; its keys, databases
+  and registry entry stay, so the next login reuses the device. Before, the
+  registry kept naming the account active and a consumer discovered the
+  dead session only through a failing `resume`.
+- **`kupferdraht-cli logout --purge-device` no longer wipes the home.** It
+  deletes the device at the backend and keeps the local data; `--purge-local`
+  forgets the account (its databases, keys and registry row — other accounts
+  of the home are untouched), and both together are the old "clean slate".
+  The output names what stays, what the backend keeps and what the next
+  `login` does.
 
 ### Deprecated
 

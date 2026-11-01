@@ -173,7 +173,7 @@ async fn store_is_closed(client: &Client) -> bool {
 }
 
 /// Without options `logout` is the native one: the session ends, the
-/// account stays in this browser.
+/// account stays in this browser — signed out (Step 78).
 #[tokio::test]
 async fn a_plain_logout_keeps_the_account_here() {
     let browser = Browser::new();
@@ -182,7 +182,7 @@ async fn a_plain_logout_keeps_the_account_here() {
 
     browser
         .kupferdraht
-        .logout_client(&client, PurgeOptions::default(), None)
+        .logout(&client, PurgeOptions::default(), None)
         .await
         .expect("logged out");
 
@@ -190,6 +190,20 @@ async fn a_plain_logout_keeps_the_account_here() {
     assert!(browser.seed().is_some(), "the seed stays");
     assert!(browser.account_dir().exists(), "the databases stay");
     assert!(browser.listed().await, "still listed");
+    assert_eq!(
+        browser
+            .kupferdraht
+            .global
+            .active_account()
+            .await
+            .expect("active account"),
+        None,
+        "signed out (Step 78)"
+    );
+    assert!(
+        !browser.caches_client().await,
+        "the manager forgot the client"
+    );
 }
 
 #[tokio::test]
@@ -200,7 +214,7 @@ async fn purge_local_forgets_the_account_here() {
 
     browser
         .kupferdraht
-        .logout_client(&client, PURGE_LOCAL, None)
+        .logout(&client, PURGE_LOCAL, None)
         .await
         .expect("purged");
 
@@ -230,7 +244,7 @@ async fn a_purged_client_is_closed_and_forgotten() {
 
     browser
         .kupferdraht
-        .logout_client(&client, PURGE_LOCAL, None)
+        .logout(&client, PURGE_LOCAL, None)
         .await
         .expect("purged");
 
@@ -244,10 +258,7 @@ async fn purge_device_needs_the_password() {
     let client = browser.first_setup().await;
     let deletion = browser.mount_device_deletion(200);
 
-    let result = browser
-        .kupferdraht
-        .logout_client(&client, PURGE_BOTH, None)
-        .await;
+    let result = browser.kupferdraht.logout(&client, PURGE_BOTH, None).await;
 
     assert!(
         matches!(result, Err(KupferdrahtError::InvalidInput(_))),
@@ -269,7 +280,7 @@ async fn a_refused_device_deletion_purges_nothing() {
 
     let result = browser
         .kupferdraht
-        .logout_client(&client, PURGE_BOTH, Some("wrong"))
+        .logout(&client, PURGE_BOTH, Some("wrong"))
         .await;
 
     assert!(
@@ -294,7 +305,7 @@ async fn purge_device_deletes_the_device_and_closes_the_client() {
 
     browser
         .kupferdraht
-        .logout_client(&client, PURGE_DEVICE, Some(PASSWORD))
+        .logout(&client, PURGE_DEVICE, Some(PASSWORD))
         .await
         .expect("purged");
 
@@ -316,7 +327,7 @@ async fn purging_both_leaves_nothing() {
 
     browser
         .kupferdraht
-        .logout_client(&client, PURGE_BOTH, Some(PASSWORD))
+        .logout(&client, PURGE_BOTH, Some(PASSWORD))
         .await
         .expect("purged");
 

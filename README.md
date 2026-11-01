@@ -40,7 +40,7 @@ end-to-end encrypted with MLS (RFC 9420):
   - device-limit recovery during login (list / free a slot, then continue on the same handle)
   - multi-account device registry with offline resume
   - two processes on one home coexist (per-account cross-process lock around token refresh and key creation, fail-fast; databases wait for each other's writes)
-  - logout, optionally purging the device
+  - sign-out through the device manager (`Kupferdraht::logout`, optionally purging the device at the backend and the account on this device) and `forget_account` for an account without a session
   - password / e-mail / display-name / handle changes
 - **Devices**
   - list, rename, and revoke registered devices

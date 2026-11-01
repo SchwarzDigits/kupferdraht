@@ -150,7 +150,6 @@ impl KupferdrahtProvider {
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` when `SQLite` cannot close it.
-    #[cfg(any(target_arch = "wasm32", test))]
     pub(crate) fn close(self) -> Result<(), KupferdrahtError> {
         self.conn
             .close()

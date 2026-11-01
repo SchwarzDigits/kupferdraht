@@ -16,11 +16,14 @@ mod pending_login;
 #[cfg(test)]
 #[path = "../../tests/common/login_mocks.rs"]
 pub(crate) mod login_mocks;
-// Step 114 (ADR-0035): the browser's logout with its purge options.
-#[cfg(any(target_arch = "wasm32", test))]
+// Signing out and forgetting an account: the browser's purge options
+// (Step 114, ADR-0035) and the native face (Step 78).
 mod purge;
 #[cfg(test)]
 mod purge_tests;
+// Step 78: signing out and forgetting an account natively.
+#[cfg(test)]
+mod forget_tests;
 #[cfg(test)]
 mod recovery_tests;
 #[cfg(target_arch = "wasm32")]
@@ -32,8 +35,7 @@ pub use pending::PendingAccount;
 pub use pending_login::PendingLogin;
 #[cfg(any(target_arch = "wasm32", test))]
 pub(crate) use pending_login::{KeysState, RegisterOptions};
-#[cfg(any(target_arch = "wasm32", test))]
-pub(crate) use purge::PurgeOptions;
+pub use purge::PurgeOptions;
 
 use std::collections::HashMap;
 use std::path::PathBuf;

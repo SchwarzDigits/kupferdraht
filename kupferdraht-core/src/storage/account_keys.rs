@@ -163,7 +163,6 @@ pub(crate) fn derive_missing_account_key(
 ///
 /// # Errors
 /// Keystore errors.
-#[cfg(any(target_arch = "wasm32", test))]
 pub(crate) fn forget_account_secrets(
     keystore: &Arc<dyn SecureKeyStore>,
     home_id: &str,

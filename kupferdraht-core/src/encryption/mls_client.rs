@@ -227,7 +227,6 @@ impl MlsClient {
     /// # Errors
     /// `KupferdrahtError::Storage` when the stand-in cannot be opened or
     /// `mls.db` not closed.
-    #[cfg(any(target_arch = "wasm32", test))]
     pub(crate) fn close_storage(&mut self) -> Result<(), KupferdrahtError> {
         let open = std::mem::replace(&mut self.provider, KupferdrahtProvider::open_in_memory()?);
         open.close()

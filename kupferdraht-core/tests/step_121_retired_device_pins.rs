@@ -38,12 +38,15 @@ fn a_registration_that_meets_a_retired_device_forgets_its_keys() {
     );
 }
 
-/// And the resume path keeps doing it, so the two ways in stay symmetric.
+/// And the resume path keeps doing it, so the two ways in stay symmetric
+/// (the routine is `forget_secrets_and_entry` since Step 78 made
+/// `forget_account` the public, session-less purge).
 #[test]
 fn a_resume_that_meets_a_retired_device_still_forgets_its_keys() {
     let text = source("kupferdraht-core/src/manager/remote_resume.rs");
     assert!(
-        text.contains("Err(KupferdrahtError::DeviceRetired(_))") && text.contains("forget_account"),
+        text.contains("Err(KupferdrahtError::DeviceRetired(_))")
+            && text.contains("forget_secrets_and_entry"),
         "the resume path stopped forgetting a retired device's keys"
     );
 }

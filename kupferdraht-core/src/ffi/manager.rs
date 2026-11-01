@@ -17,7 +17,7 @@ use crate::client::{DeviceInfo, ServerConfig};
 use crate::error::KupferdrahtError;
 use crate::keystore::SecureKeyStore;
 use crate::manager::{
-    Kupferdraht as CoreKupferdraht, PendingAccount, PendingLogin as CorePendingLogin,
+    Kupferdraht as CoreKupferdraht, PendingAccount, PendingLogin as CorePendingLogin, PurgeOptions,
 };
 use crate::storage::AccountEntry;
 
@@ -166,6 +166,39 @@ impl Kupferdraht {
     /// See `KupferdrahtError`.
     pub async fn resume(&self, account_id: &str) -> Result<Arc<Client>, KupferdrahtError> {
         self.inner.resume(account_id).await.map(Client::wrap)
+    }
+
+    /// Log `client` out (Step 78, ADR-0035): revoke the session at the
+    /// backend, then mark the account signed out — `active_account` no
+    /// longer names it and the manager no longer hands the client out;
+    /// its databases and keys stay for the next login. `options.purge_device`
+    /// also deletes the device at the backend first (`password` required);
+    /// `options.purge_local` forgets the account on this device (keys,
+    /// databases, registry row). With a purge the client is closed
+    /// afterwards — drop it. A refused password changes nothing locally.
+    ///
+    /// # Errors
+    /// See `KupferdrahtError`.
+    pub async fn logout(
+        &self,
+        client: Arc<Client>,
+        options: PurgeOptions,
+        password: Option<String>,
+    ) -> Result<(), KupferdrahtError> {
+        self.inner
+            .logout(&client.inner, options, password.as_deref())
+            .await
+    }
+
+    /// Forget `account_id` on this device without a session (Step 78):
+    /// its databases, keystore entries and registry row go; a client this
+    /// manager still holds is closed first. The device stays registered at
+    /// the backend.
+    ///
+    /// # Errors
+    /// See `KupferdrahtError` (`InvalidInput` for an unknown account).
+    pub async fn forget_account(&self, account_id: &str) -> Result<(), KupferdrahtError> {
+        self.inner.forget_account(account_id).await
     }
 
     /// Create a fresh Wire account, returning a [`PendingClient`] the

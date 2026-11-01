@@ -18,7 +18,11 @@ fn workspace_file(rel: &str) -> String {
 #[test]
 fn the_binding_takes_the_purge_options() {
     let binding = workspace_file("kupferdraht-core/src/wasm/manager.rs");
-    for needle in ["purge_local: bool", "purge_device: bool", "logout_client("] {
+    for needle in [
+        "purge_local: bool",
+        "purge_device: bool",
+        ".logout(&self.inner, purge",
+    ] {
         assert!(binding.contains(needle), "wasm/manager.rs: {needle}");
     }
 }

@@ -111,8 +111,8 @@ pub(crate) fn account_seed(home_id: &str, account_id: &str) -> String {
 
 /// The id of an account's storage-login key in the home `home_id`
 /// (Step 111b, ADR-0035): the Ed25519 key the storage server's login is
-/// signed with, beside the account's database keys.
-#[cfg(any(target_arch = "wasm32", test))]
+/// signed with, beside the account's database keys. Natively the entry
+/// never exists; a purge deletes it idempotently.
 pub(crate) fn account_storage_login(home_id: &str, account_id: &str) -> String {
     debug_assert!(!home_id.is_empty(), "a key id needs its home id");
     format!("kupferdraht.{home_id}.account-{account_id}-storage-login")
