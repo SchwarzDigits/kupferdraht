@@ -123,6 +123,8 @@ How it all fits together is described in
   messaging only. Also out of scope: asset preview thumbnails,
   AES-GCM asset emission, and federation across non-Wire backends.
   The MLS stack is RFC 9420 only, with no security-disabling options.
+  Every decided scope cut, with its reason, is listed in
+  [`docs/non-goals.md`](docs/non-goals.md).
 - **Wire's hosted service is for Wire's official apps.** Wire is a
   trademark of Wire Swiss GmbH; Kupferdraht is an independent project,
   not affiliated with, endorsed by or supported by Wire Swiss GmbH.

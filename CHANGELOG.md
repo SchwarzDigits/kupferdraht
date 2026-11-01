@@ -59,6 +59,14 @@ is no skill for it — it is this short procedure:
   and registry entry stay, so the next login reuses the device. Before, the
   registry kept naming the account active and a consumer discovered the
   dead session only through a failing `resume`.
+- **Non-goals have their own home** — `docs/non-goals.md` lists every
+  decided scope cut with its reason; `open.md` keeps open questions and
+  backlog only. New there: no contact discovery and no direct contact
+  initiation (NG-18, by Kupferdraht's purpose), no Wire push registration
+  (NG-19), no history for a new device (NG-20), no presence (NG-21).
+  `open.md` lost its closed sections (the publication checklist, whose
+  record moved to the 0.1.0 entry below, and the provenance audit) and
+  its stale items.
 - **`kupferdraht-cli logout --purge-device` no longer wipes the home.** It
   deletes the device at the backend and keeps the local data; `--purge-local`
   forgets the account (its databases, keys and registry row — other accounts
@@ -816,6 +824,18 @@ is no skill for it — it is this short procedure:
   claim as practised: no Wire source code in the tree, Wire's
   repositories consulted for protocol observation only, every observation
   recorded with its source.
+  Published 2026-10-30 as `SchwarzDigits/kupferdraht`, following the
+  checklist that open.md carried until then: a fresh clone of the private
+  `main`, an orphan branch, one commit (746 files, `.mailmap` left out),
+  the grep gates on the tree with exactly the expected hits, the
+  maintainer's SSH-signed identity as author, the third-party reports
+  regenerated against the final `Cargo.lock`, the five gates plus the two
+  wasm32 checks green on the pinned toolchain; made public together with
+  the git dependency `sqlite-remote-vfs`; CI green on the public `main`,
+  the README's build tried from a fresh clone with an empty cargo home.
+  Ruleset "protect main" (`license/cla`, the two Compliance jobs and the
+  three CI jobs required, merge commits only, signed commits), secret
+  scanning, push protection and private vulnerability reporting on.
 
 - **BREAKING: Sodium is now Kupferdraht** — a clean cut, no migration.
   The old name was taken: the library built as `libsodium.{so,dylib,a}`,

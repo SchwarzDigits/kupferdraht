@@ -65,6 +65,8 @@ Hard out-of-scope (prohibitions):
 - JavaScript port — WASM only (ADR-0015). JVM CLI path — CLI is Rust (ADR-0007).
 - Matrix-sense "threads" (Wire's `Text.quote` is in scope).
 
+Every other decided scope cut, with its reason: `docs/non-goals.md` (not `open.md` — that file holds open questions and backlog only).
+
 ## Step Procedure
 
 Every implementation step runs these 12 phases in order — do not reorder or skip. The **hard stops** are non-negotiable; standing law (the Conventions) binds throughout without being restated per phase.
@@ -189,7 +191,7 @@ Living docs updated in the same commit as the code — out-of-date docs are a de
 - CLI → `docs/cli.md` · Rust API → `docs/library.md` · UDL/bindings → `docs/bindings.md` · build/invocation or capability/scope → `README.md`
 - layer/module/data-flow → `docs/ARCHITECTURE.md` (storage schema → §7)
 - Wire endpoint → `docs/wire/api-notes.md` · Wire MLS deviation → `docs/wire/mls-deviations.md` · backend contract → `docs/backend-spec.md`
-- decision → ADR in `docs/adrs/` + same-named `rules/` file · Wire/MLS gotcha → `docs/observations.md` · resolved change → `CHANGELOG.md` · open question / backlog item / non-goal → `open.md`
+- decision → ADR in `docs/adrs/` + same-named `rules/` file · Wire/MLS gotcha → `docs/observations.md` · resolved change → `CHANGELOG.md` · open question / backlog item → `open.md` · non-goal → `docs/non-goals.md`
 
 Consult the relevant doc before re-deciding; write observations to `docs/observations.md` and continue — don't autonomously rewrite docs or add ADRs.
 

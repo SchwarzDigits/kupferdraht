@@ -1,11 +1,12 @@
 # Open — Questions, Backlog & Non-Goals
 
-Everything still on the table. Three kinds of entry: **open questions /
-unknowns** (the numbered §N findings log below), **backlog** (decided work not
-yet shipped — folded in 2026-06-30 from the former `docs/v1-*-audit.md`), and
-**non-goals** (deliberate scope cuts, kept so they aren't re-litigated). When an
-item resolves it leaves here — as a permanent Wire/MLS behaviour fact →
-`docs/observations.md`, or as a shipped change → `CHANGELOG.md`. Step-sequenced
+Everything still on the table. Two kinds of entry: **open questions /
+unknowns** (the numbered §N findings log below) and **backlog** (decided work
+not yet shipped — folded in 2026-06-30 from the former `docs/v1-*-audit.md`).
+Decided scope cuts are not open: they live in `docs/non-goals.md` (moved there
+2026-11-01). When an item resolves it leaves here — as a permanent Wire/MLS
+behaviour fact → `docs/observations.md`, as a shipped change → `CHANGELOG.md`,
+as a decision not to do something → `docs/non-goals.md`. Step-sequenced
 delivery lives in `PLAN.md`.
 
 ## 60) Step 29 decomposition leaves three client/ files over the 200-LoC cap — finer split deferred to a later step (2026-06-16)
@@ -122,8 +123,7 @@ Additive unless noted.
 - **gap-B.8** Single-ciphersuite key-package pool — tied to gap-B.1.
 - **gap-B.10** DB-key rotation not implemented — the per-DB key is load-or-create only (SQLite3MC offers `PRAGMA rekey`; unused).
 - **gap-B.26** `ClientBuilder::login()` resolves the keystore (and writes the cookie label into it) BEFORE `HttpClient::new` validates the URL scheme — on a Keychain-less macOS sandbox the `http_hardening` rejection test blocks on the Keychain for ~30 min instead of failing fast (observations §76). Reorder: validate the URL before any keystore I/O; `KUPFERDRAHT_DEV_KEYSTORE` is the workaround meanwhile.
-- **gap-B.27** mls.db migrations are not atomic — `openmls_sqlite_storage` 0.3.0 runs refinery non-grouped (`storage_provider.rs:62-65`, not configurable from outside), so a crash between a migration's SQL commit and its history-row commit re-applies it on the next open; V2+ of its migrations are re-apply-fatal. Step 87 closed the same window for kupferdraht.db (`set_grouped(true)`); mls.db waits for the upstream fix (issue draft: `docs/plan/87-atomic-migrations.md`). Blast radius is smaller than kupferdraht.db's: a bricked mls.db can be discarded and the groups rejoined by external commit; the account store cannot.
-- **gap-B.29** *(narrowed 2026-09-25, Step 94 live smoke)* The browser login vertical over the OPFS store: **login → registerDevice → syncOnce → rooms → sendText → messages → startSync/onSync ran live** against the own Wire instance from a dedicated worker in headless Firefox (through `bindings/web/kupferdraht-tabs/` from a second tab, over a same-origin dev proxy — observations §87), and after the leader tab was closed the promoted tab re-opened the OPFS store the first worker had written (`accounts()` = 1, then `syncOnce` + `rooms` + `messages`). Still unverified: reload survival of `kupferdraht.db` in a real (non-headless) session and the expiry path (the pre-Step-91 "live browser verifications pending" of Steps 53/55/56/57 are otherwise covered).
+- **gap-B.27** mls.db migrations are not atomic — `openmls_sqlite_storage` 0.3.0 runs refinery non-grouped (`storage_provider.rs:62-65`, not configurable from outside), so a crash between a migration's SQL commit and its history-row commit re-applies it on the next open; V2+ of its migrations are re-apply-fatal. Step 87 closed the same window for kupferdraht.db (`set_grouped(true)`); mls.db waits for the upstream fix (issue draft: `docs/plan/87-atomic-migrations.md`) — or, since Step 127, for the SchwarzDigits fork of `openmls_sqlite_storage` (§82) to carry `set_grouped(true)` ahead of upstream. Blast radius is smaller than kupferdraht.db's: a bricked mls.db can be discarded and the groups rejoined by external commit; the account store cannot.
 - **gap-B.35** The wasm `Client.rooms()` / `messages()` read the in-memory room cache, which is **cold after `resume()`** until the first `syncOnce` (or `load_rooms_from_store`): `rooms()` returns `[]` and `messages(roomId)` fails "unknown room" for a room the store holds (seen live 2026-09-25 by the promoted leader tab). The doc comment says "read from the store" — native has `room_or_load` (Step 14g) for exactly this; the wasm binding should hydrate on a cold miss (`room_or_load`, or `load_rooms_from_store` on resume) and the doc should say what it reads. Not a Step-94 change (surface semantics).
 - **gap-B.30** `kupferdraht-core`'s unit-test harness is native-only: `#[cfg(test)]` modules pull `httpmock` / `tempfile` without a target gate, so `cargo test --target wasm32-unknown-unknown` (and `wasm-pack test`) cannot build the lib tests — only the wasm integration tests run (`scripts/wasm-test.sh`). Gating those modules (`cfg(all(test, not(target_arch = "wasm32")))`, the sister project's pattern) would let the pure-Rust unit tests run in the browser too; not needed by any step yet.
 - **gap-B.32** Self-room establishment (Step 86) Adds every key package Wire hands out for the user's *other* registered devices (`claim … skip_own`, the `create_room` rule) — dead devices of unreadable homes included, so the self group's roster carries leaves nobody will ever operate until Wire's device-deletion Remove proposals clear them (observations §69/§70). Harmless for confidentiality (those devices are the user's own), but the roster is not "live devices"; a stale-snapshot establish race (another device commits first) is handled by discard + retry, not by a pre-flight `mls-self` fetch. `JoinSummary` deliberately gained no `established` counter (minimal API) — an established self room counts under `joined`.
@@ -161,7 +161,7 @@ Additive unless noted.
   (2026-08-25): still not shipped — the Step-66 discard workaround
   stays; the upstream issue remains worth filing.
 *Schema / process hygiene:*
-- **gap-B.17** Hand-written migrations only (V1–V22 by hand).
+- **gap-B.17** Hand-written migrations only (V1–V30 by hand).
 
 *Defects (wrong references, not shortcuts):*
 - **def-D.2** Preview ADR unwritten (NG-2, consumer-demand-triggered); the asset-deletion half is written in **Step 84**.
@@ -225,50 +225,16 @@ Correct code that is hard to read / navigate. The baseline safety rules (no
   after a reconnect, plus a per-row `Timeline::resend` for Ctrl-R;
   `PendingKind::Edit` stays TUI-side (a failed edit is not a row).
 
----
-
-## Non-Goals — by-design (decided, not open)
-
-> Deliberate scope cuts, kept so they aren't re-litigated. **Not** backlog —
-> each is intentional and backed by an ADR / CLAUDE.md / a live-validated
-> behaviour note. Reversing one is a scope decision, not a bug fix.
-
-*Backed by an ADR / CLAUDE.md (pointer only):*
-- **NG-1** No outbound AES-GCM for assets — AES-256-CBC only; inbound `AES_GCM` decoded but `download()` returns `InvalidInput` (warn-and-skip). ADR-0011; THREAT_MODEL L6.
-- **NG-2** No asset preview pipeline — `Asset.Preview` is in the proto, not consumed. ADR-0011.
-- **NG-3** Upload retention = `persistent` only. ADR-0011.
-- **NG-4** No link-preview generation — `Text.link_preview` echoed verbatim, never fetched. CLAUDE.md.
-- **NG-5** No voice / video / calling — `GenericMessage::Calling` skipped. CLAUDE.md.
-- **NG-6** No Proteus encryption / decryption — prekeys generated + uploaded (Wire registration contract), never used. ADR-0001.
-- **NG-7** No e2ei certificate enrollment — leaves advertise `X509` (W-7) but Kupferdraht never enrolls; BasicCredentials path only. CLAUDE.md.
-- **NG-8** No user-property writes — `GET /properties` only; config awareness is read-only. ADR-0012.
-- **NG-9** No login refusal on hostile feature policy — feature-config fetch is warn-and-continue. ADR-0012.
-- **NG-10** No federation across non-Wire backends — single deployment domain. CLAUDE.md.
-- **NG-11** External-senders extension = operator trust — the backend has membership-administration authority (Remove proposals) but never content; MLS-standard, visible to all members. ADR-0004 (W-5).
-- **NG-12** Asset authenticity from MLS, not local AEAD — AES-256-CBC (unauthenticated) + a SHA-256 carried inside the MLS-encrypted `GenericMessage`. ADR-0011.
-- **NG-13** `attachments` FK `ON DELETE NO ACTION` — deliberate, to avoid an FK-cascade history wipe. CHANGELOG.md §32.
-
-*Standalone design notes (no ADR — kept so the rationale survives):*
-- **NG-15** macOS keychain re-prompts per fresh build — dev-time only; `KUPFERDRAHT_DEV_KEYSTORE` is the workaround.
-- **NG-16** Inbound / download cache filename carries `message_id` (`{message_id}.enc`); the send-side temp uses a random name.
-- **NG-17** *(Step 79, 2026-09-24)* No resend of task / case / marker snapshot rows and no background resend scheduler — `Timeline::resend` refuses full-state snapshots (a stale replay can regress every receiver's LWW fold; re-send the current state via `update_task` / `set_case` / `set_task_list`), and retrying after an outage is the consumer's loop (`docs/library.md` "Reconnect contract"). ADR-0014 / ADR-0018 / ADR-0020; plan `docs/plan/archive/79-failed-send-recovery.md`.
-
-## 64) Chat-system basics — the post-Step-60 gap map (2026-07-19)
+## 64) Chat-system basics — the post-Step-60 gap map (2026-07-19; re-cut 2026-11-01)
 
 Roadmap discussion after tasks shipped: what a daily-driver messenger
 still needs. Backlog candidates, grouped; PLAN.md steps get generated
 from here with the user's OK. Items already tracked elsewhere are
-referenced, not duplicated.
-
-### Safety & contacts (the biggest true gap)
-
-- **Connections / block** — Wire's `/connections` model (connect,
-  accept, **block**) is entirely absent. Blocking is a baseline
-  safety feature, not polish.
-- **User search** — no `/search/contacts` (find by handle); without
-  it a user cannot *start* a conversation with someone new.
-- **Device verification UX** — MLS gives cryptographic identity, but
-  no fingerprint/verification surface in the library yet.
+referenced, not duplicated. Re-cut 2026-11-01: contact discovery and
+direct contact initiation are non-goals by Kupferdraht's purpose
+(`docs/non-goals.md` NG-18); push registration, new-device history and
+presence are recorded there too (NG-19 to NG-21); link previews
+contradicted NG-4 and are gone.
 
 ### Conversation daily life
 
@@ -282,21 +248,13 @@ referenced, not duplicated.
 - **Local search** — under E2EE only the client can search;
   SQLCipher + FTS5 native, own path needed for IndexedDB. At a few
   thousand messages this stops being a luxury.
-- **Link previews** — Wire's `Text` carries asset-based preview
-  fields; visible polish, not structural.
 
-### Mobile viability
+### Device trust
 
-- **Push registration** (APNs/FCM, `/push/tokens`) — *updated
-  2026-09-10:* no longer the hard blocker as written — the team
-  redirects Wire's push call to its own backend (2026-08 decision),
-  so mobile wake-up rides that path; a Kupferdraht-side `/push/tokens`
-  surface is only needed if the stock Wire push path ever comes
-  back into play.
-- **New-device history** — systemic MLS boundary (no server archive);
-  the task join snapshot (ADR-0014 decision 6) is the task-side
-  answer, message backup is Step 12 (no endpoint in Wire API v14). The limit
-  should at least be *communicable* to consumers.
+- **Device verification UX** — MLS gives cryptographic identity; since
+  Step 95d a room's devices and their MLS thumbprints are readable
+  (`Room::devices`, `subscribe_device_changes`), but there is no
+  verification / trust state yet.
 
 ### Group governance (second tier)
 
@@ -309,21 +267,14 @@ referenced, not duplicated.
   them would be a Kupferdraht-side policy decision, not parity.
 - **Room avatars** — absent.
 
-### Deliberately out (charter, unchanged)
-
-Voice/video calls, e2ei enrollment, Matrix-sense threads, JS port.
-Presence ("online") — Wire barely has it, privacy stance; leave it.
-
 ### Priority thesis
 
 1. ~~**Self-conversation step** (§63)~~ — **shipped as Step 86
    (2026-09-24)**: the channel exists; the triple leverage (personal
    task list, `LastRead` cross-device read sync, draft sync) is now
    three follow-ups under Proposed steps.
-2. **Connections/block + user search** — safety and "start a chat".
-3. **Mute/archive + unread counts** — daily comfort.
-4. **Push** — as soon as the bindings get serious (Step 20e).
-5. Local search as a filler between steps (ephemeral toleration
+2. **Mute/archive** — daily comfort (unread counts shipped 2026-08-14).
+3. Local search as a filler between steps (ephemeral toleration
    shipped with Step 89, 2026-09-17).
 
 ## 66) External code review triaged — 18 findings verified, dispositions assigned (2026-08-13)
@@ -338,18 +289,13 @@ soften S1 ("critical" → high: messages lost until heal, no permanent
 ratchet brick) and S3 (send failure is caller-visible, receivers
 tolerate generation gaps — no action needed).
 
-Dispositions (what is still open):
-
-- **Shipped:** Steps 64 / 65 / 66 (see `docs/plan/archive/`); S15
-  docs-vs-code (chore on the triage branch); S9 as Step 71
-  (gap-B.20); S17 as Step 70 (gap-B.21).
-- **Shipped 2026-09-25:** S18 → gap-B.9 as Step 85 (ADR-0024). **Still open:** S11
-  (task-cache monotonicity) is a design question — ADR-0014's
-  last-writer-wins means *event order*; a wall-clock guard would
-  change semantics; revisit if cursor-reset replays become a real
-  flow.
-- **No action:** S3 (documented, caller-visible, MLS-tolerated),
-  S14 (IndexedDB task no-ops — ARCHITECTURE §7).
+Still open: **S11** (task-cache monotonicity) is a design question —
+ADR-0014's last-writer-wins means *event order*; a wall-clock guard would
+change semantics; revisit if cursor-reset replays become a real flow.
+Everything else is shipped (Steps 64 / 65 / 66 / 70 / 71 / 85, the S15
+docs chore — `docs/plan/archive/`, `CHANGELOG.md`) or needs no action
+(S3: documented, caller-visible, MLS-tolerated; S14: IndexedDB task
+no-ops — ARCHITECTURE §7).
 
 
 ## 68) `invite_members` freshness is a contract, not enforced (2026-08-26)
@@ -492,9 +438,6 @@ the default where a target has one, ADR-0033).
   model puts that on the consumer); and a sentence "Kupferdraht writes no
   secrets into its own logs" for `docs/THREAT_MODEL.md` is proposed for
   the owner's review.
-- **H7 part 2** — browser: the OPFS pool is fixed at 24 files — per its
-  own comment sized for about two accounts, open.md earlier said about
-  ten; measure before fixing.
 
 *Medium / low:*
 - **M1** — WebSocket: no connect timeout; pongs are ignored (liveness
@@ -526,16 +469,16 @@ with Basic credentials the backend is the key directory and can inject
 a device — "does not trust the server with content" must be stated as
 an assumption (95d makes the device visible, it does not prevent it).
 
-*Operations and process:* `SECURITY.md` is the unedited GitHub template
-(no reporting channel, no external audit); no fuzzing, no property
-tests, no automated interop tests against Wire; CI runs on Ubuntu only,
-without the Kotlin / Swift binding tests, on an unpinned toolchain (no
-`rust-toolchain`, no `rust-version` — clippy `-D warnings` verified green
-on stable 1.98 on 2026-09-28, so an older or newer stable may differ
-without anyone noticing);
-0.1.0 without a release or API-stability promise (Step 20e); licensing
-for proprietary consumers (GPL-3.0-only; contributions come in under the
-Schwarz Digits CLA) and the Wire ToU question are business decisions.
+*Operations and process (re-checked 2026-11-01):* no external audit;
+no fuzzing, no property tests, no automated interop tests against Wire;
+CI runs on Ubuntu only, without the Kotlin / Swift binding tests (their
+test pins have not compiled since Step 39 — observations §93; Step 20e's
+macOS job is the structural answer); `v0.1.0` is tagged (2026-11-01)
+without an API-stability promise (Step 20e); licensing for proprietary
+consumers (GPL-3.0-only; contributions come in under the Schwarz Digits
+CLA) and the Wire ToU question are business decisions. Closed since the
+review: `SECURITY.md` names the reporting channel and the supported
+line; the toolchain is pinned (`rust-toolchain.toml`, Rust 1.98).
 
 ## 72) Browser server mode — residuals of Step 111b (2026-09-30)
 
@@ -605,107 +548,6 @@ different seed and a shorter domain. Follow-up: natrium-pin-service
 regenerates the second vector with a neutral domain; Kupferdraht adds it
 back in the same step.
 
-## 78) Publication snapshot — checklist (2026-10-08)
-
-The repository goes public as a single snapshot (README "License");
-the development history stays private. These steps happen when the
-snapshot is built, in this order, and each is checked off before the
-public repository receives its first push.
-
-- [x] **Build from a clean clone of `main`**, never from a working copy:
-      `git clone` into a fresh directory, `git checkout --orphan public`,
-      `git add -A`, one commit. `git rev-list --count HEAD` must print `1`.
-      A clean clone guarantees that ignored files (`scripts/smoke.env`,
-      `reference/wire.swagger.json`, `.claude/settings.local.json`,
-      `target/`) cannot leak in.
-- [x] **Leave `.mailmap` out** (`git rm .mailmap` before the commit). It
-      maps the placeholder identity of one private-history commit to a
-      maintainer's internal address; without the history it is useless and
-      the address is the only internal one in the tree.
-- [x] **Grep gates on the snapshot tree** (`git grep -IEn`, `vendor/`
-      excluded): the retired device identity — the user-id prefix and the
-      client id kept in the maintainer's private notes, never quoted here —
-      must have no hit at all. `onstackit|digits\.schwarz|mail\.schwarz`
-      (internal hosts and mail domains) may hit only the program's public
-      mailbox `opensource@digits.schwarz`. The sister project's former
-      name (kept in the maintainer's private notes, never spelled here)
-      must have no hit; `wire://sso-login` may hit only this list. `/Users/|/home/` may hit
-      only the container path in `.github/scripts/prepare-compliance.sh`
-      and the fixture paths in the `storage` tests. `BEGIN
-      (RSA|EC|OPENSSH) PRIVATE KEY` and `eyJ[A-Za-z0-9_-]{20,}` (JWTs)
-      must be empty. `sodium` may remain in the SHA-pinned SQL migrations
-      (`tests/migration_immutability.rs`), in the rename record (ADR-0041,
-      its rule, CHANGELOG, LEARNINGS) and in ADR-0006's mention of
-      libsodium; nowhere else. Measured 2026-10-09 on a dry run of this
-      procedure: exactly these hits.
-- [x] **Author of the snapshot commit** is the maintainer's own identity,
-      the one the retained history carries, with the name spelled as in
-      the README copyright line. The copyright holder named there is
-      Schwarz Digits KG whoever authors the commit. Signed with the SSH
-      key registered on the maintainer's GitHub account, so the commit
-      shows as verified.
-- [x] **Dangling pointers are accepted, not fixed:** the archived plan
-      headers name commit SHAs of the private history, and PLAN.md cites
-      PR numbers. The README says the history is retained privately and
-      answers provenance questions; nothing else needs rewriting.
-- [x] **Regenerate `docs/THIRD_PARTY_LICENSES.html`** against the final
-      `Cargo.lock` (`cargo about generate about.hbs`) and refresh
-      `THIRD-PARTY-NOTICES` (command in its last section) — or confirm
-      with `git log` that `Cargo.lock` has not changed since both were
-      generated. The five gates plus the two wasm32 checks must be green
-      on the commit the snapshot is built from; CI on `main` counts, the
-      tree is identical but for `.mailmap`.
-- [x] **GitHub settings, in this order:** the empty repository has
-      `main` as default branch and no Actions secrets or variables. Push
-      the snapshot, confirm that license detection shows GPL-3.0 and that
-      the first `Compliance` run is green, then make the repository
-      public. Only then add the ruleset protecting `main` (natrium's
-      "protect main" is the model) with `Compliance` as a required check:
-      on this plan GitHub refuses rulesets and branch protection while the
-      repository is private. The CLA Assistant is installed for the
-      organisation and reports as the `license/cla` check on the first
-      pull request; nothing to configure per repository. Security reports
-      go to the program's address (SECURITY.md), so no repository-level
-      advisory setup is needed.
-- [x] **After the push:** `cargo deny check` and CI green on the public
-      repository; the README's build instructions tried once from a clean
-      machine without access to any Schwarz infrastructure. The first
-      `Compliance` run reviewed and then made a required status check.
-      Expected, as measured on the private `main` on 2026-10-08: no
-      forbidden license, no copyleft warning, and 30 "unclassified
-      license" hints over six licenses — Unicode-3.0 (the icu family,
-      19 crates), Apache-2.0 WITH LLVM-exception, BSD-1-Clause,
-      CDLA-Permissive-2.0, BSL-1.0, and NOASSERTION on the test-only
-      `stringmetrics`, whose license file is Apache-2.0 — unless the
-      central classification has been extended by then (§79). The
-      Gitleaks allowlist (`.gitleaks.toml`) covers the interop vectors and
-      the planted fake token, verified against the full history. The ORT
-      scanner stays disabled until the central workflow works with ORT 96
-      (§79).
-
-Closed 2026-10-30. Measured on the snapshot: fresh clone of the private
-`main`, orphan branch, one commit (`git rev-list --count HEAD` = 1),
-`.mailmap` out, 746 files; grep gates exactly the hits listed above;
-author the maintainer's identity, SSH-signed, shown as verified; the
-third-party reports regenerated against the final `Cargo.lock`; the five
-gates plus the two wasm32 checks green on the pinned toolchain on the
-commit the snapshot was built from. GitHub: `main` default, no secrets
-or variables, license detection GPL-3.0, first Compliance run green
-(Gitleaks and Trivy clean, evaluator without rule violations); made
-public the same day together with the repository of the git dependency
-`sqlite-remote-vfs`, which had been private since 2026-10-14 and had
-kept the three CI jobs red on the private `main` since 2026-10-20 (cargo
-resolves git dependencies for every target, and the runner holds no
-credential); CI green on the public `main` after that; the README's
-build tried once from a fresh clone with an empty cargo home and no
-credentials. Ruleset "protect main" after natrium's model with
-`license/cla`, the two Compliance jobs and the three CI jobs as required
-checks, merge commits only and signed commits required (a contributor's
-signed commits stay as they are; squash and rebase would replace them
-with commits GitHub signs or leaves unsigned), no approvals yet (one
-maintainer; two admins who can review); secret scanning, push
-protection and private vulnerability reporting on.
-
 ## 79) Compliance workflow — two upstream issues reported to the OSS Committee (2026-10-08)
 
 Found by Kupferdraht's first full runs of `SchwarzDigits/oss-compliance`
@@ -742,36 +584,6 @@ by name, accepts the other three only as alternatives of `OR`
 expressions whose Apache-2.0 or MIT branch is on its list (ORT, unlike
 cargo-deny, reports every alternative), and reads `stringmetrics`'s
 license file where ORT reports NOASSERTION.
-
-## 80) Provenance audit after counsel's opinion (2026-10-20)
-
-Counsel's second opinion (2026-10-20) confirmed the licence position
-(GPL-3.0 on both sides; the GPL-3.0-or-later schema combines into the
-GPL-3.0-only work; the licence agreement for the Kalium fork does not
-reach Kupferdraht) and asked for three things before publication: the
-documented Kalium readings complete, NOTICE and README naming every
-source, and a sample-based structural comparison of the code against
-Kalium.
-
-Done on branch `chore/provenance-audit-fixes`:
-
-- **Structural comparison** of the whole tree against wireapp/kalium at
-  9ccecabb (automated layer with matrix-rust-sdk as the independent
-  baseline, plus eight module-pair readings). Record:
-  `docs/wire/provenance-audit-2026-10.md`. One distinctive item
-  (`FileSharingPolicy`'s three-state model, ADR-0012 revision 1.3), two
-  name-only echoes, one field order, one CLI default — all removed.
-- **Readings index** `docs/wire/kalium-readings.md`: every reading with
-  file and permalink, what it informed, what was replaced (the quote-hash
-  conformance vectors, the file-sharing model, the April 2026 WebSocket
-  prototype) and two attribution corrections.
-- **Wording**: README provenance rule, CLAUDE.md goal and NOTICE
-  ("Sources") say the same thing; the proto header dates its
-  modifications (GPL-3.0 §5(a)).
-
-Still to do before the snapshot is rebuilt: nothing in the tree. Then
-the §78 procedure again (delete and recreate `SchwarzDigits/kupferdraht`,
-fresh orphan commit).
 
 ## 81) crypto-bigint 0.5: timing advisory without an upgrade path (2026-10-30)
 
@@ -816,6 +628,19 @@ otherwise; `privacypass` 0.6 and phnx-im/air take it. Trust check: a
 single maintainer, no release tags, no audit — acceptable for the PIN
 path once the openmls crates move, to be re-checked at that bump.
 
+Measured 2026-10-31, as a step candidate (not decided): the forks of
+§82 can carry the migration ahead of an openmls release — an openmls
+fork branch from the `openmls-v0.9.0` tag with upstream PR #2249 and the
+three `hpke-rs` 0.8 lines of #2261 (`openmls_traits` and
+`openmls_memory_storage` from crates.io), plus Kupferdraht on `p256`
+0.14, `voprf-ng` 0.6 and `rand_core` 0.10 (two code changes: an RNG
+adapter for `blind`, `to_sec1_point` for the verifying key), builds,
+passes the core tests and the wasm32 check, and leaves no
+`crypto-bigint` 0.5 in the lock, so the ignore entry can go. Open risks
+before taking it: the live HPKE interop of the classical DHKEM-P256
+suite, `ed25519-dalek` 3 on the signing path, and more duplicate crates
+in the graph until openmls releases.
+
 ## 82) The SQLite3MC fork line: branch policy and the next bump (2026-10-31)
 
 Since Step 127 (ADR-0042) the engine comes from three SchwarzDigits forks
@@ -834,12 +659,12 @@ is not rebased onto `main` on purpose; the next branch comes from the
 next release tag.
 
 Open: the branch policy is to be confirmed with the maintainer of those
-forks; the first Rust embedder drops its own `[patch.crates-io]` entry
-(Cargo warns "unused patch" until it does); the next bump — when
-`openmls_sqlite_storage` releases on rusqlite 0.40 — goes rusqlite fork →
-refinery and openmls branches → `kupferdraht-core/Cargo.toml` → gate
-(`vendor/README.md` recipe), and a rusqlite ≥ 0.38 can retire the fork's
-wasm arm for its own `ffi-sqlite-wasm-rs`.
+forks; the next bump — when `openmls_sqlite_storage` releases on rusqlite
+0.40 — goes rusqlite fork → refinery and openmls branches →
+`kupferdraht-core/Cargo.toml` → gate (`vendor/README.md` recipe), and a
+rusqlite ≥ 0.38 can retire the fork's wasm arm for its own
+`ffi-sqlite-wasm-rs`. (The first Rust embedder dropped its own
+`[patch.crates-io]` entry on 2026-11-01.)
 
 ## 83) The login path does not enter the manager's client cache (2026-11-01)
 
