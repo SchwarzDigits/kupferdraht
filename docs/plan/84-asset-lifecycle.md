@@ -34,6 +34,10 @@ missing mini-ADR this step writes first).
 5. Note: the cache path/id handling must land AFTER Step 80
    (inbound-id path hardening) — the sweep walks the cache dir and
    must not be confused by hostile names.
+6. CLI verbs for the cache beside `delete-asset` (from open.md's
+   former erg-D.9, 2026-11-01): `cache list | size | clear` — `clear`
+   is the sweep of item 3 over every row, `size` the sum of the `.enc`
+   files, `list` the rows with their cache state.
 
 ## Out of scope
 

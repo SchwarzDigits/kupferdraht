@@ -56,38 +56,13 @@ Pre-existing over-cap files outside Step 29's scope: `login_pipeline.rs`
 
 ### Caller ergonomics
 
-Some accessors return `Option` where identity is always present; some
-messages / CLI verbs could be friendlier. Additive unless noted.
+Two items. The rest of the June audit's wish list left on 2026-11-01: no
+consumer asked for it, the `Option` accessors mirror matrix-rust-sdk by
+ADR-0009, the two-step login is by design (the device cap asks the user),
+and the CLI is a thin wrapper for live testing (`docs/cli.md`).
 
-*Convenience APIs (additive; the explicit steps stay):*
-- **erg-A.1** a one-call login for the common case: `ClientBuilder::login` → `PendingLogin::register_device` → `Arc<Client>` behind one wrapper (the two-step shape stays, since the device cap surfaces from `register_device`).
-- **erg-A.3** `ClientBuilder::resume_and_sync()` — resume + initial sync in one call.
-
-*Infallible accessors (add alongside the `Option` ones; `Client::account()` already answers the user id infallibly):*
-- **erg-B.2** `device_id() -> &str` (today `Option<&str>`).
-- **erg-B.3** borrowing / `Result` access-token getter (today `access_token() -> Option<String>` allocates).
-- **erg-B.5** `server_config() -> &ServerConfig` (one accessor vs. separate `homeserver_url` / `websocket_url` / `server_title`).
-
-*Error messages:*
-- **erg-C.1** `pipeline.rs` "{op}: {room_id} not in cache" — add an actionable hint ("run sync / load_rooms_from_store").
-- **erg-C.2** `pipeline.rs` "has no group_id — run sync_metadata first" is misleading (the real fix is to join); mirror the typed `KupferdrahtError::MlsGroupMissing` text.
-- **erg-C.4** `sqlite/mod.rs` "storage column … not valid UTF-8" → add a corruption / recovery hint.
-- **erg-C.5** errors cross layers as `"{op}: {e}"` strings with no typed context — add a hand-rolled error-context trait (no `anyhow`), applied at layer boundaries.
-- **erg-C.6** a `looks_like_uuid` shape-check in the CLI's `resolve_room_for_message` (`cli/timeline.rs`) with a distinct "doesn't look like a message id" message.
-
-*CLI UX:*
-- **erg-D.1** `send-file --mime` optional, auto-derive from extension (`mime_guess`); explicit flag overrides.
-- **erg-D.2** `download-asset --message` partial-UUID prefix match (+ ambiguity error).
-- **erg-D.3** `rejoin-all` → `rooms-rejoin-all` (group with the `rooms-*` verbs).
-- **erg-D.4** Sync-command naming — the `sync` / `sync-metadata` / `sync-stream` trio is confusing; pick a consistent scheme.
-- **erg-D.5** Access presets `invite-only` / `public` (only `room-access-allow-guests` exists).
-- **erg-D.6** `send-file -f/--file` short alias for `--path`.
-- **erg-D.7** Positional `send <room> <text>` shorthand.
-- **erg-D.8** `status --verbose` (room count, store path, last-sync, config / property counts, `file_sharing`, `receipt_mode`).
-- **erg-D.9** `cache list | size | clear` commands.
-- **erg-D.10** Global `--log <level>` flag (the tracing subscriber init shipped; the flag did not).
-- **erg-D.11** `doctor` health-check (session valid? device registered? MLS state present? key-package pool depth?).
-- **erg-D.12** *(deferred)* group per-message ops under a `msg` subcommand.
+- **erg-C** three error messages mislead or give no hint: `pipeline.rs` "has no group_id — run sync_metadata first" (the fix is to join; mirror the typed `KupferdrahtError::MlsGroupMissing` text), `pipeline.rs` "{op}: {room_id} not in cache" (add "run sync / load_rooms_from_store"), `sqlite/mod.rs` "storage column … not valid UTF-8" (add a corruption / recovery hint).
+- **erg-D.11** `kupferdraht-cli doctor` — a health check for live testing: session valid, device registered, MLS state present, key-package pool depth, store path, last sync, `file_sharing` / `receipt_mode`. Absorbs the former `status --verbose` idea.
 
 ### Known gaps (capability / lifecycle / test coverage)
 

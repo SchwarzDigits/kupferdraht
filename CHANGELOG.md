@@ -73,7 +73,11 @@ is no skill for it — it is this short procedure:
   became Steps 129 (self-room rails: `LastRead` and the personal task list)
   and 130 (idempotency keys for wasm mutations), and the crypto-bigint
   advisory tracking (§81) became Step 128 — `deny.toml`'s ignore for
-  RUSTSEC-2026-0387 now points there.
+  RUSTSEC-2026-0387 now points there. The caller-ergonomics wish list of
+  the June audit is down to two items (three misleading error messages,
+  a `doctor` command); the rest was asked for by no consumer or
+  contradicted ADR-0009's matrix-rust-sdk mirroring, and the cache verbs
+  moved into Step 84's plan.
 - **Non-goals have their own home** — `docs/non-goals.md` lists every
   decided scope cut with its reason; `open.md` keeps open questions and
   backlog only. New there: no contact discovery and no direct contact
