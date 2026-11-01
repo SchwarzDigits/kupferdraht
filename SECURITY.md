@@ -8,10 +8,11 @@ how we respond, and how the coordinated disclosure within 90 days works.
 
 ## What this project adds
 
-- **Scope.** Kupferdraht has not shipped a release (version 0.1.0,
-  `publish = false`); fixes land on `main`, the only supported line. Name
-  the component you observed the problem in: `kupferdraht-core`, the CLI,
-  a Kotlin or Swift binding, or the browser surface.
+- **Scope.** The supported line is the latest release tag (`v0.1.0`,
+  2026-10-31) and `main`; fixes land on `main` and ship with the next tag.
+  There is no crates.io release (`publish = false`). Name the component
+  you observed the problem in: `kupferdraht-core`, the CLI, a Kotlin or
+  Swift binding, or the browser surface.
 - **What counts.** [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) states
   what Kupferdraht guarantees, under which assumptions, and which limits
   it accepts by design. A report that breaks a stated guarantee is a
