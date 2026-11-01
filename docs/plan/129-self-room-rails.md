@@ -62,6 +62,13 @@ implements.
   the self room.
 - Any notion of an unread count; the SDK moves the marker and reports it,
   the consumer counts.
+- The self-room roster (open.md's former gap-B.32): establishment adds
+  every key package Wire hands out for the user's other registered
+  devices, dead devices of unreadable homes included (`claim … skip_own`),
+  so the roster carries leaves nobody operates until Wire's
+  device-deletion Remove proposals clear them (observations §69 / §70).
+  Harmless for confidentiality; a stale-snapshot establish race is handled
+  by discard + retry. `LastRead` and the task list ride the roster as it is.
 
 ## TDD sketch
 

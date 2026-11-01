@@ -38,11 +38,13 @@ missing mini-ADR this step writes first).
    former erg-D.9, 2026-11-01): `cache list | size | clear` — `clear`
    is the sweep of item 3 over every row, `size` the sum of the `.enc`
    files, `list` the rows with their cache state.
+7. The cache size policy (open.md's former gap-B.4): the cache grows
+   unbounded today. Phase 1 decides whether a size cap with LRU eviction
+   ships with the sweep, and its default.
 
 ## Out of scope
 
-- gap-B.4 (LRU eviction / size cap) — needs a sizing policy
-  decision; stays in open.md's backlog.
+- Previews of assets (`docs/non-goals.md` NG-2).
 
 ## TDD sketch
 

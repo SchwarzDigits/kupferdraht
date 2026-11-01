@@ -85,6 +85,14 @@ is no skill for it — it is this short procedure:
   The Linux desktop keystore limit is a non-goal until Linux is a target
   (NG-24; the docs that named §71 point there), the iOS notification
   extension is NG-23, the never-made future-epoch probe is gap-B.37.
+- **`open.md`'s known-gaps list is a live-verification backlog now**
+  (2026-11-01): the code gaps joined Step 132 (the builder's keystore-before-URL
+  order, `ConvType 3`, the wasm cold room cache after `resume`, AES-CBC
+  known-answer vectors, a loud ciphersuite mismatch check, the removal-flush
+  queue of §73), the cache size policy is Step 84's, the self-room roster
+  note Step 129's, the mls.db migration window §82's; one ciphersuite
+  (NG-25) and no processed-ids journal for the pull path (NG-26) are
+  non-goals. What is left are seven live checks for the next smoke session.
 - **Non-goals have their own home** — `docs/non-goals.md` lists every
   decided scope cut with its reason; `open.md` keeps open questions and
   backlog only. New there: no contact discovery and no direct contact

@@ -95,7 +95,7 @@ removed. More duplicate-crate warnings (`ed25519-dalek` 2 + 3, the
 
 - Following openmls `main`'s `openmls_traits` changes (async storage, new
   suites) — that is the next openmls release's migration, a step of its own.
-- Any ciphersuite change (open.md gap-B.1).
+- Any ciphersuite change (`docs/non-goals.md` NG-25).
 
 ## TDD sketch
 

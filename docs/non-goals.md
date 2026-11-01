@@ -88,3 +88,20 @@ limitations".
   Secret Service (unsupported, a passphrase keystore, or systemd-creds /
   TPM). `Cargo.toml`, `keystore/`, `docs/library.md` and the threat model
   point here.
+- **NG-25** One MLS ciphersuite, not negotiated —
+  MLS_128_DHKEMP256_AES128GCM_SHA256_P256 (`0x0002`, `MlsClient::MLS_CIPHERSUITE`)
+  is fixed; `mls.config.defaultCipherSuite` / `allowedCipherSuites` are
+  stored with the other feature configs and not consumed, and the
+  key-package pool is single-suite. Decided 2026-11-01 (Volker): no
+  negotiation until a backend with another default appears; what ships
+  instead is a loud mismatch check at login (Step 132), so a differing
+  backend fails at the gate rather than on the first group add.
+- **NG-26** No processed-ids journal for the pull path — the Step-64 dedup
+  catches a notification whose id equals the page cursor; a crash after
+  dispatch and before `save_sync_state`, where the unsaved notification
+  carries a different id, can dispatch it twice. Accepted 2026-11-01
+  (Volker): text is guarded by the UNIQUE constraint and the S6 guard,
+  replayed MLS ciphertexts die at openmls' replay protection, and the
+  spurious recovery of the early version is excluded since Step 64. An
+  idempotent dispatch or a journal is a design pass of its own if a
+  duplicate ever shows up.

@@ -64,58 +64,20 @@ and the CLI is a thin wrapper for live testing (`docs/cli.md`).
 - **erg-C** three error messages mislead or give no hint: `pipeline.rs` "has no group_id — run sync_metadata first" (the fix is to join; mirror the typed `KupferdrahtError::MlsGroupMissing` text), `pipeline.rs` "{op}: {room_id} not in cache" (add "run sync / load_rooms_from_store"), `sqlite/mod.rs` "storage column … not valid UTF-8" (add a corruption / recovery hint).
 - **erg-D.11** `kupferdraht-cli doctor` — a health check for live testing: session valid, device registered, MLS state present, key-package pool depth, store path, last sync, `file_sharing` / `receipt_mode`. Absorbs the former `status --verbose` idea.
 
-### Known gaps (capability / lifecycle / test coverage)
+### Live verification backlog
 
-*Protocol / capability:*
-- **gap-B.1** MLS ciphersuite negotiation — P-256 (`0x0002`) hardcoded; `mls.config.defaultCipherSuite` / `allowedCipherSuites` persisted but never consumed. Needs a correctly-numbered ciphersuite ADR (see def-D.1).
-- **gap-B.2** Typed config getters limited to two (`file_sharing()` + `receipt_mode()`); add others (mlsE2EId, legalhold, appLock, mlsMigration, …) as a consumer needs them.
+Facts no unit test can establish, each waiting for a smoke session on the
+test stage (httpmock cannot stand in for openmls or for an official
+client). Work through them in the next session that is on the stage
+anyway; a verified item leaves here (the fact goes to `docs/observations.md`).
 
-*Library / lifecycle:*
-- **gap-B.4** Asset cache: no LRU eviction / size cap — grows unbounded.
-- **gap-B.6** `fetch_server_configs` inline on the login path — errors bounded (warn-and-continue), latency not; spawn as a post-rebind task.
-- **gap-B.8** Single-ciphersuite key-package pool — tied to gap-B.1.
-- **gap-B.26** `ClientBuilder::login()` resolves the keystore (and writes the cookie label into it) BEFORE `HttpClient::new` validates the URL scheme — on a Keychain-less macOS sandbox the `http_hardening` rejection test blocks on the Keychain for ~30 min instead of failing fast (observations §76). Reorder: validate the URL before any keystore I/O; `KUPFERDRAHT_DEV_KEYSTORE` is the workaround meanwhile.
-- **gap-B.27** mls.db migrations are not atomic — `openmls_sqlite_storage` 0.3.0 runs refinery non-grouped (`storage_provider.rs:62-65`, not configurable from outside), so a crash between a migration's SQL commit and its history-row commit re-applies it on the next open; V2+ of its migrations are re-apply-fatal. Step 87 closed the same window for kupferdraht.db (`set_grouped(true)`); mls.db waits for the upstream fix (issue draft: `docs/plan/87-atomic-migrations.md`) — or, since Step 127, for the SchwarzDigits fork of `openmls_sqlite_storage` (§82) to carry `set_grouped(true)` ahead of upstream. Blast radius is smaller than kupferdraht.db's: a bricked mls.db can be discarded and the groups rejoined by external commit; the account store cannot.
-- **gap-B.35** The wasm `Client.rooms()` / `messages()` read the in-memory room cache, which is **cold after `resume()`** until the first `syncOnce` (or `load_rooms_from_store`): `rooms()` returns `[]` and `messages(roomId)` fails "unknown room" for a room the store holds (seen live 2026-09-25 by the promoted leader tab). The doc comment says "read from the store" — native has `room_or_load` (Step 14g) for exactly this; the wasm binding should hydrate on a cold miss (`room_or_load`, or `load_rooms_from_store` on resume) and the doc should say what it reads. Not a Step-94 change (surface semantics).
-- **gap-B.30** three unit-test modules still pull `httpmock` without a target gate (`wire/websocket.rs`, `wire/http/groups.rs`, `wire/http/users.rs`), so `cargo test --target wasm32-unknown-unknown` (and `wasm-pack test`) cannot build the lib tests — only the wasm integration tests run (`scripts/wasm-test.sh`). The other fourteen carry `cfg(all(test, not(target_arch = "wasm32")))` already; gating these three would let the pure-Rust unit tests run in the browser too. Not needed by any step yet.
-- **gap-B.32** Self-room establishment (Step 86) Adds every key package Wire hands out for the user's *other* registered devices (`claim … skip_own`, the `create_room` rule) — dead devices of unreadable homes included, so the self group's roster carries leaves nobody will ever operate until Wire's device-deletion Remove proposals clear them (observations §69/§70). Harmless for confidentiality (those devices are the user's own), but the roster is not "live devices"; a stale-snapshot establish race (another device commits first) is handled by discard + retry, not by a pre-flight `mls-self` fetch. `JoinSummary` deliberately gained no `established` counter (minimal API) — an established self room counts under `joined`.
-- **gap-B.33** `ConvType 3` is mapped to `Channel` and `group_conv_type` is not read (`rooms/room.rs`, `conversation_type` mapping). Wire treats type 3 as a pending-connection 1:1 and signals channels through `group_conv_type: "channel"` (side finding of the 2026-10 provenance audit, `docs/wire/provenance-audit-2026-10.md`). Verify against a live v14 backend, then fix the mapping; consumers that key on `RoomType::Channel` need the note.
-
-*Test coverage:*
-- **gap-B.11** Asset send/receive happy-path not unit-testable (httpmock can't stand in for openmls; gated on live-smoke).
-- **gap-B.12** AES-256-CBC known-answer vectors absent; generate them with an independent tool (`openssl enc`), never from a Wire repository (ADR-0011 revision 1.2).
-- **gap-B.13** Live `/feature-configs` fixture not captured (tests use a synthesised one).
-- **gap-B.14** Wire-Web→Kupferdraht inbound asset never live-validated.
-- **gap-B.15** `WIRE_RECEIPT_MODE` off-path smoke not run against a live backend.
-- **gap-B.36** The SSO login (ADR-0043) was never run end to end against a backend with a configured identity provider; four facts are assumptions pinned by tests (`docs/wire/api-notes.md` §2b: unversioned `/sso/*` paths, the cookie as a query parameter on the success redirect, `POST /access` from a bare `zuid`, `/sso/settings` as the discovery source).
-- **gap-B.37** Whether the backend itself refuses an MLS message for a future epoch was never verified (no server source; a live probe was not made — the Step-106 healing does not depend on it). Robustness, not security.
-- **gap-B.16** 4xx httpmock coverage not symmetric (assets / feature-configs / properties / token-refresh covered, not all endpoints).
-- **gap-B.7 residual** — the low-pool live drain of the key-package top-up (Step 63) is untested until a claim source exists (observations §66).
-- **gap-B.25 residual** — the removal flush (`sync/removal_flush.rs`, Step 74; observations §69/§70) keeps its pending set in memory: a restart loses it; queued proposals persist in openmls storage and commit on the room's next activity (see also §73).
-- **gap-B.23** Pull crash-window double-dispatch (review S8
-  residual, 2026-08-14): the Step-64 dedup catches only a notification
-  whose id equals the page cursor (the push-symmetric case). The
-  original window — crash after dispatch, before `save_sync_state`,
-  where the unsaved notification carries a *different* id — is not
-  closable by cursor equality at all; it needs idempotent dispatch or
-  a processed-ids journal. Text is softened by UNIQUE + the S6 guard;
-  replayed MLS ciphertexts die at replay protection (spurious
-  recovery now excluded by the Step-64 narrowing). Own design pass
-  when it matters.
-- **gap-B.22** *(upstream openmls)* No staged external join: the
-  `ExternalCommitBuilder` chain persists **and merges** the group
-  atomically in `finalize` — there is no way to build the external
-  commit, upload it, and merge only on server acceptance (the
-  add/remove path's `upload_and_merge_commit_bundle` pattern).
-  Step 66 therefore ships discard-on-upload-failure instead of true
-  staging (decided 2026-08-13, Volker). Worth an upstream issue /
-  feature request against openmls: a `StagedExternalJoin` that
-  defers the storage merge. Revisit Step 66's residual crash window
-  if upstream ever ships it. Checked against openmls 0.9.0
-  (2026-08-25): still not shipped — the Step-66 discard workaround
-  stays; the upstream issue remains worth filing.
-*Schema / process hygiene:*
-- **gap-B.17** Hand-written migrations only (V1–V30 by hand).
+- **gap-B.11** the asset send / receive happy path end to end;
+- **gap-B.14** an inbound asset from Wire Web to Kupferdraht;
+- **gap-B.15** the `WIRE_RECEIPT_MODE` off path against a live backend;
+- **gap-B.13** a live `/feature-configs` fixture captured (the tests use a synthesised one);
+- **gap-B.7 residual** the low-pool live drain of the key-package top-up (Step 63) — needs a claim source, i.e. a second device (observations §66);
+- **gap-B.36** the SSO login (ADR-0043) end to end against a backend with a configured identity provider; four assumptions pinned by tests (`docs/wire/api-notes.md` §2b: unversioned `/sso/*` paths, the cookie as a query parameter on the success redirect, `POST /access` from a bare `zuid`, `/sso/settings` as the discovery source);
+- **gap-B.37** whether the backend itself refuses an MLS message for a future epoch (the Step-106 healing does not depend on it; robustness, not security).
 
 ### Code quality / maintainability
 
@@ -131,7 +93,7 @@ Correct code that is hard to read / navigate. The baseline safety rules (no
 - **cq-B.2** No property-based tests (`proptest` / `quickcheck`) and no fuzzing — crypto + protobuf round-trips and the frame parsers are candidates.
 - **cq-B.3** No benchmarks (`criterion`) — add when perf becomes a question.
 
-### Blocked on the Wire API (no endpoint yet)
+### Blocked upstream (Wire API, openmls)
 
 - **Step 62 — `/v14/events` push (dormant):** wire-server
   hard-codes `consumableNotifications: false` since chart 5.30 (PR
@@ -142,6 +104,15 @@ Correct code that is hard to read / navigate. The baseline safety rules (no
   consumableNotifications.status`; when `enabled`, run the archived
   `smoke-step62` flow (its 7 stages are documented in
   `docs/plan/archive/62-events-websocket.md`).
+- **gap-B.22 — openmls has no staged external join:** the
+  `ExternalCommitBuilder` chain persists **and** merges the group
+  atomically in `finalize`, so an external commit cannot be built,
+  uploaded and merged only on server acceptance (the add / remove path's
+  `upload_and_merge_commit_bundle` pattern). Step 66 ships
+  discard-on-upload-failure instead (decided 2026-08-13); still not
+  shipped in openmls 0.9.0. To do: file the upstream issue (a
+  `StagedExternalJoin` that defers the storage merge); revisit Step 66's
+  residual crash window if it ships.
 
 ## 64) Chat-system basics — the post-Step-60 gap map (2026-07-19; re-cut 2026-11-01)
 
@@ -281,23 +252,6 @@ open, none of it blocking the step:
   means a tabs-proxy mirror (Step 94's parity) and a browser test, so it
   waits for an embedder that needs it.
 
-## 73) A failed removal flush is lost with the client (2026-10-01)
-
-Found by the Step-117 smoke (its first logged warning): in the browser
-smoke account's DM, `sendText` failed with `GroupStateError(PendingProposal)`
-on every try. A backend Remove proposal sits in the room's MLS state; the
-Step-74 removal flush (`sync/removal_flush.rs`) commits such proposals at
-the end of a sync cycle and keeps a failed room queued for the next cycle —
-but the queue lives in the `Client`'s memory. The first flush failed
-(`removal flush failed; retrying next cycle`, the error not captured), the
-browser was closed, and the next client started with an empty queue: the
-stored proposal now blocks every send in the room until another Remove
-arrives. Native clients have the same queue. Directions (not decided):
-rebuild the queue at startup from the groups' stored proposals, or let the
-send path commit pending proposals before it creates the message. To
-diagnose first: why the flush failed.
-
-
 ## 74) Guest links of another operator (2026-10-05)
 
 A guest link carries only `key` and `code`
@@ -385,6 +339,16 @@ forks; the next bump — when `openmls_sqlite_storage` releases on rusqlite
 rusqlite ≥ 0.38 can retire the fork's wasm arm for its own
 `ffi-sqlite-wasm-rs`. (The first Rust embedder dropped its own
 `[patch.crates-io]` entry on 2026-11-01.)
+
+The same policy decides gap-B.27: `openmls_sqlite_storage` 0.3.0 runs
+refinery non-grouped (`storage_provider.rs:62-65`, not configurable from
+outside), so a crash between a migration's SQL commit and its history-row
+commit re-applies it on the next open, and V2+ of its migrations are
+re-apply-fatal; Step 87 closed that window for kupferdraht.db with
+`set_grouped(true)`. The fork branch can carry the same one-line change
+ahead of upstream (issue draft: `docs/plan/archive/87-atomic-migrations.md`). A bricked mls.db is
+survivable — discard, rejoin by external commit — the account store is
+not, which is why kupferdraht.db went first.
 
 ## 83) The login path does not enter the manager's client cache (2026-11-01)
 
