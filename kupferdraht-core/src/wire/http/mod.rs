@@ -323,11 +323,13 @@ impl HttpClient {
         self.refresher.get().and_then(Weak::upgrade)
     }
 
-    /// Step 95c: `segment` checked as one URL path segment built from
-    /// foreign data (a peer's asset key, a backend property key). Only
-    /// RFC 3986 unreserved characters (`A-Z a-z 0-9 - . _ ~`) pass, and
-    /// neither `.` nor `..` — the value can neither be empty, add a
-    /// segment, start a query or fragment, nor percent-decode into one.
+    /// `segment` checked as one URL path segment built from foreign data
+    /// (a peer's asset key, a backend property key, a conversation or
+    /// client id). Only RFC 3986 unreserved characters (`A-Z a-z 0-9 - .
+    /// _ ~`) pass, and neither `.` nor `..` — the value can neither be
+    /// empty, add a segment, start a query or fragment, nor
+    /// percent-decode into one. Step 95c; on every dynamic path
+    /// parameter and the `?client_id=` query value since Step 137.
     ///
     /// # Errors
     /// `KupferdrahtError::InvalidInput` naming `what` otherwise.
@@ -346,6 +348,27 @@ impl HttpClient {
             )));
         }
         Ok(segment)
+    }
+
+    /// A qualified `<local>@<domain>` id split into its two path
+    /// segments, each checked as [`Self::path_segment`] (Step 137).
+    ///
+    /// # Errors
+    /// `KupferdrahtError::InvalidInput` naming `what` for an unqualified
+    /// id or a part that is not a single path segment.
+    pub(super) fn qualified_segments<'a>(
+        id: &'a str,
+        what: &str,
+    ) -> Result<(&'a str, &'a str), KupferdrahtError> {
+        let (local, domain) = id.split_once('@').ok_or_else(|| {
+            KupferdrahtError::InvalidInput(format!(
+                "{what}: `{id}` must be qualified <uuid>@<domain>"
+            ))
+        })?;
+        Ok((
+            Self::path_segment(local, what)?,
+            Self::path_segment(domain, what)?,
+        ))
     }
 
     pub(super) fn url(&self, path: &str) -> Result<Url, KupferdrahtError> {
@@ -381,8 +404,11 @@ impl HttpClient {
 }
 
 /// Build a `BackendRejected` error from a non-success response,
-/// capturing the response body text for post-hoc debugging. Shared by
-/// every submodule that talks to Wire.
+/// capturing the response body text for post-hoc debugging — bounded to
+/// about 1 KiB and without control characters
+/// ([`crate::redact::bounded_detail`], Step 137), since the error crosses
+/// `UniFFI` and wasm into host logs. Shared by every submodule that talks
+/// to Wire.
 ///
 /// A `409 mls-stale-message` is special-cased to the typed
 /// [`KupferdrahtError::MlsStaleMessage`] so the send path can match it and
@@ -407,7 +433,10 @@ pub(super) async fn reject_from_response(
     if status == reqwest::StatusCode::CONFLICT && detail.contains("mls-stale-message") {
         return KupferdrahtError::MlsStaleMessage;
     }
-    KupferdrahtError::BackendRejected(format!("{context} {status}: {detail}"))
+    KupferdrahtError::BackendRejected(format!(
+        "{context} {status}: {}",
+        crate::redact::bounded_detail(&detail)
+    ))
 }
 
 /// `Retry-After` in delta-seconds; an HTTP-date, a malformed value or no
@@ -550,5 +579,250 @@ impl HttpClient {
             .await
             .map_err(|e| KupferdrahtError::Network(format!("{op} retry: {e}")))?;
         Ok(Some(resp))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use httpmock::MockServer;
+
+    use super::HttpClient;
+    use crate::error::KupferdrahtError;
+
+    fn http(base_url: &str) -> HttpClient {
+        HttpClient::new(base_url, true).expect("HttpClient::new (permit_http=true)")
+    }
+
+    /// Step 137 (scan finding M5): what a hostile id must not be able to
+    /// inject — a second segment, a dot segment (raw or percent-encoded),
+    /// a query, a fragment.
+    const HOSTILE: [&str; 6] = ["../../self", "a/b", "key?x=1", "key#frag", "%2e%2e", ".."];
+
+    fn assert_refused<T>(site: &str, hostile: &str, result: Result<T, KupferdrahtError>) {
+        match result {
+            Err(KupferdrahtError::InvalidInput(_)) => {}
+            Err(other) => panic!("{site}({hostile:?}): expected InvalidInput, got {other:?}"),
+            Ok(_) => panic!("{site}({hostile:?}): the request was sent"),
+        }
+    }
+
+    /// The conversation endpoints: a qualified id's local part and domain,
+    /// the team and conversation ids, the code endpoints, the group info.
+    async fn assert_conversation_sites_refuse(client: &HttpClient, h: &str) {
+        let local = format!("{h}@example.test");
+        let domain = format!("room@{h}");
+        for id in [local.as_str(), domain.as_str()] {
+            assert_refused(
+                "delete_conversation_member room",
+                h,
+                client
+                    .delete_conversation_member(14, "tok", id, "user@example.test")
+                    .await,
+            );
+            assert_refused(
+                "delete_conversation_member user",
+                h,
+                client
+                    .delete_conversation_member(14, "tok", "room@example.test", id)
+                    .await,
+            );
+            assert_refused(
+                "rename_conversation",
+                h,
+                client.rename_conversation(14, "tok", id, "name").await,
+            );
+            assert_refused(
+                "set_conversation_access",
+                h,
+                client
+                    .set_conversation_access(14, "tok", id, &["code".into()], &["guest".into()])
+                    .await,
+            );
+            assert_refused(
+                "send_typing",
+                h,
+                client.send_typing(14, "tok", id, "started").await,
+            );
+        }
+        assert_refused(
+            "delete_team_conversation team",
+            h,
+            client.delete_team_conversation(14, "tok", h, "conv").await,
+        );
+        assert_refused(
+            "delete_team_conversation conv",
+            h,
+            client.delete_team_conversation(14, "tok", "team", h).await,
+        );
+        assert_refused(
+            "create_conversation_code",
+            h,
+            client.create_conversation_code(14, "tok", h, None).await,
+        );
+        assert_refused(
+            "get_conversation_code",
+            h,
+            client.get_conversation_code(14, "tok", h).await,
+        );
+        assert_refused(
+            "delete_conversation_code",
+            h,
+            client.delete_conversation_code(14, "tok", h).await,
+        );
+        assert_refused(
+            "fetch_group_info room",
+            h,
+            client.fetch_group_info(14, "tok", h, "example.test").await,
+        );
+        assert_refused(
+            "fetch_group_info domain",
+            h,
+            client.fetch_group_info(14, "tok", "room", h).await,
+        );
+    }
+
+    /// The account endpoints: assets, clients, the rebind's query value,
+    /// key packages, the 1:1 conversation, SSO.
+    async fn assert_account_sites_refuse(client: &HttpClient, h: &str) {
+        assert_refused(
+            "delete_asset domain",
+            h,
+            client.delete_asset(14, "tok", h, "key-1").await,
+        );
+        assert_refused(
+            "delete_asset id",
+            h,
+            client.delete_asset(14, "tok", "wire.com", h).await,
+        );
+        assert_refused("client_exists", h, client.client_exists(14, "tok", h).await);
+        assert_refused(
+            "update_client_mls_public_key",
+            h,
+            client
+                .update_client_mls_public_key(14, "tok", h, "ed25519", "AA==")
+                .await,
+        );
+        assert_refused(
+            "delete_client",
+            h,
+            client.delete_client(14, "tok", h, None).await,
+        );
+        assert_refused(
+            "update_client_label",
+            h,
+            client.update_client_label(14, "tok", h, "label").await,
+        );
+        assert_refused(
+            "update_client_capabilities",
+            h,
+            client
+                .update_client_capabilities(14, "tok", h, &["consumable-notifications"])
+                .await,
+        );
+        assert_refused(
+            "rebind_access_token client_id",
+            h,
+            client.rebind_access_token(14, "zuid", h).await,
+        );
+        assert_refused(
+            "claim_key_packages domain",
+            h,
+            client
+                .claim_key_packages(14, "tok", h, "user-uuid", 2, None)
+                .await,
+        );
+        assert_refused(
+            "claim_key_packages uuid",
+            h,
+            client
+                .claim_key_packages(14, "tok", "example.test", h, 2, None)
+                .await,
+        );
+        assert_refused(
+            "upload_key_packages",
+            h,
+            client.upload_key_packages(14, "tok", h, &[vec![1u8]]).await,
+        );
+        assert_refused(
+            "fetch_key_package_count",
+            h,
+            client.fetch_key_package_count(14, "tok", h, 2).await,
+        );
+        assert_refused(
+            "fetch_one_to_one_conversation domain",
+            h,
+            client
+                .fetch_one_to_one_conversation(14, "tok", h, "peer-uuid")
+                .await,
+        );
+        assert_refused(
+            "fetch_one_to_one_conversation uuid",
+            h,
+            client
+                .fetch_one_to_one_conversation(14, "tok", "example.test", h)
+                .await,
+        );
+        assert_refused(
+            "sso_initiate_login_url",
+            h,
+            client.sso_initiate_login_url(h, "s", "e"),
+        );
+        assert_refused("sso_code_exists", h, client.sso_code_exists(h).await);
+    }
+
+    /// Step 137 (M5): every dynamic path parameter in `wire/http/` — and
+    /// the `?client_id=` query value — goes through `path_segment`; a
+    /// hostile id is refused before any request leaves. The Step 95c
+    /// guard, generalised from its four sites to all of them.
+    #[tokio::test]
+    async fn hostile_ids_are_refused_at_every_path_site_before_any_request() {
+        let server = MockServer::start();
+        let any_request = server.mock(|when, then| {
+            when.any_request();
+            then.status(200)
+                .header("content-type", "application/json")
+                .body("{}");
+        });
+        let client = http(&server.base_url());
+        for h in HOSTILE {
+            assert_conversation_sites_refuse(&client, h).await;
+            assert_account_sites_refuse(&client, h).await;
+        }
+        any_request.assert_calls(0);
+    }
+
+    /// Step 137 (L6): a non-2xx body is embedded in `BackendRejected`
+    /// bounded to about 1 KiB and without control characters — the error
+    /// crosses `UniFFI` and wasm into host logs, where an unbounded body
+    /// with escape sequences is the backend's to write.
+    #[tokio::test]
+    async fn a_huge_error_body_is_capped_and_stripped_of_control_characters() {
+        use httpmock::Method::PUT;
+        let server = MockServer::start();
+        let body = format!("\u{1b}[31m{}\n\u{7}", "A".repeat(1024 * 1024));
+        server.mock(move |when, then| {
+            when.method(PUT).path("/v14/clients/abc");
+            then.status(500).body(body.clone());
+        });
+        let err = http(&server.base_url())
+            .update_client_label(14, "tok", "abc", "label")
+            .await
+            .expect_err("500 must error");
+        let KupferdrahtError::BackendRejected(message) = err else {
+            panic!("expected BackendRejected, got {err:?}");
+        };
+        assert!(
+            message.starts_with("update_client_label 500"),
+            "the context and status stay: {message}"
+        );
+        assert!(
+            message.len() <= 1024 + 64,
+            "the detail is not capped: {} bytes",
+            message.len()
+        );
+        assert!(
+            !message.chars().any(char::is_control),
+            "control characters survived into the error"
+        );
     }
 }

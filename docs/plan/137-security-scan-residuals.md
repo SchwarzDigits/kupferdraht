@@ -1,6 +1,7 @@
 # Step 137 — Security-scan residuals: URL path segments, the CLI's cookie, error bodies, the token exchange's redirects, the case dispatch's cold cache
 
-**Status: commissioned 2026-11-02** (from the review of the external
+**Status: in progress 2026-11-02** (branch `step/137-security-scan-residuals`;
+commissioned 2026-11-02 from the review of the external
 security scan of 2026-11-02; `docs/plan/135-*` and `136-*` hold its other
 consequences). Step 132 merged the same day (PR #10) and closed the scan's
 transport findings — no redirect on `HttpClient`, `ws://` refused without
@@ -48,25 +49,38 @@ lines, so they ship as one step with one gate, like 132.
    in the same drain (the ADR-0020 invite flow) meet a cold cache, and
    `room_or_load` does not know a room the store has not seen either. Step
    132's item 10 hydrated `Client::rooms()`, not this site. Not reproduced
-   live.
+   live. Reproduced red in orientation, and worse than written here: the
+   message never reaches the admin check. `decrypt_to_application`
+   resolves the room to its group through the cache (`group_id_for_room`),
+   so a message after its Welcome in the same page fails as `no local
+   group_id`, is reported through `on_sync_error`, and queues a heal of
+   the room just joined — the ADR-0020 re-broadcast is lost.
 
 ## Scope
 
 1. `path_segment` on every dynamic path parameter in `wire/http/` (the
    `?client_id=` query value included), or once beside `HttpClient::url` —
    decide in orientation; the 95c archive line is corrected to what is
-   built.
+   built. Decided: per site, as at the four Step 95c sites — a joined path
+   cannot tell an id with `/` from a legitimate second segment — with
+   `qualified_segments` for the five sites that split `<uuid>@<domain>`.
 2. `sso finalize` reads the cookie from a TTY prompt without echo, or from
    stdin with `--cookie-stdin`; `--cookie` goes. The same for
    `join-via-link`'s key. `docs/cli.md` follows.
 3. `reject_from_response` caps `detail` (about 1 KiB) and strips control
-   characters before it formats `BackendRejected`.
+   characters before it formats `BackendRejected`. Decided: one helper,
+   `redact::bounded_detail`, at the three sites of the class —
+   `reject_from_response`, `rebind_rejection` and the token exchange's
+   `refusal`; the body is still read whole (the request timeout bounds it).
 4. `token_exchange::http_client` gets `Policy::none()` natively; the wasm
    builder keeps the note `HttpClient` carries.
 5. `dispatch_inbound_case` reads the members for the ADR-0018 check from
    the store, or the drain refreshes the room list after a Welcome before
    the next dispatch — decide in orientation after reproducing the
-   Welcome-plus-case drain.
+   Welcome-plus-case drain. Decided: the refresh right after the Welcome,
+   in `dispatch_mls_welcome` (the store cannot help — the room's members
+   come with the list, and the decrypt needs the room before the case
+   dispatch does); ADR-0039 decision 1 reworded (revision 1.1).
 
 ## Out of scope
 

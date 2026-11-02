@@ -12,7 +12,24 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-use crate::cli::read_password;
+use crate::cli::{read_password, read_secret};
+
+/// A secret from stdin (`from_stdin`, its first line) or the TTY prompt,
+/// or the exit code `2` after a line on stderr; the value may not be
+/// empty. Step 137: the `zuid` cookie and a link's key never go into argv.
+fn secret_or_exit(from_stdin: bool, prompt: &str, what: &str) -> Result<String, ExitCode> {
+    match read_secret(from_stdin, prompt) {
+        Ok(secret) if !secret.is_empty() => Ok(secret),
+        Ok(_) => {
+            eprintln!("kupferdraht-cli: empty {what}");
+            Err(ExitCode::from(2))
+        }
+        Err(e) => {
+            eprintln!("kupferdraht-cli: read {what}: {e}");
+            Err(ExitCode::from(2))
+        }
+    }
+}
 
 #[derive(Parser)]
 #[command(
@@ -233,9 +250,11 @@ enum SsoCommand {
     /// Complete SSO login from the `zuid` cookie captured off the redirect.
     ///
     /// After `sso initiate`, the browser round-trip redirects to
-    /// `success_redirect` carrying the `zuid` refresh cookie. Pass that value
-    /// here to mint the session, register this device, and persist the account
-    /// (listable via `accounts`, resumable via `resume`).
+    /// `success_redirect` carrying the `zuid` refresh cookie. That value —
+    /// prompted on the TTY (no echo), or the first line of stdin with
+    /// `--cookie-stdin`, never an argument — mints the session, registers
+    /// this device, and persists the account (listable via `accounts`,
+    /// resumable via `resume`).
     Finalize {
         /// Base https URL of a self-hosted Wire-compatible backend.
         #[arg(long)]
@@ -243,9 +262,11 @@ enum SsoCommand {
         /// WebSocket URL (wss://…); derived from --api-url when omitted.
         #[arg(long)]
         ws_url: Option<String>,
-        /// The `zuid` cookie value captured from the finalize-login redirect.
+        /// Read the `zuid` cookie value (captured from the finalize-login
+        /// redirect) from stdin, its first line, instead of the TTY prompt.
+        /// The cookie is a session on its own and never goes into argv.
         #[arg(long)]
-        cookie: String,
+        cookie_stdin: bool,
         /// On the 7-device cap, delete this device id to free a slot and retry.
         #[arg(long)]
         delete_device: Option<String>,
@@ -920,15 +941,17 @@ enum Command {
     /// (`GET /v{N}/conversations/join`), joins the caller as a
     /// Wire-conversation member (`POST /v{N}/conversations/join`), then
     /// runs `sync_metadata` and the Step-3 external-commit join on that
-    /// room. The password (if the link is password-protected) is read on
-    /// the TTY (no echo).
+    /// room. The link's `key` is read on the TTY (no echo) or, with
+    /// `--key-stdin`, as the first line of stdin — never from argv; the
+    /// password (if the link is password-protected) on the TTY.
     JoinViaLink {
         /// The link's `code` query parameter.
         #[arg(long)]
         code: String,
-        /// The link's `key` query parameter.
+        /// Read the link's `key` query parameter from stdin (its first
+        /// line) instead of the TTY prompt; the key is the link's secret.
         #[arg(long)]
-        key: String,
+        key_stdin: bool,
         /// Supply the link's password. Reads from the TTY (no echo).
         #[arg(short = 'p', long)]
         password: bool,
@@ -1200,12 +1223,18 @@ async fn async_main() -> ExitCode {
             SsoCommand::Finalize {
                 api_url,
                 ws_url,
-                cookie,
+                cookie_stdin,
                 delete_device,
-            } => match backend::resolve_server(&api_url, ws_url.as_deref()) {
-                Ok(server) => cli::auth::sso_finalize(server, cookie, delete_device).await,
-                Err(e) => Err(e),
-            },
+            } => {
+                let cookie = match secret_or_exit(cookie_stdin, "zuid cookie: ", "cookie") {
+                    Ok(cookie) => cookie,
+                    Err(exit) => return exit,
+                };
+                match backend::resolve_server(&api_url, ws_url.as_deref()) {
+                    Ok(server) => cli::auth::sso_finalize(server, cookie, delete_device).await,
+                    Err(e) => Err(e),
+                }
+            }
         },
         Command::Status => cli::auth::status().await,
         Command::Accounts => cli::auth::accounts().await,
@@ -1293,20 +1322,17 @@ async fn async_main() -> ExitCode {
         Command::RoomAccessAllowGuests { id } => cli::access::room_access_allow_guests(id).await,
         Command::JoinViaLink {
             code,
-            key,
+            key_stdin,
             password,
         } => {
+            let key = match secret_or_exit(key_stdin, "Link key: ", "key") {
+                Ok(key) => key,
+                Err(exit) => return exit,
+            };
             let pw = if password {
-                match read_password(false) {
-                    Ok(p) if !p.is_empty() => Some(p),
-                    Ok(_) => {
-                        eprintln!("kupferdraht-cli: empty password");
-                        return ExitCode::from(2);
-                    }
-                    Err(e) => {
-                        eprintln!("kupferdraht-cli: read password: {e}");
-                        return ExitCode::from(2);
-                    }
+                match secret_or_exit(false, "Link password: ", "password") {
+                    Ok(pw) => Some(pw),
+                    Err(exit) => return exit,
                 }
             } else {
                 None
@@ -1476,5 +1502,68 @@ async fn async_main() -> ExitCode {
             eprintln!("kupferdraht-cli error: {e}");
             ExitCode::from(cli::exit_code_for(&e))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser as _;
+
+    use super::Cli;
+
+    fn argv<'a>(base: &[&'a str], extra: &[&'a str]) -> Vec<&'a str> {
+        let mut v = base.to_vec();
+        v.extend_from_slice(extra);
+        v
+    }
+
+    /// Step 137 (M1): the `zuid` cookie is a session on its own — as an
+    /// argument it lands in `ps` and the shell history. `sso finalize`
+    /// reads it from stdin (`--cookie-stdin`) or prompts on the TTY;
+    /// `--cookie` is gone.
+    #[test]
+    fn sso_finalize_takes_the_cookie_from_stdin_or_the_prompt_never_from_argv() {
+        let base = [
+            "kupferdraht-cli",
+            "sso",
+            "finalize",
+            "--api-url",
+            "https://backend.example",
+        ];
+        assert!(
+            Cli::try_parse_from(argv(&base, &["--cookie", "zuid-value"])).is_err(),
+            "--cookie must be refused"
+        );
+        assert!(
+            Cli::try_parse_from(argv(&base, &["--cookie-stdin"])).is_ok(),
+            "--cookie-stdin must parse"
+        );
+        assert!(
+            Cli::try_parse_from(argv(&base, &[])).is_ok(),
+            "without a flag the cookie is prompted"
+        );
+    }
+
+    /// The same for `join-via-link`'s `key`: `--key-stdin` or the prompt,
+    /// `-p` keeps prompting for the link's password.
+    #[test]
+    fn join_via_link_takes_the_key_from_stdin_or_the_prompt_never_from_argv() {
+        let base = ["kupferdraht-cli", "join-via-link", "--code", "c0de"];
+        assert!(
+            Cli::try_parse_from(argv(&base, &["--key", "k3y"])).is_err(),
+            "--key must be refused"
+        );
+        assert!(
+            Cli::try_parse_from(argv(&base, &["--key-stdin"])).is_ok(),
+            "--key-stdin must parse"
+        );
+        assert!(
+            Cli::try_parse_from(argv(&base, &["--key-stdin", "-p"])).is_ok(),
+            "--key-stdin with the password prompt must parse"
+        );
+        assert!(
+            Cli::try_parse_from(argv(&base, &[])).is_ok(),
+            "without a flag the key is prompted"
+        );
     }
 }

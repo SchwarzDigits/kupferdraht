@@ -231,6 +231,7 @@ impl HttpClient {
             }
         }
         debug_assert!(!client_id.is_empty(), "client_id must be non-empty");
+        let client_id = Self::path_segment(client_id, "rebind_access_token client_id")?;
         let path = format!("/v{api_version}/access?client_id={client_id}");
         let url = self.url(&path)?;
         debug!(%url, "POST rebind access (zuid cookie-auth)");
@@ -482,7 +483,10 @@ async fn rebind_rejection(resp: reqwest::Response) -> KupferdrahtError {
     {
         return KupferdrahtError::SessionExpired;
     }
-    KupferdrahtError::BackendRejected(format!("rebind_access_token: {status} body={body}"))
+    KupferdrahtError::BackendRejected(format!(
+        "rebind_access_token: {status} body={}",
+        crate::redact::bounded_detail(&body)
+    ))
 }
 
 /// The names of `Set-Cookie` headers (`name=value; …` → `name`) — what a
@@ -1248,6 +1252,36 @@ mod tests {
         assert!(
             matches!(err, KupferdrahtError::SessionExpired),
             "expected SessionExpired (re-login signal), got {err:?}"
+        );
+    }
+
+    /// Step 137 (L6): the rebind's rejection embeds the body bounded and
+    /// without control characters, like every other non-2xx.
+    #[tokio::test]
+    async fn rebind_500_with_a_huge_body_is_bounded() {
+        use httpmock::Method::POST;
+        use httpmock::MockServer;
+        let server = MockServer::start();
+        let body = format!("\u{1b}[31m{}\n", "B".repeat(1024 * 1024));
+        server.mock(move |when, then| {
+            when.method(POST).path("/v14/access");
+            then.status(500).body(body.clone());
+        });
+        let err = http(&server.base_url())
+            .rebind_access_token(14, "zuid", "client")
+            .await
+            .expect_err("500 must error");
+        let KupferdrahtError::BackendRejected(message) = err else {
+            panic!("expected BackendRejected, got {err:?}");
+        };
+        assert!(
+            message.len() <= 1024 + 64,
+            "the detail is not capped: {} bytes",
+            message.len()
+        );
+        assert!(
+            !message.chars().any(char::is_control),
+            "control characters survived into the error"
         );
     }
 }

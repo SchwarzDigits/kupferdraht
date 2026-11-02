@@ -369,6 +369,15 @@ impl SyncService {
         // fail without changing that.
         client.mark_rooms_stale();
         let epoch = absorb_welcome_event(client, ev).map_err(EventError::Other)?;
+        // Step 137 (M3): the rest of this drain may carry messages for the
+        // room the Welcome just opened — the ADR-0020 re-broadcast above
+        // all — and a message decrypts only once the room is known
+        // (`group_id_for_room` reads the cache). So the list marked stale
+        // above is refreshed here, not at the end of the cycle; a failed
+        // refresh leaves the mark set for the end of the cycle.
+        if let Err(e) = client.refresh_rooms_if_stale().await {
+            warn!(error = %e, "room list refresh after a Welcome failed; retrying at the end of the cycle");
+        }
         if let Some(room_id) = qualified_id_field(ev, "qualified_conversation") {
             if client.room(&room_id).await.is_some() {
                 client

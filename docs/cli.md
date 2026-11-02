@@ -207,13 +207,16 @@ kupferdraht-cli login --api-url https://nginz-https.example.com -e you@example.c
 | `--api-url <url>`        | yes      | Base https URL of a self-hosted Wire-compatible backend ("Backend selection" above). |
 | `--ws-url <url>`         | no       | WebSocket URL override (`wss://…`); only with `--api-url`, derived by nginz convention when omitted. |
 | `-e`, `--email`          | yes      | Wire account email.                              |
-| `--password-stdin`       | no       | Read the password from stdin (no TTY prompt). Useful for password-manager pipes and non-interactive runs. |
+| `--password-stdin`       | no       | Read the password from stdin (its first line; no TTY prompt). Useful for password-manager pipes and non-interactive runs. |
 | `--delete-device <id>`   | no       | On `too-many-clients`: delete this device id to free a slot, then retry the login (Step 24). |
 
 There is **no** `--password` flag by design — secrets in argv leak
 into `ps`, shell history, and process listings. Without
 `--password-stdin` the CLI prompts on the TTY with `rpassword`
-(echo off).
+(echo off); from stdin a secret is its first line, without the line
+ending. The same rule holds for the `zuid` cookie of `sso finalize`
+(`--cookie-stdin`) and a guest link's key (`join-via-link --key-stdin`)
+since Step 137.
 
 A backend whose team default MLS ciphersuite is not Kupferdraht's
 (`mls.config.defaultCipherSuite` other than `2`) is refused at login
@@ -303,14 +306,18 @@ login. `--success-redirect` / `--error-redirect` default to `kupferdraht://sso/�
 ### `sso finalize`
 
 ```bash
-kupferdraht-cli sso finalize --api-url https://nginz-https.example.com --cookie <zuid-value>
-kupferdraht-cli sso finalize --api-url https://nginz-https.example.com --cookie <zuid> --delete-device <id>   # frees a slot on the 7-device cap
+kupferdraht-cli sso finalize --api-url https://nginz-https.example.com                   # prompts for the zuid cookie (no echo)
+kupferdraht-cli sso finalize --api-url https://nginz-https.example.com --cookie-stdin < zuid.txt
+kupferdraht-cli sso finalize --api-url https://nginz-https.example.com --cookie-stdin --delete-device <id> < zuid.txt   # frees a slot on the 7-device cap
 ```
 
 Step 17β. Takes the `zuid` cookie captured off the `success_redirect` and mints
 the session (`POST /access`, no `client_id`), then registers this device and
 persists the account — immediately listable via `accounts` and resumable via
-`resume`, exactly like `login`. The 7-device cap is recoverable with
+`resume`, exactly like `login`. The cookie is read on the TTY (no echo) or,
+with `--cookie-stdin`, as the first line of stdin — never from an argument:
+the value is a session on its own and would land in `ps` and the shell
+history like a password (Step 137). The 7-device cap is recoverable with
 `--delete-device` on the same finalized session (no re-auth).
 
 ### `status`
@@ -1932,16 +1939,19 @@ kupferdraht-cli join-link-revoke --id <room-id>
 
 ### join-via-link (Steps 8, 122)
 
-Redeem a guest link and MLS-join the conversation it names. `--code`
-and `--key` are the link's query parameters. Four phases:
+Redeem a guest link and MLS-join the conversation it names. `--code` is
+the link's `code` query parameter; its `key` — the link's secret — is
+read on the TTY (no echo) or, with `--key-stdin`, as the first line of
+stdin, never from an argument (Step 137). Four phases:
 `GET /v{N}/conversations/join` (the conversation the link names),
 `POST /v{N}/conversations/join` (Wire-side membership), `sync_metadata`,
 then the Step-3 external-commit `join_room` — skipped when the room's
 group is here already. Prints the `room_id` of the joined conversation.
 
 ```bash
-kupferdraht-cli join-via-link --code <code> --key <key>
-kupferdraht-cli join-via-link --code <code> --key <key> -p
+kupferdraht-cli join-via-link --code <code>                            # prompts for the key (no echo)
+kupferdraht-cli join-via-link --code <code> --key-stdin < key.txt
+kupferdraht-cli join-via-link --code <code> --key-stdin -p < key.txt   # the password is prompted on the TTY
 ```
 
 `-p` reads the link's password from the TTY (no echo); supply it

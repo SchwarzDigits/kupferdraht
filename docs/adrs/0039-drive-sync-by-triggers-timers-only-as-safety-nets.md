@@ -85,11 +85,13 @@ loop drains on a slow timer.
 alike, and for the room list on every transport.
 
 1. **The room list is fetched when it may be out of date:** at start;
-   after an event Kupferdraht does not process itself, or a Welcome; when
-   this client cannot have seen every event (another client or process
-   drained the queue, or the backend lost the cursor) — then in the same
-   pass, after the drain; and when it is older than **5 minutes** (the
-   safety net). A reconnect alone fetches nothing: the connect drain
+   after an event Kupferdraht does not process itself; when this client
+   cannot have seen every event (another client or process drained the
+   queue, or the backend lost the cursor) — then in the same pass, after
+   the drain; after a Welcome — then at once, inside the drain, so the
+   messages that follow it in the same page find their room (revision
+   1.1, Step 137); and when it is older than **5 minutes** (the safety
+   net). A reconnect alone fetches nothing: the connect drain
    (ADR-0030) brings the gap, and its room events trigger the fetch.
 2. **No timer beside a live socket.** The loop drains when the socket
    rings or closes (a close reconnects at once, then drains).
@@ -170,3 +172,4 @@ the one value for polling and push on every target.
 - 2026-10-01: Created (Proposed — Markus)
 - 2026-10-02: Accepted (Markus) — one ADR for the room list and the push
   pace; implemented in Step 118.
+- 2026-11-02: Revision 1.1 (Step 137; Volker Zöpfel) — the fetch after a Welcome moved from the end of the pass to right after the Welcome, inside the drain: a message for the welcomed room in the same page decrypts only once the room is known (`group_id_for_room` reads the cache); before, it was reported as `no local group_id` and queued a needless heal of the room just joined (reproduced in `tests/step_137_security_scan_residuals.rs`). Decision 1 reworded; nothing else changes.

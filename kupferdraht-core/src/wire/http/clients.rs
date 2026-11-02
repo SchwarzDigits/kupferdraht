@@ -105,6 +105,7 @@ impl HttpClient {
     ) -> Result<bool, KupferdrahtError> {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!client_id.is_empty(), "client_id must be non-empty");
+        let client_id = Self::path_segment(client_id, "client_exists client_id")?;
         let path = format!("/v{api_version}/clients/{client_id}");
         let url = self.url(&path)?;
         debug!(%url, "GET client_exists");
@@ -153,6 +154,7 @@ impl HttpClient {
             !public_key_b64.is_empty(),
             "public_key_b64 must be non-empty"
         );
+        let client_id = Self::path_segment(client_id, "update_client_mls_public_key client_id")?;
         let path = format!("/v{api_version}/clients/{client_id}");
         let url = self.url(&path)?;
         let body = serde_json::json!({
@@ -213,6 +215,7 @@ impl HttpClient {
     ) -> Result<(), KupferdrahtError> {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!client_id.is_empty(), "client_id must be non-empty");
+        let client_id = Self::path_segment(client_id, "delete_client client_id")?;
         let path = format!("/v{api_version}/clients/{client_id}");
         let url = self.url(&path)?;
         let body = match password {
@@ -245,6 +248,7 @@ impl HttpClient {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!client_id.is_empty(), "client_id must be non-empty");
         debug_assert!(!label.is_empty(), "label must be non-empty");
+        let client_id = Self::path_segment(client_id, "update_client_label client_id")?;
         let path = format!("/v{api_version}/clients/{client_id}");
         let url = self.url(&path)?;
         let body = serde_json::json!({ "label": label });
@@ -282,6 +286,7 @@ impl HttpClient {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!client_id.is_empty(), "client_id must be non-empty");
         debug_assert!(!capabilities.is_empty(), "capabilities must be non-empty");
+        let client_id = Self::path_segment(client_id, "update_client_capabilities client_id")?;
         let path = format!("/v{api_version}/clients/{client_id}");
         let url = self.url(&path)?;
         let body = serde_json::json!({ "capabilities": capabilities });

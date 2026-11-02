@@ -120,8 +120,15 @@ fn token_url(exchange_url: &str, permit_http: bool) -> Result<String, Kupferdrah
 
 pub(crate) fn http_client() -> Result<reqwest::Client, KupferdrahtError> {
     let builder = reqwest::Client::builder();
+    // Step 137 (M4): no redirect is followed — the exchange POSTs a JSON
+    // body under the Wire token as bearer, and a followed 307 would
+    // re-send both to a host of the server's choosing; a 3xx answer
+    // surfaces as the status it is. (The browser build has no policy
+    // knob: `fetch` follows redirects by itself — as for `HttpClient`.)
     #[cfg(not(target_arch = "wasm32"))]
-    let builder = builder.timeout(Duration::from_secs(10));
+    let builder = builder
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(10));
     builder
         .build()
         .map_err(|e| KupferdrahtError::Environment(format!("token exchange client: {e}")))
@@ -144,7 +151,10 @@ async fn refusal(status: u16, response: reqwest::Response) -> KupferdrahtError {
         503 => KupferdrahtError::ServiceUnavailable("the token exchange is overloaded".into()),
         _ => {
             let text = response.text().await.unwrap_or_default();
-            KupferdrahtError::BackendRejected(format!("token exchange {status}: {text}"))
+            KupferdrahtError::BackendRejected(format!(
+                "token exchange {status}: {}",
+                crate::redact::bounded_detail(&text)
+            ))
         }
     }
 }
@@ -293,6 +303,65 @@ mod tests {
             matches!(result, Err(KupferdrahtError::ServiceUnavailable(_))),
             "{:?}",
             result.err()
+        );
+    }
+
+    /// Step 137 (M4, second site): the exchange POSTs a JSON body under
+    /// the Wire token as bearer; a 307 would re-send both to a host of
+    /// the server's choosing, a 302 would carry the token there as a
+    /// GET. Neither is followed — the redirect target is never requested.
+    #[tokio::test]
+    async fn a_redirect_of_the_exchange_is_not_followed() {
+        for status in [302u16, 307] {
+            let server = MockServer::start();
+            let target = server.mock(|when, then| {
+                when.path("/elsewhere/v1/token");
+                then.status(200)
+                    .header("content-type", "application/json")
+                    .body(r#"{"token":"stolen.jwt","expiresIn":3600}"#);
+            });
+            server.mock(|when, then| {
+                when.method(POST).path("/v1/token");
+                then.status(status).header(
+                    "location",
+                    format!("{}/elsewhere/v1/token", server.base_url()),
+                );
+            });
+            let result = fetch_storage_token(&server.base_url(), true, "wire-token", &KEY).await;
+            assert!(
+                result.is_err(),
+                "{status}: a redirected exchange must not yield a token"
+            );
+            assert_eq!(
+                target.calls(),
+                0,
+                "{status}: the redirect target must not be requested"
+            );
+        }
+    }
+
+    /// Step 137 (L6): an unexpected answer's body is embedded bounded and
+    /// without control characters.
+    #[tokio::test]
+    async fn an_unexpected_answer_with_a_huge_body_is_bounded() {
+        let server = MockServer::start();
+        let body = format!("\u{1b}[31m{}\n", "C".repeat(1024 * 1024));
+        answer(&server, 418, &body, None);
+        let Err(err) = fetch_storage_token(&server.base_url(), true, "wire-token", &KEY).await
+        else {
+            panic!("418 must error");
+        };
+        let KupferdrahtError::BackendRejected(message) = err else {
+            panic!("expected BackendRejected, got {err:?}");
+        };
+        assert!(
+            message.len() <= 1024 + 64,
+            "the detail is not capped: {} bytes",
+            message.len()
+        );
+        assert!(
+            !message.chars().any(char::is_control),
+            "control characters survived into the error"
         );
     }
 }

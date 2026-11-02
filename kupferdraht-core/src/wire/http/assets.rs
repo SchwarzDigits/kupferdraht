@@ -347,6 +347,8 @@ impl HttpClient {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!asset_domain.is_empty(), "asset_domain must be non-empty");
         debug_assert!(!asset_id.is_empty(), "asset_id must be non-empty");
+        let asset_domain = Self::path_segment(asset_domain, "delete_asset asset_domain")?;
+        let asset_id = Self::path_segment(asset_id, "delete_asset asset_id")?;
         let path = format!("/v{api_version}/assets/{asset_domain}/{asset_id}");
         let url = self.url(&path)?;
         debug!(%url, "DELETE asset");
