@@ -1,6 +1,23 @@
 # Step 132 — Review residuals: transport, platform and threading hardening
 
-**Status: commissioned 2026-11-01** (transferred from open.md §71 — the
+**Status: in progress 2026-11-02** — decided (Volker): redirect policy
+none; item 13 stays in this step with both layers (the queue rebuilt at
+the first sync cycle from the groups' stored pending proposals, a stale
+staged commit dropped first; a send that meets a pending proposal commits
+it for the room and retries once); `type` 3 is the pending-connection 1:1
+(live-verified 2026-11-02 on the self-hosted stack, observations §94;
+channels are disabled and locked there, so `group_conv_type: "channel"` is
+mapped by the provenance-audit note, not live); the local stack's team
+default stays `2` after the smoke. `ClientBuilder::resume` is offline, so
+"at resume" is the login path that reuses an existing device plus the
+`feature-config.update` refetch. Branch `step/132-review-residuals-hardening`.
+The browser's `sendBytes` Append (item 7) has no browser test: the wasm
+suite has no asset-send harness; the emit sits in the shared
+persist-then-emit flow and was reviewed. Gate green (1322 tests);
+smoked 2026-11-02 against the self-hosted stack — the relogin on the
+existing device refused on team default `1` with both suites named,
+accepted on `2` (left there), a live push over the legacy socket's new
+connect path, Bob's device purged. (Commissioned 2026-11-01, transferred from open.md §71 — the
 residuals of the production-readiness review of 2026-09-25 that are code,
 each re-verified in the code on 2026-11-01; the review's blockers and
 findings were closed by Steps 95–106 — plus, added 2026-11-01, the code

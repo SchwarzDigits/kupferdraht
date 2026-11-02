@@ -148,6 +148,8 @@ impl Client {
             self.backfill_user_profiles(raw).await?
         };
         self.persist_rooms(&rooms).await?;
+        self.rooms_loaded
+            .store(true, std::sync::atomic::Ordering::Release);
         *self.rooms.write().expect("rooms lock poisoned") =
             rooms.into_iter().map(Arc::new).collect();
         Ok(())
@@ -484,6 +486,8 @@ impl Client {
         })?;
         let records = store.load_rooms().await?;
         let rooms = rooms_from_records(records, &self.weak());
+        self.rooms_loaded
+            .store(true, std::sync::atomic::Ordering::Release);
         *self.rooms.write().expect("rooms lock poisoned") =
             rooms.into_iter().map(Arc::new).collect();
         // Step 60c: one-time backfill of the materialized task cache
@@ -590,6 +594,41 @@ impl Client {
     /// entry leaves the set only via [`Client::ack_removal_flush`]
     /// after its commit succeeded — failed flushes stay queued and
     /// retry on the next dispatch cycle.
+    /// Rebuild the removal-flush queue from the groups' stored pending
+    /// proposals, once per client (Step 132 item 13): a flush the backend
+    /// refused before a restart lived in memory only, while the proposal
+    /// still sits in the room's MLS state and blocks every send there.
+    pub(crate) async fn rebuild_removal_flush_queue_once(&self) {
+        if self
+            .removal_queue_rebuilt
+            .swap(true, std::sync::atomic::Ordering::AcqRel)
+        {
+            return;
+        }
+        let Ok(mls) = self.mls_client_required("rebuild_removal_flush_queue") else {
+            return;
+        };
+        let candidates: Vec<(String, Vec<u8>)> = self
+            .rooms()
+            .await
+            .iter()
+            .filter_map(|room| room.group_id_bytes().map(|group| (room.id(), group)))
+            .collect();
+        let pending: Vec<String> = {
+            let _gate = self.mls_write_gate().await;
+            let guard = crate::encryption::lock_mls(mls);
+            candidates
+                .into_iter()
+                .filter(|(_, group)| guard.has_pending_peer_removal(group).unwrap_or(false))
+                .map(|(room, _)| room)
+                .collect()
+        };
+        for room_id in pending {
+            tracing::info!(room = %room_id, "removal flush: stored pending proposal queued after restart");
+            self.queue_removal_flush(&room_id);
+        }
+    }
+
     pub(crate) fn pending_removal_flushes(&self) -> Vec<String> {
         self.pending_removal_flushes
             .lock()

@@ -378,6 +378,16 @@ impl std::fmt::Debug for AttachmentRecord {
     }
 }
 
+/// The account store behind a `Client`. The shipped SQLite store is the
+/// reference; a custom implementation meets the same contract, and one
+/// expectation is easy to miss: **the combined writes are atomic**. Every
+/// method that persists two records in one call (a timeline event with its
+/// attachment, a message with its delivery status, the Step 105 pairs) is
+/// expected to write both or neither — a reader must never see a timeline
+/// row without its attachment or a status without its message. The
+/// SQLite store does this in one transaction; an implementation that
+/// overrides those methods separately is non-atomic until it does the
+/// same (Step 132 item 7).
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 pub trait Store: MaybeSendSync {

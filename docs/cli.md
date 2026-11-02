@@ -215,6 +215,12 @@ into `ps`, shell history, and process listings. Without
 `--password-stdin` the CLI prompts on the TTY with `rpassword`
 (echo off).
 
+A backend whose team default MLS ciphersuite is not Kupferdraht's
+(`mls.config.defaultCipherSuite` other than `2`) is refused at login
+with `backend default ciphersuite <n> is not ours (2)` (Step 132, NG-25);
+the operator sets the team default to `2` — smoked 2026-11-02 against a
+self-hosted stack (observations §94).
+
 Re-running `login` against the same account creates a **new device**
 on Wire, which enforces a per-user device cap of 7. When the cap is
 hit, login fails with `too-many-clients` — the CLI then **prints the

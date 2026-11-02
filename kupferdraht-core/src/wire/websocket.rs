@@ -231,9 +231,68 @@ pub(crate) fn await_url(
 /// [`EventSocket`].
 pub(crate) struct EventSocket {
     inner: WsStream,
+    /// When the server last answered a ping (Step 132, M1); `None` until
+    /// the first pong of this connection.
+    last_pong: Option<std::time::Instant>,
+}
+
+/// Run a connect future under a deadline; the deadline is a `Network`
+/// error like any other transport failure, so the reconnect path runs.
+async fn within<T>(
+    timeout: std::time::Duration,
+    connect: impl std::future::Future<Output = Result<T, KupferdrahtError>>,
+    what: &str,
+) -> Result<T, KupferdrahtError> {
+    // Boxed: the TLS handshake future is large, and every push loop above
+    // this one would carry it inline otherwise (clippy's `large_futures`).
+    tokio::time::timeout(timeout, Box::pin(connect))
+        .await
+        .unwrap_or_else(|_| {
+            Err(KupferdrahtError::Network(format!(
+                "{what}: no handshake within {timeout:?}"
+            )))
+        })
 }
 
 impl EventSocket {
+    /// [`Self::connect`] with a deadline on the TCP + TLS + upgrade
+    /// handshake (Step 132, M1): a listener that accepts and never answers
+    /// fails as `KupferdrahtError::Network` after `timeout`, not never.
+    ///
+    /// # Errors
+    /// As [`Self::connect`], plus `Network` on the deadline.
+    pub(crate) async fn connect_with_timeout(
+        url: url::Url,
+        timeout: std::time::Duration,
+    ) -> Result<Self, KupferdrahtError> {
+        // Step 132 red: no deadline yet.
+        within(timeout, Self::connect(url), "events websocket connect").await
+    }
+
+    /// When the server last answered a ping (Step 132, M1): the keepalive
+    /// treats a ping without a pong within one interval as a dead socket.
+    pub(crate) fn last_pong(&self) -> Option<std::time::Instant> {
+        self.last_pong
+    }
+
+    /// [`Self::connect_with_bearer`] under the same deadline as
+    /// [`Self::connect_with_timeout`].
+    ///
+    /// # Errors
+    /// As [`Self::connect_with_bearer`], plus `Network` on the deadline.
+    pub(crate) async fn connect_with_bearer_timeout(
+        url: url::Url,
+        access_token: &str,
+        timeout: std::time::Duration,
+    ) -> Result<Self, KupferdrahtError> {
+        within(
+            timeout,
+            Self::connect_with_bearer(url, access_token),
+            "await websocket connect",
+        )
+        .await
+    }
+
     /// Open the WebSocket at `url` (built by [`events_url`]) and
     /// complete the upgrade.
     ///
@@ -258,7 +317,10 @@ impl EventSocket {
             response.status(),
             tokio_tungstenite::tungstenite::http::StatusCode::SWITCHING_PROTOCOLS
         );
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            last_pong: None,
+        })
     }
 
     /// Open the legacy `/await` WebSocket (Step 73, ADR-0019): the
@@ -297,7 +359,10 @@ impl EventSocket {
             response.status(),
             tokio_tungstenite::tungstenite::http::StatusCode::SWITCHING_PROTOCOLS
         );
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            last_pong: None,
+        })
     }
 
     /// Read the next legacy `/await` frame (Step 73): each text or
@@ -339,7 +404,11 @@ impl EventSocket {
                     })?
                     .to_string(),
                 Message::Close(_) => return Ok(None),
-                Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => continue,
+                Message::Pong(_) => {
+                    self.last_pong = Some(std::time::Instant::now());
+                    continue;
+                }
+                Message::Ping(_) | Message::Frame(_) => continue,
             };
             return parse_legacy_frame(&text).map(Some);
         }
@@ -395,7 +464,8 @@ impl EventSocket {
                 // and flushes it on this very read loop. Frame: raw
                 // frames never surface from a message-level read. None
                 // of the three carries a ConsumableNotification.
-                Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {}
+                Message::Pong(_) => self.last_pong = Some(std::time::Instant::now()),
+                Message::Ping(_) | Message::Frame(_) => {}
             }
         }
     }
@@ -435,6 +505,100 @@ mod tests {
         parse_legacy_frame,
     };
     use crate::error::KupferdrahtError;
+    use crate::wire::http::checked_websocket_base;
+
+    // ── Step 132: scheme rule, connect deadline, pong tracking ───────
+
+    /// M3: the socket base follows the API URL's rule — `wss://` always,
+    /// `ws://` only with `permit_http`, and the error names the scheme.
+    #[test]
+    fn websocket_base_scheme_rule_matches_the_api_url() {
+        assert!(checked_websocket_base("wss://host", false).is_ok());
+        assert!(checked_websocket_base("wss://host", true).is_ok());
+        assert!(checked_websocket_base("ws://host", true).is_ok());
+        let err = checked_websocket_base("ws://host", false).expect_err("ws:// needs permit_http");
+        assert!(
+            matches!(err, KupferdrahtError::InvalidInput(ref m) if m.contains("ws://")),
+            "got {err:?}"
+        );
+        // The browser upgrades http(s) to ws(s): the same rule applies.
+        assert!(checked_websocket_base("https://host", false).is_ok());
+        assert!(checked_websocket_base("http://host", false).is_err());
+        assert!(checked_websocket_base("http://host", true).is_ok());
+        assert!(checked_websocket_base("ftp://host", true).is_err());
+    }
+
+    /// M1: a listener that accepts the TCP connection and never completes
+    /// the upgrade must not hang the connect.
+    #[tokio::test]
+    async fn connect_gives_up_on_a_silent_listener() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let url = url::Url::parse(&format!(
+            "ws://{}/v14/events",
+            listener.local_addr().expect("addr")
+        ))
+        .expect("url");
+        let hold = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept");
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            drop(stream);
+        });
+        let outcome = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            EventSocket::connect_with_timeout(url, std::time::Duration::from_millis(300)),
+        )
+        .await
+        .expect("connect_with_timeout must return within its deadline");
+        assert!(
+            matches!(outcome, Err(KupferdrahtError::Network(_))),
+            "a silent listener must surface as Network, got {:?}",
+            outcome.err()
+        );
+        hold.abort();
+    }
+
+    /// M1: a pong is liveness — the socket records when the server last
+    /// answered, so the keepalive can notice a hung connection.
+    #[tokio::test]
+    async fn a_pong_frame_is_recorded_as_liveness() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let url = url::Url::parse(&format!(
+            "ws://{}/v14/events",
+            listener.local_addr().expect("addr")
+        ))
+        .expect("url");
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept");
+            let mut ws = tokio_tungstenite::accept_async(stream)
+                .await
+                .expect("upgrade");
+            ws.send(Message::Pong(Vec::new().into()))
+                .await
+                .expect("pong");
+            ws.send(Message::Text(EVENT_FRAME.into()))
+                .await
+                .expect("frame");
+            while let Some(msg) = ws.next().await {
+                if msg.is_err() {
+                    break;
+                }
+            }
+        });
+        let mut socket = EventSocket::connect(url).await.expect("connect");
+        assert!(socket.last_pong().is_none(), "no pong before any frame");
+        let frame = socket.next_frame().await.expect("read").expect("a frame");
+        assert!(matches!(frame, ConsumableNotification::Event { .. }));
+        assert!(
+            socket.last_pong().is_some(),
+            "the pong that preceded the frame must be recorded"
+        );
+        drop(socket);
+        server.abort();
+    }
 
     /// Known-answer frames, verbatim from backend-spec §11.2 (frozen
     /// live-derived contract).

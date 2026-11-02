@@ -61,7 +61,7 @@ consumer asked for it, the `Option` accessors mirror matrix-rust-sdk by
 ADR-0009, the two-step login is by design (the device cap asks the user),
 and the CLI is a thin wrapper for live testing (`docs/cli.md`).
 
-- **erg-C** four error messages mislead or give no hint: `pipeline.rs` "has no group_id — run sync_metadata first" (the fix is to join; mirror the typed `KupferdrahtError::MlsGroupMissing` text), `pipeline.rs` "{op}: {room_id} not in cache" (add "run sync / load_rooms_from_store"), `sqlite/mod.rs` "storage column … not valid UTF-8" (add a corruption / recovery hint); and `invite_members` "Wire returned no KeyPackages for … (pool exhausted or user has no devices?)", which on a backend with another default ciphersuite names the wrong causes (observations §94; the loud check of Step 132 removes the case at login).
+- **erg-C** three error messages mislead or give no hint: `pipeline.rs` "has no group_id — run sync_metadata first" (the fix is to join; mirror the typed `KupferdrahtError::MlsGroupMissing` text), `pipeline.rs` "{op}: {room_id} not in cache" (add "run sync / load_rooms_from_store"), `sqlite/mod.rs` "storage column … not valid UTF-8" (add a corruption / recovery hint).
 - **erg-D.11** `kupferdraht-cli doctor` — a health check for live testing: session valid, device registered, MLS state present, key-package pool depth, store path, last sync, `file_sharing` / `receipt_mode`. Absorbs the former `status --verbose` idea.
 
 ### Live verification backlog

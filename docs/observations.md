@@ -2035,9 +2035,11 @@ on one side and `kupferdraht-cli` on the other.
   packages after a reload, and both Welcome directions worked: Kupferdraht's
   Welcome (HPKE DHKEM-P256 on `hpke-rs` 0.8) opened in the web client, the
   web client's Welcome to a claimed Kupferdraht key package opened here;
-  text both ways in both groups. The loud mismatch check of Step 132
-  (item 12) would have named the suite at login; the "no KeyPackages"
-  message does not.
+  text both ways in both groups. Step 132's check names the suite at
+  login instead: smoked the same day — with the team default back on `1`
+  the relogin on the existing device was refused with `backend default
+  ciphersuite 1 is not ours (2)`, on `2` it passed; the default stays
+  `2` on that stack.
 - Independent of the default suite, the web client joined a
   Kupferdraht-created `0x0002` group by external commit (the group's
   epoch advanced, Kupferdraht processed the commit), and a Kupferdraht

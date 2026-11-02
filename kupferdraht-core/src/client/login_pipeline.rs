@@ -621,6 +621,9 @@ impl LoginPipeline {
             .await
         {
             Ok(raw) => {
+                // Step 132 (NG-25): a backend on another default suite is
+                // refused here, before anything else is persisted.
+                crate::client::ensure_default_ciphersuite(&raw)?;
                 store
                     .replace_feature_configs(&raw.into_entries(now_ms()))
                     .await?;

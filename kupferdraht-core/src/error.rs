@@ -179,6 +179,12 @@ pub enum KupferdrahtError {
     /// instead of aborting. Step 103.
     #[error("rate-limited by the backend; retry later")]
     RateLimited { retry_after_secs: Option<u64> },
+    /// The backend's team default MLS ciphersuite is not the one Kupferdraht
+    /// runs (NG-25): `backend` and `ours` are RFC 9420 suite ids, found at
+    /// login and resume so a differing backend fails at the gate rather than
+    /// on the first group add. Step 132.
+    #[error("backend default ciphersuite {backend} is not ours ({ours})")]
+    CiphersuiteMismatch { backend: u16, ours: u16 },
     #[error("unexpected error: {0}")]
     Generic(String),
 }
@@ -222,6 +228,7 @@ impl KupferdrahtError {
             Self::InvalidRecoveryData { .. } => "InvalidRecoveryData",
             Self::DeviceRetired(_) => "DeviceRetired",
             Self::RateLimited { .. } => "RateLimited",
+            Self::CiphersuiteMismatch { .. } => "CiphersuiteMismatch",
             Self::Generic(_) => "Generic",
         }
     }
@@ -274,6 +281,10 @@ mod variant_name_tests {
             KupferdrahtError::DeviceRetired(String::new()),
             KupferdrahtError::RateLimited {
                 retry_after_secs: None,
+            },
+            KupferdrahtError::CiphersuiteMismatch {
+                backend: 1,
+                ours: 2,
             },
             KupferdrahtError::Generic(String::new()),
         ]

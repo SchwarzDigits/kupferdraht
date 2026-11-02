@@ -899,7 +899,7 @@ scheduler** (the core has no lifecycle to hang one on):
 | `sync_stream(SyncSettings)`                           | `BoxStream<'static, Result<SyncSummary, KupferdrahtError>>` | **Step 14b.** Same loop surfaced as an async `Stream` of `SyncSummary`. Dropping the stream cancels the underlying polling task. Rust-side ergonomic; UDL surface deferred (callers from foreign code use `sync_with_callback`). |
 | `add_event_handler(Arc<dyn EventHandler>)`            | `()`                                   | **Step 5c.** Register an `EventHandler` to receive per-event callbacks once a `sync*` iteration is running. Handlers added before `sync()` are honored on every future service run; handlers added after are picked up by the next frame the running service dispatches (the snapshot is reloaded per frame). matrix-rust-sdk analog: `Client::add_event_handler`. |
 | `sync_metadata()`                                     | `Result<(), KupferdrahtError>`             | **Lightweight metadata-only sync** — hits `POST /v14/conversations/list-ids` + `POST /v14/conversations/list` + `POST /v14/list-users` and replaces the in-memory rooms snapshot, **without** draining `/v14/notifications`. Since Step 99 a conversation of a kind Kupferdraht does not know (a new `type` or `protocol`) or a user profile that does not decode is logged and skipped — it no longer fails the whole sync. Use over `sync_once` when battery / latency matters, or in background-startup paths where the per-event MLS-decrypt loop is too expensive — typically followed by a `sync_once` once foreground attention arrives. Originally Step 2's public sync surface; retained alongside the matrix-rust-sdk-shaped family as a deliberate Kupferdraht addition for three-tier composability (`load_rooms_from_store` / `sync_metadata` / `sync_once`). matrix-rust-sdk has no analog — Wire extension. CLI surface: `kupferdraht-cli sync-metadata`. |
-| `rooms()`                                             | `Vec<Arc<Room>>`                      | In-memory snapshot. Empty before the first sync / hydrate. |
+| `rooms()`                                             | `Vec<Arc<Room>>`                      | In-memory snapshot; a never-filled cache (right after `resume`, or a second client on the account) is hydrated from the store first (Step 132). A cache a sync or a discard emptied stays empty. |
 | `joined_rooms()`                                      | `Vec<Arc<Room>>`                      | **Step 14c.** Rooms the caller has joined. In Kupferdraht's current model every cached room is joined, so this is semantically equivalent to `rooms()`; the two methods are distinguished for forward-compatibility once invitation materialization lands. Sync (`std::sync::RwLock`). matrix-rust-sdk analog: `Client::joined_rooms`. |
 | `invited_rooms()`                                     | `Vec<Arc<Room>>`                      | **Step 14c.** Rooms the caller has been invited to but has not yet joined. Returns an empty `Vec` today — Kupferdraht does not yet materialize pending invitations as `Room` objects (Kupferdraht-current limitation, tracked outside 14c). Sync. matrix-rust-sdk analog: `Client::invited_rooms`. |
 | `rooms_filtered<F>(F)`                                | `Vec<Arc<Room>>`                      | **Step 14c.** Filter the cached rooms by a closure `F: Fn(&Room) -> bool`. Replaces ad-hoc iteration through `rooms()`. matrix-rust-sdk uses a typed `RoomListFilter`; Kupferdraht takes a closure to stay UDL-friendly and avoid filter-variant churn. |
@@ -1829,6 +1829,7 @@ current variants:
 | `IntegrityCheck`       | A cryptographic integrity check failed on the asset path (SHA-256 / MAC / AEAD-tag mismatch). Migration checksum failures surface as `Storage`, not here. |
 | `InvalidInput`         | Caller-supplied argument violates a precondition. |
 | `MlsGroupMissing`      | No MLS group loaded for the conversation — `Client::join_room` first. |
+| `CiphersuiteMismatch { backend, ours }` | The backend's team default MLS ciphersuite (`mls.config.defaultCipherSuite`, an RFC 9420 suite id) is not the one Kupferdraht runs (`0x0002`, NG-25). Raised wherever the feature configs are fetched — both login paths and the `feature-config.update` refetch — so a differing backend fails at the gate, not on the first group add with "no KeyPackages" (live: observations §94). The operator sets the team default to `2`. (Step 132) |
 | `MlsStaleMessage`      | Outbound MLS epoch is stale — resync the conversation and retry. (Step 37) |
 | `MlsOutOfOrder`        | Inbound MLS message epoch mismatch — the room resyncs to the current epoch when the backend confirms it fell behind (heal, not retry; the message itself is not re-processed); otherwise the message is skipped. (Steps 38/64/106) |
 | `Storage`              | SQLite or migration failure. |
@@ -2287,7 +2288,13 @@ pub enum RoomType { DirectMessage, Group, Channel, SelfRoom }
 `RoomType` has stable stringification via `as_str` /
 `from_str_persisted` for the `rooms.room_type` column. An unknown
 value on read is skipped silently so a schema extension can't break
-an older binary.
+an older binary. `Channel` is a regular conversation flagged
+`group_conv_type: "channel"` by the backend (Step 132; a backend without
+channels never sets it). Wire's conversation `type` 3 is a *pending
+connection*, not a channel — a 1:1 that exists while a connection
+request is open (live shape: observations §94); it maps to
+`DirectMessage` and, being a Proteus conversation, never reaches the
+room list.
 
 ### `BackendMlsKey`
 

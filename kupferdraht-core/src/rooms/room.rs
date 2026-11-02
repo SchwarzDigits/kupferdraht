@@ -840,7 +840,7 @@ pub(crate) fn room_from_conversation(conv: OwnConversation, client: Weak<Client>
         tracing::warn!("conversation without an id or domain skipped");
         return None;
     }
-    let room_type = map_room_type(conv.conv_type);
+    let room_type = room_type_for(conv.conv_type, conv.group_conv_type.as_deref());
     let (members, counterpart) = build_room_members(&conv, room_type);
     Some(Room {
         id: qualify(&conv.qualified_id),
@@ -858,12 +858,15 @@ pub(crate) fn room_from_conversation(conv: OwnConversation, client: Weak<Client>
     })
 }
 
-fn map_room_type(t: ConvType) -> RoomType {
-    match t {
+/// The room type from Wire's `type` and `group_conv_type` (Step 132 item
+/// 9): a channel is a regular conversation flagged `group_conv_type:
+/// "channel"`; `type` 3 is the pending-connection 1:1 (observations §94).
+fn room_type_for(conv_type: ConvType, group_conv_type: Option<&str>) -> RoomType {
+    match conv_type {
+        ConvType::Group if group_conv_type == Some("channel") => RoomType::Channel,
         ConvType::Group => RoomType::Group,
         ConvType::SelfRoom => RoomType::SelfRoom,
-        ConvType::DirectMessage => RoomType::DirectMessage,
-        ConvType::Channel => RoomType::Channel,
+        ConvType::DirectMessage | ConvType::Connect => RoomType::DirectMessage,
     }
 }
 
@@ -1107,6 +1110,7 @@ mod tests {
             epoch: 7,
             group_id: Some("Z3JwLWFh".into()),
             name: Some("Engineering".into()),
+            group_conv_type: None,
             access: Vec::new(),
             access_role: Vec::new(),
             team: None,
@@ -1144,7 +1148,8 @@ mod tests {
             (ConvType::Group, RoomType::Group),
             (ConvType::SelfRoom, RoomType::SelfRoom),
             (ConvType::DirectMessage, RoomType::DirectMessage),
-            (ConvType::Channel, RoomType::Channel),
+            // Step 132: Wire's `type` 3 is a pending connection, a 1:1 shape.
+            (ConvType::Connect, RoomType::DirectMessage),
         ] {
             let conv = make(wire, Protocol::Mls, &[]);
             assert_eq!(
@@ -1172,19 +1177,40 @@ mod tests {
         assert!(!cp.is_self);
     }
 
+    /// Step 132 item 9: the channel signal is `group_conv_type: "channel"`
+    /// on a regular conversation; `"group_conversation"` stays a group.
+    #[test]
+    fn group_conv_type_channel_makes_a_channel() {
+        for (flag, expected) in [
+            (Some("channel"), RoomType::Channel),
+            (Some("group_conversation"), RoomType::Group),
+            (None, RoomType::Group),
+        ] {
+            let mut conv = make(ConvType::Group, Protocol::Mls, &[]);
+            conv.group_conv_type = flag.map(str::to_string);
+            assert_eq!(
+                room_from_conversation(conv, Weak::new())
+                    .expect("mapped")
+                    .room_type(),
+                expected,
+                "group_conv_type {flag:?} must map to RoomType::{expected:?}"
+            );
+        }
+    }
+
     #[test]
     fn counterpart_is_none_for_groups_and_channels() {
         for t in [RoomType::Group, RoomType::Channel] {
-            let conv = make(
-                match t {
-                    RoomType::Group => ConvType::Group,
-                    RoomType::Channel => ConvType::Channel,
-                    _ => unreachable!(),
-                },
+            let mut conv = make(
+                ConvType::Group,
                 Protocol::Mls,
                 &[("alice", "example.test"), ("bob", "example.test")],
             );
+            if t == RoomType::Channel {
+                conv.group_conv_type = Some("channel".into());
+            }
             let room = room_from_conversation(conv, Weak::new()).expect("mapped");
+            assert_eq!(room.room_type(), t);
             assert!(room.counterpart().is_none(), "{t:?} has no counterpart");
         }
     }

@@ -686,8 +686,8 @@ Notes:
   policies kick in when the fields are omitted. The minimal
   4-field body above produces a working group on a Wire v14 backend.
 - `group_conv_type` is `"group_conversation"` for groups,
-  `"channel"` for channels (Kupferdraht does not target channels in
-  scope today).
+  `"channel"` for channels; it is the channel signal Kupferdraht maps to
+  `RoomType::Channel` (Step 132 — `type` 3 is a pending connection).
 - The created MLS group starts at **epoch 0 with one leaf**, where Wire
   rejects application messages (`mls-protocol-error: "Application
   messages at epoch 0 are not supported"`). `create_room` therefore
@@ -796,7 +796,9 @@ Fetch conversation metadata for a list of IDs (obtained via
 ```
 
 Each `Conversation` carries `qualified_id`, `type` (0=group,
-1=self, 2=one-on-one, 3=channel), `protocol`, `group_id`,
+1=self, 2=one-on-one, 3=connect — the pending-connection 1:1, *not* a
+channel: channels are `group_conv_type: "channel"`; live-confirmed
+2026-11-02, observations §94), `protocol`, `group_id`,
 `epoch`, `cipher_suite`, `name`, `members.self`, `members.others`.
 
 The MLS **self conversation** (`type: 1`, `members.self` only) is

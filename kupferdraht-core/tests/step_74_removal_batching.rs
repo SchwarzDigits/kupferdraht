@@ -456,3 +456,152 @@ async fn self_removal_in_backlog_discards_group_and_room() {
         "the room must be dropped from the cache after a self-removal"
     );
 }
+
+// ── Step 132 item 13: the flush queue survives a restart, the send path heals ──
+//
+// Step 74 keeps a room whose flush the backend refused in the client's
+// memory only; after a restart the Remove proposal still sits in the
+// room's MLS state and every send there fails `PendingProposal` until
+// another Remove arrives (former open.md §73, found by the Step-117
+// browser smoke). Two layers (decided 2026-11-02): the queue is rebuilt
+// at client start from the groups' stored pending proposals, and a send
+// that meets a pending proposal flushes the room first and retries once.
+
+/// A login whose home and keystore the caller keeps, so a second client
+/// can be resumed over the same persistence.
+async fn logged_in_client_at(
+    server: &MockServer,
+    path: &std::path::Path,
+    keystore: Arc<dyn kupferdraht::keystore::SecureKeyStore>,
+) -> Arc<kupferdraht::Client> {
+    server.mock(|when, then| {
+        when.method(POST)
+            .path_includes("/v14/mls/key-packages/self/")
+            .is_true(capture_key_package_upload);
+        then.status(201);
+    });
+    common::mount_full_login_flow(server);
+    // The manager's login persists the session a `ClientBuilder::resume`
+    // finds (the Step 118 pattern).
+    let app = kupferdraht::Kupferdraht::open(path.to_path_buf(), keystore)
+        .expect("open kupferdraht")
+        .permit_http();
+    app.login(
+        common::server_config(&server.base_url()),
+        "alice@example.test".into(),
+        "pw".into(),
+        None,
+        None,
+    )
+    .await
+    .expect("login")
+    .register_device()
+    .await
+    .expect("register device")
+}
+
+fn mount_message_send(server: &MockServer) -> Mock<'_> {
+    server.mock(|when, then| {
+        when.method(POST).path("/v14/mls/messages");
+        then.status(201)
+            .header("content-type", "application/json")
+            .body(r#"{"events":[],"time":"2026-11-02T10:00:01.000Z"}"#);
+    })
+}
+
+/// Leave a client with a queued external Remove whose flush the backend
+/// refused with a 500 (the shape observations §92 records right after an
+/// external commit): the proposal sits in the room's MLS state, the retry
+/// only in the client's memory. Returns the account id for a resume.
+async fn account_with_a_refused_flush(
+    server: &MockServer,
+    path: &std::path::Path,
+    keystore: Arc<dyn kupferdraht::keystore::SecureKeyStore>,
+) -> String {
+    mount_rooms_with_group(server);
+    let _gi = mount_groupinfo_guard(server);
+    let mut refused = mount_commit_bundles(
+        server,
+        500,
+        r#"{"code":500,"label":"server-error","message":"boom"}"#,
+    );
+    let client = logged_in_client_at(server, path, keystore).await;
+    let (peer, mut events) = peer_with_client_and_carol(server);
+    events.push(message_event(&b64(
+        &peer.external_remove_proposal(CAROL_LEAF)
+    )));
+    mount_notifications_page(server, &events);
+    client
+        .sync_once(SyncSettings::default())
+        .await
+        .expect("drain with a refused flush");
+    assert_eq!(
+        refused.calls(),
+        1,
+        "the flush was attempted once and refused"
+    );
+    refused.delete();
+    let account_id = client.user_id().expect("user id").as_str().to_string();
+    drop(client);
+    account_id
+}
+
+async fn resumed_client(
+    path: &std::path::Path,
+    keystore: Arc<dyn kupferdraht::keystore::SecureKeyStore>,
+    account_id: String,
+) -> Arc<kupferdraht::Client> {
+    ClientBuilder::new()
+        .permit_http()
+        .base_dir(path.to_path_buf())
+        .keystore(keystore)
+        .account(account_id)
+        .resume()
+        .await
+        .expect("resume over the same home")
+}
+
+#[tokio::test]
+async fn restart_rebuilds_the_removal_flush_queue() {
+    let server = MockServer::start_async().await;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let keystore: Arc<dyn kupferdraht::keystore::SecureKeyStore> =
+        Arc::new(kupferdraht::keystore::InMemoryKeyStore::new());
+    let account_id = account_with_a_refused_flush(&server, dir.path(), keystore.clone()).await;
+
+    let accepted = mount_commit_bundles_ok(&server);
+    let resumed = resumed_client(dir.path(), keystore, account_id).await;
+    resumed
+        .sync_once(SyncSettings::default())
+        .await
+        .expect("first cycle after the restart");
+    assert_eq!(
+        accepted.calls(),
+        1,
+        "the queue rebuilt from the stored pending proposal must flush on the first cycle"
+    );
+}
+
+#[tokio::test]
+async fn send_commits_a_stored_pending_removal_first() {
+    let server = MockServer::start_async().await;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let keystore: Arc<dyn kupferdraht::keystore::SecureKeyStore> =
+        Arc::new(kupferdraht::keystore::InMemoryKeyStore::new());
+    let account_id = account_with_a_refused_flush(&server, dir.path(), keystore.clone()).await;
+
+    let accepted = mount_commit_bundles_ok(&server);
+    let sent = mount_message_send(&server);
+    let resumed = resumed_client(dir.path(), keystore, account_id).await;
+    let room = resumed
+        .room_or_load(&format!("{ROOM_UUID}@{DOMAIN}"))
+        .await
+        .expect("the room is in the store");
+    room.timeline()
+        .expect("timeline")
+        .send_text("after the restart".into())
+        .await
+        .expect("a send over a stored pending proposal commits it first, then sends");
+    assert_eq!(accepted.calls(), 1, "one commit covers the stored proposal");
+    assert_eq!(sent.calls(), 1, "the message goes out after the commit");
+}

@@ -196,9 +196,8 @@ async fn load_rooms_from_store_hydrates_in_memory_cache() {
         .await
         .expect("register device");
 
-    // Before hydrate: empty.
-    assert!(fresh_client.rooms().await.is_empty());
-    // After hydrate: one DM with counterpart.
+    // `rooms()` hydrates a never-filled cache itself since Step 132 (item
+    // 10); the explicit hydrate stays the pin of `load_rooms_from_store`.
     fresh_client.load_rooms_from_store().await.expect("hydrate");
     let rooms = fresh_client.rooms().await;
     assert_eq!(rooms.len(), 1);

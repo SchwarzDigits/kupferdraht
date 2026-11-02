@@ -94,7 +94,8 @@ limitations".
   stored with the other feature configs and not consumed, and the
   key-package pool is single-suite. Decided 2026-11-01 (Volker): no
   negotiation until a backend with another default appears; what ships
-  instead is a loud mismatch check at login (Step 132), so a differing
+  instead is a loud mismatch check — `KupferdrahtError::CiphersuiteMismatch`
+  wherever the feature configs are fetched (Step 132) — so a differing
   backend fails at the gate rather than on the first group add. One such
   backend appeared on 2026-11-02 — a self-hosted wire-server whose team
   default is `1` (observations §94); the decision stands, the operator

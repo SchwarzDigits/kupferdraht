@@ -412,16 +412,24 @@ impl Client {
     /// — Step 14a switched the lock type so [`Self::dm_room`] can be
     /// sync (finding §41 verb taxonomy).
     ///
+    /// A never-filled cache over a store that holds rooms — a client right
+    /// after `resume`, or a second client on the account — is hydrated
+    /// from the store first (Step 132 item 10, the path the browser's
+    /// `rooms()` and `messages()` take too); a cache a sync or a discard
+    /// emptied stays empty, and a store error leaves the cache as it is,
+    /// as [`Self::room_or_load`] does for one room.
+    ///
     /// # Panics
     /// Panics if the in-memory rooms-cache `RwLock` is poisoned.
-    #[allow(clippy::unused_async)]
-    // Contract-async: the signature is public API (matrix-rust-sdk
-    // shape / FFI await-ability); 1.98's new lint name is allowed
-    // alongside `unknown_lints` so older toolchains don't trip over
-    // the unknown lint (deny(warnings)).
-    #[allow(unknown_lints, clippy::unused_async_trait_impl)]
-    #[allow(clippy::unused_async)]
     pub async fn rooms(&self) -> Vec<Arc<Room>> {
+        let cold = !self.rooms_loaded.load(std::sync::atomic::Ordering::Acquire);
+        if cold && self.store.is_some() {
+            // Boxed: the store load backfills caches that read `rooms()` in
+            // turn (a cycle only for the compiler — the cache is warm then).
+            if let Err(e) = Box::pin(self.load_rooms_from_store()).await {
+                tracing::warn!(error = %e, "rooms: hydrating the cold cache from the store failed");
+            }
+        }
         self.rooms.read().expect("rooms lock poisoned").clone()
     }
 

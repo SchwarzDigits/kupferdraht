@@ -52,6 +52,29 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **A backend on another MLS ciphersuite is refused at login** (Step
+  132, NG-25): `KupferdrahtError::CiphersuiteMismatch { backend, ours }`
+  wherever the feature configs are fetched — both login paths and the
+  `feature-config.update` refetch — instead of the first group add
+  failing with "no KeyPackages". Measured on a self-hosted backend whose
+  team default was `1` (observations §94); the operator sets `2`.
+- **`RoomType::Channel` comes from `group_conv_type`** (Step 132): a
+  conversation the backend flags `"channel"`; Wire's `type` 3 is the
+  pending-connection 1:1 and maps to `DirectMessage` now, not `Channel`
+  (it is a Proteus conversation and never reaches the room list anyway).
+  Consumers keying on `Channel` no longer see pending connections.
+- **`Client::rooms()` hydrates a never-filled cache from the store**
+  (Step 132): right after `resume`, or on a second client of the
+  account, it answers the stored rooms without a sync — the browser's
+  `rooms()` and `messages()` take the same path, so a promoted leader tab
+  no longer answers `[]` / "unknown room" for rooms the store holds.
+- **The threading contract is written down** (Step 132): every Kotlin and
+  Swift call may block for storage, crypto and network — call from a
+  background dispatcher, never the main thread (`docs/bindings.md`
+  "Threading"); the key-package top-up generates on a blocking pool
+  natively. `docs/bindings.md` also tells the consumer not to log
+  `AssetMeta` as a whole (the generated `toString` prints `assetToken`),
+  and the `Store` trait names the atomicity its combined writes expect.
 - **THREAT_MODEL 0.7 says what the code does** (Step 133): the claims the
   production-readiness review of 2026-09-25 measured against the code are
   narrowed, none built — zeroization is best effort by type choice (key
@@ -138,8 +161,30 @@ is no skill for it — it is this short procedure:
 
 ### Fixed
 
+- **A queued Remove survives a restart and never blocks a send** (Step
+  132, former open.md §73): the removal-flush queue is rebuilt at the first
+  sync cycle from the groups' stored pending proposals (a stale staged
+  commit is dropped first), and a send that meets a pending proposal
+  commits it for the room and tries once more — before, after a refused
+  flush and a restart every send in the room failed
+  `GroupStateError(PendingProposal)` until another Remove arrived.
+- **The browser's in-memory asset send emits its own `Append`** (Step
+  132): `sendBytes` shows the sender its row at once, as `send_file`
+  does, instead of on the next timeline read.
+- **Windows names are path-unsafe ids** (Step 132): `:`, the reserved
+  device names (`CON`, `NUL`, `COM1`…, any case, with or without an
+  extension) and a trailing dot or space are refused like separators.
+
 ### Security
 
+- **Transport hardening** (Step 132, the 2026-09-25 review's M1–M3): the
+  HTTP client follows no redirect — a 3xx is the status it is, a 307 never
+  re-sends a login body elsewhere; a `ws://` socket URL is refused without
+  `permit_http`, like `http://`, before any connection, natively and in the
+  browser; a push socket's handshake has a deadline, and a keepalive ping
+  the server does not answer within one interval renews the legacy socket
+  instead of waiting for the next write to fail. The URL scheme is checked
+  before the home or the keystore is touched.
 - **`crypto-bigint` 0.5 is out of the dependency graph** (RUSTSEC-2026-0387,
   Step 128): every P-256 operation — the HPKE of key packages and
   Welcomes, the ECDSA signatures on MLS messages, the PIN recovery's OPRF
