@@ -95,7 +95,10 @@ limitations".
   key-package pool is single-suite. Decided 2026-11-01 (Volker): no
   negotiation until a backend with another default appears; what ships
   instead is a loud mismatch check at login (Step 132), so a differing
-  backend fails at the gate rather than on the first group add.
+  backend fails at the gate rather than on the first group add. One such
+  backend appeared on 2026-11-02 — a self-hosted wire-server whose team
+  default is `1` (observations §94); the decision stands, the operator
+  sets the team's default to `2` for Kupferdraht devices.
 - **NG-26** No processed-ids journal for the pull path — the Step-64 dedup
   catches a notification whose id equals the page cursor; a crash after
   dispatch and before `save_sync_state`, where the unsaved notification

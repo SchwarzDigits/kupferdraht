@@ -61,7 +61,7 @@ consumer asked for it, the `Option` accessors mirror matrix-rust-sdk by
 ADR-0009, the two-step login is by design (the device cap asks the user),
 and the CLI is a thin wrapper for live testing (`docs/cli.md`).
 
-- **erg-C** three error messages mislead or give no hint: `pipeline.rs` "has no group_id — run sync_metadata first" (the fix is to join; mirror the typed `KupferdrahtError::MlsGroupMissing` text), `pipeline.rs` "{op}: {room_id} not in cache" (add "run sync / load_rooms_from_store"), `sqlite/mod.rs` "storage column … not valid UTF-8" (add a corruption / recovery hint).
+- **erg-C** four error messages mislead or give no hint: `pipeline.rs` "has no group_id — run sync_metadata first" (the fix is to join; mirror the typed `KupferdrahtError::MlsGroupMissing` text), `pipeline.rs` "{op}: {room_id} not in cache" (add "run sync / load_rooms_from_store"), `sqlite/mod.rs` "storage column … not valid UTF-8" (add a corruption / recovery hint); and `invite_members` "Wire returned no KeyPackages for … (pool exhausted or user has no devices?)", which on a backend with another default ciphersuite names the wrong causes (observations §94; the loud check of Step 132 removes the case at login).
 - **erg-D.11** `kupferdraht-cli doctor` — a health check for live testing: session valid, device registered, MLS state present, key-package pool depth, store path, last sync, `file_sharing` / `receipt_mode`. Absorbs the former `status --verbose` idea.
 
 ### Live verification backlog
@@ -71,7 +71,6 @@ test stage (httpmock cannot stand in for openmls or for an official
 client). Work through them in the next session that is on the stage
 anyway; a verified item leaves here (the fact goes to `docs/observations.md`).
 
-- **gap-B.11** the asset send / receive happy path end to end;
 - **gap-B.14** an inbound asset from Wire Web to Kupferdraht;
 - **gap-B.15** the `WIRE_RECEIPT_MODE` off path against a live backend;
 - **gap-B.13** a live `/feature-configs` fixture captured (the tests use a synthesised one);
@@ -137,6 +136,16 @@ retrospective are Step 129 (`LastRead`, personal task list) since
 - **Local search** — under E2EE only the client can search;
   SQLCipher + FTS5 native, own path needed for IndexedDB. At a few
   thousand messages this stops being a luxury.
+
+### Dependency lines
+
+- **Kupferdraht's own RustCrypto crates to the 0.11 / 0.13 line** —
+  `aes-gcm` 0.10, `hmac` and `hkdf` 0.12, `sha2` 0.10 and `ed25519-dalek`
+  2 sit beside the 0.11 / 0.13 / 3 line the openmls fork brought with
+  Step 128, so `cargo deny` warns about duplicate families (`aes`,
+  `aes-gcm`, `aead`, `cipher`, `ed25519-dalek`, …). Moving them touches
+  receipt, prekey and PIN code that has known-answer tests, with no
+  advisory behind it; a candidate, not a step (decided 2026-11-02).
 
 ### Device trust
 
@@ -320,17 +329,20 @@ license file where ORT reports NOASSERTION.
 Since Step 127 (ADR-0042) the engine comes from three SchwarzDigits forks
 consumed by git tag: rusqlite `v0.37.0-sqlite3mc-2.5.1` (branch
 `sqlite3mc/0.37`), refinery `v0.9.1-sqlite3mc` (`sqlite3mc/0.9`), openmls
-`sqlite_storage-v0.3.0-sqlite3mc` (`sqlite3mc/sqlite_storage-0.3`). The
-openmls and SQLite3MultipleCiphers forks of the organisation are also the
-staging area for upstream pull requests, so a long-lived downstream
-branch now sits beside the PR heads; the forks' `main` stays identical
-to upstream. GitHub's "ahead/behind" on that branch measures against
-upstream `main`, while the branch tracks the `openmls-v0.9.0` release
-tag, which is not on `main`: seven of the eight "ahead" commits are
-upstream's own release-branch commits, and `main`'s `sqlite_storage` is
-unreleased code (async storage, rusqlite 0.40, refinery 0.10). The branch
-is not rebased onto `main` on purpose; the next branch comes from the
-next release tag.
+`openmls-v0.9.0-schwarzdigits.1` (branch `schwarzdigits/openmls-0.9` — since Step 128
+the one branch per openmls release line that carries every SchwarzDigits
+change under one tag, `sqlite_storage` over the forks and the p256 0.14
+providers; the first tag `sqlite_storage-v0.3.0-sqlite3mc` stays for the
+consumers that pin it). The openmls and SQLite3MultipleCiphers forks of
+the organisation are also the staging area for upstream pull requests, so
+a long-lived downstream branch now sits beside the PR heads; the forks'
+`main` stays identical to upstream. GitHub's "ahead/behind" on that
+branch measures against upstream `main`, while the branch tracks the
+`openmls-v0.9.0` release tag, which is not on `main`: all but the last
+two "ahead" commits are upstream's own release-branch commits, and
+`main`'s `sqlite_storage` is unreleased code (async storage, rusqlite
+0.40, refinery 0.10). The branch is not rebased onto `main` on purpose;
+the next branch comes from the next release tag.
 
 Open: the branch policy is to be confirmed with the maintainer of those
 forks; the next bump — when `openmls_sqlite_storage` releases on rusqlite

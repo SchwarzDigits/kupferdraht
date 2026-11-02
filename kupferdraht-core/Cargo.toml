@@ -64,8 +64,11 @@ rusqlite = { git = "https://github.com/SchwarzDigits/rusqlite", tag = "v0.37.0-s
 refinery = { git = "https://github.com/SchwarzDigits/refinery", tag = "v0.9.1-sqlite3mc", version = "0.9", features = ["rusqlite"] }
 # Persistent openmls state backed by the shared `rusqlite` (Step 1c.5) —
 # `mls.db` on native and, over sqlite-remote-vfs, in the browser (Step 91,
-# Step 111). The fork branch is upstream's 0.3.0 over the two forks above.
-openmls_sqlite_storage = { git = "https://github.com/SchwarzDigits/openmls", tag = "sqlite_storage-v0.3.0-sqlite3mc", version = "0.3" }
+# Step 111). The openmls fork's branch `schwarzdigits/openmls-0.9` carries
+# every SchwarzDigits change on the 0.9 release line under one tag: this
+# crate is upstream's 0.3.0 over the two forks above (Step 127), the two
+# crypto crates below are upstream's 0.6.0 on the p256 0.14 line (Step 128).
+openmls_sqlite_storage = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.0-schwarzdigits.1", version = "0.3" }
 # Step 1c: MLS (RFC 9420). Wire targets ciphersuite 0x0002
 # (MLS_128_DHKEMP256_AES128GCM_SHA256_P256) with ECDSA_SECP256R1_SHA256
 # signatures so iOS clients can back keys with Secure Enclave (LEARNINGS §1.2).
@@ -74,9 +77,14 @@ openmls_sqlite_storage = { git = "https://github.com/SchwarzDigits/openmls", tag
 # stay readable, and for Kupferdraht's self-describing JsonCodec both
 # feature states wrote identical bytes anyway (observations §73).
 openmls = "0.9"
-openmls_rust_crypto = "0.6"
 openmls_traits = "0.6"
-openmls_basic_credential = "0.6"
+# Step 128: the HPKE / ECDSA P-256 providers from the openmls fork's branch
+# above — upstream's crypto-crate migration (openmls/openmls#2249, `p256`
+# 0.14, `hpke-rs` 0.8) ahead of an openmls release, so `crypto-bigint` 0.5
+# (RUSTSEC-2026-0387) is out of the graph. Code upstream's, manifests only;
+# `openmls_traits` resolves to the crates.io crate the line above names.
+openmls_rust_crypto = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.0-schwarzdigits.1", version = "0.6" }
+openmls_basic_credential = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.0-schwarzdigits.1", version = "0.6" }
 tls_codec = { version = "0.5", features = ["derive"] }
 # Step 4: Wire's text-message envelope is a Protobuf
 # `GenericMessage`. `prost` + the build-time `prost-build` plugin
@@ -115,22 +123,30 @@ md-5 = "0.10"
 # 0.8 is what `aes-gcm` 0.10 already pulls in transitively; pinning
 # the same major keeps cargo's resolution single-version.
 rand = "0.8"
+# Step 128: `voprf-ng` samples its blinding scalar through rand_core 0.10's
+# `TryRng`; `recovery/oprf.rs` adapts the caller's rand 0.8 generator to it.
+rand_core_0_10 = { package = "rand_core", version = "0.10" }
 # Step 9 (ADR-0010): Ed25519 keypair generation for the GPL-free
 # Wire-compatible prekey module (`encryption::prekeys`), which
 # hand-emits the CBOR prekey bundle Wire's `POST /clients`
 # expects. `zeroize` is a default feature but
 # named explicitly (Step 70 / THREAT_MODEL G4): the SigningKey wipe
-# must survive a future `default-features = false`.
-ed25519-dalek = { version = "2", features = ["zeroize"] }
+# must survive a future `default-features = false`. `rand_core` is what
+# `SigningKey::generate` needs; `openmls_basic_credential` unified it in
+# until it moved to ed25519-dalek 3 (Step 128).
+ed25519-dalek = { version = "2", features = ["zeroize", "rand_core"] }
 # Step 112 (ADR-0035): recovery data — the account's seed sealed with a PIN.
 # The OPRF of RFC 9497 (mode OPRF, P256-SHA256) with the PIN service
-# (`voprf` over the `p256` curve's `voprf` feature), Argon2id of the PIN,
+# (`voprf` over the `p256` curve's `oprf` feature), Argon2id of the PIN,
 # AES-256-GCM (already in the tree through openmls), the local PIN check
 # (HMAC-SHA256) and Unicode NFC of the PIN. No own cryptography.
-voprf = { version = "0.5", default-features = false, features = ["alloc"] }
+# Step 128: `voprf-ng` is the openmls maintainer's release of upstream
+# `voprf`'s 0.6 pre-release on the p256 0.14 line — same API, same RFC
+# 9497 vectors; the manifest line moves back when `voprf` 0.6 ships.
+voprf = { package = "voprf-ng", version = "0.6", default-features = false, features = ["alloc"] }
 # Step 124: the receipts the PIN service gives attempts back for are ECDSA
 # over P-256 (`ecdsa` — already compiled in through openmls's P-256 suite).
-p256 = { version = "0.13", features = ["voprf", "hash2curve", "ecdsa"] }
+p256 = { version = "0.14", features = ["oprf", "hash2curve", "ecdsa"] }
 argon2 = { version = "0.5", default-features = false, features = ["alloc", "zeroize"] }
 aes-gcm = "0.10"
 hmac = "0.12"
@@ -242,7 +258,7 @@ tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 # Step 112: a deterministic OPRF blind, to reproduce the PIN service's
 # interop values (`danger` exposes it; tests only).
-voprf = { version = "0.5", default-features = false, features = ["alloc", "danger"] }
+voprf = { package = "voprf-ng", version = "0.6", default-features = false, features = ["alloc", "danger"] }
 # Mocked HTTP server for integration tests against the wire::http client
 # without touching live Wire staging.
 httpmock = "0.8"

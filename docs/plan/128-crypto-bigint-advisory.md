@@ -1,9 +1,25 @@
 # Step 128 — `crypto-bigint` 0.5 leaves the dependency graph (RUSTSEC-2026-0387)
 
-**Status: commissioned 2026-11-01** (transferred from open.md §81, where the
-advisory was tracked since 2026-10-30; the route below was measured on
-2026-10-31 as a candidate and is now the step). Removes the `deny.toml`
-ignore for RUSTSEC-2026-0387.
+**Status: in progress 2026-11-02** (commissioned 2026-11-01, transferred
+from open.md §81, where the advisory was tracked since 2026-10-30; the
+route below was measured on 2026-10-31 as a candidate and is now the
+step). Removes the `deny.toml` ignore for RUSTSEC-2026-0387. Phase-1
+decisions (Volker, 2026-11-02): (a) one collective fork branch per
+openmls release line — `schwarzdigits/openmls-0.9`, tag `openmls-v0.9.0-schwarzdigits.1`
+for all three crates Kupferdraht takes from the fork, so every site names
+one source; the first tag `sqlite_storage-v0.3.0-sqlite3mc` stays for the
+consumers that pin it, and an openmls release that catches up is cleaned
+out of that one branch; (b) `voprf-ng`, the manifest line moves back when
+`voprf` 0.6 ships; (c) the duplicate-crate families stay — Kupferdraht's
+own RustCrypto crates to the 0.11 / 0.13 line are an open.md §64
+candidate. Branch `step/128-crypto-bigint-advisory`. Smoked 2026-11-02
+against a self-hosted wire-server with the official web client on the
+other side (observations §94): a Welcome from the web client opened here,
+Kupferdraht's Welcome opened there, external-commit joins in both roles,
+text both ways, the stack's two-account Kupferdraht smoke 18 of 18; the
+PIN export / restore round trip is not live-smoked (browser-only, no PIN
+service on that stack) — its RFC 9497 interop vectors and receipt
+known-answer tests pass on the new line.
 
 ## Problem
 

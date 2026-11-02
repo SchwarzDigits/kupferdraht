@@ -33,8 +33,11 @@ That one line is the whole integration. Kupferdraht brings its own
 SQLite: `rusqlite`, `refinery` and `openmls_sqlite_storage` come from the
 SchwarzDigits forks whose `libsqlite3-sys` compiles the SQLite3 Multiple
 Ciphers amalgamation (whole-database ChaCha20-Poly1305, ADR-0021; the
-forks are git dependencies by tag, ADR-0042), and Cargo resolves them
-transitively — nothing to patch, nothing to configure.
+forks are git dependencies by tag, ADR-0042), and so do openmls's P-256
+providers `openmls_rust_crypto` and `openmls_basic_credential` — upstream's
+p256 0.14 migration ahead of an openmls release, which keeps
+`crypto-bigint` 0.5 (RUSTSEC-2026-0387) out of the graph (Step 128). Cargo
+resolves them transitively — nothing to patch, nothing to configure.
 
 The one constraint that follows: **a dependency graph holds one
 `libsqlite3-sys`** (its `links = "sqlite3"`). An application that keeps

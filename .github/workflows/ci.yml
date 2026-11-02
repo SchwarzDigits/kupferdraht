@@ -48,6 +48,14 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      # The Step 90 provenance pin reads the resolved fork checkout through
+      # `cargo metadata --offline`, which needs every package of Cargo.lock
+      # in the local registry — including the ones no target builds here
+      # (the lockfile is the maximal resolve). A build fetches only what it
+      # compiles; `cargo fetch` without `--target` fetches them all.
+      - name: cargo fetch
+        run: cargo fetch --locked
+
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
 

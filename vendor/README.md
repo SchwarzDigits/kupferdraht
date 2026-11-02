@@ -18,7 +18,10 @@ amalgamation that lives in the fork at `libsqlite3-sys/sqlite3mc/`, with
 upstream's `bundled` flag set plus `SQLITE_TEMP_STORE=2`. refinery and
 `openmls_sqlite_storage` come from sibling forks on that rusqlite
 (github.com/SchwarzDigits/refinery, github.com/SchwarzDigits/openmls branch
-`sqlite3mc/sqlite_storage-0.3`), so the graph holds one rusqlite. No root
+`schwarzdigits/openmls-0.9` — the one branch that carries every SchwarzDigits
+change on the openmls 0.9 release line under one tag, since Step 128 also
+upstream's p256 0.14 migration of `openmls_rust_crypto` and
+`openmls_basic_credential`), so the graph holds one rusqlite. No root
 `[patch]`, no system SQLite, no pkg-config, no OpenSSL. The earlier
 `[patch.crates-io]` stand-in that lived here (Steps 90–126) is gone: a
 `[patch]` is honoured only in the root manifest of the build, so every
@@ -65,3 +68,12 @@ control and the at-rest byte layout.
 4. **Never** pass `SQLITE_EXTRA_INIT=sqlite3mc_initialize` (2.5.x registers
    itself; a second registration fails initialization); keep the
    engine-identity pins.
+5. **openmls release bump** — a new collective branch
+   `schwarzdigits/openmls-<line>` from upstream's release tag, carrying
+   what upstream has not released yet (today: `sqlite_storage` over the
+   two forks, and for the two crypto crates upstream's p256 0.14 migration
+   openmls/openmls#2249 plus the `hpke-rs` 0.8 lines, with
+   `openmls_traits` from crates.io in each manifest) and dropping what it
+   has; one tag `openmls-v<release>-schwarzdigits.<n>` for the three crates,
+   named at every site in `kupferdraht-core/Cargo.toml`. An earlier tag
+   stays as long as a Kupferdraht release tag names it.

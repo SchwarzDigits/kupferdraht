@@ -63,7 +63,10 @@ the largest, so they ship as one step with one gate.
 11. **AES-256-CBC known-answer vectors (former gap-B.12)** are absent;
     they come from an independent tool (`openssl enc`), never from a Wire
     repository (ADR-0011 revision 1.2).
-12. **Ciphersuite mismatch is silent (NG-25).** The backend's
+12. **Ciphersuite mismatch is silent (NG-25).** Measured live on
+    2026-11-02 (observations §94): a self-hosted backend with
+    `defaultCipherSuite: 1` surfaces as `room-invite` "Wire returned no
+    KeyPackages … (pool exhausted or user has no devices?)". The backend's
     `mls.config.defaultCipherSuite` is stored and never compared with
     `MlsClient::MLS_CIPHERSUITE`; a backend on another suite fails on the
     first group add with no hint.

@@ -41,7 +41,7 @@ pub(crate) fn blind(
     pin: &[u8],
     rng: &mut (impl RngCore + CryptoRng),
 ) -> Result<Blinded, KupferdrahtError> {
-    let result = OprfClient::<Suite>::blind(pin, rng)
+    let result = OprfClient::<Suite>::blind(pin, &mut Rng08(rng))
         .map_err(|e| KupferdrahtError::Generic(format!("OPRF blind: {e:?}")))?;
     Ok(Blinded {
         element: element_bytes(&result.message.serialize())?,
@@ -96,6 +96,26 @@ pub(crate) fn evaluate_as_service(secret_key: &[u8; 32], blinded: &[u8]) -> [u8;
     let element = voprf::BlindedElement::<Suite>::deserialize(blinded).expect("an element");
     element_bytes(&server.blind_evaluate(&element).serialize()).expect("33 bytes")
 }
+
+/// A rand 0.8 generator seen through `rand_core` 0.10's fallible traits —
+/// `voprf-ng` samples its blinding scalar through `TryRng`.
+struct Rng08<'a, R: RngCore + CryptoRng>(&'a mut R);
+
+impl<R: RngCore + CryptoRng> rand_core_0_10::TryRng for Rng08<'_, R> {
+    type Error = core::convert::Infallible;
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        Ok(self.0.next_u32())
+    }
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        Ok(self.0.next_u64())
+    }
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+        self.0.fill_bytes(dst);
+        Ok(())
+    }
+}
+
+impl<R: RngCore + CryptoRng> rand_core_0_10::TryCryptoRng for Rng08<'_, R> {}
 
 #[cfg(test)]
 mod tests {
