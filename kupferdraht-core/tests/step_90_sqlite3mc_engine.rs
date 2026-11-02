@@ -254,7 +254,10 @@ fn lockfile_resolves_the_sqlite3mc_line_to_the_forks() {
 }
 
 /// The manifest directory of `package` from `source` as the workspace
-/// resolves it (`cargo metadata` on the committed lockfile, offline).
+/// resolves it (`cargo metadata` on the committed lockfile, offline —
+/// every package of the lockfile must be in the local registry, also
+/// the ones no target builds here; `cargo fetch --locked` puts it there,
+/// as CI does before the tests).
 fn resolved_manifest_dir(package: &str, source: &str) -> PathBuf {
     let output = std::process::Command::new(env!("CARGO"))
         .args(["metadata", "--format-version", "1", "--locked", "--offline"])
@@ -263,7 +266,7 @@ fn resolved_manifest_dir(package: &str, source: &str) -> PathBuf {
         .expect("run cargo metadata");
     assert!(
         output.status.success(),
-        "cargo metadata: {}",
+        "cargo metadata (needs every lockfile package locally — run `cargo fetch --locked` first): {}",
         String::from_utf8_lossy(&output.stderr)
     );
     let metadata: serde_json::Value =
