@@ -86,13 +86,14 @@ pub struct Message {
     pub room_id: String,
     /// Qualified user id of the sender — the leaf openmls authenticated
     /// as the signer (Step 95a, ADR-0027), never the backend-written
-    /// envelope. Exception: a signer with a non-Basic (e2ei X.509)
-    /// credential is still attributed by the envelope's
-    /// `qualified_from` until X.509 identity parsing lands.
+    /// envelope. A message whose signer carries no Basic credential (an
+    /// e2ei X.509 certificate) is dropped before it becomes a `Message`
+    /// (Step 135).
     pub sender_user_id: String,
     /// Wire `client_id` of the sending device, from the same
-    /// authenticated leaf. `None` only on the X.509 path when the
-    /// envelope names no device.
+    /// authenticated leaf. Set for every inbound message since Step 135
+    /// (a Basic leaf always carries one); the `Option` stays for API
+    /// stability.
     pub sender_device_id: Option<String>,
     /// Decoded `GenericMessage` content. Step 5c emits only
     /// [`MessageBody::Text`]; unknown protobuf oneof variants are

@@ -314,9 +314,9 @@ since typing is live-only and a drain can never return it. The pull path:
    (`encryption/leaf_identity.rs`) before openmls drops it, and
    `sync/sender.rs` decides — the envelope's `qualified_from` /
    `from_client` is a cross-check only (mismatch → `warn!`, dispatch
-   under the MLS sender), an X.509 signer keeps the envelope
-   attribution until X.509 parsing is verified, a malformed Basic
-   signer drops the message. Every handler (text, reaction, receipt,
+   under the MLS sender), an X.509 signer drops the message until
+   X.509 parsing is verified (Step 135), a malformed Basic signer
+   drops it too. Every handler (text, reaction, receipt,
    task creator, the ADR-0018 case gate, marker, asset, ephemeral)
    sees only the attributed sender. `conversation.typing` is not an
    MLS message and stays envelope-attributed by design. An inbound

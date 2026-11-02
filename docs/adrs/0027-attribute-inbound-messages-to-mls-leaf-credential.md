@@ -123,28 +123,40 @@ Options B and E.
    cross-check only: on mismatch the message is dispatched under the MLS
    sender and a `warn!` records both values. A Basic credential that does
    not parse as W-4 is malformed and dropped with a `warn!`.
-2. **X.509 senders keep the envelope attribution until X.509 is
-   verified.** A message signed by a leaf with a non-Basic credential is
-   attributed to the envelope as before this decision and logged at
-   `debug!`. X.509 identity parsing is a follow-up step, started once a
-   real e2ei certificate can be observed; a public `sender_verified` flag
-   is weighed there.
+2. **X.509 senders are dropped until X.509 is verified** (Option D —
+   amended 2026-11-02 by Step 135, see the revision history; the decision
+   of 2026-09-26 was Option E). A message signed by a leaf with a
+   non-Basic credential yields no authenticated identity, so it is
+   dropped and logged at `warn!` with the message id and the credential
+   class, like a malformed Basic leaf. Reason: Kupferdraht never enrols
+   (NG-7), the own instances run without e2ei and no embedder runs in an
+   e2ei team, so Option E's regression was hypothetical while its forgery
+   path was open on every deployment — the backend could attribute a
+   message signed by an X.509 leaf to whomever the envelope named. X.509
+   identity parsing stays a follow-up step, started once a real e2ei
+   certificate can be observed; a public `sender_verified` flag is
+   weighed there, not here — every sender surfaced today is
+   authenticated.
 
 ## Consequences
 
 ### Positive
 
-- A backend can no longer re-attribute a Basic-credential member's
-  messages; G1 holds for them, and the ADR-0018 case gate becomes what it
-  specifies (task creators, reactions, receipts, markers likewise).
+- A backend can no longer re-attribute a member's messages; G1 holds for
+  every surfaced message (Basic-credential senders since Step 95a, and no
+  other sender is surfaced since Step 135), and the ADR-0018 case gate
+  becomes what it specifies (task creators, reactions, receipts, markers
+  likewise).
 - Wire parity: Kupferdraht attributes messages the way official clients do.
 - One parse path for Wire leaf identities (member lists, kick, sender).
 
 ### Negative
 
-- Messages signed by e2ei (X.509) leaves stay attributed by the
-  unauthenticated envelope until the follow-up step; the public API does
-  not mark which senders are authenticated.
+- Messages signed by e2ei (X.509) leaves are not delivered until the
+  follow-up step parses a verified certificate identity (dropped with a
+  `warn!`, Step 135); a team with enrolled devices would miss them. The
+  public API carries no `sender_verified` flag — none is needed while
+  every surfaced sender is authenticated.
 - A member can still re-label its *own* leaf via an Update / UpdatePath
   commit (the RFC 9420 §5.3.1 successor check is not enforced); rejecting
   such a commit is undone today by the `WrongEpoch` → rejoin heal.
@@ -190,3 +202,4 @@ Options B and E.
 ## Revision History
 
 - 2026-09-26: Created
+- 2026-11-02: Decision 2 amended (Step 135, from finding H1 of the external security scan of 2026-11-02; Volker Zöpfel): Option D replaces Option E — a message signed by a non-Basic leaf is dropped with a `warn!` instead of attributed through the envelope, since nothing authenticated that attribution and no deployment of Kupferdraht runs with e2ei. The Consequences follow. This is the follow-up the 2026-09-26 text promised, cut to what can be built without a certificate; X.509 identity parsing stays a later step.

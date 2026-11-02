@@ -194,8 +194,9 @@ for `Credential::X509`).
   to the W-4 identity of the leaf openmls authenticated as its
   signer, not to the envelope's `qualified_from` / `from_client`
   (a cross-check only — a mismatch is logged). A non-Basic (e2ei
-  X.509) leaf keeps the envelope attribution until X.509 identity
-  parsing is verified; a malformed Basic leaf drops the message.
+  X.509) leaf yields no authenticated identity and the message is
+  dropped (Step 135) until X.509 identity parsing is verified; a
+  malformed Basic leaf drops the message too.
 
 **Source:** the wire-android repository (GPL-3.0), read as a
 protocol observation; the file and date were not recorded. LEARNINGS

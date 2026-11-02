@@ -967,7 +967,7 @@ mod mls_envelope_tests {
 
     /// A `subconv` id is not the sender's client id: it must not become
     /// the envelope's device claim (it would fake a mismatch against the
-    /// leaf, and on the X.509 path become the attributed device).
+    /// leaf).
     #[test]
     fn a_subconv_id_is_not_a_device_claim() {
         let ev = serde_json::json!({

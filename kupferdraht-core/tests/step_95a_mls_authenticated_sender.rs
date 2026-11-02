@@ -586,11 +586,12 @@ async fn task_creator_is_the_mls_sender() {
     assert_eq!(tasks[0].creator_user_id, "bob-uuid@example.test");
 }
 
-/// ADR-0027 d.2 — preservation pin: a message signed by an X.509 leaf
-/// keeps today's envelope attribution (no regression for mixed e2ei
-/// teams) until the X.509 follow-up step.
+/// ADR-0027 d.2 as amended by Step 135: a message signed by an X.509 leaf
+/// is dropped end to end — nothing authenticated the envelope's claim —
+/// and the drop is logged with the message id; the sync itself succeeds.
 #[tokio::test]
-async fn x509_sender_keeps_the_envelope_attribution() {
+async fn x509_sender_drops_the_message() {
+    let events = captured_events();
     let server = MockServer::start();
     let (client, store) = logged_in_client(&server).await;
     mount_room(&server, "wire_member", "wire_member");
@@ -612,8 +613,15 @@ async fn x509_sender_keeps_the_envelope_attribution() {
 
     assert_eq!(
         row_sender(&store, "m-x509").await,
-        Some(("bob-uuid@example.test".into(), "bobx509dev".into())),
-        "an X.509 sender is attributed by the envelope, as before"
+        None,
+        "an X.509-signed message is never attributed through the envelope (Step 135)"
+    );
+    assert!(
+        warns(&events)
+            .iter()
+            .any(|w| w.contains("m-x509") && w.contains("credential")),
+        "the drop is logged naming the message and the credential: {:?}",
+        warns(&events)
     );
 }
 

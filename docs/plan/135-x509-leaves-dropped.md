@@ -1,6 +1,6 @@
 # Step 135 — X.509 leaves: drop instead of envelope attribution
 
-**Status: commissioned 2026-11-02** (from the review of the external
+**Status: in progress 2026-11-02** (branch `step/135-x509-leaves-dropped`; commissioned 2026-11-02 from the review of the external
 security scan of 2026-11-02, finding H1 — `sync/sender.rs:50`; the
 decision below is Volker's, the same day). ADR-0027 decision 2 keeps the
 envelope attribution for a sender whose leaf carries a non-Basic
