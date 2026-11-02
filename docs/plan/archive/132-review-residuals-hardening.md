@@ -1,6 +1,11 @@
 # Step 132 — Review residuals: transport, platform and threading hardening
 
-**Status: in progress 2026-11-02** — decided (Volker): redirect policy
+**Status: MERGED 2026-11-02** — `0818b6f` (the step) and `2eb590b` (the
+browser test takes the socket builder's `permit_http`) on
+`step/132-review-residuals-hardening`, merged to `main` as PR #10
+(`507e3c9`); gate green (1329 tests), CI green, smoked 2026-11-02 against
+the self-hosted stack; retrospective LEARNINGS §5.72. Archived 2026-11-02
+with this header. Decided (Volker): redirect policy
 none; item 13 stays in this step with both layers (the queue rebuilt at
 the first sync cycle from the groups' stored pending proposals, a stale
 staged commit dropped first; a send that meets a pending proposal commits
