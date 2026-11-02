@@ -1,7 +1,13 @@
 # Step 78 — Native sign-out and account purge (`Kupferdraht::logout`, `Kupferdraht::forget_account`)
 
-**Status: in progress 2026-11-01** on `step/78-local-account-purge`, off
-`main` at the `v0.1.0` tag. Commissioned 2026-09-10 as "Local account purge
+**Status: MERGED 2026-11-01** — `a53da11` on `step/78-local-account-purge`
+off the `v0.1.0` tag, merged to `main` as PR #6 (`c3f2297`) together with
+nine docs commits that restructured open.md; gate green (1295 tests), no
+smoke (the backend surface is unchanged). Scope shipped: `Kupferdraht::logout(&client,
+PurgeOptions, password)`, `Kupferdraht::forget_account`, `PurgeOptions`
+public, CLI `logout --purge-local` and `account-forget`; retrospective
+LEARNINGS §5.69. Archived 2026-11-02 with this header. Commissioned
+2026-09-10 as "Local account purge
 (destroy_store)" (Kalium-audit follow-up — Volker: too critical to backlog).
 Re-commissioned 2026-11-01 with the consumer-side write-up of the first Rust
 embedder (a TUI; its open.md §8 and §10), folded in below with the

@@ -1,6 +1,12 @@
 # Step 128 — `crypto-bigint` 0.5 leaves the dependency graph (RUSTSEC-2026-0387)
 
-**Status: in progress 2026-11-02** (commissioned 2026-11-01, transferred
+**Status: MERGED 2026-11-02** — `ad2bea8` (the step), `2668029` (CI fetches
+every lockfile package before the offline provenance pin) and `63cbd5f`
+(the smoke recorded) on `step/128-crypto-bigint-advisory`, merged to
+`main` as PR #7 (`9754900`); gate and CI green, smoked 2026-11-02 against a
+self-hosted wire-server with the official web client (observations §94);
+retrospective LEARNINGS §5.70. Archived 2026-11-02 with this header.
+(Commissioned 2026-11-01, transferred
 from open.md §81, where the advisory was tracked since 2026-10-30; the
 route below was measured on 2026-10-31 as a candidate and is now the
 step). Removes the `deny.toml` ignore for RUSTSEC-2026-0387. Phase-1
