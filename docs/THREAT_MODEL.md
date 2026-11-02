@@ -1,6 +1,6 @@
 # Kupferdraht Threat Model
 
-**Version:** 0.6 (Draft) **Author:** Volker Zöpfel **Date:** 2026-10-08 **Status:** working draft, for review by Markus Troßbach
+**Version:** 0.7 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-02 **Status:** working draft, for review by Markus Troßbach
 
 ------
 
@@ -30,7 +30,7 @@ Kupferdraht differs from Wire's architecture in one deliberate point: there is n
 
 That separation has security costs: plaintext has to cross the FFI boundary, because Kalium knows the application logic and Core Crypto the primitives. Type information is lost. Lifecycle management (zeroization, ownership) becomes a matter of convention instead of a compiler guarantee.
 
-Kupferdraht keeps application logic and crypto primitives in the same Rust crate. Plaintext comes into being in the Rust heap, is processed, encrypted and zeroized there, with no detour across a language boundary. UniFFI generates the bindings for Kotlin, Swift and WASM, but the consumer boundary lies *outside* the application logic, not in the middle of it. Zeroization is thus a compiler guarantee (through Rust `Drop` and `zeroize`), not a convention.
+Kupferdraht keeps application logic and crypto primitives in the same Rust crate. Plaintext comes into being in the Rust heap, is processed and encrypted there, with no detour across a language boundary. UniFFI generates the bindings for Kotlin, Swift and WASM, but the consumer boundary lies *outside* the application logic, not in the middle of it. Key material and credentials are zeroized when their holders drop (Rust `Drop` and `zeroize`) — a property of the types chosen, which the language keeps for every holder that has it; what is not wrapped is not wiped (G4 names it).
 
 This is not architectural dogma but a security-relevant decision.
 
@@ -48,11 +48,11 @@ Embedding web consumers therefore need a build pipeline that loads WASM. Static 
 
 Three actors:
 
-**The user** is the person whose identity and communication Kupferdraht protects. Trust in Kupferdraht comes from code review, reproducible builds and open-source inspection.
+**The user** is the person whose identity and communication Kupferdraht protects. Trust in Kupferdraht comes from code review and open-source inspection; reproducible or attested builds are not provided.
 
 **The embedding product** (Natrium, the CivicSeal client, other integrators) calls Kupferdraht correctly: it keeps the API contract, handles plaintext responsibly after decryption, and does not serialise session handles into persistent storage.
 
-**The server** is the counterpart in the Wire backend or a compatible MLS delivery infrastructure. Kupferdraht does *not* trust the server with message content. Kupferdraht trusts the server with administrative operations such as group-membership management; that relationship is formalised through MLS mechanisms and visible to every participant (see `wire/mls-deviations.md` W-5). **Limitation (ADR-0027):** under BasicCredentials the server is also the key directory: it distributes the KeyPackages with which devices are added to groups. A malicious server can therefore inject a device with an arbitrary identity (a "ghost device") that then reads along and sends MLS-authentically "as" that identity. This is the same trust model as official Wire without e2ei; the countermeasures are e2ei certificates (a non-goal) and comparing the MLS thumbprints per device. Since Step 95d Kupferdraht lists the devices of every room with their MLS thumbprint (comparable to the "MLS thumbprint" of the official apps) and reports every change in a room's devices against the last stored state, so an injected device becomes visible; it is not prevented. The statement "no trust for content" therefore holds only against a server that does not inject devices.
+**The server** is the counterpart in the Wire backend or a compatible MLS delivery infrastructure. Under A7 (the server injects no device) Kupferdraht does *not* trust the server with message content. Kupferdraht trusts the server with administrative operations such as group-membership management; that relationship is formalised through MLS mechanisms and visible to every participant (see `wire/mls-deviations.md` W-5). **Limitation (ADR-0027):** under BasicCredentials the server is also the key directory: it distributes the KeyPackages with which devices are added to groups. A malicious server can therefore inject a device with an arbitrary identity (a "ghost device") that then reads along and sends MLS-authentically "as" that identity. This is the same trust model as official Wire without e2ei; the countermeasures are e2ei certificates (a non-goal) and comparing the MLS thumbprints per device. Since Step 95d Kupferdraht lists the devices of every room with their MLS thumbprint (comparable to the "MLS thumbprint" of the official apps) and reports every change in a room's devices against the last stored state, so an injected device becomes visible; it is not prevented. The statement "no trust for content" therefore holds only under A7, against a server that does not inject devices.
 
 **Foreign identifiers are data, not paths.** Envelope ids (`message_id`), sender and user ids and asset identifiers are attacker-controlled input: a malicious peer or a compromised backend can choose them freely. No foreign string becomes a path fragment: checked at the dispatch boundary (path-unsafe ids are discarded like malformed envelopes), at every path site (`storage::is_path_safe_id`) and when the account identity is materialised from server responses (Step 80, 2026-09-11; LEARNINGS §5.23 "validate the sink").
 
@@ -68,11 +68,11 @@ Under the assumptions of the following section, Kupferdraht guarantees:
 
 **G3 — Non-key material is persisted encrypted at rest.** The entire local database is whole-DB-encrypted with SQLite3MC in the `chacha20` scheme (ChaCha20-Poly1305, RFC 8439: ChaCha20 for the page data, a 16-byte Poly1305 tag per page for integrity; ADR-0021). The database key is keystore-protected and does not leave the Kupferdraht process. Every database file (kupferdraht.db, mls.db, global.db) is isolated under its own key. **Accepted deviation:** ChaCha20-Poly1305 is not on the lists of BSI TR-02102-1 (the 2026-01 version recommends AES exclusively; §3.2 recommends no dedicated stream ciphers). The defence is the state of the art (RFC 8439, TLS 1.3, WireGuard), not a BSI listing; SQLite3MC's AES-based `sqlcipher` scheme stays compiled in as the documented fallback path (a new decision plus a database rewrite, not a consumer switch). This deviation was taken deliberately (ADR-0021, decider Volker Zöpfel, 2026-09-16) and must nowhere be rephrased as "TR-02102-compliant".
 
-**G4 — Plausible zeroization.** At session end, on leaving a group or on restore, Kupferdraht zeroizes key material in memory (Rust `zeroize`). The local database is whole-DB-encrypted (G3), so freed pages leave no plaintext behind; a separate `VACUUM` is not needed for that. Forward secrecy applies in the protocol *and* in local storage.
+**G4 — Best-effort zeroization of key material.** Key material and credentials in their holders — identity and KeyPackage private keys, database keys, the account seed, the PIN's derivations — are `Zeroizing` and wiped when they drop: at session end, on leaving a group, on restore. Not zeroized today: the access and refresh tokens (plain strings in the session record and in `access_token()`), the password inside the login request body, and message plaintext on the send and receive paths (only the resend payload is). This is best effort by type choice, not a compiler guarantee over every secret; a secret type end to end is a step of its own. The local database is whole-DB-encrypted (G3), so freed pages leave no plaintext behind; a separate `VACUUM` is not needed for that. Forward secrecy applies in the protocol; in local storage it waits for database-key rotation and `secure_delete` (Step 134).
 
 **G5 — Resistance to API misuse.** The public API is type-safe against common crypto and application-logic mistakes. Conversation handles cannot be mixed up between sessions by accident. MLS delivery and user acknowledgement are separate types (`Submitted` vs. `Acknowledged`) so that a consumer cannot confuse them: receipt by a server or a queue is never evidence of user perception.
 
-**G6 — The plaintext lifecycle stays in the Rust heap.** Plaintext messages come into being, are processed, encrypted and zeroized inside a single Rust runtime. There is no internal FFI boundary plaintext would have to cross. (The consumer boundary lies outside the application logic; as soon as a decrypted message is returned to the consumer, A6 applies.)
+**G6 — The plaintext lifecycle stays in the Rust heap.** Plaintext messages come into being, are processed and encrypted inside a single Rust runtime (their buffers are not zeroized today, G4). There is no internal FFI boundary plaintext would have to cross. (The consumer boundary lies outside the application logic; as soon as a decrypted message is returned to the consumer, A6 applies.)
 
 **G7 — Recovery is named honestly.** Today Kupferdraht provides **no** recovery path for identity loss: the mnemonic backup (Step 12) waits for an endpoint in Wire's API (observations §62), the server-side Dehydrated Device was dropped (2026-09-25). Until a replacement is decided, N6 applies without restriction: losing the device means a new MLS identity without history (Wire's multi-device property). Once the replacement is settled this goal is reformulated, not silently set back to "two paths".
 
@@ -114,6 +114,8 @@ The guarantees hold only under these assumptions:
 
 **A6 — The consumer keeps the API contract.** Plaintext is not logged after decryption, session handles are not serialised into persistent storage, error paths are handled.
 
+**A7 — The server injects no device.** Under BasicCredentials the backend is the key directory (Trust Model, ADR-0027): the content-trust statement holds against a server that distributes only the devices the users registered. Kupferdraht makes an injected device visible (Step 95d, the room's devices with their MLS thumbprints and every change against the stored state); it does not prevent it.
+
 ------
 
 ## Keystore architecture
@@ -140,7 +142,7 @@ Plus non-key material: plaintext messages, group state (ratchet tree, pending pr
 
 ### Keystore: no KEK wrapping any more
 
-The platform keystore (`SecureKeyStore`) is a plain secret store: Kupferdraht stores the database key of the whole-DB encryption (G3) **directly** under an id; no KEK, no on-disk wrapping envelope (see `open.md` §53). On desktop the `keyring` crate backs it (Keychain / Credential Manager), on mobile and web a UniFFI callback keystore (iOS Keychain, Android Keystore, WebCrypto/IndexedDB). **Linux desktop is currently not covered:** there the `keyring` crate uses only the kernel keyring (keyutils), which lives in memory and is lost on reboot, after which the local databases can no longer be opened. Secret Service is deferred for now as `open.md` §71 B4. **A missing key is never replaced (ADR-0029):** if a database exists but the keystore returns no key, Kupferdraht reports `KeyUnavailable` and writes nothing. A merely locked keystore (iOS before the first unlock) thus no longer destroys an account. Host keystores must return an error in the locked state, not "not present".
+The platform keystore (`SecureKeyStore`) is a plain secret store: Kupferdraht stores the database key of the whole-DB encryption (G3) **directly** under an id; no KEK, no on-disk wrapping envelope (see `open.md` §53). On desktop the `keyring` crate backs it (Keychain / Credential Manager), on mobile and web a UniFFI callback keystore (iOS Keychain, Android Keystore, WebCrypto/IndexedDB). **Linux desktop is currently not covered:** there the `keyring` crate uses only the kernel keyring (keyutils), which lives in memory and is lost on reboot, after which the local databases can no longer be opened. Secret Service waits until Linux is a target (`docs/non-goals.md` NG-24). **A missing key is never replaced (ADR-0029):** if a database exists but the keystore returns no key, Kupferdraht reports `KeyUnavailable` and writes nothing. A merely locked keystore (iOS before the first unlock) thus no longer destroys an account. Host keystores must return an error in the locked state, not "not present".
 
 Whether MLS signature keys should additionally sign hardware-bound (Secure Enclave) is a separate, still open question; the earlier "Curve25519 mismatch / KEK wrapping" rationale is obsolete (see `open.md` §54).
 
@@ -158,19 +160,19 @@ In the browser the same at-rest model applies since Step 91 (ADR-0022, replacing
 
 ## Auth modes
 
-Three modes in the API, distinguished at the type level:
+One mode is implemented and it has no name in the API: keys protected by the platform keystore only, no user passphrase; the user is signed in as long as they pass device unlock (Signal/Wire today). There is no mode type, trait or stub in the code.
 
-**DeviceBound**: the default. Keys protected by the keystore only. No user passphrase. The user is signed in as long as they pass device unlock. Corresponds to Signal/Wire today.
+**Design sketch, not in the code** — two further modes were foreseen and would be properties of a passphrase-backed keystore, not client states:
 
-**PasswordProtected**: keystore *plus* user passphrase (Argon2id). The passphrase-backed `SecureKeyStore` releases the key material only after the passphrase is entered. Session timeout and auto-lock are first class. The strongest mode against OS compromise: an attacker with kernel access has the keystore side but not the passphrase side.
+*PasswordProtected*: keystore *plus* user passphrase (Argon2id); the keystore releases the key material only after the passphrase is entered, with session timeout and auto-lock. The strongest mode against OS compromise: an attacker with kernel access has the keystore side but not the passphrase side.
 
-**PasswordOnly**: no keystore, only a passphrase-derived key. For web contexts without a persistent keystore API, or for users who do not trust the device. Hardware-independent, but weaker against brute force.
+*PasswordOnly*: no keystore, only a passphrase-derived key. For web contexts without a persistent keystore API, or for users who do not trust the device. Hardware-independent, but weaker against brute force.
 
 ### Type-level distinction
 
 The type-level contract against API misuse that Kalium structurally lacks lives in separate types for easily confused states, such as `Submitted` vs. `Acknowledged` for MLS delivery and user acknowledgement (G5). There is **no** `LockedSession`/`UnlockedSession` split: the store is opened ready (whole-DB-keyed), a decrypt needs no separate unlock step. An optional passphrase mode is a property of a passphrase-backed keystore, not a client state.
 
-The three auth modes stay distinguished at the type level (`DeviceBound` complete, `PasswordProtected` / `PasswordOnly` as interface stubs) so that a backup path can dock on later without breaking changes.
+A backup path (Step 12) docks on the keystore, not on a mode type; the sketched modes above add no type to the API before one of them is built.
 
 ------
 
@@ -247,6 +249,7 @@ Not blocking for the current implementation phase. To be picked up before the af
 | 0.4     | 2026-09-25 | Step 82: brought to the shipped state — header (UniFFI 0.29, wasm-bindgen), G2 honest (software keys in `mls.db`, SE signing as an option), trust boundary for foreign identifiers (Step 80), Dehydrated Device dropped (G7 → "no recovery path today", DD/policy sections replaced by a stub, L5/A1/A2 removed), proteus references replaced by ADR-0010 (intro, A3, L3), key backup as Step 12 (blocked) |
 | 0.5     | 2026-09-26 | Step 95a: G1 sender authentication on the MLS-authenticated leaf (ADR-0027, envelope as a cross-check only, X.509 exception named); Trust Model: server as key directory under BasicCredentials (ghost device) named |
 | 0.6     | 2026-10-08 | Translated from German to English for publication; content unchanged except the positioning in Purpose ("independent alternative", 2026-10-07). The German original stays in the private history. |
+| 0.7     | 2026-11-02 | Step 133: every claim matched against the code after the 2026-09-25 production-readiness review (its residuals became Steps 132 to 134 on 2026-11-01) — zeroization is best effort by type choice (G4, G6, the no-split rationale), the auth modes the code lacks are a marked design sketch, reproducible builds leave the trust model, G4's local forward secrecy points at Step 134, the server's device injection is assumption A7, the Linux keystore limit is NG-24 |
 
 ------
 

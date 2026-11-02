@@ -15,7 +15,7 @@ A Wire-compatible MLS client in Rust that:
 - uses `openmls` directly (Proteus prekeys come from an own GPL-free module, ADR-0010); crypto + app logic in a single crate — no internal FFI boundary;
 - is written from the Swagger spec, live observation and RFC 9420 and transcribes **no Wire program code**. The one Wire-authored artifact in the tree is the Protobuf schema `kupferdraht-core/proto/generic_message.proto`: a modified subset of Wire's `GenericMessage` declarations (GPL-3.0-or-later) that keeps Wire's notice and states the modifications in its header. Wire's open-source repositories (Kalium, proteus, wire-server, wire-webapp, wire-android; GPL-3.0 / AGPL-3.0) are consulted to observe protocol behaviour where the spec is silent or an interoperability failure needs explaining (every reading is indexed in `docs/wire/kalium-readings.md`), and once (2026-09) a review of Kalium's production readiness served as a checklist of defect classes for Kupferdraht's own code (Steps 77–80); never as a model for structure, naming or implementation (ADR-0009); every such observation is recorded in `docs/` with its source;
 - exposes Kotlin / Swift / WASM via UniFFI 0.29;
-- enforces compiler-checked zeroization of sensitive material (THREAT_MODEL.md G4);
+- zeroizes key material and credentials when their holders drop (best effort by type choice, THREAT_MODEL.md G4);
 - targets Wire API v14 exclusively;
 - shapes its public API after matrix-rust-sdk.
 
@@ -182,7 +182,7 @@ Check: `cargo test -p kupferdraht-core --test license_headers` — it names ever
 
 ### Sensitive Material
 
-Zeroize explicitly via `Zeroizing` / `ZeroizeOnDrop`; never rely on memory reuse. Compiler-enforced (ADR-0002, ADR-0006, THREAT_MODEL.md G4).
+Zeroize explicitly via `Zeroizing` / `ZeroizeOnDrop`; never rely on memory reuse. Best effort by type choice, not a guarantee over every secret (ADR-0002, ADR-0006 v1.2, THREAT_MODEL.md G4): tokens, the login body and message plaintext are not covered today.
 
 ### README and Documentation
 

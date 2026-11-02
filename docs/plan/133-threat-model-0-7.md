@@ -1,6 +1,10 @@
 # Step 133 — THREAT_MODEL 0.7: every claim matches the code
 
-**Status: commissioned 2026-11-01** (transferred from open.md §71: the
+**Status: in progress 2026-11-02** — decided (Volker): narrow all six claims,
+build nothing; ADR-0006's Consequences get a 1.2 revision note, since they
+repeat the zeroization claim and name a session split the model itself
+denies. Branch `step/133-threat-model-0-7`, seven doc pins in
+`tests/step_133_threat_model_pins.rs`. (Commissioned 2026-11-01, transferred from open.md §71: the
 documentation claims the production-readiness review of 2026-09-25 measured
 against the code; the precedent is Step 82, THREAT_MODEL 0.4). The document
 is Volker's — version 0.6 of 2026-10-08, for review by Markus — so phase 1

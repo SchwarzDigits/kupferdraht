@@ -93,7 +93,7 @@ end-to-end encrypted with MLS (RFC 9420):
   - MLS (RFC 9420) only, with no security-disabling options
   - whole-DB encryption via SQLite3MC (ChaCha20-Poly1305, raw 32-byte key per database; vendored amalgamation, no OpenSSL) — an accepted deviation from BSI TR-02102-1's AES-only lists, see ADR-0021
   - OS-keyring, file, in-memory, and IndexedDB keystores
-  - compiler-enforced zeroization of sensitive material
+  - zeroization of key material and credentials when their holders drop (best effort, `docs/THREAT_MODEL.md` G4 names what is not covered)
   - Proteus prekeys generated and uploaded at registration, never used to encrypt
 - **Platforms**
   - matrix-rust-sdk-shaped Rust library
