@@ -59,6 +59,14 @@ is no skill for it — it is this short procedure:
 
 ### Security
 
+- **A message signed by a non-Basic (X.509) leaf is dropped, not shown**
+  (Step 135; ADR-0027 decision 2 amended). Nothing authenticated the
+  identity such a message was delivered under — the backend-written
+  envelope — so it no longer reaches the timeline, the task, case or
+  receipt handlers, or a consumer; the drop is logged at `warn` with the
+  message id. Kupferdraht never enrols for e2ei (NG-7); a team with
+  enrolled devices will miss their messages until X.509 identity parsing
+  lands. No API change.
 - **The Gradle wrappers verify the distribution they download**
   (2026-11-02): `distributionSha256Sum` pinned in `bindings/android` and
   `bindings/kotlin` (Gradle 8.10.2) and `bindings/kmp` (Gradle 9.1.0) to

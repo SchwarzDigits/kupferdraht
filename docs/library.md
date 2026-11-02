@@ -206,11 +206,12 @@ MLS message — `Message`, `TimelineItem`, `AssetSummary`, a task's
 that signed the message, parsed from its Wire `BasicCredential`
 (`{uuid}:{client_id}@{domain}`). The Wire event envelope
 (`qualified_from` / `from_client`) is not trusted for it: a backend
-that lies there is logged (`warn!`) and ignored. Two edges: a signer
-with an e2ei X.509 credential is still attributed by the envelope
-until X.509 identity parsing lands (such senders are not
-authenticated), and a message whose Basic credential is not in Wire's
-shape is dropped. What this authenticates is *which device leaf* sent
+that lies there is logged (`warn!`) and ignored. Two edges, both
+dropped with a `warn!`: a message whose signer carries no Basic
+credential (an e2ei X.509 certificate — nothing authenticates its
+sender until X.509 identity parsing lands; Step 135), and a message
+whose Basic credential is not in Wire's shape. What this
+authenticates is *which device leaf* sent
 a message — not *who owns* that leaf: under BasicCredentials the
 backend distributes the keys, so an injected device would carry
 whatever identity the backend gave it.

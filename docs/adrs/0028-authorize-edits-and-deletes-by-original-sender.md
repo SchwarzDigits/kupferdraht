@@ -93,15 +93,17 @@ Option H. Both operations require the target in the same room.
 - Any member can hasten the deletion of the self user's own ephemeral
   messages on the self user's devices — inherent to Wire's
   receiver-enforced expiry.
-- For senders attributed by the envelope (X.509 leaves, ADR-0027 decision
-  2) the authorization inherits the envelope's weakness until the X.509
-  follow-up.
 - A rejected edit or delete is visible only in the log.
 
 ### Neutral
 
 - The public `Store` trait is unchanged; the check sits in the dispatch
   layer.
+- Every sender the check sees is authenticated: until Step 135
+  (2026-11-02) a message signed by an X.509 leaf reached it under the
+  envelope's identity and the authorization inherited that weakness;
+  since ADR-0027 decision 2 was amended such a message is dropped before
+  dispatch.
 - Task updates stay open to any member (ADR-0014) — they are new messages,
   not edits.
 
@@ -126,5 +128,6 @@ Option H. Both operations require the target in the same room.
 - 2026-09-26: Created
 - 2026-09-26: Sending side added in Step 95b (same rule, current truth — not a new decision): `Timeline::edit` / `Timeline::redact` refuse another user's message with `InvalidInput` before uploading, so the caller's local row never diverges from what every receiver keeps. Any device of the self user counts as own; a target unknown locally goes out unchanged. The receiver-side ephemeral expiry (`upload_message_delete`) is unaffected. Implementation note corrected: the target lookup is room-scoped (`Store::load_timeline_event_in_room`, a new trait method with a default body — non-breaking), because timeline rows are keyed `(message_id, room_id)` and the room-agnostic `load_timeline_event` could resolve another room's row.
 - 2026-09-28: Clause (b) of the delete rule narrowed (review question on PR #56; Markus): a delete from the self user (another own device) applies to another member's message only when that message is **ephemeral** — the own-device sync of a receiver-side expiry (observations §74). Observed behaviour, not derived: the official webapp ignores a self-sent delete of another member's ordinary message (observations §91), so "self user — any target" was not Wire's behaviour. (a) and (c) are unchanged; the effect of (b) was always confined to the self user's own devices.
+- 2026-11-02: The negative consequence inherited from ADR-0027 decision 2 (X.509 senders attributed through the envelope) is void since Step 135 amended that decision — such a message is dropped before dispatch. Recorded under Neutral; decision unchanged.
 - 2026-09-28: Context, Option H and Decision 2(b) amended to the narrowed clause (same decision as the entry above, current truth — not a supersession); Implementation Notes now name the room-scoped lookup and the `authorize.rs` home the 2026-09-26 entry corrected. Review of PR #62 (Volker): the body had kept "self user — any target" while `rules/0028` and the code carried the narrowing, and the ADR wins over its rule.
 

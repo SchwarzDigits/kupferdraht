@@ -7,17 +7,15 @@
 //! The leaf openmls authenticated as the signer is the sender; the
 //! backend-written envelope (`qualified_from` / `from_client`) is a
 //! cross-check only — on a mismatch the message still goes out under
-//! the MLS sender, and a `warn!` records both claims. An X.509
-//! (non-Basic) leaf keeps the envelope attribution until X.509 parsing
-//! is verified; a malformed Basic leaf drops the message.
+//! the MLS sender, and a `warn!` records both claims. A leaf whose
+//! credential is not Basic (an e2ei X.509 certificate) yields no
+//! authenticated identity, so its message is dropped with a `warn!`
+//! (Step 135, ADR-0027 decision 2 as amended), like a malformed Basic
+//! leaf.
 
-use tracing::{debug, warn};
+use tracing::warn;
 
 use crate::encryption::{LeafIdentity, LeafIdentityError};
-
-/// Stand-in for an envelope that names no sender — reachable only on
-/// the X.509 path, where the envelope is the attribution source.
-const UNKNOWN_SENDER: &str = "unknown@unknown";
 
 /// What the backend-written envelope claims about the sender.
 pub(super) struct EnvelopeSender<'a> {
@@ -33,7 +31,7 @@ pub(super) struct InboundSender {
 }
 
 /// Attribute an inbound application message per ADR-0027. `None` means
-/// "drop it" (a malformed Basic leaf).
+/// "drop it": a non-Basic leaf (Step 135) or a malformed Basic one.
 pub(super) fn attribute_sender(
     envelope: &EnvelopeSender<'_>,
     leaf: Result<LeafIdentity, LeafIdentityError>,
@@ -48,14 +46,12 @@ pub(super) fn attribute_sender(
             })
         }
         Err(LeafIdentityError::Unsupported) => {
-            debug!(
+            warn!(
                 message_id,
-                "non-Basic (X.509) leaf credential — envelope attribution (ADR-0027 d.2)"
+                "non-Basic (X.509) leaf credential — nothing authenticates the sender, \
+                 message dropped (ADR-0027 d.2, Step 135)"
             );
-            Some(InboundSender {
-                user_id: envelope.user_id.unwrap_or(UNKNOWN_SENDER).to_string(),
-                device_id: envelope.device_id.map(str::to_string),
-            })
+            None
         }
         Err(LeafIdentityError::Malformed(reason)) => {
             warn!(
@@ -124,33 +120,93 @@ mod tests {
         );
     }
 
+    /// Step 135: a message signed by a non-Basic (X.509) leaf is dropped,
+    /// however complete the envelope — nothing authenticated the envelope.
     #[test]
-    fn x509_falls_back_to_the_envelope() {
+    fn a_non_basic_leaf_drops_the_message_despite_a_full_envelope() {
         let sender = attribute_sender(
             &envelope(Some("bob@example.test"), Some("bobx509")),
             Err(LeafIdentityError::Unsupported),
             "m1",
         );
-        assert_eq!(
-            sender,
-            Some(InboundSender {
-                user_id: "bob@example.test".into(),
-                device_id: Some("bobx509".into()),
-            })
-        );
+        assert_eq!(sender, None);
     }
 
     #[test]
-    fn x509_without_envelope_sender_keeps_the_legacy_placeholder() {
+    fn a_non_basic_leaf_without_an_envelope_sender_drops_too() {
         let sender = attribute_sender(
             &envelope(None, None),
             Err(LeafIdentityError::Unsupported),
             "m1",
         );
-        assert_eq!(
-            sender.map(|s| s.user_id),
-            Some("unknown@unknown".to_string())
+        assert_eq!(sender, None);
+    }
+
+    /// The drop is logged at `warn!` (not `debug!`) with the message id and
+    /// the credential class, so an operator sees what vanished.
+    #[test]
+    fn a_dropped_non_basic_leaf_is_logged_at_warn_with_the_message_id() {
+        let capture = CaptureSubscriber::default();
+        let events = std::sync::Arc::clone(&capture.events);
+        tracing::subscriber::with_default(capture, || {
+            attribute_sender(
+                &envelope(Some("bob@example.test"), Some("bobx509")),
+                Err(LeafIdentityError::Unsupported),
+                "m-dropped",
+            );
+        });
+        let events = events.lock().expect("capture lock");
+        let warns: Vec<&(tracing::Level, String)> = events
+            .iter()
+            .filter(|(level, _)| *level == tracing::Level::WARN)
+            .collect();
+        assert_eq!(warns.len(), 1, "exactly one warn event, got {events:?}");
+        let rendered = &warns[0].1;
+        assert!(
+            rendered.contains("message_id=\"m-dropped\""),
+            "the warn names the message id: {rendered}"
         );
+        assert!(
+            rendered.contains("X.509") || rendered.contains("non-Basic"),
+            "the warn names the credential class: {rendered}"
+        );
+    }
+
+    /// Minimal scoped `tracing::Subscriber`: records `(level, rendered
+    /// fields)` of every event emitted while it is the default.
+    #[derive(Default)]
+    struct CaptureSubscriber {
+        events: std::sync::Arc<std::sync::Mutex<Vec<(tracing::Level, String)>>>,
+    }
+
+    impl tracing::Subscriber for CaptureSubscriber {
+        fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            let mut rendered = String::new();
+            event.record(&mut FieldRenderer(&mut rendered));
+            self.events
+                .lock()
+                .expect("capture lock")
+                .push((*event.metadata().level(), rendered));
+        }
+        fn enter(&self, _: &tracing::span::Id) {}
+        fn exit(&self, _: &tracing::span::Id) {}
+    }
+
+    struct FieldRenderer<'a>(&'a mut String);
+
+    impl tracing::field::Visit for FieldRenderer<'_> {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            use std::fmt::Write as _;
+            let _ = write!(self.0, "{}={value:?} ", field.name());
+        }
     }
 
     #[test]

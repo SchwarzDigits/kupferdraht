@@ -8,8 +8,9 @@
 //! inbound application message is the leaf openmls authenticated, so
 //! this module turns that leaf's credential into the qualified user id
 //! and the device id Kupferdraht attributes the message to. A non-Basic
-//! (e2ei X.509) credential is *unsupported* — its sender keeps the
-//! envelope attribution until the X.509 follow-up step; a Basic
+//! (e2ei X.509) credential is *unsupported* — nothing authenticates its
+//! sender, so the message is dropped (Step 135) until the X.509
+//! follow-up step parses a verified certificate identity; a Basic
 //! credential that is not exactly three non-empty parts is *malformed*.
 //! The build half ([`wire_identity`]) lives here too, so the shape is
 //! written and read in one place.
@@ -30,8 +31,9 @@ pub(crate) struct LeafIdentity {
 /// Why a leaf credential yields no [`LeafIdentity`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum LeafIdentityError {
-    /// Not a `BasicCredential` (an e2ei X.509 credential) — attributed
-    /// by the envelope until X.509 parsing is verified (ADR-0027 d.2).
+    /// Not a `BasicCredential` (an e2ei X.509 credential) — no identity
+    /// is parsed from it and the message is dropped (ADR-0027 d.2 as
+    /// amended by Step 135) until X.509 parsing is verified.
     Unsupported,
     /// A `BasicCredential` whose identity is not W-4; the reason names
     /// the defect without echoing unbounded peer bytes.

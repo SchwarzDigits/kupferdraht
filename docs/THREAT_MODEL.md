@@ -1,6 +1,6 @@
 # Kupferdraht Threat Model
 
-**Version:** 0.7 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-02 **Status:** working draft, for review by Markus Troßbach
+**Version:** 0.8 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-02 **Status:** working draft, for review by Markus Troßbach
 
 ------
 
@@ -62,7 +62,7 @@ Three actors:
 
 Under the assumptions of the following section, Kupferdraht guarantees:
 
-**G1 — Pass MLS guarantees through correctly.** Forward secrecy (FS), post-compromise security (PCS), sender authentication and plausible deniability per RFC 9420. Deviations only for Wire compatibility (External Senders extension, identity format, capabilities list). Since Step 95a (ADR-0027) sender authentication means: every inbound application message is attributed to the leaf openmls authenticated as its signer, never to the envelope the server wrote (`qualified_from` / `from_client`, now a cross-check only). Exception until the X.509 follow-up step: signers with an e2ei X.509 credential are still attributed through the envelope and are thus not authenticated. What is authenticated is *which leaf* sent, not *whom* it belongs to (see Trust Model, server).
+**G1 — Pass MLS guarantees through correctly.** Forward secrecy (FS), post-compromise security (PCS), sender authentication and plausible deniability per RFC 9420. Deviations only for Wire compatibility (External Senders extension, identity format, capabilities list). Since Step 95a (ADR-0027) sender authentication means: every inbound application message is attributed to the leaf openmls authenticated as its signer, never to the envelope the server wrote (`qualified_from` / `from_client`, now a cross-check only). A signer whose leaf carries no Basic credential (an e2ei X.509 certificate) yields no authenticated identity, so its message is dropped and logged (Step 135, ADR-0027 decision 2 as amended): every surfaced message is attributed to an authenticated leaf, without exception. What is authenticated is *which leaf* sent, not *whom* it belongs to (see Trust Model, server).
 
 **G2 — Private key material does not leave the Kupferdraht process and is key-protected at rest.** Identity signing keys, KeyPackage private keys and MLS group state live as software keys in `mls.db`, whole-DB-encrypted (G3) under a key that lives exclusively in the platform keystore; without keystore access they cannot be read. Hardware-bound *signing* (Secure Enclave; the ciphersuite `0x0002`/P-256 was chosen for it, LEARNINGS §1.2) is a possible extension through an SE-backed `Signer`, not today's state; KEM/HPKE keys would stay in `mls.db` even then, because openmls decapsulates internally. Structurally, the API gives consumer code no raw private keys, only opaque handles.
 
@@ -250,6 +250,7 @@ Not blocking for the current implementation phase. To be picked up before the af
 | 0.5     | 2026-09-26 | Step 95a: G1 sender authentication on the MLS-authenticated leaf (ADR-0027, envelope as a cross-check only, X.509 exception named); Trust Model: server as key directory under BasicCredentials (ghost device) named |
 | 0.6     | 2026-10-08 | Translated from German to English for publication; content unchanged except the positioning in Purpose ("independent alternative", 2026-10-07). The German original stays in the private history. |
 | 0.7     | 2026-11-02 | Step 133: every claim matched against the code after the 2026-09-25 production-readiness review (its residuals became Steps 132 to 134 on 2026-11-01) — zeroization is best effort by type choice (G4, G6, the no-split rationale), the auth modes the code lacks are a marked design sketch, reproducible builds leave the trust model, G4's local forward secrecy points at Step 134, the server's device injection is assumption A7, the Linux keystore limit is NG-24 |
+| 0.8     | 2026-11-02 | Step 135: G1 without the X.509 exception — a message signed by a non-Basic leaf is dropped instead of attributed through the envelope (ADR-0027 decision 2 amended); every surfaced message is attributed to an authenticated leaf |
 
 ------
 
