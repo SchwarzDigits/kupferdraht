@@ -17,6 +17,13 @@
 # scripts/smoke.env and fill it in locally.
 /scripts/smoke.env
 
+# Environment files of any tool: never committed (public GitHub). An
+# `.env.example` follows the smoke.env.example rule — a template without
+# secrets may be checked in, the filled-in file never.
+.env
+.env.*
+!.env.example
+
 # Wire's v14 OpenAPI document is Wire's, not ours: fetched on demand by
 # scripts/fetch-wire-swagger.sh, never committed (reference/README.md).
 /reference/wire.swagger.json
