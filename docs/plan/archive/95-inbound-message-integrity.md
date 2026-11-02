@@ -276,8 +276,10 @@ where the data enters:
   skips rows with an empty `task_id` that pre-95c databases can hold.
 - **Backend data.** It is checked in `wire/`: token bodies, the
   registered client id, `/self`, the removal key, push frames (id,
-  `delivery_tag`), an empty `mls-message-add` / `GroupInfo`, and URL
-  path segments (RFC 3986 unreserved characters only). Conversation
+  `delivery_tag`), an empty `mls-message-add` / `GroupInfo`, and the URL
+  path segments of the asset download, the registered client id and the
+  property key (RFC 3986 unreserved characters only; Step 137 put the
+  check on every dynamic path site). Conversation
   metadata is sanitised: no id → skipped, empty `group_id` / team →
   none, and the list is fetched in 1000-id chunks.
 - **Stored state.** Resume turns a cleared refresh token into

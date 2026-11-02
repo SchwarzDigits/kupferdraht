@@ -38,6 +38,11 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **CLI: `sso finalize --cookie` and `join-via-link --key` are gone**
+  (Step 137): the `zuid` cookie and a guest link's key are read on the TTY
+  (no echo) or, with `--cookie-stdin` / `--key-stdin`, as the first line
+  of stdin — a secret in argv lands in `ps` and the shell history. A
+  secret from stdin is its first line now, `--password-stdin` included.
 - **Step 95c's residuals are a step** (open.md §70 dissolved, 2026-11-02):
   poison recovery for the in-memory cache locks, a phase-1 ADR capping the
   fields of Kupferdraht's own payloads, the function-length list — Step 136.
@@ -57,8 +62,29 @@ is no skill for it — it is this short procedure:
 
 ### Fixed
 
+- **A message that shares a notifications page with the Welcome that
+  opened its room is no longer lost** (Step 137): the room list is
+  refreshed right after the Welcome, inside the drain, so the ADR-0020
+  re-broadcast that follows it (case snapshot, marker, tasks) decrypts and
+  lands in the timeline instead of being reported as `no local group_id`
+  and queueing a needless heal of the room just joined (ADR-0039 revision
+  1.1).
+
 ### Security
 
+- **Every id formatted into a Wire URL is checked as one path segment**
+  (Step 137, scan finding M5): the Step 95c guard (RFC 3986 unreserved
+  characters, no dot segment) now sits on all twenty dynamic path sites
+  and the `?client_id=` query value, not only on the asset download, the
+  registered client id and the property key; a hostile id is
+  `InvalidInput` before any request leaves.
+- **`BackendRejected` carries at most 1 KiB of a backend's body, control
+  characters stripped** (Step 137, L6) — for the token rebind and the
+  token exchange too; the error crosses UniFFI and wasm into host logs.
+- **The token exchange follows no redirect** (Step 137, M4): its request
+  carries the account's access token and a JSON body; a 3xx answer
+  surfaces as the status it is (natively — the browser's `fetch` follows
+  on its own, as for every request there).
 - **A message signed by a non-Basic (X.509) leaf is dropped, not shown**
   (Step 135; ADR-0027 decision 2 amended). Nothing authenticated the
   identity such a message was delivered under — the backend-written

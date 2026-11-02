@@ -170,17 +170,10 @@ impl HttpClient {
         target_user_id: &str,
     ) -> Result<(), KupferdrahtError> {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
-        let (cnv, cnv_domain) = room_id.split_once('@').ok_or_else(|| {
-            KupferdrahtError::InvalidInput(format!(
-                "delete_conversation_member: room_id `{room_id}` must be qualified <uuid>@<domain>"
-            ))
-        })?;
-        let (usr, usr_domain) = target_user_id.split_once('@').ok_or_else(|| {
-            KupferdrahtError::InvalidInput(format!(
-                "delete_conversation_member: target_user_id `{target_user_id}` must be qualified \
-                 <uuid>@<domain>"
-            ))
-        })?;
+        let (cnv, cnv_domain) =
+            Self::qualified_segments(room_id, "delete_conversation_member room_id")?;
+        let (usr, usr_domain) =
+            Self::qualified_segments(target_user_id, "delete_conversation_member target_user_id")?;
         let path =
             format!("/v{api_version}/conversations/{cnv_domain}/{cnv}/members/{usr_domain}/{usr}");
         let url = self.url(&path)?;
@@ -213,6 +206,9 @@ impl HttpClient {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!team_id.is_empty(), "team_id must be non-empty");
         debug_assert!(!conv_local_id.is_empty(), "conv_local_id must be non-empty");
+        let team_id = Self::path_segment(team_id, "delete_team_conversation team_id")?;
+        let conv_local_id =
+            Self::path_segment(conv_local_id, "delete_team_conversation conv_local_id")?;
         let path = format!("/v{api_version}/teams/{team_id}/conversations/{conv_local_id}");
         let url = self.url(&path)?;
         debug!(%url, "DELETE teams/{{tid}}/conversations/{{cid}}");
@@ -258,11 +254,7 @@ impl HttpClient {
     ) -> Result<(), KupferdrahtError> {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!new_name.is_empty(), "new_name must be non-empty");
-        let (cnv, cnv_domain) = room_id.split_once('@').ok_or_else(|| {
-            KupferdrahtError::InvalidInput(format!(
-                "rename_conversation: room_id `{room_id}` must be qualified <uuid>@<domain>"
-            ))
-        })?;
+        let (cnv, cnv_domain) = Self::qualified_segments(room_id, "rename_conversation room_id")?;
         let path = format!("/v{api_version}/conversations/{cnv_domain}/{cnv}/name");
         let url = self.url(&path)?;
         let body = serde_json::json!({ "name": new_name });
@@ -308,6 +300,8 @@ impl HttpClient {
     ) -> Result<ConversationCodeInfo, KupferdrahtError> {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!room_local_id.is_empty(), "room_local_id must be non-empty");
+        let room_local_id =
+            Self::path_segment(room_local_id, "create_conversation_code room_local_id")?;
         let path = format!("/v{api_version}/conversations/{room_local_id}/code");
         let url = self.url(&path)?;
         let body = CreateConversationCodeRequest { password };
@@ -363,6 +357,8 @@ impl HttpClient {
     ) -> Result<Option<ConversationCodeInfo>, KupferdrahtError> {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!room_local_id.is_empty(), "room_local_id must be non-empty");
+        let room_local_id =
+            Self::path_segment(room_local_id, "get_conversation_code room_local_id")?;
         let path = format!("/v{api_version}/conversations/{room_local_id}/code");
         let url = self.url(&path)?;
         debug!(%url, "GET conversations/{{cnv}}/code");
@@ -402,6 +398,8 @@ impl HttpClient {
     ) -> Result<(), KupferdrahtError> {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!room_local_id.is_empty(), "room_local_id must be non-empty");
+        let room_local_id =
+            Self::path_segment(room_local_id, "delete_conversation_code room_local_id")?;
         let path = format!("/v{api_version}/conversations/{room_local_id}/code");
         let url = self.url(&path)?;
         debug!(%url, "DELETE conversations/{{cnv}}/code");
@@ -457,11 +455,8 @@ impl HttpClient {
                 "set_conversation_access: `access_role` must be non-empty".into(),
             ));
         }
-        let (cnv, cnv_domain) = room_id.split_once('@').ok_or_else(|| {
-            KupferdrahtError::InvalidInput(format!(
-                "set_conversation_access: room_id `{room_id}` must be qualified <uuid>@<domain>"
-            ))
-        })?;
+        let (cnv, cnv_domain) =
+            Self::qualified_segments(room_id, "set_conversation_access room_id")?;
         let path = format!("/v{api_version}/conversations/{cnv_domain}/{cnv}/access");
         let url = self.url(&path)?;
         let body = ConversationAccessData {
@@ -499,11 +494,7 @@ impl HttpClient {
             status == "started" || status == "stopped",
             "typing status must be `started` or `stopped`"
         );
-        let (cnv, cnv_domain) = room_id.split_once('@').ok_or_else(|| {
-            KupferdrahtError::InvalidInput(format!(
-                "send_typing: room_id `{room_id}` must be qualified <uuid>@<domain>"
-            ))
-        })?;
+        let (cnv, cnv_domain) = Self::qualified_segments(room_id, "send_typing room_id")?;
         let path = format!("/v{api_version}/conversations/{cnv_domain}/{cnv}/typing");
         let url = self.url(&path)?;
         let body = serde_json::json!({ "status": status });

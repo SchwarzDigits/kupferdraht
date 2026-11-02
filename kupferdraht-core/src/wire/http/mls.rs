@@ -49,6 +49,7 @@ impl HttpClient {
             !key_packages.is_empty(),
             "key_packages must be non-empty — Wire rejects empty uploads"
         );
+        let client_id = Self::path_segment(client_id, "upload_key_packages client_id")?;
         let path = format!("/v{api_version}/mls/key-packages/self/{client_id}");
         let url = self.url(&path)?;
         let body = build_key_package_upload_body(key_packages);
@@ -109,6 +110,7 @@ impl HttpClient {
     ) -> Result<u64, KupferdrahtError> {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!client_id.is_empty(), "client_id must be non-empty");
+        let client_id = Self::path_segment(client_id, "fetch_key_package_count client_id")?;
         let path = format!(
             "/v{api_version}/mls/key-packages/self/{client_id}/count?ciphersuite={ciphersuite_decimal}"
         );

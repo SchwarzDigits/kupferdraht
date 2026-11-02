@@ -100,6 +100,8 @@ impl HttpClient {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!user_domain.is_empty(), "user_domain must be non-empty");
         debug_assert!(!user_uuid.is_empty(), "user_uuid must be non-empty");
+        let user_domain = Self::path_segment(user_domain, "claim_key_packages user_domain")?;
+        let user_uuid = Self::path_segment(user_uuid, "claim_key_packages user_uuid")?;
         let path = format!("/v{api_version}/mls/key-packages/claim/{user_domain}/{user_uuid}");
         let mut url = self.url(&path)?;
         {

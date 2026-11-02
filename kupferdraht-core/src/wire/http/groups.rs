@@ -55,6 +55,8 @@ impl HttpClient {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!room_id.is_empty(), "room_id must be non-empty");
         debug_assert!(!room_domain.is_empty(), "room_domain must be non-empty");
+        let room_domain = Self::path_segment(room_domain, "fetch_group_info room_domain")?;
+        let room_id = Self::path_segment(room_id, "fetch_group_info room_id")?;
         let path = format!("/v{api_version}/conversations/{room_domain}/{room_id}/groupinfo");
         let url = self.url(&path)?;
         debug!(%url, "GET groupinfo");

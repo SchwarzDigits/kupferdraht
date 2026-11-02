@@ -40,6 +40,7 @@ impl HttpClient {
                 "SSO code must be non-empty".into(),
             ));
         }
+        let code = Self::path_segment(code, "sso_initiate_login_url code")?;
         let mut url = self.url(&format!("/sso/initiate-login/{code}"))?;
         url.query_pairs_mut()
             .append_pair("success_redirect", success_redirect)
@@ -55,6 +56,7 @@ impl HttpClient {
     /// * `Network` for transport failures.
     pub async fn sso_code_exists(&self, code: &str) -> Result<bool, KupferdrahtError> {
         debug_assert!(!code.is_empty(), "SSO code must be non-empty");
+        let code = Self::path_segment(code, "sso_code_exists code")?;
         let url = self.url(&format!("/sso/initiate-login/{code}"))?;
         debug!(%url, "HEAD sso/initiate-login");
         let resp = self

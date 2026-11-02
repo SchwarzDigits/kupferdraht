@@ -71,6 +71,9 @@ impl HttpClient {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!peer_domain.is_empty(), "peer_domain must be non-empty");
         debug_assert!(!peer_uuid.is_empty(), "peer_uuid must be non-empty");
+        let peer_domain =
+            Self::path_segment(peer_domain, "fetch_one_to_one_conversation peer_domain")?;
+        let peer_uuid = Self::path_segment(peer_uuid, "fetch_one_to_one_conversation peer_uuid")?;
         let path = format!("/v{api_version}/one2one-conversations/{peer_domain}/{peer_uuid}");
         let url = self.url(&path)?;
         debug!(%url, "GET one2one-conversations/{{d}}/{{u}}");

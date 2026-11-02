@@ -7,9 +7,10 @@ drain" of `rules/0030-…` and the reconnect backoff of `rules/0017-…` and
 `rules/0019-…`.
 
 - **Fetch the room list only when it may be out of date**: at start; after
-  an event the drain does not process itself, or a Welcome; when the drain
-  does not start where this client's last one ended, or the backend lost
-  the cursor — in the same pass, after the drain; and when it is older than
+  an event the drain does not process itself, or when the drain does not
+  start where this client's last one ended, or the backend lost the cursor
+  — in the same pass, after the drain; after a Welcome — at once, inside
+  the drain, before the next event (Step 137); and when it is older than
   5 minutes. **Don't** fetch it every pass or on every reconnect.
 - **No timer beside a live socket**: drain when it rings or closes; a close
   reconnects at once, then drains (ADR-0030's order).

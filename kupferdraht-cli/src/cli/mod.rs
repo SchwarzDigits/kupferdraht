@@ -3,7 +3,7 @@
 
 //! Shared session / room plumbing reused by every CLI command domain.
 
-use std::io::{self, Read};
+use std::io::{self, BufRead};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -32,13 +32,28 @@ pub(crate) fn kupferdraht_home() -> Result<PathBuf, KupferdrahtError> {
 }
 
 pub(crate) fn read_password(from_stdin: bool) -> io::Result<String> {
+    read_secret(from_stdin, "Account password: ")
+}
+
+/// A secret from stdin (its first line) or from the TTY with `prompt`,
+/// echo off — never from argv (Step 137 for the `zuid` cookie and a
+/// link's key, as for passwords).
+pub(crate) fn read_secret(from_stdin: bool, prompt: &str) -> io::Result<String> {
     if from_stdin {
-        let mut buf = String::new();
-        io::stdin().read_to_string(&mut buf)?;
-        Ok(buf.trim_end_matches(['\n', '\r']).to_string())
+        read_secret_line(&mut io::stdin().lock())
     } else {
-        rpassword::prompt_password("Account password: ")
+        rpassword::prompt_password(prompt)
     }
+}
+
+/// One line of `reader` — a secret piped on stdin (`--password-stdin`,
+/// `--cookie-stdin`, `--key-stdin`): the first line without its line
+/// ending, so the newline `echo` or a password manager appends is not
+/// part of the secret (Step 137).
+pub(crate) fn read_secret_line(reader: &mut impl BufRead) -> io::Result<String> {
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    Ok(line.trim_end_matches(['\n', '\r']).to_string())
 }
 
 pub(crate) fn base64_encode(bytes: &[u8]) -> String {
@@ -331,5 +346,16 @@ mod tests {
     fn fmt_ms_round_trips_through_parse_due() {
         let t = ms(datetime!(2026-07-20 13:00 UTC));
         assert_eq!(parse_due(&fmt_ms(t)).expect("round trip"), t);
+    }
+
+    /// Step 137 (M1): a secret on stdin is its first line, without the
+    /// line ending — what `echo` or a password manager pipes; a second
+    /// line is not part of it.
+    #[test]
+    fn a_secret_from_stdin_is_its_first_line_without_the_line_ending() {
+        let mut piped = std::io::Cursor::new("zuid-value\r\nsecond line\n");
+        assert_eq!(read_secret_line(&mut piped).expect("read"), "zuid-value");
+        let mut bare = std::io::Cursor::new("zuid-value");
+        assert_eq!(read_secret_line(&mut bare).expect("read"), "zuid-value");
     }
 }
