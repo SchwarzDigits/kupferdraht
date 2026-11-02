@@ -59,6 +59,12 @@ is no skill for it — it is this short procedure:
 
 ### Security
 
+- **The Gradle wrappers verify the distribution they download**
+  (2026-11-02): `distributionSha256Sum` pinned in `bindings/android` and
+  `bindings/kotlin` (Gradle 8.10.2) and `bindings/kmp` (Gradle 9.1.0) to
+  the checksums `services.gradle.org` publishes; a tampered or substituted
+  archive fails the wrapper instead of running the build.
+
 ## [0.1.1] - 2026-11-02
 
 ### Added
