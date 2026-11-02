@@ -2157,3 +2157,76 @@ touched it.
   kept the change to the crates that moved. The file's scope rule for
   build tools could not be reproduced from the graph; a version bump
   inherits the file's own marker.
+
+### 5.71 A claim repeats itself in the places that cited it, and a pin needs the word it pins (Step 133)
+
+- **A narrowed claim has echoes.** The review named three documents;
+  the grep found the fourth: ADR-0006's Consequences repeated
+  "compiler-enforced" and named a `LockedSession` / `UnlockedSession`
+  split the threat model itself denies two sections later. Before
+  narrowing a claim, grep its key words across `docs/`, `rules/` and the
+  ADRs; an ADR gets a revision note, not a rewrite. Historical pointers
+  (six ADRs cite the dissolved open.md §71 as the review's reference)
+  stay — the pin scoped itself to the living claim homes for that reason.
+- **The pin's needle is the decision.** "Marked as a design sketch" was
+  the phase-1 answer for the absent auth modes, so the pin needed the
+  phrase `design sketch` in the section — and failed on the capital
+  letter the prose chose. A doc pin compares text; decide the marker
+  together with the wording, and compare case-insensitively when the
+  marker is prose.
+- **The dropped §71 pointer left a number behind.** The Versions row
+  first said "open.md §71, dissolved" and tripped the pin that no claim
+  home points at §71. Say what replaced a dissolved section (its steps),
+  not its number.
+
+### 5.72 Thirteen small items are one step only if the stubs stay quiet, and a cache is cold, not empty (Step 132)
+
+- **Under `deny(warnings)` a stub must be wired or it fails the build.**
+  The red phase added six crate-private functions; unused, each was a
+  dead-code error, so the red tree did not compile. Behaviour-preserving
+  stubs (`Ok(())`, `None`, `false`, a pass-through) wired into their real
+  call sites compile, keep every existing test green and let the new
+  tests fail on their assertions — a `todo!()` in a path the suite walks
+  takes the suite down with it.
+- **"Empty" is not "cold".** `rooms()` hydrating an *empty* cache from
+  the store resurrected a room the same cycle had discarded after a
+  self-removal (a Step 74 test caught it). The condition is a cache that
+  was *never filled*; a cache a sync or a discard emptied is the truth.
+  The flag lives beside the cache and is set where the cache is replaced.
+- **A getter that loads recurses for the compiler.** `rooms()` →
+  `load_rooms_from_store()` → the task backfill → `rooms()`: an async
+  cycle only on paper (the cache is warm on the second visit), but
+  `Box::pin` is the price of the shortcut. Likewise, wrapping a connect in
+  a deadline grew every push-loop future past clippy's `large_futures`
+  limit — box the handshake future inside the wrapper, once, not the
+  callers.
+- **"At resume" has two meanings.** `ClientBuilder::resume` is offline;
+  the login pipeline's "resume" is the path that reuses an existing
+  device, and the feature configs are refetched on a
+  `feature-config.update`. The check went where the configs are fetched,
+  the test onto the device-reuse relogin (the manager's login persists
+  the session a resume finds; a plain `ClientBuilder::login` does not).
+- **Reproduce before you fix, even a one-liner.** Item 13's test produced
+  the exact `GroupStateError(PendingProposal)` of open.md §73 after a
+  refused flush and a restart; the fix then had two obvious layers
+  (rebuild the queue at the first cycle, heal on the send path) and one
+  non-obvious guard (a stale staged commit must go before
+  `commit_to_pending_proposals`).
+- **A wrong name survives until a backend produces the value.**
+  `ConvType::Channel = 3` stood for months; Wire's `type` 3 is the
+  pending connection, and channels are a flag. The self-hosted stack
+  produced one in an afternoon (observations §94). A mapping of a
+  foreign enum deserves one live example per variant before it ships.
+- **The loud check met its first real backend in the smoke.** With the
+  stack's team default on `1`, the relogin on the existing device was
+  refused naming both suites; on `2` it passed and the default stays
+  `2`. NG-25's premise lasted a day; its mitigation shipped a day later.
+- **A wasm-only path without a harness is pinned by review.** The
+  browser's `sendBytes` Append has no test: the wasm suite drives no
+  asset send. Said so in the plan file and the PR rather than claiming a
+  pin that is not there.
+- **The gate's wasm clippy is `--lib`; CI's compiles the browser tests
+  too.** A changed signature of a wasm-only `pub fn` passed the local
+  gate and failed on CI in the Step 115 browser test. CLAUDE.md now names
+  the `ci.yml` line to run when a step touches one; the fix-up carried a
+  browser case for the new rule.

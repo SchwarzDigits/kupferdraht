@@ -1,10 +1,14 @@
 # Step 133 — THREAT_MODEL 0.7: every claim matches the code
 
-**Status: in progress 2026-11-02** — decided (Volker): narrow all six claims,
-build nothing; ADR-0006's Consequences get a 1.2 revision note, since they
-repeat the zeroization claim and name a session split the model itself
-denies. Branch `step/133-threat-model-0-7`, seven doc pins in
-`tests/step_133_threat_model_pins.rs`. (Commissioned 2026-11-01, transferred from open.md §71: the
+**Status: MERGED 2026-11-02** — `fc82e4f` on `step/133-threat-model-0-7`,
+merged to `main` as PR #9 (`599b413`); gate and CI green, no smoke (docs
+only). Decided (Volker): narrow all six claims, build nothing; ADR-0006's
+Consequences carry a 1.2 revision note, since they repeated the
+zeroization claim and named a session split the model itself denies.
+Scope shipped: THREAT_MODEL 0.7, the README and CLAUDE.md wording, seven
+doc pins in `tests/step_133_threat_model_pins.rs`; retrospective
+LEARNINGS §5.71. Archived 2026-11-02 with this header. (Commissioned
+2026-11-01, transferred from open.md §71: the
 documentation claims the production-readiness review of 2026-09-25 measured
 against the code; the precedent is Step 82, THREAT_MODEL 0.4). The document
 is Volker's — version 0.6 of 2026-10-08, for review by Markus — so phase 1
