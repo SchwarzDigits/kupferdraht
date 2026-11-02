@@ -86,6 +86,8 @@ The divergence from Kalium and Natrium is accepted. Kupferdraht serves a differe
 - Direct use of openmls with no intermediate FFI layer.
 - Type-level invariants (`LockedSession` vs `UnlockedSession`, session-bound conversation handles, zeroize-on-drop) are enforced by the compiler, not by convention.
 
+*Revision 1.2 (2026-11-02, Step 133, THREAT_MODEL 0.7):* what the two bullets above came to. Zeroization is best effort by type choice — key material and credentials in their holders are `Zeroizing` and wiped on drop, tokens and message plaintext are not (THREAT_MODEL G4); the language keeps the property for every holder that has it, it does not find the ones that lack it. The type-level invariants shipped are `Submitted` vs `Acknowledged` and session-bound handles; there is no `LockedSession` / `UnlockedSession` split (THREAT_MODEL "Type-level distinction"). The decision stands on the client platforms and on that best effort, which the JVM and Kotlin/Native cannot offer at all.
+
 ### Negative
 
 - Team members unfamiliar with Rust need to build fluency. Onboarding cost is real, though bounded to the Kupferdraht-internal team.
@@ -128,3 +130,4 @@ Details of the CLI harness, which also lives in Rust for reasons specific to the
 |---|---|---|
 | 1.0 | 2026-04-21 | Initial ADR |
 | 1.1 | 2026-09-25 | Dehydrated Device dropped (PLAN.md Step 13): the server-side-deployment argument no longer applies. Decision unchanged — it stands on the client platforms and on compiler-enforced zeroization (G4/G6). No content change. |
+| 1.2 | 2026-11-02 | Step 133 (THREAT_MODEL 0.7): the Consequences narrowed to what shipped — zeroization best effort by type choice (not tokens, not plaintext), the type-level invariants `Submitted` vs `Acknowledged` and session-bound handles, no `LockedSession` / `UnlockedSession`. Decision unchanged. |

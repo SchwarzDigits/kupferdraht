@@ -52,6 +52,16 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **THREAT_MODEL 0.7 says what the code does** (Step 133): the claims the
+  production-readiness review of 2026-09-25 measured against the code are
+  narrowed, none built — zeroization is best effort by type choice (key
+  material and credentials in their holders; tokens, the login body and
+  message plaintext are not covered), the auth modes the code lacks are a
+  marked design sketch, reproducible builds leave the trust model, G4's
+  local forward secrecy waits for Step 134, the server's device injection
+  is assumption A7, the Linux keystore limit points at NG-24. README and
+  CLAUDE.md drop "compiler-enforced"; ADR-0006 carries a 1.2 revision
+  note. Nothing in the library changes.
 - **openmls's P-256 providers come from the SchwarzDigits openmls fork**
   (Step 128): `openmls_rust_crypto` and `openmls_basic_credential` are git
   dependencies by tag like `openmls_sqlite_storage` since Step 127 — the
