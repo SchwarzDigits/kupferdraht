@@ -216,32 +216,6 @@ repository as written here and in Steps 77–80; they are documented in
 Kalium's own pull requests and were the checklist, not the source, of
 Kupferdraht's hardening.
 
-## 70) Step 95c residuals — cache-lock `expect`s, payload length caps, function-length debt (2026-09-26)
-
-Left open by Step 95c (`docs/plan/archive/95-inbound-message-integrity.md`),
-the first two deliberately:
-
-- **About 26 `.expect("… poisoned")` on in-memory cache locks** — the
-  rooms cache, event-handler and listener registries, typing state
-  (`client/{sync,rooms,membership,timeline_read,typing}.rs`,
-  `sync/service.rs`). They fire only after another panic while the
-  lock was held — no foreign data reaches them — but they turn one
-  defect into a cascade. Recovering them the way `lock_mls` does is
-  safe for data that is replaced wholesale; bundle it into the next
-  step that touches these modules.
-- **No length caps on Kupferdraht's own payloads** (`TaskPayload`,
-  `CasePayload`, `extensions`) — a peer can send a very large title or
-  map; it is stored as-is. Needs a cap per field — a protocol decision
-  (what a receiver drops, what a sender refuses), so ADR material.
-- **Function-length debt the step touched.** Functions already over
-  the 40-line budget before 95c grew by a few lines each — `run_push`
-  (61), `ClientBuilder::login` (52), `create_room` (50), `delete_room`
-  (46), `absorb_welcome` (44), `dispatch_inbound_ephemeral` (44),
-  `upsert_task` (49) — and `start_sync` crossed it (41). Other pre-95
-  overlong functions in the same files (`dispatch_generic_message` 66,
-  `rebind_access_token` 68, `create_dm` 62) are older debt. Split them
-  when the module is next touched.
-
 ## 72) Browser server mode — residuals of Step 111b (2026-09-30)
 
 What Step 111b (ADR-0035, the account databases on a storage server) left

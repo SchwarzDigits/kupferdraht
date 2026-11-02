@@ -38,6 +38,14 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **Step 95c's residuals are a step** (open.md §70 dissolved, 2026-11-02):
+  poison recovery for the in-memory cache locks, a phase-1 ADR capping the
+  fields of Kupferdraht's own payloads, the function-length list — Step 136.
+  From the same day's review of an external security scan (16 findings, all
+  real, 9 already planned, 1 closed by Step 128): Step 135 drops a message
+  signed by an X.509 leaf instead of attributing it through the envelope,
+  the follow-up ADR-0027 promised.
+
 ### Deprecated
 
 ### Removed
