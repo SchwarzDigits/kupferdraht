@@ -61,7 +61,7 @@ consumer asked for it, the `Option` accessors mirror matrix-rust-sdk by
 ADR-0009, the two-step login is by design (the device cap asks the user),
 and the CLI is a thin wrapper for live testing (`docs/cli.md`).
 
-- **erg-C** three error messages mislead or give no hint: `pipeline.rs` "has no group_id — run sync_metadata first" (the fix is to join; mirror the typed `KupferdrahtError::MlsGroupMissing` text), `pipeline.rs` "{op}: {room_id} not in cache" (add "run sync / load_rooms_from_store"), `sqlite/mod.rs` "storage column … not valid UTF-8" (add a corruption / recovery hint).
+- **erg-C** four error messages mislead or give no hint: `pipeline.rs` "has no group_id — run sync_metadata first" (the fix is to join; mirror the typed `KupferdrahtError::MlsGroupMissing` text), `pipeline.rs` "{op}: {room_id} not in cache" (add "run sync / load_rooms_from_store"), `sqlite/mod.rs` "storage column … not valid UTF-8" (add a corruption / recovery hint); and `invite_members` "Wire returned no KeyPackages for … (pool exhausted or user has no devices?)", which on a backend with another default ciphersuite names the wrong causes (observations §94; the loud check of Step 132 removes the case at login).
 - **erg-D.11** `kupferdraht-cli doctor` — a health check for live testing: session valid, device registered, MLS state present, key-package pool depth, store path, last sync, `file_sharing` / `receipt_mode`. Absorbs the former `status --verbose` idea.
 
 ### Live verification backlog
@@ -71,7 +71,6 @@ test stage (httpmock cannot stand in for openmls or for an official
 client). Work through them in the next session that is on the stage
 anyway; a verified item leaves here (the fact goes to `docs/observations.md`).
 
-- **gap-B.11** the asset send / receive happy path end to end;
 - **gap-B.14** an inbound asset from Wire Web to Kupferdraht;
 - **gap-B.15** the `WIRE_RECEIPT_MODE` off path against a live backend;
 - **gap-B.13** a live `/feature-configs` fixture captured (the tests use a synthesised one);

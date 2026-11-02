@@ -12,7 +12,14 @@ consumers that pin it, and an openmls release that catches up is cleaned
 out of that one branch; (b) `voprf-ng`, the manifest line moves back when
 `voprf` 0.6 ships; (c) the duplicate-crate families stay — Kupferdraht's
 own RustCrypto crates to the 0.11 / 0.13 line are an open.md §64
-candidate. Branch `step/128-crypto-bigint-advisory`.
+candidate. Branch `step/128-crypto-bigint-advisory`. Smoked 2026-11-02
+against a self-hosted wire-server with the official web client on the
+other side (observations §94): a Welcome from the web client opened here,
+Kupferdraht's Welcome opened there, external-commit joins in both roles,
+text both ways, the stack's two-account Kupferdraht smoke 18 of 18; the
+PIN export / restore round trip is not live-smoked (browser-only, no PIN
+service on that stack) — its RFC 9497 interop vectors and receipt
+known-answer tests pass on the new line.
 
 ## Problem
 

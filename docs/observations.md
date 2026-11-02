@@ -2016,3 +2016,50 @@ framework the Command Line Tools ship), all five pass, including
 over SQLite3MC from the fork. Fix: the stub in both pins; the structural
 gap is the missing macOS CI job (Step 20e) — only the web track runs in
 CI, every UniFFI track is hand-run.
+
+## 94) A backend whose MLS default ciphersuite is X25519 can neither add nor be added by Kupferdraht, but joins its groups (2026-11-02)
+
+Measured in the Step 128 smoke against a self-hosted wire-server (API
+v14, team feature `mls` enabled with `allowedCipherSuites: [1, 2]`,
+`defaultCipherSuite: 1`, `defaultProtocol: mls`), the official web client
+on one side and `kupferdraht-cli` on the other.
+
+- The web client uploads key packages for the backend's default suite
+  only. Kupferdraht claims for its one suite, `0x0002` (NG-25), so
+  `room-invite` of the web user fails with "Wire returned no KeyPackages
+  for … (pool exhausted or user has no devices?)" — the cause is the
+  suite, not the pool. The reverse holds too: a group the web client
+  creates claims `0x0001` key packages, of which a Kupferdraht device has
+  none. With the team's `defaultCipherSuite` set to `2` (owner `PUT
+  /teams/{tid}/features/mls`) the web client uploaded `0x0002` key
+  packages after a reload, and both Welcome directions worked: Kupferdraht's
+  Welcome (HPKE DHKEM-P256 on `hpke-rs` 0.8) opened in the web client, the
+  web client's Welcome to a claimed Kupferdraht key package opened here;
+  text both ways in both groups. The loud mismatch check of Step 132
+  (item 12) would have named the suite at login; the "no KeyPackages"
+  message does not.
+- Independent of the default suite, the web client joined a
+  Kupferdraht-created `0x0002` group by external commit (the group's
+  epoch advanced, Kupferdraht processed the commit), and a Kupferdraht
+  device joined a group whose last committer was the web client through
+  that client's GroupInfo (`room-join`, external commit, epoch 6) — the
+  external-init HPKE in both roles. Text both ways afterwards, the
+  signatures of both sides accepted (`openmls_basic_credential` on
+  `ed25519-dalek` 3 beside Kupferdraht's own 2).
+- `rooms` prints the backend's epoch for a room the device holds no local
+  MLS state for (a device registered after the group was created); only
+  `room-devices` / `room-members` say "no MLS group with that id is
+  persisted locally". The backend fans an MLS message out to the group's
+  leaf clients only, so such a device drains nothing for that room until
+  it joins (`room-join`) — the first two web messages of the smoke went
+  nowhere for that reason, not because of the crypto line.
+- The web client shows the Kupferdraht-created MLS 1:1 as read-only
+  ("you both use different protocols") on this backend — expected
+  behaviour (Volker, 2026-11-02), not an item; the smoke did not need the
+  1:1.
+- The two-account Kupferdraht smoke of the stack (`room-create`,
+  `room-invite`, `dm-create` with the external-commit join of the second
+  device, `send-file` / `download-asset` with matching SHA-256,
+  `sync-stream` over the socket) passed 18 of 18 on the p256 0.14 line;
+  the asset happy path end to end (former open.md gap-B.11) is live-verified
+  by it.
