@@ -99,21 +99,6 @@ ignore = [
     # vulnerability and not in the shipped runtime; revisit with the next
     # uniffi bump.
     { id = "RUSTSEC-2026-0374", reason = "unmaintained build-time proc-macro via askama_derive/uniffi_bindgen; not a vuln, no fix available" },
-    # `crypto-bigint` 0.5 (RUSTSEC-2026-0387, 2026-10-23): several
-    # operations meant to be constant-time can branch on secret data
-    # (subtraction, zero counting, division, Montgomery multiplication,
-    # limb equality). The fix is 0.7.6+, which only the RustCrypto 0.14
-    # line takes (elliptic-curve 0.14, p256 0.14, ecdsa 0.17); our P-256
-    # comes through openmls_rust_crypto 0.6 and openmls_basic_credential
-    # 0.6 (p256 ^0.13, hpke-rs-rust-crypto ^0.7) and voprf 0.5 (p256
-    # ^0.13), none of which has a release on 0.14 yet — hpke-rs-rust-crypto
-    # 0.8 has. Our ciphersuite is MLS_128_DHKEMP256_AES128GCM_SHA256_P256,
-    # so the affected scalar arithmetic is on the HPKE and signing path.
-    # Accepted for now with the upgrade path as Step 128
-    # (`docs/plan/128-crypto-bigint-advisory.md`): the
-    # crates cannot move independently, and the alternative is no build at
-    # all until openmls follows. Remove this entry with that upgrade.
-    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 pinned by p256 0.13 via openmls_rust_crypto/openmls_basic_credential/voprf; fix only on the RustCrypto 0.14 line, upgrade path is Step 128 (docs/plan/128-crypto-bigint-advisory.md)" },
 ]
 
 # ---------------------------------------------------------------------

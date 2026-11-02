@@ -52,6 +52,19 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **openmls's P-256 providers come from the SchwarzDigits openmls fork**
+  (Step 128): `openmls_rust_crypto` and `openmls_basic_credential` are git
+  dependencies by tag like `openmls_sqlite_storage` since Step 127 — the
+  fork's branch `schwarzdigits/openmls-0.9` carries every SchwarzDigits change on
+  the 0.9 release line under one tag, `openmls-v0.9.0-schwarzdigits.1` (the first
+  tag, `sqlite_storage-v0.3.0-sqlite3mc`, stays for the consumers that
+  pin it). The crates are upstream's 0.6.0 plus upstream's own p256 0.14
+  migration (openmls/openmls#2249, `hpke-rs` 0.8), unreleased on
+  crates.io. A Rust consumer inherits the sources through `Cargo.lock`,
+  nothing to configure; no API changes. The OPRF client of the PIN
+  recovery is `voprf-ng` 0.6 (the same crate's 0.6 pre-release on the
+  p256 0.14 line, same API, same RFC 9497 vectors) until `voprf` 0.6
+  ships.
 - **A plain `logout` signs the account out** (Step 78): after
   `Kupferdraht::logout` without a purge, and after the browser's
   `Client.logout()` without options, the account is no longer the active
@@ -116,6 +129,13 @@ is no skill for it — it is this short procedure:
 ### Fixed
 
 ### Security
+
+- **`crypto-bigint` 0.5 is out of the dependency graph** (RUSTSEC-2026-0387,
+  Step 128): every P-256 operation — the HPKE of key packages and
+  Welcomes, the ECDSA signatures on MLS messages, the PIN recovery's OPRF
+  and receipts — now runs on the RustCrypto 0.14 line (`p256` 0.14,
+  `crypto-bigint` 0.7), whose constant-time arithmetic carries the fix.
+  The `deny.toml` ignore of 2026-10-30 is gone.
 
 ## [0.1.0] - 2026-10-31
 

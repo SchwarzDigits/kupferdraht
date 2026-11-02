@@ -11,8 +11,10 @@ and the stand-in bullet of
   github.com/SchwarzDigits/rusqlite (its `libsqlite3-sys` bundles the
   SQLite3MC amalgamation; `bundled` always means SQLite3MC there),
   github.com/SchwarzDigits/refinery and github.com/SchwarzDigits/openmls
-  (branch `sqlite3mc/sqlite_storage-<line>`). Dependency and
-  dev-dependency sites alike.
+  (branch `schwarzdigits/openmls-<line>`: one branch per openmls release
+  line carrying every SchwarzDigits change under one tag — since Step 128
+  also the p256 0.14 providers `openmls_rust_crypto` and
+  `openmls_basic_credential`). Dependency and dev-dependency sites alike.
 - **The same `git` URL and `tag` at every site, in Kupferdraht and inside
   the forks** — another tag or a `rev` of the same URL is a second source,
   and the graph holds one `libsqlite3-sys` (`links = "sqlite3"`).

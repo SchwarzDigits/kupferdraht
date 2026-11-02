@@ -23,6 +23,7 @@
 
 use p256::ecdsa::signature::Signer as _;
 use p256::ecdsa::{Signature, SigningKey};
+use p256::elliptic_curve::sec1::ToSec1Point as _;
 use zeroize::{Zeroize as _, Zeroizing};
 
 use crate::error::KupferdrahtError;
@@ -69,7 +70,7 @@ impl ReceiptKey {
 
     /// The public key, compressed — `refundKey`.
     pub(crate) fn public_key(&self) -> [u8; REFUND_KEY_LEN] {
-        let point = self.signing.verifying_key().to_encoded_point(true);
+        let point = self.signing.verifying_key().as_affine().to_sec1_point(true);
         let mut key = [0u8; REFUND_KEY_LEN];
         key.copy_from_slice(point.as_bytes());
         key

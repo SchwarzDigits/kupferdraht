@@ -257,7 +257,8 @@ graph and the trademark note.
 [`docs/THIRD_PARTY_LICENSES.html`](docs/THIRD_PARTY_LICENSES.html)
 enumerates every crate Kupferdraht links against, grouped by license
 (the SchwarzDigits forks of rusqlite, refinery and openmls that carry the
-SQLite3MC build line are git dependencies and listed like any crate),
+SQLite3MC build line and openmls's P-256 providers on the p256 0.14 line
+are git dependencies and listed like any crate),
 plus a hand-kept section for the two components outside the crate
 graph: the vendored SQLite3MC engine (MIT) and the git-pinned
 `sqlite-remote-vfs` (Apache-2.0), which cargo-about skips as an

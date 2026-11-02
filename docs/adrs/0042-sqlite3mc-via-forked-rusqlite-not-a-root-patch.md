@@ -119,7 +119,7 @@ spec at every site:
 |---|---|---|---|
 | github.com/SchwarzDigits/rusqlite | v0.37.0 | `sqlite3mc/0.37`, `v0.37.0-sqlite3mc-2.5.1` | `libsqlite3-sys`: `bundled` compiles the SQLite3MC amalgamation in `libsqlite3-sys/sqlite3mc/` (copied from `vendor/sqlite3mc/` with its `LICENSE` and `PROVENANCE.txt`) with upstream's flag set plus `SQLITE_TEMP_STORE=2`; SQLCipher features refused; on `wasm32-unknown-unknown` the crate re-exports `sqlite-wasm-rs` (the former stand-in's wasm arm); upstream's crate root unchanged in `src/native.rs` |
 | github.com/SchwarzDigits/refinery | v0.9.1 | `sqlite3mc/0.9`, `v0.9.1-sqlite3mc` | `refinery-core` and the examples take `rusqlite` from the rusqlite fork by tag |
-| github.com/SchwarzDigits/openmls | openmls-v0.9.0 | `sqlite3mc/sqlite_storage-0.3`, `sqlite_storage-v0.3.0-sqlite3mc` | `sqlite_storage` takes `rusqlite` and `refinery` from the forks by tag and `openmls_traits = "0.6.0"` from crates.io instead of the workspace path, so a consumer on the crates.io openmls 0.9 line holds the trait crate once |
+| github.com/SchwarzDigits/openmls | openmls-v0.9.0 | `schwarzdigits/openmls-0.9`, `openmls-v0.9.0-schwarzdigits.1` (first published as `sqlite3mc/sqlite_storage-0.3`, `sqlite_storage-v0.3.0-sqlite3mc`, which stays for the consumers that pin it) | `sqlite_storage` takes `rusqlite` and `refinery` from the forks by tag and `openmls_traits = "0.6.0"` from crates.io instead of the workspace path, so a consumer on the crates.io openmls 0.9 line holds the trait crate once. Since Step 128 the same branch carries upstream's p256 0.14 migration of `openmls_rust_crypto` and `openmls_basic_credential` (openmls/openmls#2249 plus the `hpke-rs` 0.8 lines, traits from crates.io by the same rule) ahead of an openmls release |
 
 On this rusqlite fork `bundled` means SQLite3MC, always; there is no
 feature a consumer could leave off. Versions stay upstream's, so the
@@ -153,6 +153,11 @@ forks are upstream's code with manifest changes, rebased per release.
   recipe is in `vendor/README.md` and each fork's README.
 - The openmls fork carries a downstream branch beside the upstream PR
   heads; its branch policy is to be agreed with the fork's other user.
+  Since Step 128 (2026-11-02) it is one branch per openmls release line
+  that carries every SchwarzDigits change under one tag, so the three
+  crates Kupferdraht takes from it name the same source — a second tag of
+  the same URL would be a second source — and an openmls release that
+  catches up is cleaned out of that one branch.
 - A git tag is immutable by convention only; the committed `Cargo.lock`
   pins the commit, and the provenance of these crates is a commit hash,
   not a registry checksum.

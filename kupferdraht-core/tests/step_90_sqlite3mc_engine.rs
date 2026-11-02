@@ -177,7 +177,7 @@ const RUSQLITE_SOURCE: &str =
     "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.5.1";
 const REFINERY_SOURCE: &str = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc";
 const OPENMLS_STORAGE_SOURCE: &str =
-    "git+https://github.com/SchwarzDigits/openmls?tag=sqlite_storage-v0.3.0-sqlite3mc";
+    "git+https://github.com/SchwarzDigits/openmls?tag=openmls-v0.9.0-schwarzdigits.1";
 
 /// `libsqlite3-sys` is the SchwarzDigits rusqlite fork's sys crate, reached
 /// through rusqlite as a git dependency by tag — never crates.io's vanilla
