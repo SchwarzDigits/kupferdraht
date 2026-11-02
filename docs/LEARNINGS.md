@@ -2230,3 +2230,23 @@ touched it.
   gate and failed on CI in the Step 115 browser test. CLAUDE.md now names
   the `ci.yml` line to run when a step touches one; the fix-up carried a
   browser case for the new rule.
+
+### 5.73 A decided step is a morning, and the echoes sit in comments and a sibling ADR (Step 135)
+
+- **The plan file carried the decision, so the step was the diff.** Option
+  (a) was chosen when the step was commissioned (PR #13); orientation,
+  red tests, implementation and docs took one morning because nothing had
+  to be weighed. The grep of 5.71 found what the plan file's list had
+  not: three source comments (`leaf_identity.rs`, `event_handler.rs`, a
+  test comment in `service.rs`) and ADR-0028's negative consequence,
+  which inherited the exception. A narrowed claim echoes in code
+  comments and in the ADRs that built on it, not only in the doc homes.
+- **A scoped capture pins a log line without a global subscriber.** For a
+  synchronous function `tracing::subscriber::with_default` with a
+  ~25-line `Subscriber` in the test module records `(level, fields)`;
+  no dev-dependency, no cross-test interference, unlike Step 101's
+  global capture that an async login needed.
+- **An `Option` that is always `Some` now stays an `Option`.** Dropping
+  the X.509 path made `Message::sender_device_id` always set, but
+  narrowing the public type is a `BREAKING` for every binding; the doc
+  comment carries the truth until a minor bump collects such changes.
