@@ -1,8 +1,13 @@
 # Step 125 — The browser `Client` answers the account's handle
 
-**Status: commissioned 2026-10-06** — proposed by an embedder of the browser
-surface, which carries a REST call of its own for one string this surface
-already holds.
+**Status: MERGED 2026-10-06** — `65b388a` on `step/125-the-client-answers-its-handle`,
+merged in the pre-publication repository as its PR #117 (`32388bc`) and
+published with the v0.1.0 snapshot (CHANGELOG 0.1.0 "Browser: the account's
+handle"); smoked 2026-10-06 through an embedder's showcase app;
+retrospective LEARNINGS §5.66. Archived 2026-11-02 with this header — the
+PLAN.md row had stayed at "in progress" across the publication. Proposed
+by an embedder of the browser surface, which carried a REST call of its
+own for one string this surface already holds.
 Scope: one getter on the wasm `Client`, its twin in the tab mirror
 (ADR-0026), the two doc homes. No new ADR — no decision is surfaced. **No CLI
 command**: the surface is browser-only, as in Step 121; today's CLI has the

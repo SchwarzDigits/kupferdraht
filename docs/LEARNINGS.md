@@ -2078,3 +2078,82 @@ touched it.
   the pins again for four months, because no UniFFI track runs in CI and
   the Rust gate compiles the exports, not the generated code
   (observations §93). A pin outside the gate is a note, not a test.
+
+### 5.69 Adopt the sibling surface's answers, and pin behaviour rather than a helper's name (Step 78)
+
+- **A consumer's write-up is the commissioning input.** The first Rust
+  embedder's open.md (§8 manager-level sign-out, §10 store destruction)
+  said what was missing better than the 2026-09 audit line had; the
+  decisions — `Kupferdraht::logout(&client, PurgeOptions, password)`,
+  `Kupferdraht::forget_account` for local state only, "signed out" as the
+  cleared active account with no schema change — followed from reading it
+  with the code review of the browser's purge (Step 114) in hand. The
+  browser's answers to the phase-1 questions (backend first, close before
+  delete, keys before the registry row) were adopted natively, not
+  designed a second time.
+- **A pin on a private helper's name breaks on the next rename.**
+  `step_121_retired_device_pins.rs` asserted that `remote_resume.rs`
+  calls `forget_account`; the helper became `forget_secrets_and_entry`
+  and the pin went red for a reason that had nothing to do with retired
+  devices. What the pin wanted was "a login that meets a retired device
+  forgets its keys" — pin the effect or the public symbol, not a name
+  inside a module.
+- **The manager's client cache holds only `resume` clients.** A client
+  from `login` is the caller's alone, so `forget_account` cannot close it
+  and a `resume` right after `login` builds a second client. The tests
+  hold their client through `resume` and say so; the gap is recorded
+  (open.md §83), not fixed here — a step that notices something adjacent
+  writes it down and keeps its scope.
+
+### 5.70 A measured route is a morning's step, the lockfile is the maximal resolve, and the first backend with another suite showed up in the smoke (Step 128)
+
+- **Measure the route before commissioning, in scratch worktrees.** The
+  fork cherry-pick, the two code changes and the green gate were measured
+  on 2026-10-31 as a candidate; the step on 2026-11-02 replayed them from
+  the worktrees that still held the resolved conflicts and the exact
+  manifest lines. Nothing had to be rediscovered, and the phase-1
+  decisions could be put to Volker with numbers (duplicate families,
+  trust in `voprf-ng`, the branch layout).
+- **`Cargo.lock` is the maximal resolve; `cargo metadata --offline` needs
+  all of it.** The Step 90 provenance pin failed on CI with a crate no
+  target builds (`crabgrind` 0.3.1, an optional dependency that is locked
+  but never compiled): a build fetches only what it compiles, and the
+  runner's cache had hidden this for the old lockfile. `cargo fetch
+  --locked` before the tests, verified in an empty `CARGO_HOME`. Locally
+  the pin had passed because `cargo tree --target all` had fetched
+  everything as a side effect — a green local gate can rest on a side
+  effect; a clean cache is the only proof.
+- **One collective fork branch per openmls release line.** Chosen over a
+  topic branch per change: every site that names the fork names one tag
+  (ADR-0042's rule holds literally), and the clean-up when openmls
+  catches up happens in one place. An earlier tag stays as long as a
+  Kupferdraht release names it. `git tag` on this machine needs `-m`
+  (signed annotated tags), and `--reset-author` is not a `git commit`
+  flag outside `--amend`.
+- **The first backend with another default suite surfaced in the smoke,
+  not in production.** A self-hosted team with `defaultCipherSuite: 1`:
+  the official client uploads key packages for the default suite only,
+  Kupferdraht claims `0x0002`, and `room-invite` says "no KeyPackages (pool
+  exhausted or user has no devices?)" — two wrong causes. Beside it,
+  `rooms` printed the backend's epoch for a room the device held no MLS
+  state for, so the first web messages "vanished" until `room-join`. NG-25's
+  premise ("until a backend with another default appears") lasted one
+  day; the loud check at login (Step 132) and the erg-C message fix have
+  a measured case now.
+- **Drive the official client; do not stand in for it.** The stack's
+  Kupferdraht↔Kupferdraht smoke cannot see an HPKE derivation both sides
+  share; a Welcome from core-crypto and our Welcome into core-crypto can.
+  Headless Chrome over the DevTools protocol with the web client's
+  `data-uie-name` selectors cost an hour of session quirks (temporary
+  versus persistent device, the "already open in this browser" modal, a
+  profile that only persists on a graceful close) and gave both Welcome
+  directions plus external-commit joins in both roles — 'a Welcome from
+  an official client decrypts' is now a sentence with a date.
+- **Update a hand-kept attribution file surgically, checked against the
+  graph.** `THIRD-PARTY-NOTICES` groups crates by hand (merged author
+  strings, fork notes); regenerating it would have churned every line.
+  A removed/added diff from `cargo tree`, applied entry by entry, then
+  checked against the new graph (presence and license section exact)
+  kept the change to the crates that moved. The file's scope rule for
+  build tools could not be reproduced from the graph; a version bump
+  inherits the file's own marker.
