@@ -44,7 +44,12 @@ is no skill for it — it is this short procedure:
   From the same day's review of an external security scan (16 findings, all
   real, 9 already planned, 1 closed by Step 128): Step 135 drops a message
   signed by an X.509 leaf instead of attributing it through the envelope,
-  the follow-up ADR-0027 promised.
+  the follow-up ADR-0027 promised. Step 132, merged the same day, had
+  closed the scan's transport findings (redirects, the browser `ws://`
+  site, the connect timeout and the pong check); what it left — URL path
+  segments, the CLI's `--cookie`, the error-body cap, the token exchange's
+  redirects, the case dispatch's cold cache — is Step 137, and the umask
+  modes of open.md §69 joined Step 134.
 
 ### Deprecated
 

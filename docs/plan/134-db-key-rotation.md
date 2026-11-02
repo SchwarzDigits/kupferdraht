@@ -1,7 +1,9 @@
 # Step 134 — DB-key rotation, `secure_delete`, and a schema version for `global.db`
 
 **Status: commissioned 2026-11-01** (transferred from open.md gap-B.10 and
-§71 M5; the threat model's G4 claim, Step 133, depends on it).
+§71 M5; the threat model's G4 claim, Step 133, depends on it; the umask
+modes of open.md §69 joined on 2026-11-02, since this step touches the open
+paths).
 
 ## Problem
 
@@ -19,6 +21,14 @@
    (`storage/global.rs`) has `CREATE TABLE IF NOT EXISTS` and no schema
    version, so every change to it is an `ALTER TABLE` guarded by a column
    check.
+3. **DB files carry umask default modes** (open.md §69, transferred
+   2026-11-02). `open_connection` and `create_parent_dir` (`storage/mod.rs`)
+   create `kupferdraht.db`, `mls.db`, `global.db` and `accounts/<id>/` with
+   the process umask, typically 0644 / 0755; the keystore's files are
+   0600 / 0700 (`keystore/file_store.rs`, `storage/atomic_file.rs`). The
+   content is ciphertext and the keys sit in the OS keystore, so this is
+   defence in depth — accepted on 2026-09-10 for whichever step next
+   touches the open paths, which this one does (scan review 2026-11-02, L3).
 
 ## Design (to confirm in phase 1)
 
@@ -56,6 +66,10 @@
    version.
 3. The FFI mirror; the wasm surface refuses with a clear error until the
    browser decision lands.
+4. Unix modes on the open paths: 0700 for `accounts/<id>/` (and the home
+   when this step creates it), 0600 for the three database files; SQLite
+   gives `-wal` / `-shm` the main file's mode. An existing file keeps its
+   mode (no chmod sweep); wasm has no modes.
 
 ## Out of scope
 
@@ -72,6 +86,8 @@
 - the rotation refuses while the manager holds a client, and while another
   process holds the ADR-0024 lock;
 - `secure_delete` is ON on every opened connection (PRAGMA read-back);
+- on Unix, a fresh account's directory is 0700 and its database files
+  0600 (metadata read-back, like `keystore/file_store.rs`'s tests);
 - `global.db` reports a `user_version`, and a second open migrates nothing
   twice;
 - CLI: `keys-rotate --id` names the rotated databases; the Step-88 engine

@@ -49,11 +49,11 @@ parsed.
    "keeps the envelope attribution" bullet).
 3. `docs/THREAT_MODEL.md` G1: the exception sentence goes; every surfaced
    message is attributed to the MLS-authenticated leaf, without exception.
-   Coordinated with Step 133 — whichever lands second rebases the
-   paragraph.
-4. `docs/library.md:209-210` and `docs/wire/mls-deviations.md:197`, which
+   Step 133 (THREAT_MODEL 0.7, merged 2026-11-02) kept the sentence; this
+   step removes it with a revision line of its own.
+4. `docs/library.md:210-211` and `docs/wire/mls-deviations.md:197`, which
    describe the X.509 fallback: one line each that non-Basic leaves are
-   dropped. `RoomDevice` (`docs/library.md:1473`) is unchanged — the device
+   dropped. `RoomDevice` (`docs/library.md:1474`) is unchanged — the device
    list still shows an X.509 leaf with `user_id` / `device_id` `None`.
 5. `CHANGELOG.md` `[Unreleased]`, consumer-facing: a message class that
    was delivered under an unauthenticated identity is now dropped and

@@ -199,11 +199,10 @@ blocker class does not transfer — one Rust core, SQLCipher
 everywhere, calling out of scope). Two minors were verified and
 deliberately left as residuals rather than steps:
 
-- **DB files carry umask default modes**, not 0600 (no
-  `OpenOptions`/`set_permissions` anywhere in the storage layer).
-  Accepted because the content is SQLCipher ciphertext and the keys
-  live in the OS keystore — mode 0600 would be defense-in-depth
-  only. Bundle it into whichever step next touches the open paths.
+- **DB files carry umask default modes**, not 0600 — accepted on
+  2026-09-10 as defense-in-depth only (ciphertext, keys in the OS
+  keystore) for whichever step next touches the open paths; that is
+  Step 134 (`docs/plan/134-db-key-rotation.md`, transferred 2026-11-02).
 - **Windows `FileKeyStore` writes without ACLs** (the
   `cfg(not(unix))` arm is plain `fs::write`). Accepted: the file
   keystore is a dev-only escape hatch (Step 77 makes it loud and
