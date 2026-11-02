@@ -36,6 +36,20 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.1.1] - 2026-11-02
+
+### Added
+
 - **Native sign-out and account purge** (Step 78; the browser's purge of
   ADR-0035, adopted natively): `Kupferdraht::logout(&client, PurgeOptions,
   password)` revokes the session and marks the account signed out —
@@ -154,10 +168,6 @@ is no skill for it — it is this short procedure:
   of the home are untouched), and both together are the old "clean slate".
   The output names what stays, what the backend keeps and what the next
   `login` does.
-
-### Deprecated
-
-### Removed
 
 ### Fixed
 
