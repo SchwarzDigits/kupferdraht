@@ -64,6 +64,10 @@ is no skill for it — it is this short procedure:
   `bindings/kotlin` (Gradle 8.10.2) and `bindings/kmp` (Gradle 9.1.0) to
   the checksums `services.gradle.org` publishes; a tampered or substituted
   archive fails the wrapper instead of running the build.
+- **`.gitignore` ignores environment files** (2026-11-02, finding L1 of
+  the external security scan): `.env` and `.env.*` never enter the
+  repository, an `.env.example` still can. No such file exists today;
+  the rule is there before the first tool writes one.
 
 ## [0.1.1] - 2026-11-02
 
