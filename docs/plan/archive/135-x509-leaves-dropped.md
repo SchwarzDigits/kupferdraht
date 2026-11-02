@@ -1,8 +1,22 @@
 # Step 135 — X.509 leaves: drop instead of envelope attribution
 
-**Status: in progress 2026-11-02** (branch `step/135-x509-leaves-dropped`; commissioned 2026-11-02 from the review of the external
-security scan of 2026-11-02, finding H1 — `sync/sender.rs:50`; the
-decision below is Volker's, the same day). ADR-0027 decision 2 keeps the
+**Status: MERGED 2026-11-02** — `90fb98f` on `step/135-x509-leaves-dropped`,
+merged to `main` as PR #15 (`f159bbf`); gate and CI green, no smoke (no
+live X.509 leaf: the self-hosted stack has no IdP, and Kupferdraht never
+enrols). Decided (Volker, at commissioning): option (a) —
+`attribute_sender` drops a message signed by a non-Basic leaf with a
+`warn!` naming the message id; no `sender_verified` flag, no X.509
+parsing. Scope shipped: `sync/sender.rs` (`UNKNOWN_SENDER` gone),
+ADR-0027 decision 2 amended (Option D in place of E) with `rules/0027`,
+ADR-0028's inherited consequence, THREAT_MODEL 0.8 (G1),
+`docs/library.md`, `docs/wire/mls-deviations.md`, `docs/ARCHITECTURE.md`
+and three source comments; three unit tests in `sender.rs`, the doc pins
+of `tests/step_135_x509_leaves_dropped.rs`, and the Step-95a end-to-end
+pin turned around (`x509_sender_drops_the_message`); retrospective
+LEARNINGS §5.73. Archived 2026-11-02 with this header. (Commissioned
+2026-11-02 from the review of the external security scan of 2026-11-02,
+finding H1 — `sync/sender.rs:50`; the decision below is Volker's, the
+same day.) ADR-0027 decision 2 keeps the
 envelope attribution for a sender whose leaf carries a non-Basic
 credential and names "a follow-up step" that no plan file and no PLAN.md
 row ever held; THREAT_MODEL G1 repeats the exception. This step is that
