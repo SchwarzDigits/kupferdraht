@@ -992,8 +992,10 @@ impl Client {
     }
 
     /// The (locally stored, already-decrypted) messages of `roomId`, oldest
-    /// first, newest `limit` items. Projects each `TimelineItem` to a plain JS
-    /// object; non-text kinds carry `body: null` + a `kind` label.
+    /// first, newest `limit` items. The room is read from the cache, or from
+    /// the store when the cache is cold (right after `resume`). Projects each
+    /// `TimelineItem` to a plain JS object; non-text kinds carry `body: null`
+    /// + a `kind` label.
     #[wasm_bindgen(js_name = messages)]
     pub async fn messages(
         &self,
@@ -1001,9 +1003,11 @@ impl Client {
         limit: Option<u32>,
         before: Option<String>,
     ) -> Result<JsValue, JsValue> {
+        // Cache first, the store on a miss (Step 132 item 10): a room the
+        // store holds is answered right after `resume`, before any sync.
         let room = self
             .inner
-            .room(&room_id)
+            .room_or_load(&room_id)
             .await
             .ok_or_else(|| named_error("InvalidInput", &format!("unknown room: {room_id}")))?;
         let mut opts = crate::timeline::MessagesOptions::all();

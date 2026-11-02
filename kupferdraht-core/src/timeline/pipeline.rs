@@ -68,6 +68,19 @@ impl Client {
         plaintext: &[u8],
     ) -> Result<(), KupferdrahtError> {
         match self.encrypt_and_send_once(group_id, op, plaintext).await {
+            // Step 132 item 13: a queued Remove (its flush refused, or the
+            // client restarted since) blocks every send in the room — commit
+            // it here, where the failure shows, and try once more.
+            Err(e) if is_pending_proposal(&e) => {
+                let room_id = self.room_id_for_group(group_id).await.ok_or_else(|| {
+                    KupferdrahtError::Generic(format!(
+                        "{op}: pending proposal but no cached room owns this group"
+                    ))
+                })?;
+                self.commit_pending_external_removal(&room_id).await?;
+                self.ack_removal_flush(&room_id);
+                self.encrypt_and_send_once(group_id, op, plaintext).await?;
+            }
             Err(KupferdrahtError::MlsStaleMessage) => {
                 let room_id = self.room_id_for_group(group_id).await.ok_or_else(|| {
                     KupferdrahtError::Generic(format!(
@@ -396,4 +409,12 @@ impl Client {
 /// generated per send, so this is a store anomaly, never a replay.
 pub(crate) fn outgoing_row_exists(message_id: &str) -> KupferdrahtError {
     KupferdrahtError::Storage(format!("outbound message {message_id} is already stored"))
+}
+
+/// openmls refuses to encrypt while a proposal is queued
+/// (`GroupStateError(PendingProposal)`); the text is the only shape the
+/// error reaches here in, as `is_missing_references` matches the backend's
+/// label (`sync/removal_flush.rs`).
+fn is_pending_proposal(e: &KupferdrahtError) -> bool {
+    matches!(e, KupferdrahtError::Generic(msg) if msg.contains("GroupStateError(PendingProposal)"))
 }

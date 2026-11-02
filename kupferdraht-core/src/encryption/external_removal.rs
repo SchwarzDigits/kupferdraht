@@ -95,6 +95,17 @@ impl MlsClient {
             }
 
             super::group_invite::ensure_commit_wire_format(&group)?;
+            // A commit staged by a process that died before the upload (or
+            // one the backend refused) would make `commit_to_pending_proposals`
+            // fail `PendingCommit`; the proposals it covered are still queued,
+            // so dropping it loses nothing (Step 132 item 13).
+            if group.pending_commit().is_some() {
+                group
+                    .clear_pending_commit(provider.storage())
+                    .map_err(|e| {
+                        KupferdrahtError::Storage(format!("clear stale pending commit: {e}"))
+                    })?;
+            }
             // `commit_to_pending_proposals` consumes the proposal store and
             // stages the commit; the caller uploads the bundle and then
             // `merge_pending_commit`s (or `clear_pending_commit`s on a
@@ -146,6 +157,31 @@ fn classify_pending_removes(group: &MlsGroup) -> PendingRemove {
         PendingRemove::Peer
     } else {
         PendingRemove::None
+    }
+}
+
+impl MlsClient {
+    /// Whether the persisted group holds a queued Remove of a peer that is
+    /// ours to commit (Step 132 item 13: the flush queue is rebuilt from
+    /// this at client start). `false` for an unknown group.
+    ///
+    /// # Errors
+    /// `KupferdrahtError::Storage` when the group cannot be loaded.
+    pub fn has_pending_peer_removal(
+        &self,
+        group_id_bytes: &[u8],
+    ) -> Result<bool, KupferdrahtError> {
+        debug_assert!(
+            !group_id_bytes.is_empty(),
+            "group_id_bytes must be non-empty"
+        );
+        let Some(group) = self.load_group_snapshot(&GroupId::from_slice(group_id_bytes))? else {
+            return Ok(false);
+        };
+        Ok(matches!(
+            classify_pending_removes(&group),
+            PendingRemove::Peer
+        ))
     }
 }
 

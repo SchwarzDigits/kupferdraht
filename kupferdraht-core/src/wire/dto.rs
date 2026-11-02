@@ -203,14 +203,18 @@ pub struct ConversationsResponse {
 /// | 0    | `Group`              |
 /// | 1    | `SelfRoom`           |
 /// | 2    | `DirectMessage`      |
-/// | 3    | `Channel`            |
+/// | 3    | `Connect` (a pending connection, not a channel — observations §94) |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(try_from = "u8", into = "u8")]
 pub enum ConvType {
     Group = 0,
     SelfRoom = 1,
     DirectMessage = 2,
-    Channel = 3,
+    /// Wire's `connect`: the 1:1 that exists while a connection request is
+    /// pending (live: `type: 3`, `group_conv_type: "group_conversation"`,
+    /// `protocol: "proteus"`, no other member — observations §94). Not a
+    /// channel; channels are `group_conv_type: "channel"`.
+    Connect = 3,
 }
 
 impl TryFrom<u8> for ConvType {
@@ -221,7 +225,7 @@ impl TryFrom<u8> for ConvType {
             0 => Ok(Self::Group),
             1 => Ok(Self::SelfRoom),
             2 => Ok(Self::DirectMessage),
-            3 => Ok(Self::Channel),
+            3 => Ok(Self::Connect),
             other => Err(format!("unknown Wire ConvType integer: {other}")),
         }
     }
@@ -264,6 +268,11 @@ pub struct OwnConversation {
     pub group_id: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
+    /// Wire's `group_conv_type` — `"group_conversation"` or `"channel"`,
+    /// the channel signal (Step 132; `type` 3 is a pending connection).
+    /// Absent on backends without channels.
+    #[serde(default)]
+    pub group_conv_type: Option<String>,
     pub members: OwnConvMembers,
     /// Wire's `access` field — list of join modes the conversation
     /// permits. Common values: `"invite"` (member-only),

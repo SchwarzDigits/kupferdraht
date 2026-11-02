@@ -220,6 +220,26 @@ impl Client {
     }
 }
 
+/// Refuse a backend whose team default MLS ciphersuite is not ours (Step
+/// 132, NG-25): one suite, not negotiated — on another default the first
+/// group add would fail with `no KeyPackages` (live: observations §94).
+/// Runs wherever the feature configs are fetched: both login paths and the
+/// `feature-config.update` refetch. A backend that names no default passes.
+///
+/// # Errors
+/// `KupferdrahtError::CiphersuiteMismatch` naming both suites.
+pub(crate) fn ensure_default_ciphersuite(
+    raw: &crate::wire::http::feature_configs::RawFeatureConfigs,
+) -> Result<(), KupferdrahtError> {
+    let ours = u16::from(crate::encryption::MLS_CIPHERSUITE_FOR_CLAIM);
+    match raw.default_cipher_suite() {
+        Some(backend) if backend != ours => {
+            Err(KupferdrahtError::CiphersuiteMismatch { backend, ours })
+        }
+        _ => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

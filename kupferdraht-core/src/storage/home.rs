@@ -163,7 +163,28 @@ pub(crate) fn is_path_safe_id(id: &str) -> bool {
     if id.is_empty() || id.len() > 250 || id == "." || id == ".." {
         return false;
     }
-    !id.chars().any(|c| c == '/' || c == '\\' || c.is_control())
+    // Step 132 (M4): Windows refuses `:` in a name, a trailing dot or
+    // space (silently stripped, so two ids would share a path) and the
+    // reserved device names; the check is cheap on every platform.
+    if id.ends_with('.') || id.ends_with(' ') || is_windows_reserved_name(id) {
+        return false;
+    }
+    !id.chars()
+        .any(|c| c == '/' || c == '\\' || c == ':' || c.is_control())
+}
+
+/// Windows' reserved device names — `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`,
+/// `LPT1`–`LPT9` — in any case, with or without an extension (the part
+/// before the first dot decides).
+fn is_windows_reserved_name(id: &str) -> bool {
+    let stem = id.split('.').next().unwrap_or(id).to_ascii_uppercase();
+    match stem.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" => true,
+        s if s.len() == 4 && (s.starts_with("COM") || s.starts_with("LPT")) => {
+            s.as_bytes()[3].is_ascii_digit() && s.as_bytes()[3] != b'0'
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -203,6 +224,38 @@ mod path_safe_tests {
             "id_with-dash.and.dots",
         ] {
             assert!(is_path_safe_id(good), "must accept {good:?}");
+        }
+    }
+
+    /// Step 132 (M4): Windows names — `:`, the reserved device names in
+    /// any case, with or without an extension, and a trailing dot or
+    /// space — are refused; look-alikes stay valid.
+    #[test]
+    fn windows_names_are_rejected() {
+        for bad in [
+            "a:b",
+            "CON",
+            "con",
+            "Con.txt",
+            "con.tar.gz",
+            "NUL",
+            "nul.log",
+            "COM1",
+            "com9",
+            "LPT1",
+            "lpt9",
+            "AUX",
+            "PRN",
+            "prn.ok.x",
+            "trailing.",
+            "trailing ",
+        ] {
+            assert!(!is_path_safe_id(bad), "{bad:?} must be refused");
+        }
+        for good in [
+            "console", "nul2", "con-x", "com10", "lpt", "aux1", "a.b", "a b",
+        ] {
+            assert!(is_path_safe_id(good), "{good:?} must pass");
         }
     }
 }

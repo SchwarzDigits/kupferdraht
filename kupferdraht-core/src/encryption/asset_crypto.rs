@@ -787,4 +787,72 @@ mod tests {
         let asset = encrypt_file(&plain_path, dir.path()).expect("encrypt");
         assert_eq!(asset.plaintext_size, plaintext.len() as u64);
     }
+
+    // ── Step 132 item 11: AES-256-CBC known answers ──────────────────
+    //
+    // Produced with an independent tool, never a Wire repository
+    // (ADR-0011 revision 1.2): `openssl enc -aes-256-cbc -K <KEY> -iv <IV>
+    // -nosalt` of LibreSSL 3.3.6, PKCS#7 padding. Two plaintexts: one a
+    // whole block (its padding is a full extra block), one three blocks
+    // and one byte.
+
+    const KAT_KEY: [u8; 32] = [
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+        0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
+        0x1e, 0x1f,
+    ];
+    const KAT_IV: [u8; 16] = [
+        0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
+        0x00,
+    ];
+
+    fn unhex(hex: &str) -> Vec<u8> {
+        (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).expect("hex"))
+            .collect()
+    }
+
+    #[test]
+    fn decrypts_openssl_known_answers() {
+        let dir = TempDir::new().expect("tempdir");
+        // Wire's `sha256` is over the encrypted blob (ADR-0011), so the
+        // integrity input is computed here; the plaintexts' own SHA-256 are
+        // 8f1c194a…2207 and 0d78381d…e8b4 for the record.
+        for (name, plaintext, ciphertext_hex) in [
+            (
+                "three-blocks-and-one",
+                &b"Kupferdraht asset known-answer vector: 41 bytes!!"[..],
+                "ebe3ab060e20aa0a61870dc9ca3c6c1883dccbe6207b40bfe1af9554ad254f66df33568292eaa051f93bee30b0f9acdb450b2597e7458ca3f214dda7f4bb0d19",
+            ),
+            (
+                "one-block",
+                &b"sixteen-byte-blk"[..],
+                "8f4598010ab09e6ceabea2a10a0dcd0f3ce62f6428a2e27305b4656246d39544",
+            ),
+        ] {
+            let mut blob = KAT_IV.to_vec();
+            blob.extend(unhex(ciphertext_hex));
+            let path = write_temp(dir.path(), name, &blob);
+            let blob_sha: [u8; 32] = sha2::Sha256::digest(&blob).into();
+            let got = decrypt_to_memory(&path, &KAT_KEY, &blob_sha).expect("known answer decrypts");
+            assert_eq!(got, plaintext, "{name}: plaintext must match openssl's");
+        }
+    }
+
+    /// The same vectors through the file path: `decrypt_to_path` writes
+    /// exactly the plaintext.
+    #[test]
+    fn decrypt_to_path_matches_the_openssl_known_answer() {
+        let dir = TempDir::new().expect("tempdir");
+        let mut blob = KAT_IV.to_vec();
+        blob.extend(unhex(
+            "8f4598010ab09e6ceabea2a10a0dcd0f3ce62f6428a2e27305b4656246d39544",
+        ));
+        let path = write_temp(dir.path(), "one-block.enc", &blob);
+        let out = dir.path().join("one-block.txt");
+        let blob_sha: [u8; 32] = sha2::Sha256::digest(&blob).into();
+        decrypt_to_path(&path, &KAT_KEY, &blob_sha, &out).expect("known answer decrypts");
+        assert_eq!(std::fs::read(&out).expect("read"), b"sixteen-byte-blk");
+    }
 }

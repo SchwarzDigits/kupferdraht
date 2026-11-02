@@ -232,7 +232,11 @@ pub fn await_url_with_token(
     websocket_base: &str,
     client_id: &str,
     access_token: &str,
+    permit_http: bool,
 ) -> Result<url::Url, KupferdrahtError> {
+    // Step 132 (M3): the API URL's scheme rule, shared with the native
+    // builders — `ws://` and `http://` only with the opt-in.
+    crate::wire::http::checked_websocket_base(websocket_base, permit_http)?;
     debug_assert!(
         !client_id.is_empty(),
         "await_url_with_token: client_id must be non-empty"
@@ -331,8 +335,9 @@ pub async fn connect(
     client_id: &str,
     access_token: &str,
     doorbell: &Doorbell,
+    permit_http: bool,
 ) -> Result<BrowserPushSocket, KupferdrahtError> {
-    let url = await_url_with_token(websocket_base, client_id, access_token)?;
+    let url = await_url_with_token(websocket_base, client_id, access_token, permit_http)?;
     let socket = web_sys::WebSocket::new(url.as_str()).map_err(|e| {
         KupferdrahtError::Network(format!("push socket construct: {}", js_text(&e)))
     })?;

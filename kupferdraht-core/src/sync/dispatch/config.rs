@@ -72,6 +72,9 @@ pub(in crate::sync) async fn refetch_feature_configs(
     client: &Arc<Client>,
 ) -> Result<(), KupferdrahtError> {
     let raw = client.http_fetch_feature_configs().await?;
+    // Step 132 (NG-25): a backend reconfigured to another default suite
+    // surfaces at its next refetch, not on the next group add.
+    crate::client::ensure_default_ciphersuite(&raw)?;
     if let Some(store) = client.store_handle() {
         store
             .replace_feature_configs(&raw.into_entries(now_ms()))

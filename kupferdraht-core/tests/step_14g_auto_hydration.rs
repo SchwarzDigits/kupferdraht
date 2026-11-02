@@ -167,10 +167,8 @@ async fn room_or_load_hydrates_from_store_on_cache_miss() {
     // Second client — fresh in-process state (empty rooms cache),
     // same persistence on disk.
     let fresh_client = logged_in_client_sharing_persistence(&server, home.path(), keystore).await;
-    assert!(
-        fresh_client.rooms().await.is_empty(),
-        "second-client cache must start empty (no hydration yet)",
-    );
+    // `rooms()` hydrates a cold cache itself since Step 132 (item 10), so
+    // it is not called here; `room` stays a cache-only lookup.
     assert!(
         fresh_client.room(&room_id_str()).await.is_none(),
         "Client::room must report None on cold cache (existing contract — \
@@ -238,4 +236,38 @@ async fn _send_text_auto_join_signature_compile(timeline: Arc<kupferdraht::Timel
     // Force the typed variant onto the public surface — green-phase
     // adds it to `error.rs`.
     let _: kupferdraht::KupferdrahtError = kupferdraht::KupferdrahtError::MlsGroupMissing;
+}
+
+// ---- Step 132 item 10 — Client::rooms on a cold cache --------------
+
+/// The shared path the browser's `rooms()` / `messages()` take after
+/// `resume` (Step 132 item 10): a client whose in-memory cache is cold
+/// but whose store holds rooms answers them from the store, like
+/// `room_or_load` does for one room.
+#[tokio::test]
+async fn rooms_hydrates_from_the_store_on_a_cold_cache() {
+    let server = MockServer::start();
+    mount_sync_with_one_room(&server);
+    let home = tempfile::TempDir::new().expect("TempDir");
+    let keystore: Arc<dyn SecureKeyStore> = Arc::new(InMemoryKeyStore::new());
+
+    let warm = logged_in_client_sharing_persistence(&server, home.path(), keystore.clone()).await;
+    warm.sync_once(SyncSettings::default())
+        .await
+        .expect("sync populates the store");
+    assert_eq!(
+        warm.rooms().await.len(),
+        1,
+        "the warm client lists the synced room"
+    );
+    drop(warm);
+
+    let cold = logged_in_client_sharing_persistence(&server, home.path(), keystore).await;
+    let rooms = cold.rooms().await;
+    assert_eq!(
+        rooms.len(),
+        1,
+        "a cold cache over a store with one room must answer it without a sync"
+    );
+    assert_eq!(rooms[0].id(), room_id_str());
 }

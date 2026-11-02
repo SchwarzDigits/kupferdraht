@@ -122,6 +122,9 @@ pub struct HttpClient {
     #[cfg(not(target_arch = "wasm32"))]
     transfer_idle: std::time::Duration,
     base_url: Url,
+    /// The `permit_http` opt-in this client was built with; the socket
+    /// URL builders apply the same scheme rule (Step 132).
+    permit_http: bool,
     /// Token-refresh seam, installed by the owning `Client` once it
     /// exists ([`HttpClient::set_refresher`]). `None` on the
     /// login-phase client, so a `401` there surfaces verbatim instead
@@ -172,6 +175,34 @@ impl HttpTimeouts {
         request: REQUEST_TIMEOUT,
         transfer_idle: TRANSFER_IDLE_TIMEOUT,
     };
+}
+
+/// The socket base URL gets the API URL's scheme rule (Step 132, M3):
+/// `wss://` always, `ws://` only with `permit_http`; anything else — and a
+/// `ws://` without the opt-in — is `KupferdrahtError::InvalidInput` naming
+/// the scheme, before any connection is attempted. An `http(s)://` base is
+/// accepted as the scheme the browser upgrades (`wasm::push_socket`).
+///
+/// # Errors
+/// `KupferdrahtError::InvalidInput` as described.
+pub(crate) fn checked_websocket_base(
+    websocket_base: &str,
+    permit_http: bool,
+) -> Result<(), KupferdrahtError> {
+    let url = Url::parse(websocket_base).map_err(|e| {
+        KupferdrahtError::InvalidInput(format!("websocket base `{websocket_base}`: {e}"))
+    })?;
+    match url.scheme() {
+        "wss" | "https" => Ok(()),
+        "ws" | "http" if permit_http => Ok(()),
+        "ws" | "http" => Err(KupferdrahtError::InvalidInput(format!(
+            "websocket base must be wss:// (ws:// only with permit_http), got `{}://`",
+            url.scheme()
+        ))),
+        other => Err(KupferdrahtError::InvalidInput(format!(
+            "websocket base must be wss:// or ws://, got `{other}://`"
+        ))),
+    }
 }
 
 /// Parse the API base URL; plain HTTP only with `permit_http`.
@@ -231,8 +262,15 @@ impl HttpClient {
         Ok(Self {
             client: build_reqwest(ReqwestClient::builder())?,
             base_url: checked_base_url(api_base_url, permit_http)?,
+            permit_http,
             refresher: OnceLock::new(),
         })
+    }
+
+    /// Whether plain `http://` and `ws://` were permitted when this client
+    /// was built (Step 132: the socket URL follows the same rule).
+    pub(crate) fn permit_http(&self) -> bool {
+        self.permit_http
     }
 
     /// [`Self::new`] with explicit timeouts (Step 98; tests shrink them).
@@ -246,17 +284,28 @@ impl HttpClient {
         timeouts: HttpTimeouts,
     ) -> Result<Self, KupferdrahtError> {
         let base_url = checked_base_url(api_base_url, permit_http)?;
+        // Step 132 (M2): no redirect is followed. Wire's API issues none, and
+        // a followed 3xx could re-send a login body to a host of the
+        // server's choosing (307) or downgrade to plain HTTP; a 3xx answer
+        // surfaces as the status it is. (The browser build has no policy
+        // knob: `fetch` follows redirects by itself.)
         let client = build_reqwest(
             ReqwestClient::builder()
+                .redirect(reqwest::redirect::Policy::none())
                 .connect_timeout(timeouts.connect)
                 .timeout(timeouts.request),
         )?;
-        let transfer = build_reqwest(ReqwestClient::builder().connect_timeout(timeouts.connect))?;
+        let transfer = build_reqwest(
+            ReqwestClient::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .connect_timeout(timeouts.connect),
+        )?;
         Ok(Self {
             client,
             transfer,
             transfer_idle: timeouts.transfer_idle,
             base_url,
+            permit_http,
             refresher: OnceLock::new(),
         })
     }

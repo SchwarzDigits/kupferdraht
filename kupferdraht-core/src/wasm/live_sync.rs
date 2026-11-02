@@ -382,7 +382,15 @@ async fn dispatch_transients(client: &Arc<Client>, doorbell: &Doorbell) {
 async fn open_doorbell_socket(client: &Client, doorbell: &Doorbell) -> Option<BrowserPushSocket> {
     let device_id = client.device_id()?.to_owned();
     let token = client.access_token()?;
-    match push_socket::connect(client.websocket_url(), &device_id, &token, doorbell).await {
+    match push_socket::connect(
+        client.websocket_url(),
+        &device_id,
+        &token,
+        doorbell,
+        client.permit_http(),
+    )
+    .await
+    {
         Ok(socket) => Some(socket),
         Err(e) => {
             // Not an error the consumer needs: receive continues on the timer.

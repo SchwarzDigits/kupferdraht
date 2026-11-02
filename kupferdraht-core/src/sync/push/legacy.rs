@@ -91,9 +91,16 @@ where
     F: FnMut(SyncSummary) -> ControlFlow<()> + Send,
 {
     debug_assert!(!device_id.is_empty(), "run_push refuses an empty device id");
+    crate::wire::http::checked_websocket_base(client.websocket_url(), client.permit_http())?;
     let url = await_url(client.websocket_url(), device_id)?;
     let access_token = client.access_token().unwrap_or_default();
-    let mut socket = match EventSocket::connect_with_bearer(url, &access_token).await {
+    let mut socket = match EventSocket::connect_with_bearer_timeout(
+        url,
+        &access_token,
+        super::SOCKET_CONNECT_TIMEOUT,
+    )
+    .await
+    {
         Ok(socket) => socket,
         Err(e) => {
             service.notify_error(&format!("push connect (legacy): {e}"));
@@ -119,6 +126,9 @@ where
 {
     let mut bell = Doorbell::connected();
     let mut ping = tokio::time::interval(LEGACY_PING_INTERVAL);
+    // When the last keepalive ping went out (Step 132, M1): the next tick
+    // treats an unanswered one as a dead socket.
+    let mut last_ping: Option<std::time::Instant> = None;
     ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     ping.tick().await; // the first tick fires immediately — consume it
     // Boxed: the drain future is large, the connection loop lives long.
@@ -141,7 +151,7 @@ where
             frame = socket.next_legacy_frame() => {
                 settle_read(client, service, frame, drain.as_mut(), &mut bell, on_frame).await?
             }
-            _ = ping.tick() => send_keepalive(service, socket, &bell, drain.is_terminated()).await,
+            _ = ping.tick() => send_keepalive(service, socket, &bell, drain.is_terminated(), &mut last_ping).await,
         };
         if let Some(outcome) = next {
             return Ok(outcome);
@@ -300,9 +310,24 @@ async fn send_keepalive(
     socket: &mut EventSocket,
     bell: &Doorbell,
     idle: bool,
+    last_ping: &mut Option<std::time::Instant>,
 ) -> Next {
     if idle && socket_silent(bell.last_frame.elapsed()) {
         debug!("push: no frame for a minute; renewing the legacy socket");
+        return Some(RECONNECT);
+    }
+    // Step 132 (M1): a ping the server did not answer within one interval
+    // is a hung connection — reconnect instead of waiting for the next
+    // write to fail.
+    if let Some(sent_at) = *last_ping
+        && pong_overdue(
+            sent_at,
+            socket.last_pong(),
+            LEGACY_PING_INTERVAL,
+            std::time::Instant::now(),
+        )
+    {
+        debug!("push: the last ping went unanswered; renewing the legacy socket");
         return Some(RECONNECT);
     }
     if let Err(e) = socket.send_ping().await {
@@ -310,6 +335,7 @@ async fn send_keepalive(
         warn!(error = %e, "push: keepalive ping failed; reconnecting");
         return Some(RECONNECT);
     }
+    *last_ping = Some(std::time::Instant::now());
     None
 }
 
@@ -338,4 +364,64 @@ async fn dispatch_transient(
 ) -> Result<u32, KupferdrahtError> {
     // Step 115b moved the body to `SyncService` so the browser socket shares it.
     service.dispatch_transient_notification(client, notif).await
+}
+
+/// Whether the last ping went unanswered for a whole interval (Step 132,
+/// M1): no pong arrived since the ping was sent and `interval` has passed
+/// since then. A pong received before the ping does not count.
+pub(super) fn pong_overdue(
+    ping_sent_at: std::time::Instant,
+    pong_received_at: Option<std::time::Instant>,
+    interval: Duration,
+    now: std::time::Instant,
+) -> bool {
+    now.duration_since(ping_sent_at) >= interval
+        && pong_received_at.is_none_or(|received| received < ping_sent_at)
+}
+
+#[cfg(test)]
+mod keepalive_tests {
+    use std::time::{Duration, Instant};
+
+    use super::pong_overdue;
+
+    const INTERVAL: Duration = Duration::from_secs(25);
+
+    #[test]
+    fn a_pong_after_the_ping_keeps_the_socket() {
+        let t0 = Instant::now();
+        assert!(!pong_overdue(
+            t0,
+            Some(t0 + Duration::from_secs(1)),
+            INTERVAL,
+            t0 + Duration::from_secs(26)
+        ));
+    }
+
+    #[test]
+    fn no_pong_within_an_interval_is_overdue() {
+        let t0 = Instant::now();
+        assert!(pong_overdue(
+            t0,
+            None,
+            INTERVAL,
+            t0 + Duration::from_secs(26)
+        ));
+        assert!(
+            !pong_overdue(t0, None, INTERVAL, t0 + Duration::from_secs(10)),
+            "still within the interval"
+        );
+    }
+
+    #[test]
+    fn a_pong_before_the_ping_does_not_count() {
+        let t0 = Instant::now();
+        let earlier = t0.checked_sub(Duration::from_secs(1)).expect("instant");
+        assert!(pong_overdue(
+            t0,
+            Some(earlier),
+            INTERVAL,
+            t0 + Duration::from_secs(26)
+        ));
+    }
 }

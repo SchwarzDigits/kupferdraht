@@ -60,6 +60,11 @@ use crate::wire::websocket::{ConsumableNotification, EventSocket, events_url};
 
 use legacy::run_legacy_cycle;
 
+/// Deadline for the TCP + TLS + upgrade handshake of a push socket (Step
+/// 132, M1): a listener that accepts and never answers fails here instead
+/// of hanging the loop; the value is the HTTP client's connect timeout.
+const SOCKET_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// How a connection cycle ended, when the consumer did not stop it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Ended {
@@ -180,6 +185,7 @@ where
     // in the synchronization frame once the backlog has drained.
     let sync_marker = uuid::Uuid::new_v4().to_string();
     let access_token = client.access_token().unwrap_or_default();
+    crate::wire::http::checked_websocket_base(client.websocket_url(), client.permit_http())?;
     let url = events_url(
         client.websocket_url(),
         client.api_version(),
@@ -187,7 +193,7 @@ where
         &sync_marker,
         &access_token,
     )?;
-    let mut socket = match EventSocket::connect(url).await {
+    let mut socket = match EventSocket::connect_with_timeout(url, SOCKET_CONNECT_TIMEOUT).await {
         Ok(socket) => socket,
         Err(e) => {
             service.notify_error(&format!("push connect: {e}"));

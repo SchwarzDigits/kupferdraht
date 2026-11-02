@@ -47,6 +47,7 @@ mod rooms;
 mod self_room;
 mod sent_signal;
 mod server_configs;
+pub(crate) use server_configs::ensure_default_ciphersuite;
 mod session;
 mod sync;
 mod timeline_read;
@@ -247,6 +248,12 @@ pub struct Client {
     /// persist in openmls storage and re-signal on the room's next
     /// inbound event (plan 74, documented residual).
     pending_removal_flushes: StdMutex<std::collections::HashSet<String>>,
+    /// Whether [`Client::rebuild_removal_flush_queue_once`] ran (Step 132).
+    removal_queue_rebuilt: std::sync::atomic::AtomicBool,
+    /// Whether the rooms cache was ever filled — by a sync or from the
+    /// store; `rooms()` hydrates a never-filled cache (Step 132 item 10),
+    /// an emptied one (every room left or discarded) stays empty.
+    rooms_loaded: std::sync::atomic::AtomicBool,
     /// Step 97a: message ids of the own sends whose upload is in flight
     /// in this process. A `sending` row not in here was abandoned
     /// (cancelled, or the process restarted) and reads as `Failed`.
@@ -279,6 +286,12 @@ impl std::fmt::Debug for Client {
 }
 
 impl Client {
+    /// The `permit_http` opt-in the client was built with (Step 132: the
+    /// push sockets apply the API URL's scheme rule).
+    pub(crate) fn permit_http(&self) -> bool {
+        self.http.permit_http()
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         user_id: UserId,
@@ -340,6 +353,8 @@ impl Client {
                 typing: crate::client::typing::TypingTracker::default(),
                 typing_send_lock: tokio::sync::Mutex::new(()),
                 pending_removal_flushes: StdMutex::new(std::collections::HashSet::new()),
+                removal_queue_rebuilt: std::sync::atomic::AtomicBool::new(false),
+                rooms_loaded: std::sync::atomic::AtomicBool::new(false),
                 in_flight_sends: crate::timeline::InFlightSends::default(),
                 device_replaced: std::sync::atomic::AtomicBool::new(false),
             }

@@ -46,6 +46,7 @@ use crate::storage::{
 };
 use crate::wire::HttpClient;
 use crate::wire::dto::{LoginOutcome, NewUserRequest, SelfUser};
+use crate::wire::http::checked_websocket_base;
 
 /// Wire-server addressing tuple supplied to `ClientBuilder`.
 ///
@@ -212,6 +213,7 @@ impl ClientBuilder {
         let idp = idp_id(code);
         require_non_empty("initiate_sso", &[("code", idp)])?;
         let http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        checked_websocket_base(&server.websocket_url, self.permit_http)?;
         if !http.sso_code_exists(idp).await? {
             return Err(KupferdrahtError::InvalidInput(format!(
                 "SSO code not recognized: {code}"
@@ -246,6 +248,7 @@ impl ClientBuilder {
             KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
         })?;
         let http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        checked_websocket_base(&server.websocket_url, self.permit_http)?;
         let code = http.sso_default_code().await?.ok_or_else(|| {
             KupferdrahtError::InvalidInput("no SSO provider is configured for this backend".into())
         })?;
@@ -283,14 +286,18 @@ impl ClientBuilder {
         // `(user, label)`; one label per home keeps two homes of one user
         // from invalidating each other's `zuid` (Step 41's per-install
         // label was per keystore, observations §83).
+        // Dedicated transport for the post-auth device-list / device-delete
+        // calls `PendingLogin` exposes (`HttpClient` is not `Clone`, so it
+        // can't be borrowed out of the consume-on-success pipeline state).
+        // Built first (Step 132): the URL scheme is refused before the home
+        // or the keystore is touched, so a bad URL fails fast on a machine
+        // whose keystore probe blocks (observations §76).
+        let device_ops_http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        checked_websocket_base(&server.websocket_url, self.permit_http)?;
         let home = open_home(self.base_dir.clone(), self.account_keys)?;
         let keystore = resolve_keystore(self.keystore.clone(), self.permit_http).await?;
         let cookie_label = home_cookie_label(home.as_ref());
         let device_label = self.device_label.clone();
-        // Dedicated transport for the post-auth device-list / device-delete
-        // calls `PendingLogin` exposes (`HttpClient` is not `Clone`, so it
-        // can't be borrowed out of the consume-on-success pipeline state).
-        let device_ops_http = HttpClient::new(&server.api_base_url, self.permit_http)?;
         // The per-account store directory (`base/accounts/<id>/`) is not
         // known until `authenticate` returns the account id, so the
         // pipeline starts storage-less; the provider opens the (ready,
@@ -342,11 +349,13 @@ impl ClientBuilder {
         let server = self.server.ok_or_else(|| {
             KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
         })?;
+        // Scheme checks first (Step 132), as in `login`.
+        let device_ops_http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        checked_websocket_base(&server.websocket_url, self.permit_http)?;
         let home = open_home(self.base_dir.clone(), self.account_keys)?;
         let keystore = resolve_keystore(self.keystore.clone(), self.permit_http).await?;
         let cookie_label = home_cookie_label(home.as_ref());
         let device_label = self.device_label.clone();
-        let device_ops_http = HttpClient::new(&server.api_base_url, self.permit_http)?;
         let pipeline = LoginPipeline::start(
             server,
             None,
@@ -435,6 +444,7 @@ impl ClientBuilder {
         let mut parts = load_resume_state(&*store, &account_id).await?;
         let server = build_server_from_record(parts.server_cfg.clone());
         let http = HttpClient::new(&server.api_base_url, permit_http)?;
+        checked_websocket_base(&server.websocket_url, permit_http)?;
         // If the persisted access token has aged out, refresh it in
         // place with the persisted zuid instead of forcing a re-login
         // (see `refresh_stale_access_token`) — under the account's
@@ -513,6 +523,7 @@ impl ClientBuilder {
         })?;
         let keystore = resolve_keystore(self.keystore.clone(), self.permit_http).await?;
         let http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        checked_websocket_base(&server.websocket_url, self.permit_http)?;
         let body = NewUserRequest {
             name,
             email: Some(email.clone()),
@@ -567,6 +578,7 @@ impl ClientBuilder {
             KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
         })?;
         let http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        checked_websocket_base(&server.websocket_url, self.permit_http)?;
         http.activate(&email, &code).await?;
         self.login(email, password, None)
             .await?

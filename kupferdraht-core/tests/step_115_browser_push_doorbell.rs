@@ -17,6 +17,7 @@
 
 use std::time::Duration;
 
+use kupferdraht::KupferdrahtError;
 use kupferdraht::wasm::push_socket::{
     Doorbell, PushFrame, Wake, await_url_with_token, parse_push_frame, wait_for_bell_or,
 };
@@ -104,7 +105,8 @@ async fn rings_coalesce_and_do_not_accumulate() {
 /// string. This is the one shape the native path does not build.
 #[wasm_bindgen_test]
 fn await_url_carries_client_and_access_token() {
-    let url = await_url_with_token("wss://ws.example", "client-7", "tok-abc").expect("valid base");
+    let url =
+        await_url_with_token("wss://ws.example", "client-7", "tok-abc", false).expect("valid base");
     assert_eq!(url.path(), "/await", "the legacy route is versionless");
     let pairs: Vec<(String, String)> = url
         .query_pairs()
@@ -125,18 +127,40 @@ fn await_url_carries_client_and_access_token() {
 /// timer — the bug Step 115's smoke found.
 #[wasm_bindgen_test]
 fn await_url_upgrades_wires_published_https_base() {
-    let url = await_url_with_token("https://ws.example", "c", "t").expect("https is accepted");
+    let url =
+        await_url_with_token("https://ws.example", "c", "t", false).expect("https is accepted");
     assert_eq!(url.scheme(), "wss", "https must become wss, not be refused");
-    let plain = await_url_with_token("http://ws.example", "c", "t").expect("http is accepted");
+    let plain =
+        await_url_with_token("http://ws.example", "c", "t", true).expect("http with the opt-in");
     assert_eq!(plain.scheme(), "ws", "and http must become ws");
+}
+
+/// Step 132 (M3): the API URL's scheme rule — a plain `ws://` or `http://`
+/// base is refused without `permit_http`, so the token never rides a
+/// cleartext socket by accident; `wss://` and `https://` need no opt-in.
+#[wasm_bindgen_test]
+fn await_url_refuses_plain_schemes_without_permit_http() {
+    for base in ["ws://ws.example", "http://ws.example"] {
+        let err = await_url_with_token(base, "c", "t", false)
+            .expect_err("a plain scheme without permit_http must be refused");
+        assert!(
+            matches!(err, KupferdrahtError::InvalidInput(ref m) if m.contains("permit_http")),
+            "{base}: expected InvalidInput naming permit_http, got {err:?}"
+        );
+        assert!(
+            await_url_with_token(base, "c", "t", true).is_ok(),
+            "{base} with the opt-in"
+        );
+    }
+    assert!(await_url_with_token("wss://ws.example", "c", "t", false).is_ok());
 }
 
 /// Anything that is not a web URL is still refused: the token rides in the query,
 /// so the scheme has to be one a browser will actually open.
 #[wasm_bindgen_test]
 fn await_url_rejects_a_scheme_a_browser_cannot_open() {
-    assert!(await_url_with_token("ftp://ws.example", "c", "t").is_err());
-    assert!(await_url_with_token("kupferdraht://sso", "c", "t").is_err());
+    assert!(await_url_with_token("ftp://ws.example", "c", "t", true).is_err());
+    assert!(await_url_with_token("kupferdraht://sso", "c", "t", true).is_err());
 }
 
 /// A session between token refreshes must not build a socket that authenticates
@@ -144,7 +168,7 @@ fn await_url_rejects_a_scheme_a_browser_cannot_open() {
 #[wasm_bindgen_test]
 fn await_url_refuses_an_empty_token() {
     assert!(
-        await_url_with_token("wss://ws.example", "c", "").is_err(),
+        await_url_with_token("wss://ws.example", "c", "", false).is_err(),
         "an empty token would connect to nothing useful"
     );
 }
@@ -152,7 +176,7 @@ fn await_url_refuses_an_empty_token() {
 /// Wire's configured base may carry a trailing slash; the route must not double it.
 #[wasm_bindgen_test]
 fn await_url_tolerates_a_trailing_slash_on_the_base() {
-    let url = await_url_with_token("wss://ws.example/", "c", "t").expect("valid base");
+    let url = await_url_with_token("wss://ws.example/", "c", "t", false).expect("valid base");
     assert_eq!(url.path(), "/await");
 }
 

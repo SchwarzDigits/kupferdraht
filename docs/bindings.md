@@ -123,7 +123,11 @@ object identity)
   `send_typing_stopped` — auto-stop + dedupe), `asset(message_id) -> Asset?`,
   `subscribe(listener) -> Subscription`.
 - `Asset` — `metadata() -> AssetMeta`, `download() -> bytes`,
-  `save_to(path)`.
+  `save_to(path)`. `AssetMeta.assetToken` is the short-lived download
+  token of the asset: the Rust `Debug` redacts it, but the Kotlin
+  `toString()` and Swift `description` UniFFI generates print every
+  field — **do not log `AssetMeta` as a whole** (Step 132; the threat
+  model's N3 puts a leaked token on the consumer).
 
 **Records / enums** — `QualifiedUserId`, `Account`, `RoomMember`,
 `RoomDevice`, `DeviceCredential`, `RoomDevicesChange` (Step 95d; the
@@ -236,6 +240,25 @@ statement and the Rust shape of the loop.
 **Handles.** `TaskHandle.cancel()` and `Subscription.unsubscribe()` stop a
 sync loop / listener. Dropping the handle also stops it, but on the JVM
 finalization is GC-timed — **call them explicitly** for prompt shutdown.
+
+## Threading
+
+Every call on the Kotlin and Swift surface **may block** the calling
+thread: behind it are SQLite transactions on the encrypted store, MLS
+commits and decryptions, and the network. UniFFI's async functions are
+polled on the caller's thread, so the thread that calls is the thread
+that waits. The contract: call Kupferdraht from a **background
+dispatcher** — `Dispatchers.IO` or a dedicated executor on Kotlin, a
+non-main actor or a background queue on Swift — **never the main thread**;
+an Android main thread that waits for a sync or a key-package top-up is an
+ANR, an iOS one a frozen UI. The one CPU-bound burst Kupferdraht does on
+its own — generating up to a hundred key packages for the pool — runs on a
+blocking pool natively (Step 132), which shortens the wait, not the rule.
+Callbacks (`EventHandler`, `SyncListener`, `RoomDevicesListener`,
+`TimelineListener`, `onLog`) arrive on Kupferdraht's threads — hand the
+work to the UI thread yourself and return fast. The browser surface has no
+such rule: the engine runs in a worker (the leader tab, ADR-0026) and every
+call is a promise.
 
 ## The WASM / web surface
 

@@ -13,6 +13,8 @@
 //! automatic check on the sync surface (`sync_once`, which every
 //! polling loop variant converges on).
 
+use std::sync::Arc;
+
 use tracing::{debug, info, warn};
 
 use crate::client::Client;
@@ -92,12 +94,16 @@ impl Client {
             needed > 0 && needed <= KEY_PACKAGE_TARGET,
             "top-up size must stay within (0, TARGET]"
         );
-        let packages = {
-            let mls = self.mls_client_required("replenish_key_packages")?;
-            let _gate = self.mls_write_gate().await;
-            let guard = crate::encryption::lock_mls(mls);
-            guard.generate_key_packages(needed)?
-        };
+        let mls = Arc::clone(self.mls_client_required("replenish_key_packages")?);
+        let gate = self.mls_write_gate().await;
+        // Step 132 (H5): the generation is CPU work a UniFFI caller would
+        // otherwise sit through on its own thread — a blocking pool natively;
+        // the browser has none and keeps the inline path.
+        #[cfg(not(target_arch = "wasm32"))]
+        let packages = generate_key_packages_off_thread(mls, needed).await?;
+        #[cfg(target_arch = "wasm32")]
+        let packages = crate::encryption::lock_mls(&mls).generate_key_packages(needed)?;
+        drop(gate);
         self.http
             .upload_key_packages(self.api_version, &access_token, &device_id, &packages)
             .await?;
@@ -143,4 +149,21 @@ impl Client {
             }
         }
     }
+}
+
+/// Generate `count` key packages without holding the async executor
+/// (Step 132, H5): up to a hundred HPKE key pairs and signatures are CPU
+/// work a `UniFFI` caller would otherwise sit through on its own thread.
+/// The browser has no blocking pool and keeps the inline path.
+#[cfg(not(target_arch = "wasm32"))]
+async fn generate_key_packages_off_thread(
+    mls: Arc<std::sync::Mutex<crate::encryption::MlsClient>>,
+    count: usize,
+) -> Result<Vec<Vec<u8>>, KupferdrahtError> {
+    tokio::task::spawn_blocking(move || {
+        let guard = crate::encryption::lock_mls(&mls);
+        guard.generate_key_packages(count)
+    })
+    .await
+    .map_err(|e| KupferdrahtError::Generic(format!("key-package generation task: {e}")))?
 }

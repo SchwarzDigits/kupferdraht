@@ -495,16 +495,21 @@ impl Client {
         // Step 97a: the rows are written as `Sending` before the MLS send.
         let _in_flight = self.begin_send(&message_id);
         let sent_at_ms = crate::time::now_ms();
-        self.persist_outgoing_bytes_asset(&OutgoingBytes {
-            room_id,
-            message_id: &message_id,
-            filename,
-            mime_type,
-            enc: &enc,
-            upload: &upload,
-            sent_at_ms,
-        })
-        .await?;
+        if let Some((attachment, timeline)) = self
+            .persist_outgoing_bytes_asset(&OutgoingBytes {
+                room_id,
+                message_id: &message_id,
+                filename,
+                mime_type,
+                enc: &enc,
+                upload: &upload,
+                sent_at_ms,
+            })
+            .await?
+        {
+            // The sender sees its own row at once, like `send_file`'s.
+            self.emit_outgoing_asset_append(attachment, timeline, room_id);
+        }
         let mls_upload = self
             .encrypt_and_upload(&group_id, "send_bytes", &plaintext_pb)
             .await;
@@ -538,12 +543,15 @@ impl Client {
     ///
     /// # Errors
     /// `InvalidInput` without a device id; storage errors.
+    /// Persist the `Sending` rows of an in-memory asset send; returns the
+    /// two records for the consumer's `TimelineDiff::Append` (Step 132
+    /// item 7, as `send_file` does), `None` without a store.
     async fn persist_outgoing_bytes_asset(
         &self,
         out: &OutgoingBytes<'_>,
-    ) -> Result<(), KupferdrahtError> {
+    ) -> Result<Option<(AttachmentRecord, TimelineEventRecord)>, KupferdrahtError> {
         let Some(store) = self.store_handle().cloned() else {
-            return Ok(());
+            return Ok(None);
         };
         let device_id = self
             .device_id()
@@ -567,11 +575,12 @@ impl Client {
             ephemeral_ttl_ms: None,
         };
         // Step 105: the row and its attachment are one write.
+        let attachment = self.bytes_attachment_record(out);
         if store
-            .insert_timeline_event_with_attachment(&timeline, &self.bytes_attachment_record(out))
+            .insert_timeline_event_with_attachment(&timeline, &attachment)
             .await?
         {
-            Ok(())
+            Ok(Some((attachment, timeline)))
         } else {
             Err(crate::timeline::pipeline::outgoing_row_exists(
                 out.message_id,

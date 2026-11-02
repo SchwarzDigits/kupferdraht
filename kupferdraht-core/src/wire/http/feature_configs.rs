@@ -29,8 +29,11 @@
 //! `mls.config.allowedCipherSuites` like every other config, but
 //! Kupferdraht runs one ciphersuite, `MlsClient::MLS_CIPHERSUITE` (P-256),
 //! and negotiates none (`docs/non-goals.md` NG-25). A backend whose
-//! default differs fails on the first group add today; the loud check at
-//! login is Step 132.
+//! default differs is refused at login and resume with
+//! `KupferdrahtError::CiphersuiteMismatch` naming both suites
+//! ([`RawFeatureConfigs::default_cipher_suite`]; live-confirmed on a
+//! backend with default `1`, observations §94), not on the first group
+//! add with `no KeyPackages`.
 
 use serde_json::Value;
 use tracing::debug;
@@ -76,6 +79,18 @@ impl RawFeatureConfigs {
     /// present, `None` for status-only or config-only features.
     /// `config` is the per-feature `config` value when present.
     #[must_use]
+    /// The backend's `mls.config.defaultCipherSuite` (an RFC 9420 suite
+    /// id), when the `mls` feature carries one — the input of the
+    /// ciphersuite check at login and resume (Step 132, NG-25).
+    pub fn default_cipher_suite(&self) -> Option<u16> {
+        self.inner
+            .get("mls")?
+            .get("config")?
+            .get("defaultCipherSuite")?
+            .as_u64()
+            .and_then(|n| u16::try_from(n).ok())
+    }
+
     pub fn iter(&self) -> RawFeatureConfigsIter<'_> {
         RawFeatureConfigsIter {
             inner: self.inner.as_object().map(serde_json::Map::iter),

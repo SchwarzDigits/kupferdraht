@@ -150,6 +150,7 @@ impl SyncService {
             self.notify_error(&format!("room list refresh: {e}"));
         }
         self.run_follow_ups(client).await;
+        client.rebuild_removal_flush_queue_once().await;
         self.flush_removal_commits(client).await;
         if let Err(e) = client.expire_due_ephemeral_messages().await {
             warn!(error = %e, "ephemeral expiry sweep failed; retrying next cycle");

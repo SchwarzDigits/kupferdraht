@@ -130,7 +130,11 @@ cargo clippy -p kupferdraht-core --target wasm32-unknown-unknown --lib -- -D war
 ./scripts/wasm-test.sh                       # the browser tests; needs Firefox + geckodriver
 ```
 
-The first two are cheap and belong in the gate. `wasm-test.sh` runs the wasm integration tests in headless Firefox; a change a native test cannot reach should not wait for CI to find out — Step 125's rename was confirmed by `step_94_leader_tab`, not by anything native. All three need a clang with the WebAssembly backend — Apple clang 21 (Xcode 26) and Homebrew LLVM have it, an older Apple clang has not; only then point cargo at Homebrew's via `CC_wasm32_unknown_unknown` / `AR_wasm32_unknown_unknown` — see [`docs/bindings.md`](docs/bindings.md).
+The first two are cheap and belong in the gate. CI's wasm clippy also
+compiles the browser test targets (`--test step_115_browser_push_doorbell`
+and the others `.github/workflows/ci.yml` lists): a changed signature of a
+wasm-only `pub fn` passes `--lib` and fails there — run the `ci.yml` line
+when a step touches one (Step 132 learned it on CI). `wasm-test.sh` runs the wasm integration tests in headless Firefox; a change a native test cannot reach should not wait for CI to find out — Step 125's rename was confirmed by `step_94_leader_tab`, not by anything native. All three need a clang with the WebAssembly backend — Apple clang 21 (Xcode 26) and Homebrew LLVM have it, an older Apple clang has not; only then point cargo at Homebrew's via `CC_wasm32_unknown_unknown` / `AR_wasm32_unknown_unknown` — see [`docs/bindings.md`](docs/bindings.md).
 
 ### Design
 
