@@ -86,6 +86,14 @@ is no skill for it — it is this short procedure:
 
 ### Fixed
 
+- **A room the cache does not know yet is no longer healed** (ADR-0034
+  implementation note): a message that failed because the room list had
+  not caught up with its Welcome used to queue the room's recovery —
+  discard the local group, rejoin by external commit — and threw away the
+  group the Welcome had just opened when the end-of-cycle refresh then
+  found the room. Recovery now queues on a missing openmls group only
+  (`MlsGroupMissing`, now the inbound loader's error too); a stale cache
+  is reported and filled by the refresh.
 - **A message that shares a notifications page with the Welcome that
   opened its room is no longer lost** (Step 137): the room list is
   refreshed right after the Welcome, inside the drain, so the ADR-0020

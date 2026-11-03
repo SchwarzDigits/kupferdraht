@@ -241,13 +241,18 @@ impl SyncService {
         // Step 64 (review S1), narrowed after the re-check and by Step
         // 106 (ADR-0034 d.2): an `mls-message-add` triggers room recovery
         // only on the one POSITIVE broken-local-state signal left —
-        // `InvalidInput`, no local group (the group loads before the
-        // ciphertext parses, so a garbage frame in a healthy group
-        // surfaces as `Encoding`/`Generic` instead). A storage failure is
-        // transient and retried, never healed. Healing on every class
-        // would let any member discard+rejoin a healthy group once per
-        // drain by posting garbage.
-        if matches!(e, KupferdrahtError::InvalidInput(_))
+        // `MlsGroupMissing`, the openmls store has no group (the group
+        // loads before the ciphertext parses, so a garbage frame in a
+        // healthy group surfaces as `Encoding`/`Generic` instead). A room
+        // the cache does not know yet (`InvalidInput`, no local
+        // `group_id`) is not that signal: its group may have been opened
+        // by a Welcome moments ago, and a heal — discard + rejoin — would
+        // throw it away; the end-of-cycle refresh fills the cache
+        // instead. A storage failure is transient and retried, never
+        // healed. Healing on every class would let any member
+        // discard+rejoin a healthy group once per drain by posting
+        // garbage.
+        if matches!(e, KupferdrahtError::MlsGroupMissing)
             && ev.get("type").and_then(serde_json::Value::as_str)
                 == Some("conversation.mls-message-add")
             && let Ok(env) = extract_mls_envelope(ev)

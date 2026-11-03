@@ -10,7 +10,7 @@ none; item 13 stays in this step with both layers (the queue rebuilt at
 the first sync cycle from the groups' stored pending proposals, a stale
 staged commit dropped first; a send that meets a pending proposal commits
 it for the room and retries once); `type` 3 is the pending-connection 1:1
-(live-verified 2026-11-02 on the self-hosted stack, observations §94;
+(live-verified 2026-11-02 on the self-hosted stack, observations §95;
 channels are disabled and locked there, so `group_conv_type: "channel"` is
 mapped by the provenance-audit note, not live); the local stack's team
 default stays `2` after the smoke. `ClientBuilder::resume` is offline, so

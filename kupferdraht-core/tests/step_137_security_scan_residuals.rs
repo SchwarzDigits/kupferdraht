@@ -17,6 +17,9 @@
 //!   admin check — `decrypt_to_application` maps the room to its group
 //!   through the cache the Welcome only marked stale, the drain reports
 //!   `no local group_id` and queues a heal of the room it just joined.
+//! * A cache miss after a Welcome heals nothing: the message after the
+//!   Welcome met a cold room cache, not a missing group, so no follow-up
+//!   may discard the group the Welcome just opened (ADR-0034).
 //! * `docs/cli.md` documents `--cookie-stdin` and `--key-stdin` and no
 //!   longer shows either secret as an argument (M1).
 //!
@@ -26,6 +29,7 @@
 //! hand-emitted (the Step-72b precedent).
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use base64::Engine as _;
@@ -425,6 +429,58 @@ async fn a_members_case_snapshot_in_the_drain_that_welcomed_its_room_is_stored_b
         room.case().await.expect("case read").is_none(),
         "a member's snapshot must not fold, cold cache or not"
     );
+}
+
+/// The refresh right after the Welcome fails, the end-of-cycle one
+/// succeeds: the message after the Welcome met a cold room cache, not a
+/// missing group. The `InvalidInput` it fails with must queue no
+/// `HealRoom` — a heal discards the local group and rejoins by external
+/// commit (ADR-0034), which would throw away the group the Welcome just
+/// opened. Pinned on the group itself and on the join endpoints.
+#[tokio::test]
+async fn a_cache_miss_after_the_welcome_heals_nothing() {
+    let server = MockServer::start();
+    let (client, _store) = cold_client(&server).await;
+    // The first list-ids call of the cycle — the refresh right after the
+    // Welcome — fails; every later one answers (mounted below).
+    let first = Arc::new(AtomicBool::new(true));
+    let gate = Arc::clone(&first);
+    server.mock(move |when, then| {
+        when.method(POST)
+            .path("/v14/conversations/list-ids")
+            .is_true(move |_| gate.swap(false, Ordering::SeqCst));
+        then.status(500).body("{}");
+    });
+    mount_room(&server, "wire_admin");
+    let _page = mount_welcome_and_case(&server, "case-miss", "Cache miss");
+    let group_info = server.mock(|when, then| {
+        when.method(GET).path_includes("/groupinfo");
+        then.status(500).body("{}");
+    });
+    let commit_bundle = server.mock(|when, then| {
+        when.method(POST).path("/v14/mls/commit-bundles");
+        then.status(500).body("{}");
+    });
+    let events = Arc::new(SyncErrors::default());
+    client.add_event_handler(events.clone());
+
+    let _ = client.sync_once(SyncSettings::default()).await;
+
+    assert!(
+        !first.load(Ordering::SeqCst),
+        "the refresh after the Welcome was attempted"
+    );
+    let room = client
+        .room(&room_id())
+        .await
+        .expect("the end-of-cycle refresh cached the room");
+    assert!(
+        room.devices().await.is_ok(),
+        "the group the Welcome opened must survive the cycle (reported: {:?})",
+        events.reported()
+    );
+    group_info.assert_calls(0);
+    commit_bundle.assert_calls(0);
 }
 
 /// The refresh after the Welcome fails (the list endpoint is down): the
