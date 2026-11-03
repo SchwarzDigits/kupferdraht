@@ -2285,3 +2285,41 @@ touched it.
   `doc_markdown` trips on `UniFFI` in a doc comment; 1.98's
   `map_or_identity` wants `unwrap_or`. A clap pin in a bin crate needs no
   stub (`try_parse_from(...).is_err()`); only the stdin reader did.
+
+### 5.75 The red tests were reviewed before they went green, and the review found the oldest gap (Step 138)
+
+- **A review of the red tests is cheap and found what the plan missed.**
+  Six additions came from one read of the red phase: the motivating
+  count-0-plus-flag case, a `Read` with receipts on (the READ upload had
+  no native pin since 6-II-f; the Step 4 MLS fixture made one in 150
+  lines), idempotence, "device-local" in the docs, the `null` projection
+  pin. Show the red tests to a reader who sat outside the orientation.
+- **A stub that forwards is not an implementation; a stub that
+  constructs is.** `Room::read_marker` wired through to the store
+  compiled and stayed red on the SQLite `todo!()`; the browser projection
+  could not be stubbed (`deny(warnings)` rejects an unconstructed field),
+  so its pins were green in the red phase — said so, not hidden.
+- **`None` crosses the boundary as whatever the serializer decides.**
+  `serde_wasm_bindgen` writes `undefined` unless told `null`; the types
+  have said `null` since Step 94 and no consumer compared `=== null`. The
+  new views say what the types say, the old ones are open.md §85. A
+  browser pin on the serialized value catches this; a pin on the Rust
+  struct never will.
+- **A crate-private helper the native build never calls is dead code.**
+  `Client::read_states` for the browser's `rooms()` failed
+  `deny(dead_code)` natively; `pub` with its FFI mirror and mapping row
+  was the honest answer, a `cfg(wasm32)` the hack.
+- **One directory, a stash for the detour.** Volker prefers one working
+  directory; the worktree stays the tool for a blocked `main`. A chore
+  in between (the 137 pins) rode on `git stash push -u`, and `git rebase
+  --autostash origin/main` moved the step onto a merged `main` with the
+  work carried along.
+- **A commit script laid out mid-gate gets run mid-gate.** The 137-pins
+  script was ready before clippy had reported; it was run, and a
+  `too_many_lines` cost a fix-up commit. The script is written after the
+  last gate line, never before.
+- **The reviewer's remark that read worst was the real bug.** "A cache
+  miss must not heal" sounded like the race claim already rejected; the
+  red test showed `resync_room` discarding the Welcome-joined group after
+  a failed mid-drain refresh (PR #21). Reproduce a remark before ranking
+  it.

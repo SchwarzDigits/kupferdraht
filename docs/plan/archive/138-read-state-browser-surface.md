@@ -1,8 +1,20 @@
 # Step 138 — Read state on the browser surface: an unread flag, a read without receipt, read state in `rooms()`
 
-**Status: in progress 2026-11-03** — red tests reviewed and approved,
-green phase on `step/138-read-state-browser-surface`; commissioned
-2026-11-02 (from an embedder's spec "read state on
+**Status: MERGED 2026-11-03** — `f5b3db9` on
+`step/138-read-state-browser-surface`, merged to `main` as PR #20 (`8276eb4`);
+gate and CI green (the browser tests in headless Firefox included); smoked
+2026-11-03 against the self-hosted stack with two devices (a private read on
+bob left alice's `read_by` empty, the flag showed in `rooms` and cleared on
+the read, the read with receipt reached alice as `✓×1`). Scope shipped as
+decided below (1–5): V31, `Room::read_marker` / `set_unread_flag` /
+`is_marked_unread`, `Client::read_states`, `mark_as_read(ReceiptType)`
+(BREAKING), the browser's `rooms()` fields, `markAsRead(options)`,
+`markAsUnread`, `onRoomsChanged` as `rooms`, the tabs mirror, `mark-read
+--no-receipt` / `mark-unread`; pins in `tests/step_138_read_state.rs`,
+`tests/step_138_browser_read_state.rs`, the Step 94 driver, `read_markers.rs`
+and the CLI; retrospective LEARNINGS §5.75; the older wasm views' `undefined`
+is open.md §85. Archived 2026-11-03 with this header. (Commissioned
+2026-11-02 from an embedder's spec "read state on
 the browser surface — mark read / unread", measured against the public
 snapshot `4f30f02` of 2026-10-30; every claim re-verified on v0.1.1 the same
 day). The embedder lists rooms as a work queue: a room needs attention while

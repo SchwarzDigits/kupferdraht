@@ -394,3 +394,14 @@ own views (`wasm/read_state.rs`) serialize `null` as declared, with a
 browser pin. Aligning the rest is one serializer helper and a sweep of the
 `to_value` sites — consumer-visible (`undefined` → `null`), so a
 `Changed` entry and a d.ts review, not a silent fix.
+
+## 86) `room_read_markers` rows outlive their rooms (2026-11-03)
+
+A marker row (Step 67) and, since Step 138, its flag stay when the room
+is left or deleted — nothing purges `room_read_markers`, and `rooms` is
+replace-managed by every metadata sync, so a room that returns (rejoined
+by link) meets its old position and flag. Harmless for the lists: the
+rows are joined onto the room list, never shown on their own
+(`read_states()`, the CLI's `rooms`). A purge on leave / delete, or a
+sweep against `rooms` at the end of a sync, is a small item for the next
+storage step.
