@@ -2250,3 +2250,38 @@ touched it.
   the X.509 path made `Message::sender_device_id` always set, but
   narrowing the public type is a `BREAKING` for every binding; the doc
   comment carries the truth until a minor bump collects such changes.
+
+### 5.74 The plan file's fifth item was the wrong symptom, and 23 sites take one scripted pass (Step 137)
+
+- **Reproduce the chain, not the symptom.** The plan file said a case
+  snapshot in the same drain as its Welcome persists `sender_authorized =
+  false`. The red test on the full chain (no `on_sync_error`, row stored,
+  snapshot folded) failed one assertion earlier: the message never reached
+  the case dispatch — `decrypt_to_application` resolves the room to its
+  group through the cache, reported `no local group_id` and queued a heal
+  of the room just joined. The fix moved from the admin check to the
+  Welcome dispatch, and the "store instead of cache" alternative was
+  moot: the room's members come with the list. Pin what the consumer
+  sees first; the internal flag comes last.
+- **A crypto/transport rule decided the fix site.** The lazy variant —
+  refresh inside `decrypt_to_application` when the group is unknown —
+  would have put an HTTP call into the function that locks openmls
+  (CLAUDE.md: the two never share a function). The eager refresh in the
+  Welcome dispatch is one site and makes the end-of-cycle refresh a no-op.
+- **One guard at 23 sites is a script, not 23 edits.** Tracking the
+  enclosing `fn` by regex and inserting `path_segment` before each `let
+  path = format!(…)` with a dynamic placeholder did all of `wire/http/`
+  in one pass; the pass must recognise both helpers (`path_segment` and
+  the new `qualified_segments`) as "already checked", and stop at
+  `#[cfg(test)]`. The table-driven pin (22 methods × 6 hostile ids,
+  catch-all mock at zero calls) is what makes the generated edits safe.
+- **A worktree keeps the step moving while a chore PR waits.** The
+  archive chore of Step 135 sat uncommitted in the main clone; `git
+  worktree add` off `main` with a shared `CARGO_TARGET_DIR` let the red
+  tests start at once with warm dependencies. The commit script rebases
+  onto `origin/main` before the push.
+- **Small lints of the day.** `expect_err` wants `T: Debug` — a `let
+  Err(e) = … else` keeps `Debug` off a token-bearing type; pedantic
+  `doc_markdown` trips on `UniFFI` in a doc comment; 1.98's
+  `map_or_identity` wants `unwrap_or`. A clap pin in a bin crate needs no
+  stub (`try_parse_from(...).is_err()`); only the stdin reader did.
