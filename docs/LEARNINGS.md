@@ -2323,3 +2323,45 @@ touched it.
   red test showed `resync_room` discarding the Welcome-joined group after
   a failed mid-drain refresh (PR #21). Reproduce a remark before ranking
   it.
+
+### 5.76 Four teammates in one working tree, and the pin that broke on the next revision (Step 139)
+
+- **Strict file ownership made parallel teammates safe.** Four cmux
+  teammates (core, wasm, tabs, docs) edited one working tree at once;
+  each owned a disjoint file list and verified only what its own files
+  could prove (native tests, wasm32 clippy, pins). The one dependency
+  across the split — the wasm binding needed the core's
+  `service_token_exchange()` re-export — cost a wait. Next time the
+  accessor goes to the teammate that calls it.
+- **The lead gates, the teammates verify.** No teammate ran the
+  workspace gate; the lead ran all five plus the wasm32 line twice (the
+  second time after a one-line doc comment) and found what no teammate
+  could: a rustfmt line break in the lead's own pins, and a Step 135 pin
+  on the exact THREAT_MODEL version.
+- **A pin on an exact document version breaks on the next revision.**
+  Step 135 pinned `**Version:** 0.8`; THREAT_MODEL 0.9 broke it. A pin
+  on a version row (`| 0.8` naming Step 135) is right, a pin on the
+  header is "at least 0.8" — the header moves with every step that
+  touches the model.
+- **A red phase on wasm32 cannot be verified without wiring.**
+  `deny(warnings)` reports an uncalled stub as dead code, so the wasm32
+  check was red on the stubs until `Client.serviceToken` called them
+  (LEARNINGS 5.75 again); the browser test targets were checked only in
+  the green phase. The honest red report says so.
+- **`impl AsyncFn(&str)` breaks a UniFFI future's `Send` proof.** The
+  renewal helper's closure took the token by reference and compiled on
+  its own, then failed inside the `#[uniffi::export(async_runtime =
+  "tokio")]` login that buys a PIN token: a future borrowing the argument
+  is higher-ranked over its lifetime. By value (`Fn(Zeroizing<String>) ->
+  Fut`) has one concrete future and passes. Core found it; the helper's
+  doc names the reason.
+- **"A refusal evicts" was not observable; the test says what is.**
+  Within half a lifetime nothing is bought, so nothing can be refused
+  there; the pin that exists says "no token of before stands in for a
+  refusal". A plan sentence about internal state becomes a test about
+  behaviour or it becomes a comment.
+- **The browser suite is CI-only on this machine.** No Firefox, no
+  geckodriver, no JavaScript runtime at all — `scripts/wasm-test.sh` and
+  `node --check` cannot run here. The step's two browser scenarios went
+  green for the first time in PR #23's CI job; the gate report said
+  "browser tests: CI" instead of claiming a run.
