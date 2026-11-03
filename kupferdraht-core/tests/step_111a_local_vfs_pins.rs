@@ -34,15 +34,16 @@ fn the_opfs_pool_is_gone() {
 /// v0.3.0 (`fb257c7`: a takeover reported as an event) since Step 119,
 /// v0.4.0 (`01688f2`: the account's slot) since Step 120, v0.5.0
 /// (`2c6930f`: a commit the server failed internally is resent) since
-/// Step 123.
+/// Step 123, v0.6.0 (`8e4e7e2`: plaintext refused on request) since Step
+/// 140.
 #[test]
 fn the_vfs_is_pinned_to_a_reviewed_revision() {
     let manifest = workspace_file("kupferdraht-core/Cargo.toml");
     assert!(
         manifest.contains(
-            r#"sqlite-remote-vfs = { git = "https://github.com/SchwarzDigits/sqlite-remote-vfs", rev = "2c6930f" }"#
+            r#"sqlite-remote-vfs = { git = "https://github.com/SchwarzDigits/sqlite-remote-vfs", rev = "8e4e7e2" }"#
         ),
-        "sqlite-remote-vfs v0.5.0 (a failed commit is resent)"
+        "sqlite-remote-vfs v0.6.0 (plaintext refused on request)"
     );
     let deny = workspace_file("deny.toml");
     let allow_git = deny

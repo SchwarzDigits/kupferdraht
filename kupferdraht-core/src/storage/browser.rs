@@ -432,6 +432,9 @@ pub async fn prepare_browser_database(path: &Path) -> Result<(), KupferdrahtErro
         .contains(&format!("{LOCAL_DATABASE_PREFIX}/{home_id}/{key}"));
     let mut config = Config::local(home_id);
     config.takeover = take_over;
+    // Step 140 (sqlite-remote-vfs 0.6.0): as in the server mode, an
+    // unencrypted page 1 is refused — the same build defect, the same guard.
+    config.refuse_plaintext = true;
     let vfs = RemoteVfs::register_async(&registration_name("local"), config)
         .await
         .map_err(|e| KupferdrahtError::Storage(format!("browser storage: prepare {key}: {e}")))?;
@@ -602,7 +605,8 @@ pub(crate) fn open_browser_connection(path: &Path) -> Result<Connection, Kupferd
 /// # Errors
 /// `KupferdrahtError::Evicted` after an eviction or a takeover;
 /// `StorageAccessDenied` for a refused token; `ServiceUnavailable` while
-/// the storage server is unreachable.
+/// the storage server is unreachable; `Storage` when the VFS refused an
+/// unencrypted page 1 (Step 140).
 pub(crate) fn check_database(
     path: &Path,
     probe: impl FnOnce() -> bool,
@@ -624,6 +628,20 @@ pub(crate) fn check_database(
             )));
         }
         Some((Failure::Unreachable, _)) => probe() && database_failure(path).is_none(),
+        // Step 140: the guard of sqlite-remote-vfs 0.6.0 — runtime data (a
+        // build that does not encrypt, a database stored in the clear), so a
+        // recoverable error, not an assertion.
+        Some((Failure::Plaintext, on_server)) => {
+            return Err(KupferdrahtError::Storage(format!(
+                "{}: plaintext refused — the SQLite build in use does not encrypt{}",
+                path.display(),
+                if on_server {
+                    ", or the database on the storage server is stored in the clear"
+                } else {
+                    ""
+                }
+            )));
+        }
         _ => true,
     };
     if let Some(account) = database_account(path) {

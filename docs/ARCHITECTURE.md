@@ -464,7 +464,13 @@ one `sqlite-remote-vfs` per database — the VFS allows one database per
 registration and one connection per database — in an async *prepare* step
 before the synchronous open, which names that VFS's SQLite3MC encrypting
 layer explicitly (`storage::open_connection`, the one open of `kupferdraht.db`,
-`mls.db` and `global.db`). Step 111a uses the VFS's local mode: each
+`mls.db` and `global.db`). Since Step 140 (sqlite-remote-vfs 0.6.0) every
+registration sets `Config::refuse_plaintext`: a page 1 that carries an
+unencrypted SQLite header is refused with `SQLITE_PERM` and the VFS
+reports `Failure::Plaintext`, which `check_database` maps to a `Storage`
+error naming the cause — a build that linked plain SQLite instead of
+SQLite3MC, or a lost key, stores nothing in the clear (the guard needs a
+plaintext header of at most 72 bytes; Kupferdraht's is 32). Step 111a uses the VFS's local mode: each
 database is an IndexedDB database `sqlite-remote-vfs-local/<home-id>/
 kupferdraht/…`, one Web Lock per database. In the **server mode** (Step 111b,
 `storage/remote/`) an account's `kupferdraht.db` and `mls.db` live on a

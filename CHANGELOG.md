@@ -38,6 +38,10 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **sqlite-remote-vfs 0.6.0** (Step 140): the browser's storage follows
+  the server's page size and page count only within SQLite's limits; no
+  interface change for embedders.
+
 ### Deprecated
 
 ### Removed
@@ -45,6 +49,14 @@ is no skill for it — it is this short procedure:
 ### Fixed
 
 ### Security
+
+- **The browser stores no database in the clear** (Step 140): every VFS
+  registration sets sqlite-remote-vfs 0.6.0's `refuse_plaintext`, so a
+  page 1 with an unencrypted SQLite header — a build that linked plain
+  SQLite instead of SQLite3MC, a forgotten or lost key — is refused and
+  the operation fails with `Storage` ("plaintext refused"); the refused
+  transaction rolls back, nothing reaches IndexedDB or the storage
+  server in plaintext.
 
 ## [0.2.0] - 2026-11-03
 

@@ -153,10 +153,11 @@ fn lockfile_pins_the_wasm_engine_and_vfs_lines() {
     );
     // Step 113: v0.2.0 heals a database in place after an outage; Step 119:
     // v0.3.0 reports a takeover as an event; Step 120: v0.4.0 has the slot;
-    // Step 123: v0.5.0 resends a commit the server failed internally.
+    // Step 123: v0.5.0 resends a commit the server failed internally;
+    // Step 140: v0.6.0 refuses plaintext on request.
     assert!(
-        version_of("sqlite-remote-vfs").starts_with("0.5."),
-        "sqlite-remote-vfs 0.5.x"
+        version_of("sqlite-remote-vfs").starts_with("0.6."),
+        "sqlite-remote-vfs 0.6.x"
     );
 }
 
