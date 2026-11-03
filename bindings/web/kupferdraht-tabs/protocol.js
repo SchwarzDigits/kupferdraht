@@ -93,6 +93,7 @@ export const METHODS = Object.freeze([
   ["Client", "deleteDevice", "mutation", null],
   ["Client", "featureConfigs", "idempotent", null],
   ["Client", "fileSharing", "idempotent", null],
+  ["Client", "serviceToken", "idempotent", null],
   ["Client", "logout", "mutation", null],
   ["Client", "sendFile", "mutation", null],
   ["Client", "downloadAsset", "idempotent", null],

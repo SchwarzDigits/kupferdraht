@@ -1,11 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The token exchange's client (Step 111b, ADR-0036): a storage token for
-//! the account's storage-login key, bought with the Wire access token.
+//! The token exchange's client (Step 111b, ADR-0036): short-lived tokens
+//! bought with the Wire access token — the storage token for the account's
+//! storage-login key, the PIN token for the PIN service (Step 112), and a
+//! service token for an audience the embedder names (Step 139, ADR-0036
+//! revision 1.1).
 //!
 //! `POST <exchange>/v1/token`, `Authorization: Bearer <Wire access token>`,
-//! `{"audience": "storage", "publicKey": "<base64url, no padding>"}` →
+//! with `{"audience": "storage", "publicKey": "<base64url, no padding>"}`
+//! for the storage token and `{"audience": "<name>"}` for every other one →
 //! `{"token": "<JWT>", "expiresIn": <seconds>}`. The address comes from the
 //! embedder's configuration — never built in.
 
@@ -24,18 +28,22 @@ struct TokenAnswer {
     expires_in: u64,
 }
 
-/// A storage token and its lifetime.
-pub(crate) struct StorageToken {
+/// A token the exchange issued and its lifetime.
+pub(crate) struct ExchangedToken {
     pub(crate) token: Zeroizing<String>,
     pub(crate) expires_in: Duration,
 }
 
-impl StorageToken {
+impl ExchangedToken {
     /// When to ask for the next one: at half the lifetime.
     pub(crate) fn renew_after(&self) -> Duration {
         self.expires_in / 2
     }
 }
+
+/// The audiences Kupferdraht buys for itself (Step 139): no service token
+/// is bought for them.
+pub(crate) const RESERVED_AUDIENCES: [&str; 2] = ["storage", "pin"];
 
 /// Buy a storage token for `public_key` with `wire_token`.
 ///
@@ -51,7 +59,7 @@ pub(crate) async fn fetch_storage_token(
     permit_http: bool,
     wire_token: &str,
     public_key: &[u8; 32],
-) -> Result<StorageToken, KupferdrahtError> {
+) -> Result<ExchangedToken, KupferdrahtError> {
     let body = serde_json::json!({
         "audience": "storage",
         "publicKey": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(public_key),
@@ -65,7 +73,7 @@ async fn exchange(
     permit_http: bool,
     wire_token: &str,
     body: &serde_json::Value,
-) -> Result<StorageToken, KupferdrahtError> {
+) -> Result<ExchangedToken, KupferdrahtError> {
     let url = token_url(exchange_url, permit_http)?;
     let response = http_client()?
         .post(url)
@@ -81,7 +89,7 @@ async fn exchange(
             .await
             .map_err(|e| KupferdrahtError::Encoding(format!("token exchange answer: {e}")))?;
         debug_assert!(!answer.token.is_empty(), "the exchange issues a token");
-        return Ok(StorageToken {
+        return Ok(ExchangedToken {
             token: Zeroizing::new(answer.token),
             expires_in: Duration::from_secs(answer.expires_in),
         });
@@ -100,10 +108,57 @@ pub(crate) async fn fetch_pin_token(
     permit_http: bool,
     wire_token: &str,
 ) -> Result<Zeroizing<String>, KupferdrahtError> {
-    let body = serde_json::json!({ "audience": "pin" });
-    Ok(exchange(exchange_url, permit_http, wire_token, &body)
-        .await?
-        .token)
+    Ok(
+        exchange_for_audience(exchange_url, permit_http, wire_token, "pin")
+            .await?
+            .token,
+    )
+}
+
+/// A token for `audience`, bought with `wire_token` — `{"audience":
+/// audience}`, no key (Step 139, ADR-0036 revision 1.1): the embedder's own
+/// services beside the storage server and the PIN service. The audiences
+/// Kupferdraht buys for itself (`storage`, `pin`) and the empty string are
+/// refused before any request.
+///
+/// # Errors
+/// `InvalidInput` for a reserved or empty audience; else as
+/// [`fetch_storage_token`].
+pub(crate) async fn fetch_token(
+    exchange_url: &str,
+    permit_http: bool,
+    wire_token: &str,
+    audience: &str,
+) -> Result<ExchangedToken, KupferdrahtError> {
+    refuse_reserved_audience(audience)?;
+    exchange_for_audience(exchange_url, permit_http, wire_token, audience).await
+}
+
+/// Refuse an audience no service token is bought for: an empty one, and
+/// those Kupferdraht buys for itself.
+fn refuse_reserved_audience(audience: &str) -> Result<(), KupferdrahtError> {
+    if audience.is_empty() {
+        return Err(KupferdrahtError::InvalidInput(
+            "service token: the audience is empty".into(),
+        ));
+    }
+    if RESERVED_AUDIENCES.contains(&audience) {
+        return Err(KupferdrahtError::InvalidInput(format!(
+            "service token: the audience {audience:?} is Kupferdraht's own"
+        )));
+    }
+    Ok(())
+}
+
+/// `{"audience": audience}` and nothing else, bought with `wire_token`.
+async fn exchange_for_audience(
+    exchange_url: &str,
+    permit_http: bool,
+    wire_token: &str,
+    audience: &str,
+) -> Result<ExchangedToken, KupferdrahtError> {
+    let body = serde_json::json!({ "audience": audience });
+    exchange(exchange_url, permit_http, wire_token, &body).await
 }
 
 /// `<exchange>/v1/token`, HTTPS unless plain HTTP is permitted (dev).
@@ -362,6 +417,67 @@ mod tests {
         assert!(
             !message.chars().any(char::is_control),
             "control characters survived into the error"
+        );
+    }
+
+    /// Step 139: a service token carries the Wire token as bearer and the
+    /// audience — nothing else, no key.
+    #[tokio::test]
+    async fn a_service_token_asks_for_its_audience_only() {
+        let server = MockServer::start();
+        let exchange = server.mock(|when, then| {
+            when.method(POST)
+                .path("/v1/token")
+                .header("authorization", "Bearer wire-token")
+                .json_body(serde_json::json!({ "audience": "cases" }));
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(r#"{"token":"cases.jwt","expiresIn":900}"#);
+        });
+
+        let token = fetch_token(&server.base_url(), true, "wire-token", "cases")
+            .await
+            .expect("a token");
+
+        exchange.assert();
+        assert_eq!(token.token.as_str(), "cases.jwt");
+        assert_eq!(token.expires_in, Duration::from_mins(15));
+    }
+
+    /// Step 139: the audiences Kupferdraht buys for itself, and an empty
+    /// one, are refused before the exchange hears of them.
+    #[tokio::test]
+    async fn a_reserved_or_empty_audience_is_refused_before_any_request() {
+        let server = MockServer::start();
+        let exchange = server.mock(|when, then| {
+            when.method(POST).path("/v1/token");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(r#"{"token":"never.jwt","expiresIn":900}"#);
+        });
+
+        for audience in ["storage", "pin", ""] {
+            let result = fetch_token(&server.base_url(), true, "wire-token", audience).await;
+            assert!(
+                matches!(result, Err(KupferdrahtError::InvalidInput(_))),
+                "{audience:?}: {:?}",
+                result.err()
+            );
+        }
+        assert_eq!(exchange.calls(), 0, "no request for a reserved audience");
+    }
+
+    /// Step 139: the exchange's answers map for a service token as for the
+    /// storage token — the admission's refusal is `StorageAccessDenied`.
+    #[tokio::test]
+    async fn a_service_token_the_admission_refuses_is_storage_access_denied() {
+        let server = MockServer::start();
+        answer(&server, 403, r#"{"error":"not_allowed"}"#, None);
+        let result = fetch_token(&server.base_url(), true, "t", "cases").await;
+        assert!(
+            matches!(result, Err(KupferdrahtError::StorageAccessDenied(_))),
+            "{:?}",
+            result.err()
         );
     }
 }

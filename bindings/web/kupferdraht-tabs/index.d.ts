@@ -286,6 +286,11 @@ export class ClientProxy {
   featureConfigs(): Promise<FeatureConfig[]>;
   fileSharing(): Promise<FileSharing>;
   /**
+   * A token of the token exchange for the embedder's own service (Step 139, ADR-0036 revision 1.1): `{ token, expiresIn }`
+   * (seconds), as the exchange answered. `storage`, `pin` and `""` are reserved (`InvalidInput`), as is the local mode.
+   */
+  serviceToken(audience: string): Promise<ServiceToken>;
+  /**
    * Without options the keys stay, as natively. `purgeDevice` deletes the device at the backend (with the password)
    * and, in the server mode, its databases there; `purgeLocal` forgets the account in this browser (keys, local
    * databases, registry entry — recovery data still restores it). After a purge the client is closed.
@@ -296,6 +301,9 @@ export class ClientProxy {
   /** The account's recovery data (ADR-0035). */
   recovery(): Promise<RecoveryProxy>;
 }
+
+/** A token of the token exchange for the embedder's own service (Step 139, ADR-0036 revision 1.1); `expiresIn` in seconds. */
+export interface ServiceToken { token: string; expiresIn: number }
 
 /** `exportedAt`: when the current recovery data was made (milliseconds since the epoch). */
 export type RecoveryState = { state: 'disabled' } | { state: 'enabled'; exportedAt: number };

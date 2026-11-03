@@ -503,3 +503,17 @@ export async function readStateReachesEveryTab() {
     b.close();
   }
 }
+
+/** Step 139: a thin tab's `serviceToken` reaches the leader; the answer and a refusal's name cross the channel. */
+export async function serviceTokenThroughATab() {
+  const { a, b } = await twoTabs();
+  try {
+    const client = await b.kupferdraht.resume(FIXTURE_ACCOUNT);
+    const answer = await client.serviceToken('cases');
+    const error = await client.serviceToken('pin').then(() => null, (err) => err);
+    return { token: answer.token, expiresIn: answer.expiresIn, errorName: error?.name ?? null };
+  } finally {
+    a.close();
+    b.close();
+  }
+}

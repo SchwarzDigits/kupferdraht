@@ -105,9 +105,16 @@ fn threat_model_g1_has_no_exception_and_a_new_version_row() {
             .any(|l| l.starts_with("| 0.8") && l.contains("Step 135")),
         "THREAT_MODEL's Versions table needs a 0.8 row naming Step 135"
     );
+    // Later revisions move the header on (0.9 with Step 139): at least 0.8.
+    let version: f32 = doc
+        .lines()
+        .find_map(|l| l.strip_prefix("**Version:** "))
+        .and_then(|rest| rest.split_whitespace().next())
+        .and_then(|v| v.parse().ok())
+        .expect("THREAT_MODEL's header carries a version");
     assert!(
-        doc.contains("**Version:** 0.8"),
-        "THREAT_MODEL's header must say version 0.8"
+        version >= 0.8,
+        "THREAT_MODEL's header must be at version 0.8 or later, is {version}"
     );
 }
 

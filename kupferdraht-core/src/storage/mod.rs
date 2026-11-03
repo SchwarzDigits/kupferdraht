@@ -69,8 +69,8 @@ pub(crate) use remote::health::StorageState;
 #[cfg(target_arch = "wasm32")]
 pub(crate) use remote::server::{
     account_on_storage_server, account_storage_state, attach_account_client,
-    prepare_remote_account, storage_server_configured, subscribe_storage_state,
-    unsubscribe_storage_state, use_storage_server,
+    prepare_remote_account, service_token_exchange, storage_server_configured,
+    subscribe_storage_state, unsubscribe_storage_state, use_storage_server,
 };
 #[cfg(target_arch = "wasm32")]
 pub(crate) use remote::wire_session::WireSession;

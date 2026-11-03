@@ -379,6 +379,12 @@ timeout) or a response-size policy (`Content-Length` pre-check, a bounded
 `bytes_stream`) — a decision of its own. Step 139 (service tokens,
 wasm-only, the same exchange client) takes it into its orientation.
 
+Step 139 (2026-11-03) took it into its orientation as announced: the
+service-token path (`serviceToken(audience)`, ADR-0036 revision 1.1) buys
+through the same exchange client and shares the gap — a service token's
+response is read without a bound, a redirect is followed with the
+audience in the body. Nothing changed; the decision stays open.
+
 ## 85) The older wasm views cross `None` as `undefined`, the types say `null` (2026-11-03)
 
 `serde_wasm_bindgen::to_value` serializes a Rust `None` as `undefined`

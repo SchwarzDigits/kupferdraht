@@ -13,6 +13,9 @@ pub(crate) mod instance_id;
 pub(crate) mod login_key;
 #[cfg(target_arch = "wasm32")]
 pub(crate) mod server;
+// Step 139 (ADR-0036 revision 1.1): service tokens for the embedder's own
+// services, one cached per audience.
+pub(crate) mod service_tokens;
 // Step 120 (ADR-0040): the account's storage slot — is there a device, which.
 pub(crate) mod slot;
 pub(crate) mod token_cache;

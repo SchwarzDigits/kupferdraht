@@ -1,17 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The Wire session a storage token (Step 111b) and a PIN token (Step 112)
-//! are bought with: the login's token while a login is pending, the
-//! client's own session once the client exists. A Wire token the exchange
-//! refuses is renewed once through the client's session, as every other
-//! Wire call does on a `401`.
+//! The Wire session a storage token (Step 111b), a PIN token (Step 112) and
+//! a service token (Step 139) are bought with: the login's token while a
+//! login is pending, the client's own session once the client exists. A
+//! Wire token the exchange refuses is renewed once through the client's
+//! session, as every other Wire call does on a `401`.
 
+use std::future::Future;
 use std::sync::Weak;
 
 use zeroize::Zeroizing;
 
-use super::token_exchange::{StorageToken, fetch_pin_token, fetch_storage_token};
+use super::token_exchange::{ExchangedToken, fetch_pin_token, fetch_storage_token, fetch_token};
 use crate::error::KupferdrahtError;
 use crate::wire::http::TokenRefresh;
 
@@ -71,16 +72,11 @@ pub(crate) async fn buy_storage_token(
     exchange: &TokenExchange,
     session: &WireSession,
     public_key: &[u8; 32],
-) -> Result<StorageToken, KupferdrahtError> {
-    let (wire_token, issued_at) = session.token().await?;
-    debug_assert!(!wire_token.is_empty(), "a session holds a Wire token");
-    match fetch_storage_token(&exchange.url, exchange.permit_http, &wire_token, public_key).await {
-        Err(KupferdrahtError::Unauthorized) => {
-            let renewed = session.renewed(issued_at).await?;
-            fetch_storage_token(&exchange.url, exchange.permit_http, &renewed, public_key).await
-        }
-        bought => bought,
-    }
+) -> Result<ExchangedToken, KupferdrahtError> {
+    buy_renewing_once(session, |wire_token| async move {
+        fetch_storage_token(&exchange.url, exchange.permit_http, &wire_token, public_key).await
+    })
+    .await
 }
 
 /// Buy a PIN token (Step 112) with the session's Wire token; one the
@@ -94,13 +90,52 @@ pub(crate) async fn buy_pin_token(
     exchange: &TokenExchange,
     session: &WireSession,
 ) -> Result<Zeroizing<String>, KupferdrahtError> {
+    buy_renewing_once(session, |wire_token| async move {
+        fetch_pin_token(&exchange.url, exchange.permit_http, &wire_token).await
+    })
+    .await
+}
+
+/// Buy a token for `audience` (Step 139: the embedder's own services) with
+/// the session's Wire token; one the exchange refuses (`Unauthorized`) is
+/// renewed once through the client's session.
+///
+/// # Errors
+/// As [`super::token_exchange::fetch_token`]; `Unauthorized` when a login's
+/// token is refused or the renewed one is; `SessionExpired` once the client
+/// is gone or its session is.
+pub(crate) async fn buy_token(
+    exchange: &TokenExchange,
+    session: &WireSession,
+    audience: &str,
+) -> Result<ExchangedToken, KupferdrahtError> {
+    buy_renewing_once(session, |wire_token| async move {
+        fetch_token(&exchange.url, exchange.permit_http, &wire_token, audience).await
+    })
+    .await
+}
+
+/// Buy through `buy` with the session's Wire token; one the exchange
+/// refuses (`Unauthorized`) is renewed once through the client's session,
+/// and the renewed token buys — a second refusal stands. `buy` takes the
+/// token by value and returns one future type: a future borrowing the token
+/// is higher-ranked over its lifetime, which the `Send` proof of the
+/// `UniFFI` login future cannot generalise over.
+///
+/// # Errors
+/// `buy`'s; `Unauthorized` when a login's token is refused (it cannot be
+/// renewed); `SessionExpired` once the client is gone or its session is.
+async fn buy_renewing_once<T, Fut>(
+    session: &WireSession,
+    buy: impl Fn(Zeroizing<String>) -> Fut,
+) -> Result<T, KupferdrahtError>
+where
+    Fut: Future<Output = Result<T, KupferdrahtError>>,
+{
     let (wire_token, issued_at) = session.token().await?;
     debug_assert!(!wire_token.is_empty(), "a session holds a Wire token");
-    match fetch_pin_token(&exchange.url, exchange.permit_http, &wire_token).await {
-        Err(KupferdrahtError::Unauthorized) => {
-            let renewed = session.renewed(issued_at).await?;
-            fetch_pin_token(&exchange.url, exchange.permit_http, &renewed).await
-        }
+    match buy(wire_token).await {
+        Err(KupferdrahtError::Unauthorized) => buy(session.renewed(issued_at).await?).await,
         bought => bought,
     }
 }
@@ -248,6 +283,67 @@ mod tests {
         let weak: Weak<dyn TokenRefresh> = Arc::downgrade(&FakeClient::new()) as _;
 
         let result = buy_storage_token(&exchange(&server), &WireSession::Client(weak), &KEY).await;
+
+        assert!(
+            matches!(result, Err(KupferdrahtError::SessionExpired)),
+            "{:?}",
+            result.err()
+        );
+    }
+
+    /// Step 139: a service token is bought the same way — a refused client
+    /// token is renewed once, and the renewed token buys it.
+    #[tokio::test]
+    async fn a_refused_client_token_buys_the_service_token_after_one_renewal() {
+        let server = MockServer::start();
+        answer_for(&server, "expired", 401, "{}");
+        answer_for(
+            &server,
+            "fresh",
+            200,
+            r#"{"token":"cases.jwt","expiresIn":900}"#,
+        );
+        let client = FakeClient::new();
+        let weak: Weak<dyn TokenRefresh> = Arc::downgrade(&client) as _;
+
+        let bought = buy_token(&exchange(&server), &WireSession::Client(weak), "cases")
+            .await
+            .expect("bought");
+
+        assert_eq!(bought.token.as_str(), "cases.jwt");
+        assert_eq!(client.renewals.load(Ordering::SeqCst), 1, "renewed once");
+    }
+
+    /// Step 139: the renewal happens once — a second refusal stands.
+    #[tokio::test]
+    async fn a_second_refusal_of_a_service_token_is_unauthorized() {
+        let server = MockServer::start();
+        answer_for(&server, "expired", 401, "{}");
+        answer_for(&server, "fresh", 401, "{}");
+        let client = FakeClient::new();
+        let weak: Weak<dyn TokenRefresh> = Arc::downgrade(&client) as _;
+
+        let result = buy_token(&exchange(&server), &WireSession::Client(weak), "cases").await;
+
+        assert!(
+            matches!(result, Err(KupferdrahtError::Unauthorized)),
+            "{:?}",
+            result.err()
+        );
+        assert_eq!(
+            client.renewals.load(Ordering::SeqCst),
+            1,
+            "renewed once, not twice"
+        );
+    }
+
+    /// Step 139: a gone client buys no service token.
+    #[tokio::test]
+    async fn a_dropped_client_buys_no_service_token() {
+        let server = MockServer::start();
+        let weak: Weak<dyn TokenRefresh> = Arc::downgrade(&FakeClient::new()) as _;
+
+        let result = buy_token(&exchange(&server), &WireSession::Client(weak), "cases").await;
 
         assert!(
             matches!(result, Err(KupferdrahtError::SessionExpired)),

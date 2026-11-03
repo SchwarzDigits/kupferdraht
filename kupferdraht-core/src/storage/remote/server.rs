@@ -29,7 +29,7 @@ use super::health::{ObserverId, StorageHealth, StorageState};
 use super::instance_id::storage_instance_id;
 use super::login_key::{StorageLoginKey, account_storage_login_key};
 use super::token_cache::StorageTokenCache;
-use super::token_exchange::StorageToken;
+use super::token_exchange::ExchangedToken;
 use super::wire_session::{TokenExchange, WireSession, buy_storage_token};
 use crate::error::KupferdrahtError;
 use crate::keystore::SecureKeyStore;
@@ -161,6 +161,25 @@ fn server_settings() -> Result<Rc<ServerSettings>, KupferdrahtError> {
         .ok_or_else(|| KupferdrahtError::Storage("browser storage: no storage server".into()))
 }
 
+/// The token exchange, for the embedder's service tokens (Step 139,
+/// ADR-0036 revision 1.1).
+///
+/// # Errors
+/// `InvalidInput` in the local mode — no token exchange is configured.
+pub(crate) fn service_token_exchange() -> Result<TokenExchange, KupferdrahtError> {
+    SERVER
+        .with(|s| {
+            s.borrow()
+                .as_ref()
+                .map(|settings| settings.exchange.clone())
+        })
+        .ok_or_else(|| {
+            KupferdrahtError::InvalidInput(
+                "no token exchange configured: the local mode has none".into(),
+            )
+        })
+}
+
 /// Make the databases of `account_id` ready to open on the storage server:
 /// buy a storage token with `session`, register each database's VFS with
 /// the account's signer (once per key and takeover), and keep the token
@@ -289,7 +308,7 @@ fn registration_error(
     }
 }
 
-fn store_token(account: &RemoteAccount, token: StorageToken) {
+fn store_token(account: &RemoteAccount, token: ExchangedToken) {
     debug_assert!(!token.token.is_empty(), "the exchange issues a token");
     let lifetime = token.expires_in.saturating_sub(EXPIRY_MARGIN);
     let expires_at = crate::time::now_ms()

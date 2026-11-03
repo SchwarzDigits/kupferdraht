@@ -36,6 +36,7 @@ use crate::manager::{KeysState, RegisterOptions};
 use crate::recovery::account::{RecoveryContext, RecoveryState};
 use crate::recovery::flow::RecoveryServices;
 use crate::storage::account_keys::AccountKeySource;
+use crate::storage::remote::service_tokens::ServiceTokenCache;
 use crate::storage::remote::wire_session::TokenExchange;
 
 /// Map a core error into a thrown JS `Error`: the message as before, the
@@ -511,6 +512,7 @@ impl Kupferdraht {
             inner,
             manager: Arc::clone(&self.inner),
             rooms_changed: RoomsChangedSlot::default(),
+            service_tokens: ServiceTokenCache::default(),
         })
     }
 
@@ -683,6 +685,7 @@ impl PendingLogin {
             inner,
             manager: Arc::clone(&self.manager),
             rooms_changed: RoomsChangedSlot::default(),
+            service_tokens: ServiceTokenCache::default(),
         })
     }
 
@@ -723,6 +726,7 @@ impl PendingLogin {
             inner,
             manager: Arc::clone(&self.manager),
             rooms_changed: RoomsChangedSlot::default(),
+            service_tokens: ServiceTokenCache::default(),
         })
     }
 
@@ -768,6 +772,9 @@ pub struct Client {
     /// change reports the room's new state here; `SyncHandle.stop` clears
     /// it.
     rooms_changed: RoomsChangedSlot,
+    /// `serviceToken`'s tokens (Step 139): one per audience, served until
+    /// half its lifetime, then bought anew.
+    service_tokens: ServiceTokenCache,
 }
 
 /// The one `onRoomsChanged` registration of a client (Step 138).
@@ -1443,6 +1450,23 @@ impl Client {
             client: self.inner.clone(),
             context: self.manager.recovery_context(),
         }
+    }
+
+    /// A token of the token exchange for `audience` — the embedder's own
+    /// service beside the storage server and the PIN service (Step 139,
+    /// ADR-0036 revision 1.1): `{ token, expiresIn }` (seconds), as the
+    /// exchange answered; Kupferdraht neither parses nor checks it. A bearer
+    /// token without the storage token's key binding: a copy works until it
+    /// expires. One token per audience is kept and served until half its
+    /// lifetime — the exchange's limits are shared with the storage token.
+    /// `storage`, `pin` and `""` are Kupferdraht's own: `InvalidInput`, as
+    /// is the local mode (no exchange). The exchange's refusals as for the
+    /// storage token — `StorageAccessDenied`, `RateLimited` (`retryAfter`),
+    /// `ServiceUnavailable`, `Unauthorized` after one renewal of the Wire
+    /// token; `SessionExpired` once the client is gone.
+    #[wasm_bindgen(js_name = serviceToken)]
+    pub async fn service_token(&self, audience: String) -> Result<JsValue, JsValue> {
+        super::service_token::service_token(&self.inner, &self.service_tokens, &audience).await
     }
 
     /// Revoke the session server-side (`POST /access/logout`); the browser

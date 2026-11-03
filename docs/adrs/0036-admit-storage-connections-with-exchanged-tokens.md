@@ -77,14 +77,26 @@ a token source before every connect; the server verifies it offline as a JWT aga
 2. **What the token is.** An EdDSA JWT of the exchange: `aud` is the storage server's own name, `cnf.jwk` the
    storage-login key, a short lifetime (one hour by default). The storage server verifies it offline against the
    exchange's key set and compares `cnf` with the key of the connection.
-3. **One audience per server.** The PIN service gets tokens of its own audience (`pin`), without a key, since a
-   browser restoring its recovery data has no key yet. Neither server accepts the other's tokens, and only the
-   exchange ever sees the account's access token.
+3. **One audience per server, and further audiences for the embedder's services.** The PIN service gets tokens of
+   its own audience (`pin`), without a key, since a browser restoring its recovery data has no key yet. Neither
+   server accepts the other's tokens, and only the exchange ever sees the account's access token. The further
+   audiences are decision 6.
 4. **Admission is the exchange's.** Which teams and users may use the servers, and how many tokens and keys a user
    gets, is configured there. Kupferdraht reports a refusal as `StorageAccessDenied`, waits out a rate limit, and reports
    an unreachable exchange as `ServiceUnavailable`.
 5. **Expiry and revocation.** The storage server ends a connection when its token expires; the VFS reconnects with a
    fresh token. A token refused while running stops the instance with `onEvicted("access")`.
+6. **Service tokens on the embedder's request (revision 1.1, Step 139).** A third token kind: on
+   `serviceToken(audience)` Kupferdraht buys a token of the audience the embedder names — the session's access token
+   as bearer, the body `{"audience": "<name>"}`, no key — and hands the exchange's answer to the page unchanged, for
+   a service the embedder runs beside the storage server and the PIN service that must answer only users logged in
+   to Wire and admitted by the operator. The audiences `storage` and `pin` are reserved: Kupferdraht buys them for
+   itself and refuses them on request before any request leaves (`InvalidInput`), as it refuses the empty audience
+   and a call in local mode, which has no exchange. One token per audience is kept and served until half its
+   lifetime, bought anew after that or after a refusal, because the exchange's per-user limits are shared with the
+   storage token's renewal. Kupferdraht neither parses nor checks the token; the embedder's service verifies it
+   offline against the exchange's key set (`sub` the user, `team` the team). Without a key binding it is a bearer
+   token: a copy works until it expires, and the lifetime is the exchange's to set.
 
 ## Consequences
 
@@ -101,6 +113,11 @@ a token source before every connect; the server verifies it offline as a JWT aga
 - The exchange's limits count per instance.
 - The audiences must be configured consistently: the exchange's storage audience must equal the storage server's
   name, its PIN audience the PIN service's name.
+- A service token is a bearer token without `cnf`: handed to the page on the embedder's request, it lives in the
+  embedder's trust domain like the plaintexts the page displays (THREAT_MODEL N8), and a copy works until it
+  expires.
+- The browser build's exchange client has no request timeout and no redirect policy (open.md §84); the
+  service-token path shares the client and the gap.
 
 ### Neutral
 
@@ -109,10 +126,13 @@ a token source before every connect; the server verifies it offline as a JWT aga
 ## Implementation Notes
 
 - `Kupferdraht.open` server-mode storage options carry `tokenExchangeUrl`; requests are `POST <url>/v1/token` with
-  `{"audience": "storage", "publicKey": "<base64url>"}` or `{"audience": "pin"}`; the answer is
-  `{"token", "expiresIn"}`.
+  `{"audience": "storage", "publicKey": "<base64url>"}` for the storage token and `{"audience": "<name>"}` for every
+  other audience (`pin`, and the audiences of `serviceToken`); the answer is `{"token", "expiresIn"}`
+  (`ExchangedToken`).
 - The VFS token source is synchronous: it returns the cached token; Kupferdraht refreshes in the background.
-- Tokens, like access tokens, never appear in logs, errors or `Debug` output.
+  `storage/remote/service_tokens.rs` keeps the service tokens, one per audience, until half their lifetime.
+- Tokens — storage, PIN and service tokens alike — never appear in logs, errors or `Debug` output, like access
+  tokens.
 
 ## References
 
@@ -122,3 +142,4 @@ a token source before every connect; the server verifies it offline as a JWT aga
 ## Revision History
 
 - 2026-09-29: Created (Accepted — Markus)
+- 2026-11-03: Revision 1.1 (Step 139; Volker Zöpfel) — a third token kind: service tokens of an audience the embedder names, bought on `serviceToken(audience)` with `{"audience": "<name>"}` and handed to the page unchanged; `storage` and `pin` reserved; one token per audience until half its lifetime because the exchange's limits are shared; not parsed or checked by Kupferdraht. Decision 6 added, decision 3 names the further audiences, the Implementation Notes generalise the request body; nothing else changes.

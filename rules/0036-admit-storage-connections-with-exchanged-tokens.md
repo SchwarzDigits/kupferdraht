@@ -13,5 +13,14 @@ Condensed from `docs/adrs/0036-admit-storage-connections-with-exchanged-tokens.m
 - **Don't decide admission in Kupferdraht.** Map the exchange's answers:
   `403` → `StorageAccessDenied`, `429` → wait `Retry-After`, unreachable →
   `ServiceUnavailable`; a token refused while running → `onEvicted("access")`.
-- **Never log tokens** — storage, PIN or access — nor put them in errors or
-  `Debug` output.
+- **A service token on request only (`serviceToken(audience)`):** buy
+  `{"audience": "<name>"}` with the session's Wire token (renew it once on
+  a `401`) and hand the exchange's answer to the page unchanged; keep one
+  per audience and serve it until half its lifetime — the exchange's
+  limits are shared with the storage token's renewal. **Never** buy
+  `storage` or `pin` on request (`InvalidInput` before any request, as for
+  the empty audience); the local mode has no exchange (`InvalidInput`).
+  Don't parse or verify the token — the embedder's service does; it is a
+  bearer token without `cnf`.
+- **Never log tokens** — storage, PIN, service or access — nor put them in
+  errors or `Debug` output.

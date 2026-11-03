@@ -363,6 +363,7 @@ export class ClientProxy extends HandleProxy {
   leave(roomId) { return this.#call('leave', [roomId]); }
   featureConfigs() { return this.#call('featureConfigs', []); }
   fileSharing() { return this.#call('fileSharing', []); }
+  serviceToken(audience) { return this.#call('serviceToken', [audience]); }
   logout(options) { return this.#call('logout', [options]); }
   sendFile(roomId, bytes, filename, mimeType) { return this.#call('sendFile', [roomId, bytes, filename, mimeType]); }
   downloadAsset(roomId, itemId) { return this.#call('downloadAsset', [roomId, itemId]); }
