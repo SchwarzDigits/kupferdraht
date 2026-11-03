@@ -378,3 +378,19 @@ A fix is a second HTTP path beside reqwest's wasm backend
 timeout) or a response-size policy (`Content-Length` pre-check, a bounded
 `bytes_stream`) — a decision of its own. Step 139 (service tokens,
 wasm-only, the same exchange client) takes it into its orientation.
+
+## 85) The older wasm views cross `None` as `undefined`, the types say `null` (2026-11-03)
+
+`serde_wasm_bindgen::to_value` serializes a Rust `None` as `undefined`
+unless the serializer is built with `serialize_missing_as_null(true)`.
+Every wasm view before Step 138 uses the default — `TimelineItem.body`,
+`replyTo`, `asset`, `expiresAtMs`, `hotKnock`, `location`,
+`MessageEvent_.replyToId` / `expiresAtMs`, `Member.displayName` / `handle`,
+`DeviceInfo`'s optional fields, `RoomDevice.userId` / `deviceId` /
+`thumbprint` — while `bindings/web/kupferdraht-tabs/index.d.ts` declares
+them `| null`. A consumer comparing `=== null` misses them; `== null` and
+truthiness checks do not, which is why nothing has surfaced. Step 138's
+own views (`wasm/read_state.rs`) serialize `null` as declared, with a
+browser pin. Aligning the rest is one serializer helper and a sweep of the
+`to_value` sites — consumer-visible (`undefined` → `null`), so a
+`Changed` entry and a d.ts review, not a silent fix.

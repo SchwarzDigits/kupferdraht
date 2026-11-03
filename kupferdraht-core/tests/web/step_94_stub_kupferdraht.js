@@ -104,7 +104,15 @@ export class StubClient {
     return (limit ? all.slice(-limit) : all).map((m) => ({ ...m }));
   }
   async sendText(roomId, body) { await delay(SLOW_MS); return { messageId: `sent-${roomId}-${body.length}`, sentAtMs: Date.now() }; }
-  startSync(onMessage, onTyping, onExpired, onSync, onDevicesChanged, onStorage) {
+  /** Step 138: a read-state change made through this client, reported to `onRoomsChanged` with the room's read state. */
+  async markAsRead(roomId, itemId, options) {
+    if (this._onRoomsChanged) this._onRoomsChanged({ roomId, unreadCount: 0, lastReadAtMs: 3, markedUnread: false });
+  }
+  async markAsUnread(roomId) {
+    if (this._onRoomsChanged) this._onRoomsChanged({ roomId, unreadCount: 0, lastReadAtMs: 3, markedUnread: true });
+  }
+  startSync(onMessage, onTyping, onExpired, onSync, onDevicesChanged, onStorage, onRoomsChanged) {
+    this._onRoomsChanged = onRoomsChanged;
     const timer = setTimeout(() => {
       onMessage({ roomId: 'room-1', senderUserId: 'peer@example.test', messageId: 'live-1', body: 'live', replyToId: null, receivedAtMs: 1, expiresAtMs: null });
       if (onSync) onSync({ roomsUpdated: 1, eventsDispatched: 1 });

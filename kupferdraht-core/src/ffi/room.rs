@@ -279,6 +279,32 @@ impl Room {
         self.inner.unread_count().await
     }
 
+    /// The device-local read marker (`sent_at_ms`), `None` when never
+    /// marked (Step 138).
+    ///
+    /// # Errors
+    /// See `KupferdrahtError`.
+    pub async fn read_marker(&self) -> Result<Option<i64>, KupferdrahtError> {
+        self.inner.read_marker().await
+    }
+
+    /// Flag the room unread by hand, or clear the flag (Step 138); a read
+    /// clears it too.
+    ///
+    /// # Errors
+    /// See `KupferdrahtError`.
+    pub async fn set_unread_flag(&self, flag: bool) -> Result<(), KupferdrahtError> {
+        self.inner.set_unread_flag(flag).await
+    }
+
+    /// Whether the room is flagged unread by hand (Step 138).
+    ///
+    /// # Errors
+    /// See `KupferdrahtError`.
+    pub async fn is_marked_unread(&self) -> Result<bool, KupferdrahtError> {
+        self.inner.is_marked_unread().await
+    }
+
     /// Set the room's `access` + `access_role`; returns the refreshed
     /// handle.
     ///

@@ -295,16 +295,33 @@ pub(crate) async fn resolve_room_for_message(
 pub(crate) async fn mark_read(
     room_id: Option<String>,
     message_id: String,
+    no_receipt: bool,
 ) -> Result<(), KupferdrahtError> {
     let (_client, room, room_id) = resume_with_room_for_message(room_id, &message_id).await?;
     let timeline = room.timeline()?;
-    match timeline.mark_as_read(message_id.clone()).await? {
+    let receipt = if no_receipt {
+        kupferdraht::ReceiptType::ReadPrivate
+    } else {
+        kupferdraht::ReceiptType::Read
+    };
+    let outcome = timeline.mark_as_read(message_id.clone(), receipt).await?;
+    let marker = room
+        .read_marker()
+        .await?
+        .map_or_else(|| "none".to_string(), super::fmt_ms);
+    match outcome {
         Some(handle) => {
             println!("mark-read ok");
             println!("  room_id:           {room_id}");
             println!("  target:            {message_id}");
             println!("  confirmation_event:{}", handle.message_id);
             println!("  confirmed_at:      {}", super::fmt_ms(handle.sent_at_ms));
+        }
+        None if no_receipt => {
+            // Step 138: the position moved, the room learns nothing.
+            println!("mark-read private");
+            println!("  room_id:           {room_id}");
+            println!("  target:            {message_id}");
         }
         None => {
             // Step 10f gate: WIRE_RECEIPT_MODE = 0 → no Confirmation
@@ -316,6 +333,23 @@ pub(crate) async fn mark_read(
             println!("  reason:            WIRE_RECEIPT_MODE = Off");
         }
     }
+    println!("  read_marker:       {marker}");
+    Ok(())
+}
+
+/// Step 138: flag a room unread by hand; the room must be known locally.
+pub(crate) async fn mark_unread(room_id: String) -> Result<(), KupferdrahtError> {
+    let client = super::resume_client().await?;
+    let room = client.room_or_load(&room_id).await.ok_or_else(|| {
+        KupferdrahtError::InvalidInput(format!(
+            "mark-unread: unknown room {room_id}; run `kupferdraht-cli sync` first"
+        ))
+    })?;
+    room.set_unread_flag(true).await?;
+    println!("mark-unread ok");
+    println!("  room_id:           {room_id}");
+    println!("  unread:            {}", room.unread_count().await?);
+    println!("  marked_unread:     {}", room.is_marked_unread().await?);
     Ok(())
 }
 

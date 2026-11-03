@@ -316,7 +316,7 @@ export class ClientProxy extends HandleProxy {
   createJoinLink(roomId, password) { return this.#call('createJoinLink', [roomId, password]); }
   revokeJoinLink(roomId) { return this.#call('revokeJoinLink', [roomId]); }
   joinViaLink(code, key, password) { return this.#call('joinViaLink', [code, key, password]); }
-  startSync(onMessage, onTyping, onExpired, onSync, onDevicesChanged, onStorage) {
+  startSync(onMessage, onTyping, onExpired, onSync, onDevicesChanged, onStorage, onRoomsChanged) {
     if (typeof onMessage !== 'function') throw new TypeError('startSync: onMessage must be a function');
     const subscription = {
       id: crypto.randomUUID(),
@@ -331,6 +331,7 @@ export class ClientProxy extends HandleProxy {
         else if (event === 'sync' && onSync) onSync(payload);
         else if (event === 'devices' && onDevicesChanged) onDevicesChanged(payload);
         else if (event === 'storage' && onStorage) onStorage(payload);
+        else if (event === 'rooms' && onRoomsChanged) onRoomsChanged(payload);
       },
     };
     this.transport.subscribe(subscription);
@@ -350,7 +351,8 @@ export class ClientProxy extends HandleProxy {
   toggleReaction(roomId, itemId, emoji) { return this.#call('toggleReaction', [roomId, itemId, emoji]); }
   editMessage(roomId, itemId, newBody) { return this.#call('editMessage', [roomId, itemId, newBody]); }
   redact(roomId, itemId) { return this.#call('redact', [roomId, itemId]); }
-  markAsRead(roomId, itemId) { return this.#call('markAsRead', [roomId, itemId]); }
+  markAsRead(roomId, itemId, options) { return this.#call('markAsRead', [roomId, itemId, options]); }
+  markAsUnread(roomId) { return this.#call('markAsUnread', [roomId]); }
   createRoom(name) { return this.#call('createRoom', [name]); }
   createDm(peer) { return this.#call('createDm', [peer]); }
   members(roomId) { return this.#call('members', [roomId]); }

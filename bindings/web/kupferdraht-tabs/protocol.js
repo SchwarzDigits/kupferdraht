@@ -69,6 +69,7 @@ export const METHODS = Object.freeze([
   ["Client", "editMessage", "mutation", null],
   ["Client", "redact", "mutation", null],
   ["Client", "markAsRead", "mutation", null],
+  ["Client", "markAsUnread", "mutation", null],
   ["Client", "createRoom", "mutation", null],
   ["Client", "createDm", "mutation", null],
   ["Client", "members", "idempotent", null],
@@ -121,7 +122,7 @@ export const GETTERS = Object.freeze([
 ]);
 
 /** Events the leader broadcasts (the wasm `startSync` callbacks + the per-pass summary). */
-export const LEADER_EVENTS = Object.freeze(['message', 'typing', 'expired', 'sync', 'devices', 'storage']);
+export const LEADER_EVENTS = Object.freeze(['message', 'typing', 'expired', 'sync', 'devices', 'storage', 'rooms']);
 
 /** `class → method → { kind, returns }`, derived from METHODS. */
 export function methodTable() {

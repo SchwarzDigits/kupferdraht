@@ -15,7 +15,7 @@ export const METHODS: ReadonlyArray<readonly [string, string, FailoverKind, Wrap
 /** `[class, getter]` — snapshotted into a handle when the leader returns it. */
 export const GETTERS: ReadonlyArray<readonly [string, string]>;
 /** Events the leader broadcasts: the wasm `startSync` callbacks plus the per-pass summary. */
-export const LEADER_EVENTS: ReadonlyArray<'message' | 'typing' | 'expired' | 'sync' | 'devices' | 'storage'>;
+export const LEADER_EVENTS: ReadonlyArray<'message' | 'typing' | 'expired' | 'sync' | 'devices' | 'storage' | 'rooms'>;
 export const PROTOCOL_VERSION: number;
 export const REQUEST_CHANNEL: string;
 export const LEASE_NAME: string;
@@ -79,6 +79,8 @@ export interface TabHostEventMap {
   'sync': CustomEvent<SyncSummary>;
   /** Step 113 (ADR-0038): a client's storage state changed — `"reconnecting"` while the storage server is unreachable. */
   'storage': CustomEvent<'online' | 'reconnecting'>;
+  /** Step 138: a room's read state changed through `markAsRead` / `markAsUnread` on any tab. */
+  'rooms': CustomEvent<ReadStateChange>;
 }
 
 export class TabHost extends EventTarget {
@@ -123,7 +125,13 @@ export function serveTab(options: ServeTabOptions): void;
 export interface AccountEntry { accountId: string; server: string; handle: string | null; displayName: string | null; lastActiveMs: number }
 export interface StorageEngineInfo { engine: string; version: string; cipher: string; plaintextHeaderSize: number; location: 'server' | 'local' }
 export interface SyncSummary { roomsUpdated: number; eventsDispatched: number }
-export interface Room { roomId: string; name: string }
+/**
+ * A room with its device-local read state (Step 138): `unreadCount` inbound messages newer than the
+ * read position, `lastReadAtMs` that position (`null` when never read), `markedUnread` the hand-set flag.
+ */
+export interface Room { roomId: string; name: string; unreadCount: number; lastReadAtMs: number | null; markedUnread: boolean }
+/** The `onRoomsChanged` payload (Step 138): a room's read state after a local change — its `rooms()` row without the name. */
+export interface ReadStateChange { roomId: string; unreadCount: number; lastReadAtMs: number | null; markedUnread: boolean }
 export interface MessageHandle { messageId: string; sentAtMs: number }
 export interface Reaction { emoji: string; count: number; isSelf: boolean }
 export type DeliveryStatus = 'sending' | 'submitted' | 'received' | 'failed';
@@ -246,7 +254,7 @@ export class ClientProxy {
   /** An MLS external commit — `code`/`key` come from the link's query; the link names the conversation. */
   joinViaLink(code: string, key: string, password?: string): Promise<Room>;
   /** A subscription to the leader's one sync loop; callbacks run in this tab. */
-  startSync(onMessage: (m: MessageEvent_) => void, onTyping?: (t: TypingEvent_) => void, onExpired?: () => void, onSync?: (s: SyncSummary) => void, onDevicesChanged?: (c: DevicesChange) => void, onStorage?: (state: 'online' | 'reconnecting') => void): SyncHandleProxy;
+  startSync(onMessage: (m: MessageEvent_) => void, onTyping?: (t: TypingEvent_) => void, onExpired?: () => void, onSync?: (s: SyncSummary) => void, onDevicesChanged?: (c: DevicesChange) => void, onStorage?: (state: 'online' | 'reconnecting') => void, onRoomsChanged?: (c: ReadStateChange) => void): SyncHandleProxy;
   startTyping(roomId: string): Promise<void>;
   stopTyping(roomId: string): Promise<void>;
   syncOnce(): Promise<SyncSummary>;
@@ -260,7 +268,13 @@ export class ClientProxy {
   toggleReaction(roomId: string, itemId: string, emoji: string): Promise<MessageHandle>;
   editMessage(roomId: string, itemId: string, newBody: string): Promise<MessageHandle>;
   redact(roomId: string, itemId: string): Promise<MessageHandle>;
-  markAsRead(roomId: string, itemId: string): Promise<void>;
+  /**
+   * Move the device-local read position to `itemId` and clear the room's unread flag. `sendReceipt` (default `true`)
+   * tells the room; `false` is a private read — nothing leaves the device. `onRoomsChanged` fires afterwards.
+   */
+  markAsRead(roomId: string, itemId: string, options?: { sendReceipt?: boolean }): Promise<void>;
+  /** Flag the room unread by hand (device-local, idempotent); the next `markAsRead` clears it. `InvalidInput` for an unknown room. */
+  markAsUnread(roomId: string): Promise<void>;
   createRoom(name: string): Promise<Room>;
   createDm(peer: string): Promise<Room>;
   members(roomId: string): Promise<Member[]>;

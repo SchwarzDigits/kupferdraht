@@ -97,6 +97,8 @@ extern "C" {
     fn recovery_handle_survives_the_leader() -> js_sys::Promise;
     #[wasm_bindgen(js_name = storageStateReachesEveryTab)]
     fn storage_state_reaches_every_tab() -> js_sys::Promise;
+    #[wasm_bindgen(js_name = readStateReachesEveryTab)]
+    fn read_state_reaches_every_tab() -> js_sys::Promise;
 }
 
 async fn outcome<T: serde::de::DeserializeOwned>(scenario: js_sys::Promise) -> T {
@@ -488,4 +490,33 @@ async fn a_stale_leader_message_moves_no_tab_back() {
         o.a_follows, o.b_tab_id,
         "the evicted tab keeps following the new leader"
     );
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadStateOutcome {
+    subscriber_room_id: String,
+    subscriber_marked_unread: bool,
+    host_a_room_id: String,
+    host_a_marked_unread: bool,
+    host_b_room_id: String,
+    host_b_marked_unread: bool,
+}
+
+/// Step 138: a read-state change made through one tab (a `markAsUnread`
+/// on the thin tab) reaches every tab with the room's read state — the
+/// leader broadcasts `onRoomsChanged` as `rooms`, like `devices` and
+/// `storage`.
+#[wasm_bindgen_test]
+async fn a_read_state_change_reaches_every_tab() {
+    let o: ReadStateOutcome = outcome(read_state_reaches_every_tab()).await;
+    assert_eq!(
+        o.subscriber_room_id, "room-1",
+        "the calling tab's startSync subscriber"
+    );
+    assert!(o.subscriber_marked_unread, "the payload carries the flag");
+    assert_eq!(o.host_a_room_id, "room-1", "the leader tab's host");
+    assert!(o.host_a_marked_unread);
+    assert_eq!(o.host_b_room_id, "room-1", "the thin tab's host");
+    assert!(o.host_b_marked_unread);
 }

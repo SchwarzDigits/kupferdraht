@@ -109,10 +109,14 @@ object identity)
   `timeline() -> Timeline`, `messages(limit?, before?)` (`limit`
   `null`/`nil` = everything), `failed_sends()` (the room's `Failed`
   rows, oldest first — Step 79), `devices() -> [RoomDevice]` (Step 95d —
-  one per MLS leaf with identity and MLS thumbprint).
+  one per MLS leaf with identity and MLS thumbprint), `read_marker()`,
+  `set_unread_flag(flag)`, `is_marked_unread()` (Step 138 — the
+  device-local read position and the hand-set unread flag).
 - `Timeline` — `room_id()`, `items()`, send (`send_text`,
   `send_text_auto_join`, `send_reply`, `edit`, `redact`,
-  `toggle_reaction`, `mark_as_read`, `send_file`, `send_file_stream`,
+  `toggle_reaction`, `mark_as_read(item_id, receipt: ReceiptType)` — `Read`
+  / `ReadPrivate`, Step 138, a breaking change of the Kotlin and Swift
+  signatures —, `send_file`, `send_file_stream`,
   `send_text_with_mentions`, `send_knock`, `send_location`,
   `send_ephemeral_text(body, ttl: Duration)` — Step 89; `edit` / `redact`
   refuse another user's message with `InvalidInput`, Step 95b),
@@ -662,7 +666,7 @@ Since Step 110 (ADR-0035):
   called, or `SyncHandle.stop()`). A method, not a getter: it changes,
   and tab proxies snapshot getters.
 - Sync: `startSync(onMessage, onTyping?, onExpired?, onSync?,
-  onDevicesChanged?, onStorage?) -> SyncHandle` — background `spawn_local` loop that drives
+  onDevicesChanged?, onStorage?, onRoomsChanged?) -> SyncHandle` — background `spawn_local` loop that drives
   `sync_once` and pushes decrypted events to the JS callbacks. Since Step 115 it
   waits on a push doorbell (`wasm/push_socket.rs`, the legacy `/await`
   socket): a frame drains within about a second, and receive itself stays the
@@ -680,7 +684,11 @@ Since Step 110 (ADR-0035):
   `onSync` (Step 94) fires after every successful pass with the
   `{roomsUpdated, eventsDispatched}` summary. `syncOnce()` runs one pass and
   returns `{roomsUpdated, eventsDispatched}`.
-- Rooms: `rooms() -> {roomId, name}[]`, `createRoom(name)`,
+- Rooms: `rooms() -> {roomId, name, unreadCount, lastReadAtMs,
+  markedUnread}[]` (Step 138 — the device-local read state of every room
+  from two grouped queries; `lastReadAtMs` is `null` for a room never
+  read; every method that returns a room returns the same row),
+  `createRoom(name)`,
   `createDm(peer)`, `members(roomId)`, `invite(roomId, userIds)`,
   `kick(roomId, userIds)`, `leave(roomId)`, and since Step 98b
   `renameRoom(roomId, name)`, `deleteRoom(roomId)` (team-admin),
@@ -692,6 +700,16 @@ Since Step 110 (ADR-0035):
   `revokeJoinLink(roomId)`, `joinViaLink(code, key, password?)` (an MLS
   external commit — `code`/`key` come from the link's query, and the link
   names the conversation; Step 122 dropped `domain`, BREAKING).
+- Read state (Step 138): `markAsRead(roomId, itemId, options?)` moves the
+  device-local read position to `itemId` and clears the room's unread
+  flag; `options.sendReceipt` (default `true`) tells the room, `false` is
+  a private read — the position moves, nothing leaves the device.
+  `markAsUnread(roomId)` flags a room unread by hand — device-local (Wire
+  carries no message for it, no other tab's device and no other client
+  learns of it), idempotent, `InvalidInput` for a room the client does not
+  know; the next `markAsRead` of the room clears it. Both fire
+  `onRoomsChanged` afterwards. A UI shows a room as needing attention
+  while `unreadCount > 0 || markedUnread`.
 - Server-administered config (Step 98d): `featureConfigs()`,
   `fileSharing() -> {policy}` (`"disabled" | "enabled"`).
 - Devices (Step 95d): `roomDevices(roomId) -> {userId, deviceId,
@@ -739,7 +757,7 @@ Since Step 110 (ADR-0035):
   for reminders.
 
 **`class SyncHandle`** — `stop()`, idempotent (ends the loop and the
-`onDevicesChanged` / `onStorage` registrations).
+`onDevicesChanged` / `onStorage` / `onRoomsChanged` registrations).
 
 **JS callbacks** (plain functions passed to `startSync`):
 - `onMessage({roomId, senderUserId, messageId, body, replyToId,
@@ -770,6 +788,15 @@ Since Step 110 (ADR-0035):
   the storage healed. Always `"online"` in the local mode (it never
   fires). The leader tab broadcasts it as `storage`; `client.storageState`
   is the current value.
+- `onRoomsChanged({roomId, unreadCount, lastReadAtMs, markedUnread})` —
+  optional (Step 138); fires after a local read-state change on this
+  client — `markAsRead`, `markAsUnread` — with the room's new read state,
+  the `rooms()` row without its name, so a tab updates one row without
+  a re-pull. A change the backend never hears of (a private read, the
+  flag) is announced by nothing else; a read with receipt is announced
+  twice — here at once, and by the `onSync` of the pass its upload wakes
+  (Step 122) — both are idempotent to act on. The leader tab broadcasts
+  it as `rooms`; `SyncHandle.stop()` ends it with the loop.
 
 ### Many tabs, one instance — `bindings/web/kupferdraht-tabs/` (Step 94, ADR-0026)
 

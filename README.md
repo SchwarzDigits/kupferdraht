@@ -64,7 +64,8 @@ end-to-end encrypted with MLS (RFC 9420):
   - replies / quotes and @-mentions
   - edits and delete-for-everyone (tombstoned, reply chains stay renderable)
   - emoji reactions
-  - read receipts and delivery status
+  - read receipts and delivery status; a device-local read position with a
+    private read (no receipt) and a hand-set unread flag
   - knock and location messages
   - self-deleting (ephemeral) text with a sender-chosen timer — Wire's official clients show the countdown; inbound ones self-redact locally when the timer elapses
   - failed-send recovery: a send that failed offline stays a listable `Failed` row and is re-driven explicitly under the same message id (text, replies, mentions, ephemeral, knock, location, files) — no background scheduler; the reconnect contract is the consumer's loop

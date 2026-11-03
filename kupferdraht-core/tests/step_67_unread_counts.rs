@@ -152,7 +152,7 @@ async fn mark_as_read_persists_the_marker_even_with_receipts_off() {
     let room = client.room(room_id).await.expect("room cached");
     let timeline = room.timeline().expect("timeline");
     let receipt = timeline
-        .mark_as_read("m2".into())
+        .mark_as_read("m2".into(), kupferdraht::ReceiptType::Read)
         .await
         .expect("mark_as_read with receipts off");
     assert!(

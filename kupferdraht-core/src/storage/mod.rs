@@ -39,8 +39,9 @@ pub use global::{AccountEntry, GlobalStore, open_default_global_store};
 pub use records::{
     AttachmentRecord, BackendMlsKey, DeliveryReceiptRecord, DeviceRecord, ExpiredMessageRecord,
     FeatureConfigEntry, MentionRecord, MessageEditRecord, ReactionRecord, ReadReceiptRecord,
-    RecoveryStateRecord, RoomMemberRecord, RoomRecord, SelfUserRecord, ServerConfigRecord,
-    SessionRecord, Store, SyncStateRecord, TaskRecord, TimelineEventRecord, UserPropertyEntry,
+    ReadStateRecord, RecoveryStateRecord, RoomMemberRecord, RoomRecord, SelfUserRecord,
+    ServerConfigRecord, SessionRecord, Store, SyncStateRecord, TaskRecord, TimelineEventRecord,
+    UserPropertyEntry,
 };
 pub use sqlite::SqliteStore;
 

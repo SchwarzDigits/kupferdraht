@@ -717,8 +717,11 @@ enum Command {
         #[arg(long)]
         id: String,
     },
-    /// Mark a message as read (Step 6-II-f). Wire emits
-    /// `Confirmation { type: READ, first_message_id }`. Recipients
+    /// Mark a message as read (Steps 6-II-f, 138): the device-local
+    /// read position moves to it and the room's unread flag clears.
+    /// Wire emits `Confirmation { type: READ, first_message_id }`
+    /// unless `--no-receipt` is given (a private read — the room learns
+    /// nothing) or the account's read receipts are off. Recipients
     /// stamp the `(message_id, reader_user_id)` tuple into
     /// `read_receipts`; Wire web shows a "read" indicator.
     ///
@@ -735,6 +738,17 @@ enum Command {
         /// `message_id` of the message to confirm as read.
         #[arg(long = "message")]
         message: String,
+        /// Move the read position without confirming to the room.
+        #[arg(long = "no-receipt")]
+        no_receipt: bool,
+    },
+    /// Flag a room unread by hand (Step 138): it needs attention again
+    /// although its messages are read. Device-local — Wire carries no
+    /// message for it; the next `mark-read` of the room clears it.
+    MarkUnread {
+        /// Qualified room id (`<uuid>@<domain>`).
+        #[arg(long)]
+        id: String,
     },
     /// Toggle a single emoji reaction on (Step 6-II-e). If the
     /// emoji is already in the caller's reaction set on the
@@ -1262,7 +1276,12 @@ async fn async_main() -> ExitCode {
         } => cli::timeline::edit(id, message, new_body).await,
         Command::DeleteMessage { id, message } => cli::timeline::delete_message(id, message).await,
         Command::React { id, message, emoji } => cli::timeline::react(id, message, emoji).await,
-        Command::MarkRead { id, message } => cli::timeline::mark_read(id, message).await,
+        Command::MarkRead {
+            id,
+            message,
+            no_receipt,
+        } => cli::timeline::mark_read(id, message, no_receipt).await,
+        Command::MarkUnread { id } => cli::timeline::mark_unread(id).await,
         Command::SyncStream {
             idle_backoff,
             transport,
@@ -1564,6 +1583,30 @@ mod tests {
         assert!(
             Cli::try_parse_from(argv(&base, &[])).is_ok(),
             "without a flag the key is prompted"
+        );
+    }
+
+    /// Step 138: `mark-read --no-receipt` moves the marker without a
+    /// `Confirmation`; `mark-unread --id` flags a room by hand.
+    #[test]
+    fn mark_read_takes_no_receipt_and_mark_unread_takes_the_room() {
+        let read = ["kupferdraht-cli", "mark-read", "--message", "m-1"];
+        assert!(
+            Cli::try_parse_from(argv(&read, &["--no-receipt"])).is_ok(),
+            "--no-receipt must parse"
+        );
+        assert!(
+            Cli::try_parse_from(argv(&read, &[])).is_ok(),
+            "the receipt stays the default"
+        );
+        let unread = ["kupferdraht-cli", "mark-unread"];
+        assert!(
+            Cli::try_parse_from(argv(&unread, &["--id", "r@d"])).is_ok(),
+            "mark-unread --id must parse"
+        );
+        assert!(
+            Cli::try_parse_from(argv(&unread, &[])).is_err(),
+            "mark-unread needs the room"
         );
     }
 }

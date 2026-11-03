@@ -35,8 +35,10 @@ there stays in force; this file adds the multi-tab layer on top.
 - **The leader broadcasts** `message`, `typing`, `expired`, `sync`
   (per-pass summary — the one Rust addition: `startSync`'s optional
   `onSync`), `devices` (Step 95d: `startSync`'s optional
-  `onDevicesChanged`), `leader-changed`, `evicted`. Thin tabs **pull** the rest;
-  **no local store in a thin tab**.
+  `onDevicesChanged`), `storage` (Step 113: `onStorage`), `rooms` (Step
+  138: `onRoomsChanged`, a room's read state after a local change),
+  `leader-changed`, `evicted`. Thin tabs **pull** the rest; **no local
+  store in a thin tab**.
 - **The single-tab path stays byte-identical:** `Kupferdraht.open` directly,
   no proxy — the module is opt-in. **Don't** make `kupferdraht-core` depend
   on the module; **don't** host in a `SharedWorker` (ADR-0023 Option C).

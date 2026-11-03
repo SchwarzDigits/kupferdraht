@@ -65,7 +65,10 @@ leader broadcasts it as `devices`) — `client.roomDevices(roomId)` lists the
 devices with their MLS thumbprints. A sixth, `onStorage(state)` (Step 113),
 reports `"reconnecting"` / `"online"` while the storage server is
 unreachable and after the storage healed itself; the host fires `storage`,
-and `client.storageState` is a snapshot.
+and `client.storageState` is a snapshot. A seventh, `onRoomsChanged(change)`
+(Step 138), carries a room's read state after `markAsRead` / `markAsUnread`
+on any tab — the host fires `rooms`; `client.rooms()` lists every room with
+`unreadCount`, `lastReadAtMs` and `markedUnread`.
 
 **Recovery data (Step 112).** `client.recovery()` resolves to a
 `RecoveryProxy` (`state`, `enable`, `changePin`, `verifyPin`);

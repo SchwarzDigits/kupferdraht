@@ -498,7 +498,8 @@ List the rooms previously written to `kupferdraht.db` by `sync`. Reads
 the local store only — no network, no authentication. Each room
 shows its `unread` count (Step 67 — inbound messages newer than the
 device-local read marker; `mark-read` advances the marker, no marker
-means everything inbound counts).
+means everything inbound counts) and, after `mark-unread`, the hand-set
+flag (`unread: 0 (flagged by hand)`, Step 138).
 
 ```bash
 kupferdraht-cli rooms
@@ -1201,11 +1202,13 @@ Common errors:
 
 ### `mark-read`
 
-Mark a message as read (Step 6-II-f). Wire-side emits a
-`Confirmation { type: READ, first_message_id }` carrying just
-the supplied id. Recipients stamp `(message_id, reader_user_id)`
-into `read_receipts`; Wire web shows a "read" indicator next to
-the original message.
+Mark a message as read (Steps 6-II-f, 138): the device-local read
+position moves to it (forward only) and the room's hand-set unread
+flag clears. Wire-side emits a `Confirmation { type: READ,
+first_message_id }` carrying just the supplied id. Recipients stamp
+`(message_id, reader_user_id)` into `read_receipts`; Wire web shows a
+"read" indicator next to the original message. With `--no-receipt` the
+read is private: the position moves, nothing leaves the device.
 
 **Step 10f gate**: when the user has read receipts disabled
 (`WIRE_RECEIPT_MODE = 0` — toggled via Wire-Web → Settings →
@@ -1216,12 +1219,14 @@ won't expect a receipt.
 
 ```bash
 kupferdraht-cli mark-read --id <room>@<domain> --message <message_id>
+kupferdraht-cli mark-read --message <message_id> --no-receipt
 ```
 
-| Flag        | Required | Description                                                                       |
-|-------------|----------|-----------------------------------------------------------------------------------|
-| `--id`      | no¹      | Qualified room id. When omitted, auto-resolved from `--message` against local timeline. |
-| `--message` | yes      | `message_id` of the message to confirm.                                           |
+| Flag           | Required | Description                                                                       |
+|----------------|----------|-----------------------------------------------------------------------------------|
+| `--id`         | no¹      | Qualified room id. When omitted, auto-resolved from `--message` against local timeline. |
+| `--message`    | yes      | `message_id` of the message to confirm.                                           |
+| `--no-receipt` | no       | A private read (Step 138): move the read position, send no `Confirmation`. |
 
 ¹ The CLI looks the message up in `timeline_events`. If the
 message hasn't been synced locally (run `sync` /
@@ -1238,6 +1243,16 @@ mark-read ok
   target:            <message_id>
   confirmation_event: <fresh uuid>
   confirmed_at:      <rfc3339, local offset>
+  read_marker:       <rfc3339, local offset>
+```
+
+Output (`--no-receipt` — a private read):
+
+```
+mark-read private
+  room_id:           <room>@<domain>
+  target:            <message_id>
+  read_marker:       <rfc3339, local offset>
 ```
 
 Output (receipts off — gate fired):
@@ -1247,7 +1262,12 @@ mark-read skipped
   room_id:           <room>@<domain>
   target:            <message_id>
   reason:            WIRE_RECEIPT_MODE = Off
+  read_marker:       <rfc3339, local offset>
 ```
+
+`read_marker` is the room's device-local read position afterwards —
+`none` when the message is not in the local timeline (the position
+does not move then; the flag still clears).
 
 The local `read_receipts` table also records the caller's own
 receipt so `timeline` shows `✓×N` (where N is the count of
@@ -1255,6 +1275,33 @@ distinct reader user-ids that have confirmed).
 
 Idempotence: receiving the same `Confirmation` for the same
 `(message, reader)` pair is a `INSERT OR IGNORE` no-op.
+
+### `mark-unread`
+
+Flag a room unread by hand (Step 138): it needs attention again although
+its messages are read. Device-local — Wire carries no message for it, so
+no other client and no other device of the account learns of it; the next
+`mark-read` of the room (with or without receipt) clears it. Idempotent.
+Reads the local store only.
+
+```bash
+kupferdraht-cli mark-unread --id <room>@<domain>
+```
+
+| Flag   | Required | Description                                   |
+|--------|----------|-----------------------------------------------|
+| `--id` | yes      | Qualified room id; must be known locally (`sync` first). |
+
+Output:
+
+```
+mark-unread ok
+  room_id:           <room>@<domain>
+  unread:            0
+  marked_unread:     true
+```
+
+`rooms` shows the flag as `unread: 0 (flagged by hand)`.
 
 ### `react`
 

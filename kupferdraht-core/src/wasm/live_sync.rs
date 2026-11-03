@@ -113,6 +113,8 @@ pub struct SyncHandle {
     /// Step 113: the `onStorage` registration (account, observer), ended by
     /// `stop`.
     storage: std::cell::RefCell<Option<(String, crate::storage::remote::health::ObserverId)>>,
+    /// Step 138: the client's `onRoomsChanged` slot, cleared by `stop`.
+    rooms_changed: super::manager::RoomsChangedSlot,
 }
 
 #[wasm_bindgen]
@@ -127,6 +129,7 @@ impl SyncHandle {
         if let Some((account, id)) = self.storage.borrow_mut().take() {
             crate::storage::unsubscribe_storage_state(&account, id);
         }
+        self.rooms_changed.borrow_mut().take();
     }
 }
 
@@ -157,6 +160,9 @@ pub(crate) struct Callbacks {
     pub(crate) sync: Option<js_sys::Function>,
     pub(crate) devices_changed: Option<js_sys::Function>,
     pub(crate) storage: Option<js_sys::Function>,
+    /// Step 138: the client's `onRoomsChanged` slot — set by `startSync`,
+    /// fired by `markAsRead` / `markAsUnread`, cleared by `stop`.
+    pub(crate) rooms_changed: super::manager::RoomsChangedSlot,
 }
 
 /// Register the handlers and start the background sync loop for `client`.
@@ -167,7 +173,9 @@ pub(crate) struct Callbacks {
 /// `on_devices_changed` fires per room whose device set changed, with
 /// `{ roomId, added, removed }` (Step 95d — broadcast as `devices`);
 /// `on_storage` fires with the account's storage state on each change
-/// (Step 113 — broadcast as `storage`).
+/// (Step 113 — broadcast as `storage`); `onRoomsChanged` (Step 138 —
+/// broadcast as `rooms`) is the client's, fired by its own read-state
+/// mutations, and ends with the handle too.
 pub(crate) fn start(client: Arc<Client>, callbacks: Callbacks) -> SyncHandle {
     let Callbacks {
         message: on_message,
@@ -176,6 +184,7 @@ pub(crate) fn start(client: Arc<Client>, callbacks: Callbacks) -> SyncHandle {
         sync: on_sync,
         devices_changed: on_devices_changed,
         storage: on_storage,
+        rooms_changed,
     } = callbacks;
     let storage = on_storage.and_then(|cb| watch_storage(&client, cb));
     let devices = on_devices_changed.map(|cb| {
@@ -200,6 +209,7 @@ pub(crate) fn start(client: Arc<Client>, callbacks: Callbacks) -> SyncHandle {
         account,
         devices: std::cell::RefCell::new(devices),
         storage: std::cell::RefCell::new(storage),
+        rooms_changed,
     }
 }
 

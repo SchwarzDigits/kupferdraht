@@ -114,7 +114,7 @@ export function createLeaderDispatcher(kupferdraht, { tabId, epoch, heartbeatMs 
       const handle = client.startSync(emit('message'), emit('typing'), () => {
         broadcast('expired', userId, null);
         syncs.delete(clientHandle);
-      }, emit('sync'), emit('devices'), emit('storage'));
+      }, emit('sync'), emit('devices'), emit('storage'), emit('rooms'));
       live = { handle, subscribers: new Set() };
       syncs.set(clientHandle, live);
     }

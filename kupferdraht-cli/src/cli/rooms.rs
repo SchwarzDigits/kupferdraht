@@ -19,12 +19,19 @@ pub(crate) async fn rooms() -> Result<(), KupferdrahtError> {
     }
     // Step 67: one grouped query for the whole list; missing = 0.
     let unread = client.unread_counts().await?;
+    // Step 138: the hand-set flag, one query as well; missing = clear.
+    let states = client.read_states().await?;
     for (room, members) in rooms {
         println!("- {}", room.room_id);
         println!("    type:   {}", room.room_type);
         println!(
-            "    unread: {}",
-            unread.get(&room.room_id).copied().unwrap_or(0)
+            "    unread: {}{}",
+            unread.get(&room.room_id).copied().unwrap_or(0),
+            if states.get(&room.room_id).is_some_and(|s| s.marked_unread) {
+                " (flagged by hand)"
+            } else {
+                ""
+            }
         );
         println!(
             "    name:   {}",

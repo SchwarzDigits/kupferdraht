@@ -123,6 +123,25 @@ impl Client {
         store.unread_counts(&self_id).await
     }
 
+    /// Every room's read state — the device-local marker and the hand-set
+    /// unread flag — in one query (Step 138), the room list's companion
+    /// to [`Self::unread_counts`]; rooms without a marker row are absent
+    /// (never read, never flagged). matrix-rust-sdk has no bulk twin —
+    /// it exposes `read_marker` / `is_marked_unread` per room, as
+    /// [`crate::rooms::Room`] does too.
+    ///
+    /// # Errors
+    /// `KupferdrahtError::Storage` on read failure.
+    pub async fn read_states(
+        &self,
+    ) -> Result<std::collections::HashMap<String, crate::storage::ReadStateRecord>, KupferdrahtError>
+    {
+        let Some(store) = self.store_handle() else {
+            return Ok(std::collections::HashMap::new());
+        };
+        store.read_states().await
+    }
+
     /// Fold the room's persisted case rows into the current case
     /// state (Step 72b, ADR-0018): admin-authorized snapshots
     /// last-writer-win by `revision`, non-admin rows contribute

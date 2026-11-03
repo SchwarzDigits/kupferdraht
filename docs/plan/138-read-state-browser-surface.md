@@ -1,6 +1,8 @@
 # Step 138 — Read state on the browser surface: an unread flag, a read without receipt, read state in `rooms()`
 
-**Status: commissioned 2026-11-02** (from an embedder's spec "read state on
+**Status: in progress 2026-11-03** — red tests reviewed and approved,
+green phase on `step/138-read-state-browser-surface`; commissioned
+2026-11-02 (from an embedder's spec "read state on
 the browser surface — mark read / unread", measured against the public
 snapshot `4f30f02` of 2026-10-30; every claim re-verified on v0.1.1 the same
 day). The embedder lists rooms as a work queue: a room needs attention while
@@ -57,13 +59,31 @@ confirm reading to the other side.
    a private read too (it reaches the user's own devices, not the peers) —
    one line in 129's scope.
 
+**Taken 2026-11-03 (Volker):** 1 — the matrix shape and the bump; 2 — the
+callback, broadcast as `rooms`, carrying the room's read state
+`{ roomId, unreadCount, lastReadAtMs, markedUnread }` (a thin tab updates
+one row without a re-pull and without racing a `rooms()` in flight;
+`onDevicesChanged` carries its change the same way); 3 — before 129. Two
+more from the review of the red tests the same day:
+
+4. **The schema.** V31 rebuilds `room_read_markers`: `last_read_at_ms`
+   becomes nullable (a room flagged before it was ever read has no
+   position) and `marked_unread INTEGER NOT NULL DEFAULT 0` is added — no
+   stored sentinel.
+5. **The store's room-list query.** `Store::read_states()` returns every
+   marker row in one query, beside `unread_counts()`, so `rooms()` is two
+   queries, not 2N+1.
+
 ## Scope
 
-1. **Store.** Migration V31: `marked_unread INTEGER NOT NULL DEFAULT 0` on
-   `room_read_markers`; the `set_read_marker` upsert clears it, a new
-   `set_unread_flag` sets it; `is_marked_unread` beside `read_marker`, with
-   default bodies for custom stores (`storage/records.rs:731-764`). The
-   browser store runs the same migrations.
+1. **Store.** Migration V31 rebuilds `room_read_markers` (decision 4):
+   `last_read_at_ms` nullable, `marked_unread INTEGER NOT NULL DEFAULT 0`;
+   the `set_read_marker` upsert clears the flag, a new `set_unread_flag`
+   sets it (a row without a position for a room never read);
+   `is_marked_unread` beside `read_marker`, and `read_states()` for room
+   lists (decision 5), with default bodies for custom stores
+   (`storage/records.rs:731-764`). The browser store runs the same
+   migrations.
 2. **Core.** `Room::read_marker()`, `Room::set_unread_flag(bool)` and
    `Room::is_marked_unread()` (new pub, mapping rows); `mark_as_read` per
    decision 1: `ReadPrivate` moves the marker and clears the flag and sends
@@ -71,11 +91,11 @@ confirm reading to the other side.
    locally moves no marker and still clears the flag — the caller's "this
    room is read" holds.
 3. **wasm.** `RoomView` grows `unreadCount`, `lastReadAtMs` (`null` when
-   never marked) and `markedUnread` — one grouped `unread_counts` query per
-   `rooms()` call; `markAsRead(roomId, itemId, options?)` with
+   never marked) and `markedUnread` — two grouped queries per `rooms()`
+   call (`unread_counts`, `read_states`); `markAsRead(roomId, itemId, options?)` with
    `sendReceipt` defaulting to `true`; `markAsUnread(roomId)` new,
    idempotent, `InvalidInput` for a room the client does not know; the
-   signal of decision 2 fires after both.
+   signal of decision 2 fires after both, carrying the room's read state.
 4. **Tabs.** `protocol.js` (`markAsUnread` as `mutation`), `proxy.js`,
    `index.d.ts` (`Room`, `markAsRead`, the new callback);
    `tests/step_94_tab_proxy_parity.rs` pins the table.
@@ -107,5 +127,15 @@ confirm reading to the other side.
   `markAsRead` flips `markedUnread`; the signal reaches the calling tab and
   a thin tab (the Step 94 driver).
 - Parity: the tab-proxy table, the FFI mirror, the doc pins.
+- From the review of the red tests (2026-11-03): the motivating case — a
+  room read to the end (count 0) flagged by hand still needs attention,
+  and flagging twice is idempotent; `Read` with receipts on uploads one
+  confirmation, moves the marker, clears the flag and records the own
+  receipt (the first native pin of the READ upload since 6-II-f, on the
+  Step 4 MLS fixture); the doc homes say "device-local" at the flag and
+  the private read and name the double signal (a read with receipt is
+  followed by `rooms` and the pass's `onSync`); the browser projection
+  crosses a missing marker as `null`, pinned in the browser suite with
+  built records (`rooms()` itself needs a backend the suite has not).
 - Smoke: two devices on the self-hosted stack — a private read on A leaves
   B's `read_by` empty, a read with receipt fills it.
