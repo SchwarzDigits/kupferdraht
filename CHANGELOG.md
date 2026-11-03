@@ -36,6 +36,20 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.2.0] - 2026-11-03
+
+### Added
+
 - **A read without receipt and a hand-set unread flag** (Step 138):
   `Timeline::mark_as_read(item_id, ReceiptType::ReadPrivate)` moves the
   device-local read position and tells the room nothing; `Room::set_unread_flag`
@@ -92,10 +106,6 @@ is no skill for it — it is this short procedure:
   segments, the CLI's `--cookie`, the error-body cap, the token exchange's
   redirects, the case dispatch's cold cache — is Step 137, and the umask
   modes of open.md §69 joined Step 134.
-
-### Deprecated
-
-### Removed
 
 ### Fixed
 
