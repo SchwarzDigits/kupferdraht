@@ -99,6 +99,8 @@ extern "C" {
     fn storage_state_reaches_every_tab() -> js_sys::Promise;
     #[wasm_bindgen(js_name = readStateReachesEveryTab)]
     fn read_state_reaches_every_tab() -> js_sys::Promise;
+    #[wasm_bindgen(js_name = serviceTokenThroughATab)]
+    fn service_token_through_a_tab() -> js_sys::Promise;
 }
 
 async fn outcome<T: serde::de::DeserializeOwned>(scenario: js_sys::Promise) -> T {
@@ -519,4 +521,23 @@ async fn a_read_state_change_reaches_every_tab() {
     assert!(o.host_a_marked_unread);
     assert_eq!(o.host_b_room_id, "room-1", "the thin tab's host");
     assert!(o.host_b_marked_unread);
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ServiceTokenOutcome {
+    token: String,
+    expires_in: u32,
+    error_name: Option<String>,
+}
+
+/// Step 139: `client.serviceToken(audience)` in a thin tab reaches the
+/// leader; the answer crosses unchanged and a reserved audience's refusal
+/// keeps its name.
+#[wasm_bindgen_test]
+async fn service_token_calls_reach_the_leader() {
+    let o: ServiceTokenOutcome = outcome(service_token_through_a_tab()).await;
+    assert_eq!(o.token, "stub.cases");
+    assert_eq!(o.expires_in, 600);
+    assert_eq!(o.error_name.as_deref(), Some("InvalidInput"));
 }

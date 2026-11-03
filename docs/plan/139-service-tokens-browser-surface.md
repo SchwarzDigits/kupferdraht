@@ -1,9 +1,10 @@
 # Step 139 — Service tokens from the token exchange on the browser surface
 
-**Status: commissioned 2026-11-02** (from an embedder's spec "service tokens
-from the token exchange on the browser surface", measured against the public
-snapshot `4f30f02` of 2026-10-30; every claim re-verified on v0.1.1 the same
-day). The embedder runs a service of its own beside the storage server and
+**Status: in progress 2026-11-03** — red tests reviewed and approved,
+green phase on `step/139-service-tokens-browser-surface`; commissioned
+2026-11-02 (from an embedder's spec "service tokens from the token exchange
+on the browser surface", measured against the public snapshot `4f30f02` of
+2026-10-30; every claim re-verified on v0.1.1 the same day). The embedder runs a service of its own beside the storage server and
 the PIN service. It must answer only users who are logged in to Wire and
 admitted by the operator — the question the storage server and the PIN
 service ask, answered the same way: a short-lived token from the token
@@ -68,6 +69,36 @@ cannot get such a token today.
    no FFI mirror; the tab-proxy parity test applies. Native would first
    need an exchange address in `ServerConfig` — out of scope, as the spec
    says. Recommended: wasm only.
+
+**Taken 2026-11-03 (Volker):** 1 — the cache, with two details from the
+review of the red tests: a token served from the cache reports `expiresIn`
+as the time it has left (the exchange's seconds would mislead the embedder
+half a lifetime later), and "bought anew after a refusal" is observable
+only as "no token of before stands in for a refusal" — within half the
+lifetime nothing is bought, so nothing can be refused there; 2 — the ADR
+revision, the rule and THREAT_MODEL 0.9 in this commit; 3 — wasm only.
+Four more from the same review:
+
+4. **The exchange's answer type is `ExchangedToken`** (was
+   `StorageToken`): it now names the storage token, the PIN token and a
+   service token alike.
+5. **One renewal helper.** `buy_storage_token`, `buy_pin_token` and the
+   new `buy_token` share `buy_renewing_once` instead of a third copy of
+   the "buy, renew the Wire token once on `401`, buy again" match.
+6. **The browser suite has no logged-in client** (Step 138's lesson), so
+   the local-mode refusal is pinned on `wasm::service_token::exchange()`
+   — a `pub` seam behind an opaque `ServiceTokenExchange` — and the
+   answer's shape on `to_js`; `serviceToken` itself is wired through the
+   Step 94 driver (stub leader) and pinned natively by source text.
+7. **The api-mapping row is Drift, not Kupferdraht-specific:**
+   matrix-rust-sdk's `Account::request_openid_token()` is a real analog
+   (a short-lived token the client hands a third-party service, `expires_in`
+   in seconds); the issuer, the audience and the offline verification
+   differ. Scope 4 below said "Kupferdraht-specific"; the row says why.
+
+open.md §84 (no request timeout, no redirect policy on the browser build's
+exchange client) stays as it is: the service-token path shares the client
+and the gap, ADR-0036 revision 1.1 and §84 say so.
 
 ## Scope
 

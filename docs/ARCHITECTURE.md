@@ -476,7 +476,15 @@ client's refreshing session), `remote/token_cache.rs` serves it to the
 VFS's synchronous token source, and `remote/server.rs` registers each
 database with a signer over the key — never the key — and an instance id
 stable per home and account (`remote/instance_id.rs`, Step 111d: a reload
-takes its own lease back), and renews the token at half its lifetime. `manager::Kupferdraht::resume` renews the Wire session
+takes its own lease back), and renews the token at half its lifetime.
+Since Step 139 the same exchange client also buys **service tokens** for
+audiences the embedder names (ADR-0036 revision 1.1): `wasm/service_token.rs`
+is the `Client.serviceToken(audience)` binding — it refuses the reserved
+audiences `storage` and `pin` and the local mode before any request and
+hands the exchange's answer to the page unchanged — and
+`storage/remote/service_tokens.rs` keeps one token per audience, served
+until half its lifetime and bought anew after that or after a refusal,
+since the exchange's limits are shared with the storage token's renewal. `manager::Kupferdraht::resume` renews the Wire session
 with the browser's cookie (`POST /access` without `client_id`) before the
 databases open, without creating them. Every operation on either database
 (`SqliteStore::lock()`, the MLS provider's transaction entry) goes through

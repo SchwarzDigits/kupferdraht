@@ -52,6 +52,19 @@ is no skill for it — it is this short procedure:
   callback `onRoomsChanged({ roomId, unreadCount, lastReadAtMs,
   markedUnread })`, broadcast by the leader tab as `rooms` (ADR-0026
   revision 2026-11-03). `kupferdraht-tabs` mirrors all of it.
+- **Service tokens for the embedder's own services on the browser surface**
+  (Step 139): `serviceToken(audience)` buys a token of the named audience
+  from the token exchange with the session's Wire token and returns the
+  exchange's answer unchanged, `{ token, expiresIn }` (seconds) — for a
+  service the embedder runs beside the storage server, which verifies the
+  token offline against the exchange's key set (`sub` the user, `team`
+  the team). One token per audience is cached and served until half its
+  lifetime, bought anew after that or after a refusal — the exchange's
+  limits are shared with the storage token's renewal. The audiences
+  `storage` and `pin` are reserved and fail `InvalidInput`, as does the
+  local mode (no exchange). `kupferdraht-tabs` mirrors it. ADR-0036
+  revision 1.1; THREAT_MODEL 0.9 (N8: such tokens live in the embedder's
+  trust domain).
 
 ### Changed
 

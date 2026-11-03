@@ -335,6 +335,30 @@ only with `permitHttp`.
   the Wire session with the browser's login cookie (the device id sits in
   the remote `kupferdraht.db`), then opens the databases **without creating**
   them.
+- **Service tokens for the embedder's own services (Step 139, ADR-0036
+  revision 1.1).** `client.serviceToken(audience)` buys a token of the
+  named audience from the same exchange with the session's Wire token and
+  returns the exchange's answer unchanged, `{ token, expiresIn }`
+  (seconds) — for a service the embedder runs beside the storage server
+  and the PIN service, one that must answer only users logged in to Wire
+  and admitted by the operator. The exchange may know further audiences
+  beside `storage` and `pin`; which ones is its configuration. Kupferdraht
+  neither parses nor checks the token: the embedder's service verifies it
+  offline against the exchange's key set (`sub` the user, `team` the
+  team). A service token is a plain bearer token without the storage
+  token's `cnf` key binding — a copy works until it expires, and the
+  lifetime is the exchange's to set. One token per audience is cached and
+  served until half its lifetime (the answer's `expiresIn` is the time
+  left), bought anew after that or after a refusal, because the exchange's
+  per-user limits are shared with the storage token's renewal — a page
+  calling in a loop would starve its own storage connection. The
+  audiences `storage` and `pin` are reserved (Kupferdraht buys them for
+  itself) and fail `InvalidInput` before any request, as does the empty
+  string; the local mode has no exchange, so there the call fails
+  `InvalidInput` too. A refusal maps as for the storage token
+  (`StorageAccessDenied`, `RateLimited` with `retryAfter`,
+  `ServiceUnavailable`); the Wire token is renewed once on a `401`, a
+  second one is `Unauthorized`; `SessionExpired` once the client is gone.
 - **The server serves too.** Every open needs the server; the VFS keeps a
   cache of each database in IndexedDB (only acknowledged pages), so reads
   it can serve cost no round trip. Every commit is a round trip.
@@ -361,9 +385,12 @@ rolled back), `Evicted` (this instance stopped). The server mode adds:
 - `NothingStored` — `resume` found no database of the account on the
   storage server (its retention may have removed an unused one): log in
   again; the login creates the databases anew and registers a new device.
-- `StorageAccessDenied` — the token exchange does not admit this user, or
-  the storage server refused the storage token. A renewal the exchange
-  refuses stops the instance: `onEvicted("access")`.
+- `StorageAccessDenied` — the token exchange does not admit this user for
+  any audience it was asked for (the storage token, or a service token the
+  embedder asked for with `serviceToken`, Step 139), or the storage server
+  refused the storage token. A storage-token renewal the exchange refuses
+  stops the instance: `onEvicted("access")`; a refused service token fails
+  only that call.
 - `ServiceUnavailable` — the storage server or the token exchange cannot
   be reached, or the exchange is overloaded; retry later. The
   exchange's rate limit is `RateLimited`.
@@ -736,6 +763,11 @@ Since Step 110 (ADR-0035):
   password)`. `DeviceInfo` is the core record field for field —
   `{deviceId, class, label, model, registeredAt, lastActive, isSelf}`.
 - `recovery() -> Recovery` (Step 112) — the account's recovery data.
+- `serviceToken(audience) -> { token, expiresIn }` (async, Step 139) — a
+  token of the named audience from the token exchange for a service of
+  the embedder's own, the exchange's answer unchanged (`expiresIn` in
+  seconds); server mode only — `InvalidInput` in the local mode and for
+  the reserved audiences `storage` and `pin`. See "The server mode".
 - `logout(options?)` — `POST /access/logout`. `options` is
   `{ purgeDevice?: boolean, password?: string, purgeLocal?: boolean }` —
   `logout({ purgeDevice, password, purgeLocal })`, the native shape plus

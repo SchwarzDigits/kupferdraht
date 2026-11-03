@@ -122,5 +122,14 @@ export class StubClient {
     return { stop() { clearTimeout(timer); } };
   }
   async syncOnce() { return { roomsUpdated: 0, eventsDispatched: 0 }; }
+  /** Step 139: a service token for the embedder's own service; a reserved audience fails as the wasm one does. */
+  async serviceToken(audience) {
+    if (audience === 'storage' || audience === 'pin' || audience === '') {
+      const err = new Error(`stub: the audience ${JSON.stringify(audience)} is reserved`);
+      err.name = 'InvalidInput';
+      throw err;
+    }
+    return { token: `stub.${audience}`, expiresIn: 600 };
+  }
   recovery() { return new StubRecovery(); }
 }

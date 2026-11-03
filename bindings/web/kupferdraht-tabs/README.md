@@ -78,6 +78,12 @@ its detail across tabs — `reason`, `attemptsRemaining`, `retryAfter`.
 `client.logout({ purgeDevice, password, purgeLocal })` (Step 114) leaves a
 browser; after a purge the client is closed for every tab.
 
+**Service tokens (Step 139).** `client.serviceToken(audience)` resolves to
+`{ token, expiresIn }` (seconds) of the token exchange for the embedder's
+own service (ADR-0036 revision 1.1), as the exchange answered — idempotent,
+so a call in flight when the leader changes is re-issued. The reserved
+audiences `storage` and `pin`, `""` and the local mode reject `InvalidInput`.
+
 `host.kupferdraht` has the same method names as the wasm `Kupferdraht` class
 (everything but `open`); the objects it returns mirror `PendingLogin`,
 `Client`, `Recovery` and `SyncHandle`. `host.state` is `electing` | `leader` | `thin`;

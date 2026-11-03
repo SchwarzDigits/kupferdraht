@@ -1,6 +1,6 @@
 # Kupferdraht Threat Model
 
-**Version:** 0.8 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-02 **Status:** working draft, for review by Markus Troßbach
+**Version:** 0.9 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-03 **Status:** working draft, for review by Markus Troßbach
 
 ------
 
@@ -94,7 +94,7 @@ Under the assumptions of the following section, Kupferdraht guarantees:
 
 **N7 — Protection against state actors with hardware access.** No library technique helps against kernel-level compromise or physical access to an unlocked device. Mitigation is operational (ephemeral sessions, auto-delete) and belongs at the product level.
 
-**N8 — Protection against malicious code in the browser origin.** Kupferdraht runs in the WASM sandbox, but the surrounding web page is not under Kupferdraht's control. An XSS attack on the web consumer compromises plaintexts as soon as they are handed from the WASM boundary to the JavaScript side (for display in the DOM). Mitigation lies with the web consumer: Content Security Policy, Subresource Integrity, strict origin separation.
+**N8 — Protection against malicious code in the browser origin.** Kupferdraht runs in the WASM sandbox, but the surrounding web page is not under Kupferdraht's control. An XSS attack on the web consumer compromises plaintexts as soon as they are handed from the WASM boundary to the JavaScript side (for display in the DOM). Mitigation lies with the web consumer: Content Security Policy, Subresource Integrity, strict origin separation. Service tokens of the token exchange (`serviceToken`, ADR-0036 revision 1.1) cross the WASM boundary by the embedder's request and live in the embedder's trust domain, as the plaintexts do: a service token is a bearer token without key binding, good for whoever holds it until it expires.
 
 ------
 
@@ -251,6 +251,7 @@ Not blocking for the current implementation phase. To be picked up before the af
 | 0.6     | 2026-10-08 | Translated from German to English for publication; content unchanged except the positioning in Purpose ("independent alternative", 2026-10-07). The German original stays in the private history. |
 | 0.7     | 2026-11-02 | Step 133: every claim matched against the code after the 2026-09-25 production-readiness review (its residuals became Steps 132 to 134 on 2026-11-01) — zeroization is best effort by type choice (G4, G6, the no-split rationale), the auth modes the code lacks are a marked design sketch, reproducible builds leave the trust model, G4's local forward secrecy points at Step 134, the server's device injection is assumption A7, the Linux keystore limit is NG-24 |
 | 0.8     | 2026-11-02 | Step 135: G1 without the X.509 exception — a message signed by a non-Basic leaf is dropped instead of attributed through the envelope (ADR-0027 decision 2 amended); every surfaced message is attributed to an authenticated leaf |
+| 0.9     | 2026-11-03 | Step 139: N8 names the service tokens of the token exchange (ADR-0036 revision 1.1) — handed to the page on the embedder's request, they live in the embedder's trust domain like the plaintexts; a bearer token without key binding |
 
 ------
 
