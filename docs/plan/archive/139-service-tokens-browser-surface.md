@@ -1,10 +1,25 @@
 # Step 139 — Service tokens from the token exchange on the browser surface
 
-**Status: in progress 2026-11-03** — red tests reviewed and approved,
-green phase on `step/139-service-tokens-browser-surface`; commissioned
-2026-11-02 (from an embedder's spec "service tokens from the token exchange
-on the browser surface", measured against the public snapshot `4f30f02` of
-2026-10-30; every claim re-verified on v0.1.1 the same day). The embedder runs a service of its own beside the storage server and
+**Status: MERGED 2026-11-03** — `5b3e53b` on
+`step/139-service-tokens-browser-surface`, merged to `main` as PR #23
+(`87b2a97`); gate and CI green, the browser tests in headless Firefox
+included (`step_139_browser_service_token` and the Step 94
+`serviceTokenThroughATab` scenario — CI only, the dev machine has no
+Firefox); no smoke (no exchange with a third audience on the local stack).
+Scope shipped as decided below (1–7): `Client.serviceToken(audience)` →
+`{ token, expiresIn }`, `ExchangedToken`, `fetch_token` with the reserved
+audiences, `buy_renewing_once`, `ServiceTokenCache` (one token per
+audience until half its lifetime, forgotten before every purchase),
+`service_token_exchange()` for the local mode, `wasm/service_token.rs`
+(`exchange()` / `to_js`), the tabs mirror (idempotent), ADR-0036 revision
+1.1 + `rules/0036`, THREAT_MODEL 0.9; pins in
+`tests/step_139_service_token_pins.rs`, `tests/step_139_browser_service_token.rs`,
+the Step 94 driver, `token_exchange.rs`, `wire_session.rs` and
+`service_tokens.rs`; retrospective LEARNINGS §5.76. Archived 2026-11-03 with
+this header. (Commissioned 2026-11-02 from an embedder's spec "service
+tokens from the token exchange on the browser surface", measured against the
+public snapshot `4f30f02` of 2026-10-30; every claim re-verified on v0.1.1
+the same day.) The embedder runs a service of its own beside the storage server and
 the PIN service. It must answer only users who are logged in to Wire and
 admitted by the operator — the question the storage server and the PIN
 service ask, answered the same way: a short-lived token from the token
