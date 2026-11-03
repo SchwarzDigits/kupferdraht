@@ -86,6 +86,30 @@ async fn an_empty_registered_client_id_is_an_encoding_error() {
     assert_encoding(login_and_register(&server).await, "empty client id");
 }
 
+/// A non-empty but hostile `id` from `POST /clients` — a second segment,
+/// a dot segment, a query — is refused the same way: it would be
+/// formatted into every client path later (Step 137's guard, checked on
+/// the response because the id is the backend's).
+#[tokio::test]
+async fn a_hostile_registered_client_id_is_an_encoding_error() {
+    for id in ["a/b", "..", "dev?x=1"] {
+        let server = MockServer::start();
+        let body = format!(r#"{{"id":"{id}","type":"permanent"}}"#);
+        server.mock(move |when, then| {
+            when.method(POST).path("/v14/clients");
+            then.status(201)
+                .header("content-type", "application/json")
+                .body(body.clone());
+        });
+        common::mount_full_login_flow(&server);
+
+        assert_encoding(
+            login_and_register(&server).await,
+            &format!("client id {id:?}"),
+        );
+    }
+}
+
 /// The rebind `/access` answering with an empty `access_token`.
 #[tokio::test]
 async fn an_empty_rebound_access_token_is_an_encoding_error() {

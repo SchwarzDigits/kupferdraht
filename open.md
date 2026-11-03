@@ -359,3 +359,22 @@ returns a manager-aware wrapper. Not done in Step 78 (not needed by it:
 every consumer today either runs one process per command or keeps the one
 client it logged in with). The Step 78 tests hold their client through
 `resume` and say so.
+
+## 84) The browser build has no request timeout and no redirect policy (2026-11-03)
+
+Both knobs are reqwest's native ones: the request timeout of Step 132
+(`wire/http/mod.rs`, `storage/remote/token_exchange.rs`) and the
+`redirect::Policy::none()` of Step 137 on the token exchange sit under
+`#[cfg(not(target_arch = "wasm32"))]` — the fetch backend has neither. So
+in a browser a Wire or storage-server response is read whole with no bound
+at all (natively the timeout bounds it; the 1 KiB cap of Step 137 is on the
+error string, not on the stream), and a cross-origin redirect of the token
+exchange is followed by `fetch` — the browser drops `Authorization` on it
+per the Fetch standard, so the Wire token does not travel, the body
+(audience, public key) does. Noted while reviewing Step 137's residuals.
+
+A fix is a second HTTP path beside reqwest's wasm backend
+(`web_sys::RequestInit.redirect(RequestRedirect::Error)`, an `AbortSignal`
+timeout) or a response-size policy (`Content-Length` pre-check, a bounded
+`bytes_stream`) — a decision of its own. Step 139 (service tokens,
+wasm-only, the same exchange client) takes it into its orientation.

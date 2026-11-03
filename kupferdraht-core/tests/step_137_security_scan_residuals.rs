@@ -222,7 +222,7 @@ fn mount_empty_notifications(server: &MockServer) -> Mock<'_> {
     })
 }
 
-fn mount_notifications_page(server: &MockServer, events: &[String]) {
+fn mount_notifications_page<'a>(server: &'a MockServer, events: &[String]) -> Mock<'a> {
     let payload = events.join(",");
     let body = format!(
         r#"{{"notifications":[{{"id":"13700e58-8eae-11ef-0000-00000000cafe","payload":[{payload}]}}],"has_more":false}}"#
@@ -232,7 +232,7 @@ fn mount_notifications_page(server: &MockServer, events: &[String]) {
         then.status(200)
             .header("content-type", "application/json")
             .body(body.clone());
-    });
+    })
 }
 
 fn welcome_event(data_b64: &str) -> String {
@@ -286,31 +286,41 @@ async fn logged_in_client(server: &MockServer) -> (Arc<kupferdraht::Client>, Arc
 }
 
 /// Bob's Welcome for this client and his case snapshot, in one page.
-fn mount_welcome_and_case(server: &MockServer, message_id: &str, title: &str) {
+fn mount_welcome_and_case<'a>(server: &'a MockServer, message_id: &str, title: &str) -> Mock<'a> {
     let b64 = |bytes: Vec<u8>| base64::engine::general_purpose::STANDARD.encode(bytes);
     let mut peer = common::mls::PeerGroup::new(GROUP_ID, BOB_IDENTITY);
     let welcome = b64(peer.welcome_over_key_package(&captured_key_package_for(server)));
     let case = b64(peer.application_message(&case_generic_message(message_id, title)));
-    mount_notifications_page(server, &[welcome_event(&welcome), message_event(&case)]);
+    mount_notifications_page(server, &[welcome_event(&welcome), message_event(&case)])
 }
 
-/// What the drain reports through `on_sync_error`.
+/// What the drain reports through `on_sync_error`, and the rooms it
+/// announced through `on_room_invited`.
 #[derive(Default)]
-struct SyncErrors(Mutex<Vec<String>>);
+struct SyncErrors {
+    reported: Mutex<Vec<String>>,
+    invited: Mutex<Vec<String>>,
+}
 
 impl SyncErrors {
     fn reported(&self) -> Vec<String> {
-        self.0.lock().expect("errors lock").clone()
+        self.reported.lock().expect("errors lock").clone()
+    }
+
+    fn invited(&self) -> Vec<String> {
+        self.invited.lock().expect("invited lock").clone()
     }
 }
 
 impl EventHandler for SyncErrors {
     fn on_message(&self, _message: Message) {}
 
-    fn on_room_invited(&self, _room_id: String) {}
+    fn on_room_invited(&self, room_id: String) {
+        self.invited.lock().expect("invited lock").push(room_id);
+    }
 
     fn on_sync_error(&self, description: String) {
-        self.0.lock().expect("errors lock").push(description);
+        self.reported.lock().expect("errors lock").push(description);
     }
 }
 
@@ -323,44 +333,63 @@ async fn sync(client: &kupferdraht::Client) {
 
 // ---- tests ----
 
-/// M3: a room the drain's own Welcome has just opened is known to the
-/// rest of the drain — the message after the Welcome decrypts, reaches
-/// the store, and the ADR-0018 admin check reads the refreshed list.
 /// Pass one syncs an account with no rooms (the list is fresh afterwards,
-/// so pass two does not refresh it before the drain); pass two drains
-/// bob's Welcome and his case snapshot in one page, with bob a
-/// `wire_admin` of the room the backend lists by then — nothing is
-/// reported, the row is stored, the snapshot folds.
-#[tokio::test]
-async fn a_case_snapshot_in_the_drain_that_welcomed_its_room_is_authorized_per_the_refreshed_list()
-{
-    let server = MockServer::start();
-    let mut empty_list = mount_empty_room_list(&server);
-    let (client, store) = logged_in_client(&server).await;
-    let mut no_events = mount_empty_notifications(&server);
+/// so pass two does not refresh it before the drain); the mocks of pass
+/// one are gone when it returns, so pass two is the caller's to mount.
+async fn cold_client(server: &MockServer) -> (Arc<kupferdraht::Client>, Arc<dyn Store>) {
+    let mut empty_list = mount_empty_room_list(server);
+    let (client, store) = logged_in_client(server).await;
+    let mut no_events = mount_empty_notifications(server);
     sync(&client).await;
     assert!(client.rooms().await.is_empty(), "pass one: no rooms yet");
     for mock in empty_list.iter_mut().chain(std::iter::once(&mut no_events)) {
         mock.delete();
     }
+    (client, store)
+}
 
-    mount_room(&server, "wire_admin");
-    mount_welcome_and_case(&server, "case-cold", "Cold room");
-    let errors = Arc::new(SyncErrors::default());
-    client.add_event_handler(errors.clone());
-    sync(&client).await;
-
-    assert!(
-        errors.reported().is_empty(),
-        "the drain reported: {:?}",
-        errors.reported()
-    );
+/// Pass two: bob's Welcome and his case snapshot in one page, bob with
+/// `bob_role` in the room the backend lists by then. Returns what the
+/// drain reported and whether the snapshot row is stored.
+async fn drain_welcome_and_case_cold(
+    server: &MockServer,
+    client: &kupferdraht::Client,
+    store: &Arc<dyn Store>,
+    bob_role: &str,
+) -> (Arc<SyncErrors>, bool) {
+    mount_room(server, bob_role);
+    mount_welcome_and_case(server, "case-cold", "Cold room");
+    let events = Arc::new(SyncErrors::default());
+    client.add_event_handler(events.clone());
+    sync(client).await;
     let stored = store
         .load_timeline_events(&room_id())
         .await
         .expect("load rows")
         .into_iter()
         .any(|r| r.message_id == "case-cold");
+    (events, stored)
+}
+
+/// M3: a room the drain's own Welcome has just opened is known to the
+/// rest of the drain — the message after the Welcome decrypts, reaches
+/// the store, and the ADR-0018 admin check reads the refreshed list:
+/// with bob a `wire_admin`, nothing is reported, the row is stored, the
+/// snapshot folds.
+#[tokio::test]
+async fn a_case_snapshot_in_the_drain_that_welcomed_its_room_is_authorized_per_the_refreshed_list()
+{
+    let server = MockServer::start();
+    let (client, store) = cold_client(&server).await;
+
+    let (events, stored) =
+        drain_welcome_and_case_cold(&server, &client, &store, "wire_admin").await;
+
+    assert!(
+        events.reported().is_empty(),
+        "the drain reported: {:?}",
+        events.reported()
+    );
     assert!(stored, "the snapshot row is stored under the welcomed room");
     let room = client
         .room(&room_id())
@@ -369,6 +398,78 @@ async fn a_case_snapshot_in_the_drain_that_welcomed_its_room_is_authorized_per_t
     assert!(
         room.case().await.expect("case read").is_some(),
         "an admin's snapshot must fold although the cache was cold when it arrived"
+    );
+}
+
+/// The negative of the same drain: with bob a `wire_member`, the refreshed
+/// list is what the ADR-0018 check reads — the row is stored, the snapshot
+/// does not fold. A refresh that failed open (an unknown room treated as
+/// authorized) would fold it.
+#[tokio::test]
+async fn a_members_case_snapshot_in_the_drain_that_welcomed_its_room_is_stored_but_not_folded() {
+    let server = MockServer::start();
+    let (client, store) = cold_client(&server).await;
+
+    let (_events, stored) =
+        drain_welcome_and_case_cold(&server, &client, &store, "wire_member").await;
+
+    assert!(
+        stored,
+        "a member's snapshot row is stored (ADR-0018: stored, never folded)"
+    );
+    let room = client
+        .room(&room_id())
+        .await
+        .expect("the end-of-cycle refresh cached the room");
+    assert!(
+        room.case().await.expect("case read").is_none(),
+        "a member's snapshot must not fold, cold cache or not"
+    );
+}
+
+/// The refresh after the Welcome fails (the list endpoint is down): the
+/// Welcome stays absorbed and announced, the drain goes on, the message
+/// after it is reported as before Step 137 (not lost silently), the
+/// refresh is retried at the end of the cycle, and the next pass with the
+/// list back caches the room.
+#[tokio::test]
+async fn a_failed_refresh_after_the_welcome_keeps_the_welcome_and_retries_the_list() {
+    let server = MockServer::start();
+    let (client, _store) = cold_client(&server).await;
+    let mut list_down = server.mock(|when, then| {
+        when.method(POST).path("/v14/conversations/list-ids");
+        then.status(500).body("{}");
+    });
+    let mut page = mount_welcome_and_case(&server, "case-down", "List down");
+    let events = Arc::new(SyncErrors::default());
+    client.add_event_handler(events.clone());
+
+    let outcome = client.sync_once(SyncSettings::default()).await;
+
+    assert_eq!(
+        events.invited(),
+        vec![room_id()],
+        "the Welcome was absorbed and announced although the refresh failed"
+    );
+    assert!(
+        events.reported().iter().any(|e| e.contains(&room_id())),
+        "the message after it is reported, as before Step 137 (outcome {outcome:?}): {:?}",
+        events.reported()
+    );
+    assert_eq!(
+        list_down.calls(),
+        2,
+        "refreshed right after the Welcome, retried at the end of the cycle"
+    );
+
+    list_down.delete();
+    page.delete();
+    mount_room(&server, "wire_admin");
+    let _quiet = mount_empty_notifications(&server);
+    sync(&client).await;
+    assert!(
+        client.room(&room_id()).await.is_some(),
+        "the next pass refreshed the list the failed cycle left stale"
     );
 }
 
