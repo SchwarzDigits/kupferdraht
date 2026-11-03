@@ -683,9 +683,9 @@ mod tests {
         );
     }
 
-    /// The account endpoints: assets, clients, the rebind's query value,
-    /// key packages, the 1:1 conversation, SSO, the property key.
-    async fn assert_account_sites_refuse(client: &HttpClient, h: &str) {
+    /// The asset endpoints: the delete, the native download into a file,
+    /// the in-memory download.
+    async fn assert_asset_sites_refuse(client: &HttpClient, h: &str) {
         let sink = tempfile::tempdir().expect("tempdir");
         let sink = sink.path().join("asset.bin");
         assert_refused(
@@ -726,6 +726,11 @@ mod tests {
                 .download_asset_bytes(14, "tok", "wire.com", h, None)
                 .await,
         );
+    }
+
+    /// The account endpoints: the property key, clients, the rebind's
+    /// query value, key packages, the 1:1 conversation, SSO.
+    async fn assert_account_sites_refuse(client: &HttpClient, h: &str) {
         assert_refused(
             "fetch_property_value",
             h,
@@ -827,6 +832,7 @@ mod tests {
         let client = http(&server.base_url());
         for h in HOSTILE {
             assert_conversation_sites_refuse(&client, h).await;
+            assert_asset_sites_refuse(&client, h).await;
             assert_account_sites_refuse(&client, h).await;
         }
         any_request.assert_calls(0);
