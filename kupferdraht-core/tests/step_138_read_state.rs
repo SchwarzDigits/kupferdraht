@@ -737,16 +737,15 @@ fn doc_homes_name_the_read_state() {
         workspace_file("rules/0026-leader-tab-serves-thin-client-tabs.md").contains("`rooms`"),
         "rules/0026 lacks the rooms broadcast"
     );
+    // The entry starts under [Unreleased] and moves into the release that
+    // ships it (0.2.0): whichever section names the change marks it.
     let changelog = workspace_file("CHANGELOG.md");
-    let start = changelog
-        .find("\n## [Unreleased]\n")
-        .expect("an [Unreleased] section")
-        + 1;
-    let rest = &changelog[start..];
-    let end = rest[3..].find("\n## [").map_or(rest.len(), |i| i + 3);
-    let unreleased = &rest[..end];
+    let section = changelog
+        .split("\n## [")
+        .find(|section| section.contains("ReceiptType"))
+        .expect("CHANGELOG names the mark_as_read change");
     assert!(
-        unreleased.contains("BREAKING") && unreleased.contains("ReceiptType"),
-        "CHANGELOG [Unreleased] names the breaking mark_as_read change"
+        section.contains("BREAKING"),
+        "the CHANGELOG section naming mark_as_read's ReceiptType marks it BREAKING"
     );
 }
