@@ -1,7 +1,21 @@
 # Step 137 — Security-scan residuals: URL path segments, the CLI's cookie, error bodies, the token exchange's redirects, the case dispatch's cold cache
 
-**Status: in progress 2026-11-02** (branch `step/137-security-scan-residuals`;
-commissioned 2026-11-02 from the review of the external
+**Status: MERGED 2026-11-02** — `08d0e58` on
+`step/137-security-scan-residuals`, merged to `main` as PR #17 (`9dd79e0`);
+gate and CI green; smoked 2026-11-02 against the self-hosted stack (a
+guest link redeemed with the key on stdin and `--key` refused; a Welcome
+and a case snapshot in one notifications page folding on the invitee), no
+`sso finalize` smoke (the stack has no IdP). Scope shipped: `path_segment`
+at every dynamic path site plus `qualified_segments`; `sso finalize
+--cookie-stdin` / `join-via-link --key-stdin` or the TTY prompt;
+`redact::bounded_detail` at three sites; `Policy::none()` on the token
+exchange; the room list refreshed right after a Welcome (ADR-0039
+revision 1.1 — item 5 turned out worse than written below: the message
+was lost, not only unauthorized); pins in
+`tests/step_137_security_scan_residuals.rs`, `wire/http/mod.rs`,
+`wire/http/auth.rs`, `storage/remote/token_exchange.rs`, `redact.rs` and
+the CLI; retrospective LEARNINGS §5.74. Archived 2026-11-02 with this
+header. (Commissioned 2026-11-02 from the review of the external
 security scan of 2026-11-02; `docs/plan/135-*` and `136-*` hold its other
 consequences). Step 132 merged the same day (PR #10) and closed the scan's
 transport findings — no redirect on `HttpClient`, `ws://` refused without
