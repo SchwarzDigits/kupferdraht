@@ -917,7 +917,7 @@ pub(crate) fn room_from_conversation(conv: OwnConversation, client: Weak<Client>
 
 /// The room type from Wire's `type` and `group_conv_type` (Step 132 item
 /// 9): a channel is a regular conversation flagged `group_conv_type:
-/// "channel"`; `type` 3 is the pending-connection 1:1 (observations §94).
+/// "channel"`; `type` 3 is the pending-connection 1:1 (observations §95).
 fn room_type_for(conv_type: ConvType, group_conv_type: Option<&str>) -> RoomType {
     match conv_type {
         ConvType::Group if group_conv_type == Some("channel") => RoomType::Channel,

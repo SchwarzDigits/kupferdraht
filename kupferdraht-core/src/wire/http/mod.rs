@@ -819,7 +819,13 @@ mod tests {
     /// sites (the asset download, the property key) are in this table
     /// too, so it is the one place that lists every site. The backend's
     /// own id of `register_client` is checked on the response instead
-    /// (`step_95c_hostile_backend`).
+    /// (`step_95c_hostile_backend`). The other query values — the
+    /// notifications' `client` and `since`, the join link's `code` and
+    /// `key`, the key packages' `ciphersuite`, the SSO redirects, the
+    /// socket's `client` / `sync_marker` / `access_token` — go through
+    /// `Url::query_pairs_mut().append_pair`, which percent-encodes
+    /// `/ ? # & =`: nothing to guard. Only the rebind formats its value
+    /// into the URL string, hence its row above.
     #[tokio::test]
     async fn hostile_ids_are_refused_at_every_path_site_before_any_request() {
         let server = MockServer::start();

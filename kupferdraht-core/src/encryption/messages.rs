@@ -205,15 +205,11 @@ fn load_inbound_group<P: openmls_traits::OpenMlsProvider>(
     provider: &P,
     group_id_bytes: &[u8],
 ) -> Result<MlsGroup, KupferdrahtError> {
+    // The typed variant, as on the send path (Step 14g): the drain heals a
+    // room on it — and on nothing a stale room cache can produce (ADR-0034).
     MlsGroup::load(provider.storage(), &GroupId::from_slice(group_id_bytes))
         .map_err(|e| KupferdrahtError::Storage(format!("load MlsGroup: {e}")))?
-        .ok_or_else(|| {
-            KupferdrahtError::InvalidInput(
-                "process_inbound_message: group not in storage; \
-                 call Client::join_room first"
-                    .into(),
-            )
-        })
+        .ok_or(KupferdrahtError::MlsGroupMissing)
 }
 
 /// Whether decryption failed because the message's key was already

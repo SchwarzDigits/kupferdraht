@@ -2316,7 +2316,7 @@ an older binary. `Channel` is a regular conversation flagged
 `group_conv_type: "channel"` by the backend (Step 132; a backend without
 channels never sets it). Wire's conversation `type` 3 is a *pending
 connection*, not a channel — a 1:1 that exists while a connection
-request is open (live shape: observations §94); it maps to
+request is open (live shape: observations §95); it maps to
 `DirectMessage` and, being a Proteus conversation, never reaches the
 room list.
 

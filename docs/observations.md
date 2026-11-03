@@ -2065,3 +2065,31 @@ on one side and `kupferdraht-cli` on the other.
   `sync-stream` over the socket) passed 18 of 18 on the p256 0.14 line;
   the asset happy path end to end (former open.md gap-B.11) is live-verified
   by it.
+
+## 95) Wire's conversation `type` 3 is the pending connection, not a channel (2026-11-02, re-read 2026-11-03)
+
+Measured on the self-hosted wire-server (API v14) in the Step 132 smoke:
+a connection request from alice to a user outside her team produced a
+connection with `status: "sent"` and a `qualified_conversation`, and
+`POST /v14/conversations/list` for that id answers (re-read 2026-11-03,
+the request still pending):
+
+```json
+{ "type": 3, "group_conv_type": "group_conversation", "protocol": "proteus",
+  "name": null, "epoch": null, "group_id": null,
+  "access": ["private"], "access_role": [], "creator": "<alice>", "team": null,
+  "members": { "self": { "id": "<alice>", "domain": "example.com" }, "others": [] } }
+```
+
+So `type` 3 is the 1:1 that exists while a connection request is open —
+the `connect` conversation of Wire's own enumeration: Proteus, no MLS
+group, no other member yet; it becomes the ordinary 1:1 once the request
+is accepted. Channels are not a `type` at all: a regular conversation
+(`type` 0) carries `group_conv_type: "channel"` (channels were disabled
+and locked on this stack, so that value is mapped from the provenance
+audit, not live). Before Step 132 `wire/dto.rs` mapped 3 to
+`ConvType::Channel`; since then it is `ConvType::Connect`, mapped to
+`RoomType::DirectMessage` in `rooms/room.rs`, and — a Proteus
+conversation — it never reaches the room list. The code comments at those
+two sites, `docs/library.md` and the Step 132 archive pointed at §94 (the
+ciphersuite observation of the same day) until 2026-11-03.

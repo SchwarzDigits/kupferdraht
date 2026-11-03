@@ -102,8 +102,14 @@ reference every pending proposal.
   (`POST /v14/conversations/list` for the one id), not from the rooms
   cache, which can be stale.
 - An `mls-message-add` whose processing fails with `Storage` becomes a
-  persist-class error (`EventError::Persist`); `MlsGroupMissing` /
-  `InvalidInput` keep queuing recovery.
+  persist-class error (`EventError::Persist`); `MlsGroupMissing` — the
+  openmls store has no group, the inbound loader's typed error since
+  2026-11-03 — keeps queuing recovery. A room the cache does not know yet
+  (`InvalidInput`, no local `group_id`) does not: its group may have been
+  opened by a Welcome in the same drain, and a heal would discard it (the
+  refresh that fills the cache runs before the follow-ups). Found by a
+  review of Step 137; until then both failed with `InvalidInput` and both
+  healed.
 - The self-removal check reads the queued proposal's sender
   (`Sender::External`).
 

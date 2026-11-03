@@ -203,7 +203,7 @@ pub struct ConversationsResponse {
 /// | 0    | `Group`              |
 /// | 1    | `SelfRoom`           |
 /// | 2    | `DirectMessage`      |
-/// | 3    | `Connect` (a pending connection, not a channel — observations §94) |
+/// | 3    | `Connect` (a pending connection, not a channel — observations §95) |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(try_from = "u8", into = "u8")]
 pub enum ConvType {
@@ -212,7 +212,7 @@ pub enum ConvType {
     DirectMessage = 2,
     /// Wire's `connect`: the 1:1 that exists while a connection request is
     /// pending (live: `type: 3`, `group_conv_type: "group_conversation"`,
-    /// `protocol: "proteus"`, no other member — observations §94). Not a
+    /// `protocol: "proteus"`, no other member — observations §95). Not a
     /// channel; channels are `group_conv_type: "channel"`.
     Connect = 3,
 }
