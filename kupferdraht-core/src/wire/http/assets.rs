@@ -428,7 +428,12 @@ impl HttpClient {
         self.send_and_decode::<AssetUploadResponse>(req, "upload_asset_bytes")
             .await
     }
+}
 
+// Compiled for native tests as well, so the guard on its path segments sits
+// in the hostile-id table beside every other site (Step 137, M5).
+#[cfg(any(target_arch = "wasm32", test))]
+impl HttpClient {
     /// `GET /v{api_version}/assets/{domain}/{id}` buffering the whole encrypted
     /// blob into memory (W7).
     ///

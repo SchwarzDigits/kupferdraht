@@ -595,7 +595,9 @@ mod tests {
 
     /// Step 137 (scan finding M5): what a hostile id must not be able to
     /// inject — a second segment, a dot segment (raw or percent-encoded),
-    /// a query, a fragment.
+    /// a query, a fragment. The empty id is a `debug_assert!` precondition
+    /// at the sites whose id is the caller's; where it is runtime data
+    /// (the asset download, the property key) Step 95c pins it.
     const HOSTILE: [&str; 6] = ["../../self", "a/b", "key?x=1", "key#frag", "%2e%2e", ".."];
 
     fn assert_refused<T>(site: &str, hostile: &str, result: Result<T, KupferdrahtError>) {
@@ -682,8 +684,10 @@ mod tests {
     }
 
     /// The account endpoints: assets, clients, the rebind's query value,
-    /// key packages, the 1:1 conversation, SSO.
+    /// key packages, the 1:1 conversation, SSO, the property key.
     async fn assert_account_sites_refuse(client: &HttpClient, h: &str) {
+        let sink = tempfile::tempdir().expect("tempdir");
+        let sink = sink.path().join("asset.bin");
         assert_refused(
             "delete_asset domain",
             h,
@@ -693,6 +697,39 @@ mod tests {
             "delete_asset id",
             h,
             client.delete_asset(14, "tok", "wire.com", h).await,
+        );
+        assert_refused(
+            "download_asset domain",
+            h,
+            client
+                .download_asset(14, "tok", h, "key-1", None, &sink)
+                .await,
+        );
+        assert_refused(
+            "download_asset id",
+            h,
+            client
+                .download_asset(14, "tok", "wire.com", h, None, &sink)
+                .await,
+        );
+        assert_refused(
+            "download_asset_bytes domain",
+            h,
+            client
+                .download_asset_bytes(14, "tok", h, "key-1", None)
+                .await,
+        );
+        assert_refused(
+            "download_asset_bytes id",
+            h,
+            client
+                .download_asset_bytes(14, "tok", "wire.com", h, None)
+                .await,
+        );
+        assert_refused(
+            "fetch_property_value",
+            h,
+            client.fetch_property_value(14, "tok", h).await,
         );
         assert_refused("client_exists", h, client.client_exists(14, "tok", h).await);
         assert_refused(
@@ -773,7 +810,11 @@ mod tests {
     /// Step 137 (M5): every dynamic path parameter in `wire/http/` — and
     /// the `?client_id=` query value — goes through `path_segment`; a
     /// hostile id is refused before any request leaves. The Step 95c
-    /// guard, generalised from its four sites to all of them.
+    /// guard, generalised from its four sites to all of them; the 95c
+    /// sites (the asset download, the property key) are in this table
+    /// too, so it is the one place that lists every site. The backend's
+    /// own id of `register_client` is checked on the response instead
+    /// (`step_95c_hostile_backend`).
     #[tokio::test]
     async fn hostile_ids_are_refused_at_every_path_site_before_any_request() {
         let server = MockServer::start();
