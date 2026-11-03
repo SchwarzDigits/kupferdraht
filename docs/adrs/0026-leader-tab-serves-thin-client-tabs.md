@@ -445,3 +445,4 @@ For Step 94 (`docs/plan/archive/94-leader-tab-thin-clients.md`, merged 2026-09-2
   the proxy) and archived; the plan path in Implementation Notes
   repointed — no content change
 - 2026-09-26: Step 95d added a fifth optional `startSync` callback, `onDevicesChanged` (a room's MLS device set changed); the leader broadcasts it as `devices` and the proxy delivers it like `sync`. Same mechanism, current truth — not a new decision.
+- 2026-11-03: Step 138 added a seventh optional `startSync` callback, `onRoomsChanged` (a room's read state after a local `markAsRead` / `markAsUnread` — a change the backend never hears of, so no pass announces it); the leader broadcasts it as `rooms` and the proxy delivers it like `sync`. Step 113's `onStorage` (broadcast as `storage`) had taken the same path on 2026-09-30. Same mechanism, current truth — not a new decision.

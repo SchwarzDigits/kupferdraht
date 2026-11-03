@@ -24,6 +24,8 @@ mod manager;
 pub mod push_socket;
 // Step 122: whether an account's sync loop runs on push.
 pub mod push_state;
+// Step 138: a room's read state as the browser sees it.
+pub mod read_state;
 // Step 118: how long the live-sync loop waits, when it may reconnect.
 pub mod sync_pace;
 

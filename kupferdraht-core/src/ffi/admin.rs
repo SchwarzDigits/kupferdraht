@@ -280,6 +280,18 @@ impl Client {
         self.inner.unread_counts().await
     }
 
+    /// Every room's read state (marker, hand-set flag) in one query
+    /// (Step 138); rooms never read and never flagged are absent.
+    ///
+    /// # Errors
+    /// See `KupferdrahtError`.
+    pub async fn read_states(
+        &self,
+    ) -> Result<std::collections::HashMap<String, crate::storage::ReadStateRecord>, KupferdrahtError>
+    {
+        self.inner.read_states().await
+    }
+
     /// Rooms that contain a message / edit-event id (local lookup).
     ///
     /// # Errors

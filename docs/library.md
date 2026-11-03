@@ -1097,10 +1097,28 @@ pub struct ResyncSummary {
 
 | Method                                                  | Returns                          | Notes |
 |---|---|---|
-| `Timeline::mark_as_read(item_id: String)`               | `Result<Option<MessageHandle>>`  | Send a `Confirmation { type: READ, first_message_id }` for a single message. **Step 10f gate**: when `Client::receipt_mode()` returns `Off`, this returns `Ok(None)` without sending — peers respect the same setting account-wide. Wire-side ack is per-batch but Kupferdraht's first cut sends one id per call. matrix-rust-sdk analog: `Timeline::send_single_receipt`. |
+| `Timeline::mark_as_read(item_id: String, receipt: ReceiptType)` | `Result<Option<MessageHandle>>` | **Step 138** (BREAKING: the second argument). Move the device-local read position to `item_id` (forward only, Step 67) and clear the room's hand-set unread flag, then — with `ReceiptType::Read` — send a `Confirmation { type: READ, first_message_id }` for the message; with `ReceiptType::ReadPrivate` nothing leaves the device and the result is always `None` (the position and the flag are device-local, another device of the same user sees neither). **Step 10f gate**: with `Client::receipt_mode()` `Off` a `Read` sends nothing either and returns `Ok(None)` — peers respect the same setting account-wide. An item unknown locally moves no position and still clears the flag. One id per call. matrix-rust-sdk analog: `Timeline::send_single_receipt`. |
+| `ReceiptType { Read, ReadPrivate }`                     | (enum)                           | **Step 138.** Whether a read is confirmed to the room. `Read`: the position moves and Wire's `Confirmation { READ }` leaves (unless the account's receipts are off); `ReadPrivate`: the position moves, the room learns nothing. After matrix-rust-sdk's `ReceiptType` (no `FullyRead`: Wire has no second position). |
 | `Store::apply_read_receipts(room_id, reader_user_id, message_ids, confirmed_at_ms)` | `Result<usize>` | Per-batch `INSERT OR IGNORE` into `read_receipts`. Returns the count of fresh inserts. Idempotent on redelivery. |
 | `Store::load_read_receipts_for_room(room_id)`           | `Result<Vec<ReadReceiptRecord>>` | All receipts for a room. `Client::messages` calls this once per call and overlays per-message `read_by` lists. |
 | `TimelineItem::read_by: Vec<String>`                    | (field)                          | Reader user-ids that have confirmed READ on this item, sorted + deduplicated. |
+
+### Read state: the device-local position and the unread flag (Step 138)
+
+A room list is a work queue: a room needs attention while it holds inbound
+messages its user has not seen, opening it clears that, and the user can
+put a room back by hand. Everything here is **device-local** — Wire carries
+no message for it, so no other client and no other device of the same user
+learns of a private read or a flag (the cross-device read position is
+Step 129's). A UI shows a room as needing attention while
+`unread_count() > 0 || is_marked_unread()`.
+
+| Method | Returns | Notes |
+|---|---|---|
+| `Room::read_marker()` | `Result<Option<i64>, KupferdrahtError>` | The device-local read position (Step 67's marker): the `sent_at_ms` up to which inbound messages count as read, `None` when never read. `Timeline::mark_as_read` moves it, forward only. matrix-rust-sdk analog: `Room::read_marker`. |
+| `Room::set_unread_flag(flag: bool)` | `Result<(), KupferdrahtError>` | Flag the room unread by hand, or clear the flag — device-local, idempotent; a read of the room (`Timeline::mark_as_read`, either `ReceiptType`) clears it. A room read to the end (count 0) stays flagged until read again. matrix-rust-sdk analog: `Room::set_unread_flag`. |
+| `Room::is_marked_unread()` | `Result<bool, KupferdrahtError>` | Whether the room is flagged unread by hand. matrix-rust-sdk analog: `Room::is_marked_unread`. |
+| `Client::read_states()` | `Result<HashMap<String, ReadStateRecord>, KupferdrahtError>` | Every room's read state — `last_read_at_ms: Option<i64>`, `marked_unread: bool` — in one query, the room-list companion to `unread_counts()`; rooms never read and never flagged are absent. The browser's `rooms()` joins the two onto the room list. |
 
 ### Delivery receipts (Step 25b)
 
@@ -2274,6 +2292,10 @@ impl Room {
     pub fn group_id_b64(&self) -> Option<&str>;               // as Wire delivers it
     pub async fn join(&self) -> Result<(), KupferdrahtError>;                       // Step 3
     pub async fn sync_members(&self) -> Result<Vec<RoomMember>, KupferdrahtError>;   // Step 3, renamed in Step 14b
+    pub async fn unread_count(&self) -> Result<u32, KupferdrahtError>;                // Step 67
+    pub async fn read_marker(&self) -> Result<Option<i64>, KupferdrahtError>;         // Step 138, device-local
+    pub async fn set_unread_flag(&self, flag: bool) -> Result<(), KupferdrahtError>;  // Step 138, device-local
+    pub async fn is_marked_unread(&self) -> Result<bool, KupferdrahtError>;           // Step 138
 }
 
 pub struct RoomMember {

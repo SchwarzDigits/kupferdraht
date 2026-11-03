@@ -767,16 +767,19 @@ impl Timeline {
         self.inner.toggle_reaction(item_id, emoji).await
     }
 
-    /// Send a `READ` receipt for a message. `None` when the account's
-    /// receipt mode is off (no receipt emitted).
+    /// Mark a message as read (Step 138). `Read` moves the device-local
+    /// marker and sends a `READ` receipt — `None` when the account's
+    /// receipt mode is off; `ReadPrivate` moves the marker only and is
+    /// always `None`. Either clears the room's unread flag.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
     pub async fn mark_as_read(
         &self,
         item_id: String,
+        receipt: crate::timeline::ReceiptType,
     ) -> Result<Option<MessageHandle>, KupferdrahtError> {
-        self.inner.mark_as_read(item_id).await
+        self.inner.mark_as_read(item_id, receipt).await
     }
 
     /// Encrypt + upload a file and send the MLS asset reference.

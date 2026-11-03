@@ -467,3 +467,39 @@ export async function storageStateReachesEveryTab() {
     b.close();
   }
 }
+
+/**
+ * Step 138: a read-state change made through one tab reaches every tab —
+ * the caller's `startSync` subscriber (the seventh callback,
+ * `onRoomsChanged`) and every host's `rooms` event, carrying the room's
+ * read state. The stub's `sync` event proves the subscription is live
+ * before the change is made.
+ */
+export async function readStateReachesEveryTab() {
+  const { a, b } = await twoTabs();
+  try {
+    const client = await b.kupferdraht.resume(FIXTURE_ACCOUNT);
+    const live = once(b, 'sync');
+    const hostA = once(a, 'rooms');
+    const hostB = once(b, 'rooms');
+    const subscriber = new Promise((resolve) => {
+      client.startSync(() => {}, undefined, undefined, undefined, undefined, undefined, (change) => resolve(change));
+    });
+    await live;
+    await client.markAsUnread('room-1');
+    const change = await Promise.race([subscriber, wait(5000).then(() => ({ roomId: 'none within 5 s' }))]);
+    const a_ = (await hostA).detail;
+    const b_ = (await hostB).detail;
+    return {
+      subscriberRoomId: change.roomId,
+      subscriberMarkedUnread: change.markedUnread === true,
+      hostARoomId: a_.roomId,
+      hostAMarkedUnread: a_.markedUnread === true,
+      hostBRoomId: b_.roomId,
+      hostBMarkedUnread: b_.markedUnread === true,
+    };
+  } finally {
+    a.close();
+    b.close();
+  }
+}

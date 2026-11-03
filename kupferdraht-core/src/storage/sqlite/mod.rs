@@ -364,6 +364,22 @@ impl Store for SqliteStore {
         read_markers::read_marker(self, room_id)
     }
 
+    async fn set_unread_flag(&self, room_id: &str, flag: bool) -> Result<(), KupferdrahtError> {
+        let _permit = self.write_permit().await;
+        read_markers::set_unread_flag(self, room_id, flag)
+    }
+
+    async fn is_marked_unread(&self, room_id: &str) -> Result<bool, KupferdrahtError> {
+        read_markers::is_marked_unread(self, room_id)
+    }
+
+    async fn read_states(
+        &self,
+    ) -> Result<std::collections::HashMap<String, crate::storage::ReadStateRecord>, KupferdrahtError>
+    {
+        read_markers::read_states(self)
+    }
+
     async fn unread_count_for_room(
         &self,
         room_id: &str,

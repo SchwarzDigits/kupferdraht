@@ -54,6 +54,7 @@ mod typing;
 pub use asset_receive::AssetSummary;
 pub use asset_send::AssetSource;
 pub use case::{CasePatch, CasePriority, CaseSnapshot, CaseState};
+pub use confirmation::ReceiptType;
 pub(crate) use items::group_reactions_by_emoji;
 pub(crate) use items::location_body;
 pub(crate) use items::location_kind_from_body;

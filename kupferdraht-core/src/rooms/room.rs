@@ -371,6 +371,63 @@ impl Room {
         store.unread_count_for_room(&self.id, &self_id).await
     }
 
+    /// The device-local read marker of this room (Step 138): the
+    /// `sent_at_ms` up to which inbound messages count as read; `None`
+    /// when never marked. `Timeline::mark_as_read` moves it, forward only.
+    ///
+    /// matrix-rust-sdk analog: `Room::read_marker`.
+    ///
+    /// # Errors
+    /// `KupferdrahtError::InvalidInput` when the owning `Client` is gone;
+    /// `Storage` on read failure.
+    pub async fn read_marker(&self) -> Result<Option<i64>, KupferdrahtError> {
+        let Some(store) = self.owner_store("read_marker")? else {
+            return Ok(None);
+        };
+        store.read_marker(&self.id).await
+    }
+
+    /// Flag this room unread by hand, or clear the flag (Step 138). Local
+    /// to the device — Wire carries no message for it. A read of the room
+    /// (`Timeline::mark_as_read`, either receipt type) clears it.
+    ///
+    /// matrix-rust-sdk analog: `Room::set_unread_flag`.
+    ///
+    /// # Errors
+    /// `KupferdrahtError::InvalidInput` when the owning `Client` is gone or
+    /// no `Store` is attached; `Storage` on write failure.
+    pub async fn set_unread_flag(&self, flag: bool) -> Result<(), KupferdrahtError> {
+        let store = self.owner_store("set_unread_flag")?.ok_or_else(|| {
+            KupferdrahtError::InvalidInput("set_unread_flag: no Store attached".into())
+        })?;
+        store.set_unread_flag(&self.id, flag).await
+    }
+
+    /// Whether this room is flagged unread by hand (Step 138).
+    ///
+    /// matrix-rust-sdk analog: `Room::is_marked_unread`.
+    ///
+    /// # Errors
+    /// `KupferdrahtError::InvalidInput` when the owning `Client` is gone;
+    /// `Storage` on read failure.
+    pub async fn is_marked_unread(&self) -> Result<bool, KupferdrahtError> {
+        let Some(store) = self.owner_store("is_marked_unread")? else {
+            return Ok(false);
+        };
+        store.is_marked_unread(&self.id).await
+    }
+
+    /// The owning client's store, `None` when no store is attached.
+    fn owner_store(
+        &self,
+        what: &str,
+    ) -> Result<Option<Arc<dyn crate::storage::Store>>, KupferdrahtError> {
+        let client = self.client.upgrade().ok_or_else(|| {
+            KupferdrahtError::InvalidInput(format!("{what}: owning Client dropped"))
+        })?;
+        Ok(client.store_handle().cloned())
+    }
+
     /// Acquire a [`Timeline`] for this room. Cheap to call —
     /// constructs an `Arc<Timeline>` carrying an `Arc<Client>` plus
     /// the room id by value. Each call returns a fresh handle; the

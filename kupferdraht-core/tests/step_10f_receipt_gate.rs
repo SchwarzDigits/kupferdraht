@@ -51,7 +51,7 @@ async fn mark_as_read_returns_none_when_receipt_mode_off() {
     let timeline = room.timeline().expect("timeline");
 
     let result = timeline
-        .mark_as_read("msg-id-under-test".into())
+        .mark_as_read("msg-id-under-test".into(), kupferdraht::ReceiptType::Read)
         .await
         .expect("mark_as_read should succeed even when gated");
     assert!(

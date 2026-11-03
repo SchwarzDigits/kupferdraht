@@ -195,6 +195,15 @@ pub struct ReadReceiptRecord {
     pub confirmed_at_ms: i64,
 }
 
+/// One row of `room_read_markers` (Steps 67, 138): a room's device-local
+/// read position and its hand-set unread flag. `last_read_at_ms` is `None`
+/// for a room flagged before it was ever read.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
+pub struct ReadStateRecord {
+    pub last_read_at_ms: Option<i64>,
+    pub marked_unread: bool,
+}
+
 /// One row of `delivery_receipts`. Step 25b — represents one
 /// `(message, confirmer)` ack that the recipient's device received the
 /// message. Wire's `Confirmation { type: DELIVERED }` event fans out into
@@ -723,8 +732,11 @@ pub trait Store: MaybeSendSync {
     }
 
     /// Persist the device-local read marker for a room (Step 67):
-    /// everything with `sent_at_ms <= at_ms` counts as read. Default
-    /// no-op keeps a custom `Store` compiling (custom-store pattern).
+    /// everything with `sent_at_ms <= at_ms` counts as read. The marker
+    /// only moves forward, and moving it clears the room's hand-set
+    /// unread flag (Step 138) — a read is the user's "this room is
+    /// read". Default no-op keeps a custom `Store` compiling
+    /// (custom-store pattern).
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` on backend failure.
@@ -765,6 +777,37 @@ pub trait Store: MaybeSendSync {
         &self,
         _self_user_id: &str,
     ) -> Result<std::collections::HashMap<String, u32>, KupferdrahtError> {
+        Ok(std::collections::HashMap::new())
+    }
+
+    /// Set or clear a room's hand-set unread flag (Step 138). A room never
+    /// read gets a marker row without a position. Default no-op
+    /// (custom-store pattern).
+    ///
+    /// # Errors
+    /// `KupferdrahtError::Storage` on backend failure.
+    async fn set_unread_flag(&self, _room_id: &str, _flag: bool) -> Result<(), KupferdrahtError> {
+        Ok(())
+    }
+
+    /// Whether a room is flagged unread by hand (Step 138). Default `false`
+    /// (custom-store pattern).
+    ///
+    /// # Errors
+    /// `KupferdrahtError::Storage` on backend failure.
+    async fn is_marked_unread(&self, _room_id: &str) -> Result<bool, KupferdrahtError> {
+        Ok(false)
+    }
+
+    /// Every room's read state in one query (Step 138) — for room lists,
+    /// beside [`Store::unread_counts`]; rooms without a marker row are
+    /// absent. Default empty (custom-store pattern).
+    ///
+    /// # Errors
+    /// `KupferdrahtError::Storage` on backend failure.
+    async fn read_states(
+        &self,
+    ) -> Result<std::collections::HashMap<String, ReadStateRecord>, KupferdrahtError> {
         Ok(std::collections::HashMap::new())
     }
 

@@ -697,6 +697,14 @@ from `timeline_events` against this marker
 (`storage/sqlite/read_markers.rs`); the cross-device read position
 rides the self-conversation in a later step.
 
+The V31 migration (Step 138) rebuilds `room_read_markers`:
+`last_read_at_ms` becomes nullable and `marked_unread INTEGER NOT NULL
+DEFAULT 0` is added — the hand-set unread flag beside the position. A
+room flagged before it was ever read has a row without a position (NULL
+counts as "never read", like a missing row); the marker upsert clears
+the flag, so a read is the user's "this room is read". `Store::read_states`
+reads every row in one query for room lists, beside `unread_counts`.
+
 **Two processes on one home (Step 85, native).** Every native
 connection carries `busy_timeout = 5000` and an explicit
 `synchronous = FULL` (`storage::set_multi_process_pragmas`, on all

@@ -17,22 +17,38 @@ use crate::client::Client;
 use crate::error::KupferdrahtError;
 use crate::timeline::{MessageHandle, Timeline};
 
+/// Whether a read is confirmed to the room (Step 138). matrix-rust-sdk
+/// analog: `ReceiptType::Read` / `ReceiptType::ReadPrivate`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ReceiptType {
+    /// Move the device-local read marker and send
+    /// `Confirmation { type: READ }` — unless the account's receipt mode
+    /// is off (ADR-0012).
+    Read,
+    /// Move the device-local read marker only; the room learns nothing.
+    ReadPrivate,
+}
+
 impl Timeline {
-    /// Mark a message as read (Step 6-II-f). Wire-side emits a
-    /// `Confirmation { type: READ, first_message_id: item_id }`
-    /// carrying just the supplied id (Kupferdraht's CLI doesn't yet
-    /// batch). Receivers stamp `(message_id, reader_user_id)`
-    /// into `read_receipts`; Wire web's UI shows a "read" indicator
-    /// once the recipient has confirmed.
+    /// Mark a message as read (Steps 6-II-f, 138): the device-local read
+    /// position moves to `item_id` (forward only — Step 67) and the
+    /// room's hand-set unread flag clears, whatever `receipt` says. With
+    /// [`ReceiptType::Read`] a `Confirmation { type: READ,
+    /// first_message_id: item_id }` leaves for the room (one id per
+    /// call); receivers stamp `(message_id, reader_user_id)` into
+    /// `read_receipts` and Wire's apps show a "read" indicator. With
+    /// [`ReceiptType::ReadPrivate`] nothing leaves: the room learns
+    /// nothing, and the result is always `None`.
     ///
-    /// **Step 10f gate**: when the user's `WIRE_RECEIPT_MODE`
-    /// preference is `Off`, this method short-circuits to `Ok(None)`
-    /// without sending the `Confirmation`. The caller can use the
-    /// `None` return as a signal that read receipts are off
-    /// account-wide. Other Wire clients respect the same setting,
-    /// so peers won't expect a receipt to arrive. See ADR-0012
-    /// §Decision and `Client::receipt_mode` for the
-    /// preference projection.
+    /// **Step 10f gate**: with the account's `WIRE_RECEIPT_MODE` off a
+    /// `Read` sends no `Confirmation` either and returns `Ok(None)` — the
+    /// other Wire clients respect the same setting, so peers expect no
+    /// receipt (ADR-0012 §Decision, `Client::receipt_mode`).
+    ///
+    /// An item unknown locally anchors no position: the marker stays,
+    /// the flag still clears — the caller's "this room is read" holds.
+    /// The position and the flag are device-local; the cross-device read
+    /// position is a later step.
     ///
     /// matrix-rust-sdk analog: `Timeline::send_single_receipt`.
     ///
@@ -42,38 +58,49 @@ impl Timeline {
     pub async fn mark_as_read(
         &self,
         item_id: String,
+        receipt: ReceiptType,
     ) -> Result<Option<MessageHandle>, KupferdrahtError> {
         if item_id.is_empty() {
             return Err(KupferdrahtError::InvalidInput(
                 "mark_as_read: item_id must be non-empty".into(),
             ));
         }
-        // Step 67: advance the device-local read marker BEFORE the
-        // receipt gate below — the gate governs the outbound wire
-        // signal, not the local read position. The marker only moves
-        // forward (store-side MAX), so marking an older item cannot
-        // resurrect read messages as unread. An item unknown locally
-        // anchors no position and skips the marker.
-        if let Some(record) = self
-            .client
-            .lookup_timeline_event(&self.room_id, &item_id)
-            .await?
-            && let Some(store) = self.client.store_handle()
+        // The local read position first — the receipt gate below governs
+        // the outbound wire signal, not the position (Step 67).
+        self.advance_read_position(&item_id).await?;
+        if receipt == ReceiptType::ReadPrivate
+            || matches!(
+                self.client.receipt_mode().await?,
+                crate::client::ReceiptMode::Off
+            )
         {
-            store
-                .set_read_marker(&self.room_id, record.sent_at_ms)
-                .await?;
-        }
-        if matches!(
-            self.client.receipt_mode().await?,
-            crate::client::ReceiptMode::Off
-        ) {
             return Ok(None);
         }
         self.client
             .send_read_confirmation(&self.room_id, &[item_id])
             .await
             .map(Some)
+    }
+
+    /// Move the device-local marker to `item_id`'s position when the item
+    /// is known locally (the store's upsert keeps it forward-only and
+    /// clears the flag), else clear the flag alone (Step 138).
+    async fn advance_read_position(&self, item_id: &str) -> Result<(), KupferdrahtError> {
+        let Some(store) = self.client.store_handle() else {
+            return Ok(());
+        };
+        match self
+            .client
+            .lookup_timeline_event(&self.room_id, item_id)
+            .await?
+        {
+            Some(record) => {
+                store
+                    .set_read_marker(&self.room_id, record.sent_at_ms)
+                    .await
+            }
+            None => store.set_unread_flag(&self.room_id, false).await,
+        }
     }
 }
 

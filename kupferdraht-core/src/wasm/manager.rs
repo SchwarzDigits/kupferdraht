@@ -28,6 +28,7 @@ use wasm_bindgen::prelude::*;
 
 use zeroize::Zeroizing;
 
+use super::read_state;
 use crate::client::ServerConfig;
 use crate::error::KupferdrahtError;
 use crate::keystore::IndexedDbKeyStore;
@@ -87,7 +88,7 @@ fn set_error_detail(error: &JsValue, e: &KupferdrahtError) {
 
 /// A JS `Error` with `name` — for the binding's own failures, named like the
 /// `KupferdrahtError` variant they stand for (`InvalidInput`, `Encoding`).
-fn named_error(name: &str, message: &str) -> JsValue {
+pub(super) fn named_error(name: &str, message: &str) -> JsValue {
     let error = js_sys::Error::new(message);
     error.set_name(name);
     error.into()
@@ -509,6 +510,7 @@ impl Kupferdraht {
         Ok(Client {
             inner,
             manager: Arc::clone(&self.inner),
+            rooms_changed: RoomsChangedSlot::default(),
         })
     }
 
@@ -680,6 +682,7 @@ impl PendingLogin {
         Ok(Client {
             inner,
             manager: Arc::clone(&self.manager),
+            rooms_changed: RoomsChangedSlot::default(),
         })
     }
 
@@ -719,6 +722,7 @@ impl PendingLogin {
         Ok(Client {
             inner,
             manager: Arc::clone(&self.manager),
+            rooms_changed: RoomsChangedSlot::default(),
         })
     }
 
@@ -760,7 +764,14 @@ pub struct Client {
     /// The manager: what `recovery()` and a purging `logout` need of it
     /// (Steps 112, 114).
     manager: Arc<crate::manager::Kupferdraht>,
+    /// `startSync`'s `onRoomsChanged` (Step 138): a local read-state
+    /// change reports the room's new state here; `SyncHandle.stop` clears
+    /// it.
+    rooms_changed: RoomsChangedSlot,
 }
+
+/// The one `onRoomsChanged` registration of a client (Step 138).
+pub(super) type RoomsChangedSlot = std::rc::Rc<std::cell::RefCell<Option<js_sys::Function>>>;
 
 #[wasm_bindgen]
 impl Client {
@@ -873,7 +884,12 @@ impl Client {
     /// with `{ roomId, added, removed }` (devices as in `roomDevices`);
     /// `onStorage` (optional, Step 113) fires with `"reconnecting"` /
     /// `"online"` when the account's storage state changes (see
-    /// `storageState`). Returns a handle whose `.stop()` ends them all.
+    /// `storageState`); `onRoomsChanged` (optional, Step 138) fires after a
+    /// local read-state change — `markAsRead`, `markAsUnread` — with the
+    /// room's read state `{ roomId, unreadCount, lastReadAtMs,
+    /// markedUnread }` (a change the backend never hears of, so no pass
+    /// and no `onSync` would announce it). Returns a handle whose
+    /// `.stop()` ends them all.
     #[wasm_bindgen(js_name = startSync)]
     #[must_use]
     pub fn start_sync(
@@ -884,7 +900,9 @@ impl Client {
         on_sync: Option<js_sys::Function>,
         on_devices_changed: Option<js_sys::Function>,
         on_storage: Option<js_sys::Function>,
+        on_rooms_changed: Option<js_sys::Function>,
     ) -> super::SyncHandle {
+        *self.rooms_changed.borrow_mut() = on_rooms_changed;
         super::live_sync::start(
             self.inner.clone(),
             super::live_sync::Callbacks {
@@ -894,6 +912,7 @@ impl Client {
                 sync: on_sync,
                 devices_changed: on_devices_changed,
                 storage: on_storage,
+                rooms_changed: std::rc::Rc::clone(&self.rooms_changed),
             },
         )
     }
@@ -962,21 +981,29 @@ impl Client {
     }
 
     /// The rooms known to this client, read from the store, as
-    /// `{ roomId, name }[]`. After a `syncOnce` these are backed by the
-    /// account's `SQLite3MC` store, so they survive a reload.
+    /// `{ roomId, name, unreadCount, lastReadAtMs, markedUnread }[]` — the
+    /// read state of every room from two grouped queries (Step 138;
+    /// `lastReadAtMs` is `null` for a room never read). After a `syncOnce`
+    /// these are backed by the account's `SQLite3MC` store, so they survive
+    /// a reload.
     #[wasm_bindgen(js_name = rooms)]
     pub async fn rooms(&self) -> Result<JsValue, JsValue> {
-        let view: Vec<RoomView> = self
-            .inner
-            .rooms()
-            .await
+        let rooms = self.inner.rooms().await;
+        let counts = self.inner.unread_counts().await.map_err(|e| to_js(&e))?;
+        let states = self.inner.read_states().await.map_err(|e| to_js(&e))?;
+        let view: Vec<read_state::RoomView> = rooms
             .iter()
-            .map(|r| RoomView {
-                room_id: r.id(),
-                name: r.name(),
+            .map(|r| {
+                let id = r.id();
+                read_state::room_view(
+                    &id,
+                    &r.name(),
+                    counts.get(&id).copied().unwrap_or(0),
+                    states.get(&id),
+                )
             })
             .collect();
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        read_state::to_js(&view)
     }
 
     /// Send a text message to `roomId`, joining the room's MLS group first if
@@ -1115,14 +1142,41 @@ impl Client {
         message_handle_to_js(&handle)
     }
 
-    /// Mark `itemId` (and everything before it) as read in `roomId`.
+    /// Mark `itemId` (and everything before it) as read in `roomId` and
+    /// clear the room's unread flag (Step 138). `options.sendReceipt`
+    /// (default `true`) decides whether the room is told: `false` is a
+    /// private read — the position moves, nothing leaves the device.
+    /// `onRoomsChanged` fires with the room's read state afterwards.
     #[wasm_bindgen(js_name = markAsRead)]
-    pub async fn mark_as_read(&self, room_id: String, item_id: String) -> Result<(), JsValue> {
+    pub async fn mark_as_read(
+        &self,
+        room_id: String,
+        item_id: String,
+        options: JsValue,
+    ) -> Result<(), JsValue> {
+        let receipt = if send_receipt(&options) {
+            crate::timeline::ReceiptType::Read
+        } else {
+            crate::timeline::ReceiptType::ReadPrivate
+        };
         let timeline = self.timeline_for(&room_id).await?;
         timeline
-            .mark_as_read(item_id)
+            .mark_as_read(item_id, receipt)
             .await
             .map_err(|e| to_js(&e))?;
+        self.report_read_state(&room_id).await;
+        Ok(())
+    }
+
+    /// Flag `roomId` unread by hand (Step 138): it needs attention again
+    /// although its messages are read. Device-local and idempotent; the
+    /// next `markAsRead` of the room clears it. `InvalidInput` for a room
+    /// this client does not know. `onRoomsChanged` fires afterwards.
+    #[wasm_bindgen(js_name = markAsUnread)]
+    pub async fn mark_as_unread(&self, room_id: String) -> Result<(), JsValue> {
+        let room = self.room_for(&room_id).await?;
+        room.set_unread_flag(true).await.map_err(|e| to_js(&e))?;
+        self.report_read_state(&room_id).await;
         Ok(())
     }
 
@@ -1130,7 +1184,7 @@ impl Client {
     #[wasm_bindgen(js_name = createRoom)]
     pub async fn create_room(&self, name: String) -> Result<JsValue, JsValue> {
         let room = self.inner.create_room(&name).await.map_err(|e| to_js(&e))?;
-        room_to_js(&room)
+        room_to_js(&room).await
     }
 
     /// Open (or reuse) a 1:1 conversation with the qualified `peer` user id.
@@ -1138,7 +1192,7 @@ impl Client {
     #[wasm_bindgen(js_name = createDm)]
     pub async fn create_dm(&self, peer: String) -> Result<JsValue, JsValue> {
         let room = self.inner.create_dm(&peer).await.map_err(|e| to_js(&e))?;
-        room_to_js(&room)
+        room_to_js(&room).await
     }
 
     /// The members of `roomId` as `{ userId, isSelf, displayName, handle }[]`.
@@ -1168,7 +1222,7 @@ impl Client {
             .invite_members(&room_id, &user_ids)
             .await
             .map_err(|e| to_js(&e))?;
-        room_to_js(&room)
+        room_to_js(&room).await
     }
 
     /// Remove `userIds` from `roomId`'s MLS group.
@@ -1179,7 +1233,7 @@ impl Client {
             .kick_members(&room_id, &user_ids)
             .await
             .map_err(|e| to_js(&e))?;
-        room_to_js(&room)
+        room_to_js(&room).await
     }
 
     /// Rename `roomId` (Step 98b). Returns the updated room.
@@ -1190,7 +1244,7 @@ impl Client {
             .rename_room(&room_id, &name)
             .await
             .map_err(|e| to_js(&e))?;
-        room_to_js(&room)
+        room_to_js(&room).await
     }
 
     /// Delete `roomId` for everyone (Step 98b) — team-admin only. A room
@@ -1232,7 +1286,7 @@ impl Client {
             .set_room_access(&room_id, &modes, &roles)
             .await
             .map_err(|e| to_js(&e))?;
-        room_to_js(&room)
+        room_to_js(&room).await
     }
 
     /// Open `roomId` to guest-link joins (Step 98b).
@@ -1250,7 +1304,7 @@ impl Client {
             .await
             .ok_or_else(|| named_error("InvalidInput", &format!("unknown room: {room_id}")))?;
         let room = room.open_to_guests().await.map_err(|e| to_js(&e))?;
-        room_to_js(&room)
+        room_to_js(&room).await
     }
 
     /// Issue (or fetch) `roomId`'s reusable guest link (Step 98b).
@@ -1303,7 +1357,7 @@ impl Client {
             .join_via_link(code, key, password)
             .await
             .map_err(|e| to_js(&e))?;
-        room_to_js(&room)
+        room_to_js(&room).await
     }
 
     /// Leave `roomId` (server-driven MLS remove + local group discard).
@@ -1466,18 +1520,79 @@ impl Client {
 }
 
 impl Client {
+    /// Resolve a room — cache first, the store on a miss (Step 132 item
+    /// 10) — erroring if the room is unknown.
+    async fn room_for(&self, room_id: &str) -> Result<Arc<crate::rooms::Room>, JsValue> {
+        self.inner
+            .room_or_load(room_id)
+            .await
+            .ok_or_else(|| named_error("InvalidInput", &format!("unknown room: {room_id}")))
+    }
+
     /// Resolve a room's `Timeline`, erroring if the room is unknown.
     async fn timeline_for(
         &self,
         room_id: &str,
     ) -> Result<std::sync::Arc<crate::timeline::Timeline>, JsValue> {
-        let room = self
-            .inner
-            .room(room_id)
-            .await
-            .ok_or_else(|| named_error("InvalidInput", &format!("unknown room: {room_id}")))?;
-        room.timeline().map_err(|e| to_js(&e))
+        self.room_for(room_id)
+            .await?
+            .timeline()
+            .map_err(|e| to_js(&e))
     }
+
+    /// Hand the room's read state to `startSync`'s `onRoomsChanged` after
+    /// a local change (Step 138). A failure to read it back is logged;
+    /// the change itself stands.
+    async fn report_read_state(&self, room_id: &str) {
+        let Some(callback) = self.rooms_changed.borrow().clone() else {
+            return;
+        };
+        let Some(room) = self.inner.room_or_load(room_id).await else {
+            return;
+        };
+        let payload = match read_state_of(&room).await {
+            Ok((unread, state)) => read_state::to_js(&read_state::read_state_change(
+                room_id,
+                unread,
+                Some(&state),
+            )),
+            Err(e) => Err(e),
+        };
+        match payload {
+            Ok(payload) => {
+                let _ = callback.call1(&JsValue::NULL, &payload);
+            }
+            Err(e) => tracing::warn!(
+                room_id,
+                error = ?e,
+                "read state after a change could not be read; onRoomsChanged not fired"
+            ),
+        }
+    }
+}
+
+/// `options.sendReceipt` of `markAsRead`: `true` unless the option is
+/// present and `false`.
+fn send_receipt(options: &JsValue) -> bool {
+    if !options.is_object() {
+        return true;
+    }
+    js_sys::Reflect::get(options, &JsValue::from_str("sendReceipt"))
+        .ok()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
+}
+
+/// One room's read state (Step 138): its unread count and its marker row.
+async fn read_state_of(
+    room: &crate::rooms::Room,
+) -> Result<(u32, crate::storage::ReadStateRecord), JsValue> {
+    let unread = room.unread_count().await.map_err(|e| to_js(&e))?;
+    let state = crate::storage::ReadStateRecord {
+        last_read_at_ms: room.read_marker().await.map_err(|e| to_js(&e))?,
+        marked_unread: room.is_marked_unread().await.map_err(|e| to_js(&e))?,
+    };
+    Ok((unread, state))
 }
 
 /// Marshal a `MessageHandle` to `{ messageId, sentAtMs }`.
@@ -1489,13 +1604,16 @@ fn message_handle_to_js(handle: &crate::timeline::MessageHandle) -> Result<JsVal
     serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
 }
 
-/// Marshal a `Room` to `{ roomId, name }`.
-fn room_to_js(room: &crate::rooms::Room) -> Result<JsValue, JsValue> {
-    let view = RoomView {
-        room_id: room.id(),
-        name: room.name(),
-    };
-    serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+/// Marshal a `Room` to `{ roomId, name, unreadCount, lastReadAtMs,
+/// markedUnread }` — the same row `rooms()` lists it with (Step 138).
+async fn room_to_js(room: &crate::rooms::Room) -> Result<JsValue, JsValue> {
+    let (unread, state) = read_state_of(room).await?;
+    read_state::to_js(&read_state::room_view(
+        &room.id(),
+        &room.name(),
+        unread,
+        Some(&state),
+    ))
 }
 
 /// Plain, JS-serializable view of `RoomAccess` (Step 98b).
@@ -1567,14 +1685,6 @@ impl From<&crate::rooms::RoomMember> for MemberView {
 struct SyncSummaryView {
     rooms_updated: u32,
     events_dispatched: u32,
-}
-
-/// Plain, JS-serializable view of a room.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct RoomView {
-    room_id: String,
-    name: String,
 }
 
 /// Plain, JS-serializable view of a `MessageHandle`.

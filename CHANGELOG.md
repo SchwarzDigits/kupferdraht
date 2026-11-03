@@ -36,8 +36,32 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **A read without receipt and a hand-set unread flag** (Step 138):
+  `Timeline::mark_as_read(item_id, ReceiptType::ReadPrivate)` moves the
+  device-local read position and tells the room nothing; `Room::set_unread_flag`
+  / `is_marked_unread` / `read_marker` put a room back into the work queue
+  by hand and read the position; `Client::read_states()` answers every
+  room's position and flag in one query for room lists. Both are
+  device-local — Wire carries no message for them. Migration V31 rebuilds
+  `room_read_markers` (nullable position, the flag). CLI: `mark-read
+  --no-receipt`, `mark-unread --id`, `rooms` shows the flag.
+- **Read state on the browser surface** (Step 138): `rooms()` rows carry
+  `unreadCount`, `lastReadAtMs` (`null` when never read) and
+  `markedUnread`; `markAsRead(roomId, itemId, { sendReceipt })` with the
+  receipt default `true`; `markAsUnread(roomId)`; a seventh `startSync`
+  callback `onRoomsChanged({ roomId, unreadCount, lastReadAtMs,
+  markedUnread })`, broadcast by the leader tab as `rooms` (ADR-0026
+  revision 2026-11-03). `kupferdraht-tabs` mirrors all of it.
+
 ### Changed
 
+- **BREAKING: `Timeline::mark_as_read` takes a `ReceiptType`** (Step
+  138) — `Read` (as before: the position moves, a `Confirmation { READ }`
+  leaves unless the account's receipts are off) or `ReadPrivate`; Rust,
+  Kotlin and Swift callers add the argument, the browser's `markAsRead`
+  stays compatible (its receipt rides in `options`). A read now also
+  clears the room's unread flag, and an item unknown locally still
+  clears it.
 - **CLI: `sso finalize --cookie` and `join-via-link --key` are gone**
   (Step 137): the `zuid` cookie and a guest link's key are read on the TTY
   (no echo) or, with `--cookie-stdin` / `--key-stdin`, as the first line
