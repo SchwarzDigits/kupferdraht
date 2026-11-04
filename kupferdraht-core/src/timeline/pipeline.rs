@@ -28,7 +28,9 @@
 use crate::client::Client;
 use crate::error::KupferdrahtError;
 use crate::storage::TimelineEventRecord;
+use crate::timeline::ContentRow;
 use crate::timeline::items::{DeliveryStatus, TimelineDiff, TimelineItem};
+use crate::timeline::keyed::{SendKey, insert_outgoing_row};
 
 impl Client {
     /// Resolve `room_id` to its locally-cached `Room` and return the
@@ -347,62 +349,84 @@ impl Client {
         }
     }
 
-    /// Persist an outgoing text row (with `status`), its local mentions, and
-    /// emit the `TimelineDiff::Append` — the shared tail of `send_text` for
-    /// both the `Submitted` and `Failed` outcomes. Step 25a.
-    #[allow(clippy::too_many_arguments)]
+    /// Persist an outgoing text row as `Sending` with its local mentions —
+    /// and with `key` for a keyed send, as one write (Step 130a) — and emit
+    /// the `TimelineDiff::Append`. Step 25a / 97a.
     pub(super) async fn persist_and_emit_outgoing_text(
         &self,
-        message_id: &str,
-        room_id: &str,
-        body: &str,
-        sent_at_ms: i64,
-        reply_to: Option<&str>,
-        mentions: &[crate::timeline::Mention],
-        status: DeliveryStatus,
+        text: &OutgoingText<'_>,
+        key: Option<SendKey<'_>>,
     ) -> Result<(), KupferdrahtError> {
         let Some(store) = self.store_handle() else {
             return Ok(());
         };
-        let mut record =
-            self.outgoing_record(message_id, room_id, "text", body, sent_at_ms, status);
-        record.reply_to_id = reply_to.map(str::to_string);
+        let mut record = self.outgoing_record(
+            text.message_id,
+            text.room_id,
+            "text",
+            text.body,
+            text.sent_at_ms,
+            DeliveryStatus::Sending,
+        );
+        record.reply_to_id = text.reply_to.map(str::to_string);
         // Step 105: the row and its mentions are one write.
-        let mention_records = Self::local_mention_records(room_id, message_id, mentions);
-        if !store
-            .insert_timeline_event_with_mentions(&record, &mention_records)
-            .await?
-        {
-            return Err(outgoing_row_exists(message_id));
+        let mention_records =
+            Self::local_mention_records(text.room_id, text.message_id, text.mentions);
+        if !insert_outgoing_row(store.as_ref(), &record, &mention_records, None, key).await? {
+            return Err(outgoing_row_exists(text.message_id));
         }
-        self.emit_outgoing_text_append(record, mentions);
+        self.emit_outgoing_text_append(record, text.mentions);
         Ok(())
     }
 
-    /// Persist + emit an outbound non-text content row (Knock / Location).
-    /// `kind` / `body` are the packed representation `from_record` decodes
-    /// back into the structured `TimelineItemKind`; there is no reply or
-    /// mention rewrite (those are Text-only). Step 26.
+    /// Persist + emit an outbound non-text content row (Knock / Location /
+    /// case / marker). `kind` / `body` are the packed representation
+    /// `from_record` decodes back into the structured `TimelineItemKind`;
+    /// there is no reply or mention rewrite (those are Text-only). A keyed
+    /// row is written with its key as one write (Step 130a). Step 26.
     pub(super) async fn persist_and_emit_outgoing_content(
         &self,
-        message_id: &str,
         room_id: &str,
-        kind: &str,
-        body: &str,
+        row: &ContentRow<'_>,
         sent_at_ms: i64,
         status: DeliveryStatus,
     ) -> Result<(), KupferdrahtError> {
         let Some(store) = self.store_handle() else {
             return Ok(());
         };
-        let event = self.outgoing_record(message_id, room_id, kind, body, sent_at_ms, status);
-        store.insert_timeline_event(&event).await?;
+        let event = self.outgoing_record(
+            row.message_id,
+            room_id,
+            row.kind,
+            row.body,
+            sent_at_ms,
+            status,
+        );
+        match row.key {
+            Some(key) => {
+                if !insert_outgoing_row(store.as_ref(), &event, &[], None, Some(key)).await? {
+                    return Err(outgoing_row_exists(row.message_id));
+                }
+            }
+            None => store.insert_timeline_event(&event).await?,
+        }
         self.dispatch_timeline_diff(&TimelineDiff::Append {
             room_id: room_id.to_string(),
             item: TimelineItem::from_record(event),
         });
         Ok(())
     }
+}
+
+/// One outgoing text for [`Client::persist_and_emit_outgoing_text`]: the
+/// row's id, room, body and send time, the reply's parent, the mentions.
+pub(super) struct OutgoingText<'a> {
+    pub(super) message_id: &'a str,
+    pub(super) room_id: &'a str,
+    pub(super) body: &'a str,
+    pub(super) sent_at_ms: i64,
+    pub(super) reply_to: Option<&'a str>,
+    pub(super) mentions: &'a [crate::timeline::Mention],
 }
 
 /// A fresh outbound message id that already has a row — an outbound id is

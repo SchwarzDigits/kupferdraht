@@ -7,8 +7,11 @@
 // to the leader over `TabTransport`. Failover (ADR-0026 L3): an idempotent
 // call in flight is re-issued to the new leader (a `Client` handle is
 // re-resumed by its `userId` first, a `Recovery` handle asks its client
-// again), a mutation in flight rejects with
-// `LeaderChangedError` and is never retried, a subscription is
+// again); a keyed send in flight is re-issued the same way with its
+// idempotency key — the proxy adds one when the caller gave none, so the
+// new leader answers a send the old one completed from its store instead
+// of sending twice (Step 130a); a mutation in flight rejects with
+// `LeaderChangedError` and is never retried; a subscription is
 // re-established. Getters are snapshots the leader took when it handed
 // the wrapper out, so `userId` / `displayName` / `email` stay synchronous.
 import {
@@ -185,7 +188,11 @@ export class TabTransport {
     this.waiting.clear();
   }
 
-  /** ADR-0026 L3: mutations in flight fail typed, idempotent calls re-issue, subscriptions re-establish. */
+  /**
+   * ADR-0026 L3: mutations in flight fail typed; idempotent calls re-issue;
+   * keyed calls re-issue with the key their arguments already carry (Step
+   * 130a — the same key reaches both leaders); subscriptions re-establish.
+   */
   #failOver() {
     const stale = [...this.pending.values()].filter((entry) => entry.leaderKey !== this.leaderKey);
     for (const entry of stale) {
@@ -210,6 +217,17 @@ export class TabTransport {
     if (m.ok) entry.resolve(m.value);
     else entry.reject(remoteError(m.error || {}));
   }
+}
+
+/**
+ * The options of a keyed send (Step 130a) with `idempotencyKey` set — the
+ * caller's, or a fresh one — as a copy, so the caller's object stays as
+ * it was. The key is chosen here, before the first attempt, so a re-issue
+ * after a leader change carries the same key.
+ */
+function withKey(options) {
+  const given = options ?? {};
+  return { ...given, idempotencyKey: given.idempotencyKey ?? crypto.randomUUID() };
 }
 
 function closedError(method) {
@@ -341,14 +359,14 @@ export class ClientProxy extends HandleProxy {
   stopTyping(roomId) { return this.#call('stopTyping', [roomId]); }
   syncOnce() { return this.#call('syncOnce', []); }
   rooms() { return this.#call('rooms', []); }
-  sendText(roomId, body) { return this.#call('sendText', [roomId, body]); }
+  sendText(roomId, body, options) { return this.#call('sendText', [roomId, body, withKey(options)]); }
   messages(roomId, limit, before) { return this.#call('messages', [roomId, limit, before]); }
-  sendKnock(roomId, hotKnock) { return this.#call('sendKnock', [roomId, hotKnock]); }
-  sendLocation(roomId, latitude, longitude, name, zoom) {
-    return this.#call('sendLocation', [roomId, latitude, longitude, name, zoom]);
+  sendKnock(roomId, hotKnock, options) { return this.#call('sendKnock', [roomId, hotKnock, withKey(options)]); }
+  sendLocation(roomId, latitude, longitude, name, zoom, options) {
+    return this.#call('sendLocation', [roomId, latitude, longitude, name, zoom, withKey(options)]);
   }
-  sendReply(roomId, parentId, body) { return this.#call('sendReply', [roomId, parentId, body]); }
-  toggleReaction(roomId, itemId, emoji) { return this.#call('toggleReaction', [roomId, itemId, emoji]); }
+  sendReply(roomId, parentId, body, options) { return this.#call('sendReply', [roomId, parentId, body, withKey(options)]); }
+  toggleReaction(roomId, itemId, emoji, options) { return this.#call('toggleReaction', [roomId, itemId, emoji, withKey(options)]); }
   editMessage(roomId, itemId, newBody) { return this.#call('editMessage', [roomId, itemId, newBody]); }
   redact(roomId, itemId) { return this.#call('redact', [roomId, itemId]); }
   markAsRead(roomId, itemId, options) { return this.#call('markAsRead', [roomId, itemId, options]); }
@@ -365,7 +383,9 @@ export class ClientProxy extends HandleProxy {
   fileSharing() { return this.#call('fileSharing', []); }
   serviceToken(audience) { return this.#call('serviceToken', [audience]); }
   logout(options) { return this.#call('logout', [options]); }
-  sendFile(roomId, bytes, filename, mimeType) { return this.#call('sendFile', [roomId, bytes, filename, mimeType]); }
+  sendFile(roomId, bytes, filename, mimeType, options) {
+    return this.#call('sendFile', [roomId, bytes, filename, mimeType, withKey(options)]);
+  }
   downloadAsset(roomId, itemId) { return this.#call('downloadAsset', [roomId, itemId]); }
   recovery() { return this.#call('recovery', []).then((v) => wrapValue(this.transport, v, 'Recovery', this)); }
 }

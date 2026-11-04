@@ -33,10 +33,12 @@ host.addEventListener('leader-changed', (e) => console.log(e.detail)); // { lead
 const [account] = await host.kupferdraht.accounts();     // through the leader, whichever tab that is
 const client = await host.kupferdraht.resume(account.accountId);
 const handle = client.startSync((m) => render(m), undefined, () => relogin(), (s) => { if (s.roomsUpdated) refreshRooms(); });
+const sent = await client.sendText(roomId, 'hello'); // keyed: survives a leader change, sent once
+// sent.idempotencyKey is the key the proxy added — a retry with it never sends twice
 try {
-  await client.sendText(roomId, 'hello');
+  await client.createRoom('Team');
 } catch (err) {
-  if (err instanceof LeaderChangedError) offerRetry(); // the leader changed mid-send; never resent by the module
+  if (err instanceof LeaderChangedError) offerRetry(); // the leader changed mid-call; never resent by the module
 }
 ```
 
@@ -90,16 +92,26 @@ audiences `storage` and `pin`, `""` and the local mode reject `InvalidInput`.
 `host.takeOver()` is the override for a hung leader; `host.close()` on
 page teardown.
 
-## Failover, in one line each
+## Failover
 
-- Reads (`accounts`, `rooms`, `messages`, `members`, `downloadAsset`, …)
-  in flight when the leader changes are re-issued to the new leader; a
-  client re-resumes, a recovery handle asks its client again.
-- Mutations (`sendText`, `login`, `registerDevice`, `recover`, `enable`,
-  `changePin`, …) in flight reject
-  with `LeaderChangedError` and are never retried by the module.
-- `startSync` subscriptions are re-established; a call while no leader
-  exists rejects with `NoLeaderError` after `leaderWaitMs`.
+What a call in flight does when the leader changes — `protocol.js`'s
+`METHODS` table, class by class (Step 130a; a native pin compares this
+table against it):
+
+| Class | Calls | At a leader change |
+|---|---|---|
+| keyed | `Client.sendText`, `Client.sendReply`, `Client.sendKnock`, `Client.sendLocation`, `Client.sendFile`, `Client.toggleReaction` | Re-issued to the new leader with the call's idempotency key — `options.idempotencyKey`, or the one the proxy added before the first attempt. The new leader answers a send the old one completed with its stored handle (nothing reaches the backend twice), resends one that failed under the same message id, and sends one that never got that far. The handle carries the key (`{ messageId, sentAtMs, idempotencyKey }`). |
+| idempotent | `Kupferdraht.initiateSso`, `Kupferdraht.initiateSsoByEmail`, `Kupferdraht.resume`, `Kupferdraht.accounts`, `Kupferdraht.validateNewPin`, `PendingLogin.devices`, `Client.storageEngine`, `Client.pushState`, `Client.syncOnce`, `Client.rooms`, `Client.messages`, `Client.members`, `Client.roomDevices`, `Client.ownDeviceThumbprint`, `Client.roomAccess`, `Client.devices`, `Client.featureConfigs`, `Client.fileSharing`, `Client.serviceToken`, `Client.downloadAsset`, `Client.recovery`, `Recovery.state`, `Recovery.verifyPin`, `SyncHandle.stop`, `Client.markAsRead`, `Client.markAsUnread`, `Client.startTyping`, `Client.stopTyping`, `Client.redact`, `Client.createDm`, `Client.renameRoom`, `Client.setRoomAccess`, `Client.allowGuests`, `Client.setDisplayName` | Re-issued to the new leader: the reads, and the mutations a repeat converges and answers like the first call. A client re-resumes by its `userId` first; a recovery handle asks its client again. |
+| mutation | `Kupferdraht.login`, `Kupferdraht.finalizeSso`, `PendingLogin.registerDevice`, `PendingLogin.recover`, `PendingLogin.deleteDevice`, `PendingLogin.cancel`, `Client.createRoom`, `Client.editMessage`, `Client.invite`, `Client.kick`, `Client.leave`, `Client.deleteRoom`, `Client.createJoinLink`, `Client.revokeJoinLink`, `Client.joinViaLink`, `Client.setHandle`, `Client.updateEmail`, `Client.deleteDevice`, `Client.logout`, `Recovery.enable`, `Recovery.changePin` | Rejects with `LeaderChangedError` and is never resent by the module: it cannot know whether the call reached the backend, and a repeat is not safe — a second room, a second edit, a repeat that fails after the first landed (an `invite` of a member already in the group, a `leave` of a room already left). Check the state, then retry deliberately. |
+| subscription | `Client.startSync` | Re-established on the new leader; the callbacks stay in this tab. |
+
+- A keyed call without `options.idempotencyKey` gets a fresh key from the
+  proxy (`crypto.randomUUID()`), so both leaders see the same key; keep
+  `idempotencyKey` from the handle — or pass your own — to retry after an
+  error without sending twice. A repeated `toggleReaction` needs its key:
+  a new key toggles back.
+- A call while no leader exists rejects with `NoLeaderError` after
+  `leaderWaitMs`.
 - A late message of an older leader (lower epoch) moves no tab back to it
   (Step 116); its event still reaches the callbacks.
 

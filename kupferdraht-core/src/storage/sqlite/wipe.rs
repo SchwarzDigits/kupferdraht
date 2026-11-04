@@ -4,7 +4,8 @@
 //! One-shot clear of per-account messaging state — used when a re-login
 //! registers a NEW device that supersedes a gone one (Step 40 Part B). The new
 //! device starts from a clean slate and re-joins every room fresh, so the old
-//! device's rooms, history, and sync cursor are dropped. Session / device /
+//! device's rooms, history, sync cursor and idempotency keys are dropped —
+//! nothing the old device sent answers a key (Step 130a). Session / device /
 //! self-user / server-config / feature-config rows are left intact (login
 //! re-establishes them); MLS group state lives in the separate `mls.db` and is
 //! discarded by the caller via `discard_group`.
@@ -25,6 +26,7 @@ pub(super) fn clear_messaging_state(store: &SqliteStore) -> Result<(), Kupferdra
         "attachments",
         "read_receipts",
         "delivery_receipts",
+        "send_keys",
         "timeline_events",
         "room_members",
         "rooms",
@@ -45,7 +47,9 @@ pub(super) fn clear_messaging_state(store: &SqliteStore) -> Result<(), Kupferdra
 mod tests {
     use super::super::fresh_store;
     use crate::storage::Store as _;
-    use crate::storage::records::{RoomRecord, SyncStateRecord};
+    use crate::storage::records::{
+        RoomRecord, SendKeyRecord, SyncStateRecord, TimelineEventRecord,
+    };
 
     #[tokio::test]
     async fn clear_messaging_state_empties_rooms_and_cursor() {
@@ -72,6 +76,29 @@ mod tests {
             })
             .await
             .expect("seed sync state");
+        let failed_send = TimelineEventRecord {
+            message_id: "m-failed".to_string(),
+            room_id: "room-a@example.test".to_string(),
+            sender_user_id: "u@example.test".to_string(),
+            sender_device_id: "dev".to_string(),
+            kind: "text".to_string(),
+            body: "never left".to_string(),
+            sent_at_ms: 1,
+            delivery_status: "failed".to_string(),
+            ..TimelineEventRecord::default()
+        };
+        let key = SendKeyRecord {
+            idempotency_key: "k-old-device".to_string(),
+            room_id: "room-a@example.test".to_string(),
+            kind: "message".to_string(),
+            message_id: "m-failed".to_string(),
+            sent_at_ms: 1,
+            created_at_ms: 1,
+        };
+        store
+            .insert_timeline_event_keyed(&failed_send, &[], None, &key)
+            .await
+            .expect("seed a keyed send");
         assert_eq!(store.load_rooms().await.expect("load").len(), 1);
 
         store.clear_messaging_state().await.expect("clear");
@@ -83,6 +110,11 @@ mod tests {
         assert!(
             store.load_sync_state().await.expect("load").is_none(),
             "sync cursor must be cleared"
+        );
+        assert_eq!(
+            store.send_key("k-old-device").await.expect("load"),
+            None,
+            "send_keys must be cleared — a wiped send answers no key"
         );
     }
 }

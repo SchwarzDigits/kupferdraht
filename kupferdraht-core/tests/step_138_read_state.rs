@@ -596,8 +596,8 @@ fn the_tabs_module_mirrors_the_read_state() {
     let module = |name: &str| workspace_file(&format!("bindings/web/kupferdraht-tabs/{name}"));
     let protocol = module("protocol.js");
     assert!(
-        protocol.contains(r#"["Client", "markAsUnread", "mutation", null]"#),
-        "protocol.js METHODS lists markAsUnread as a mutation"
+        protocol.contains(r#"["Client", "markAsUnread", "idempotent", null]"#),
+        "protocol.js METHODS lists markAsUnread as idempotent — a repeat sets the same flag (Step 130a)"
     );
     let events = protocol
         .lines()

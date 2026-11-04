@@ -3,8 +3,8 @@
 
 //! `kupferdraht-cli` timeline command handlers (send / reply / edit / react / …).
 
-use kupferdraht::KupferdrahtError;
 use kupferdraht::timeline::{DeliveryStatus, MessagesOptions, TimelineItemKind};
+use kupferdraht::{KupferdrahtError, OutgoingContent};
 
 use super::{resume_client, resume_with_room, resume_with_room_for_message};
 
@@ -180,6 +180,7 @@ pub(crate) async fn send(
     room_id: String,
     body: String,
     ephemeral_secs: Option<u64>,
+    idempotency_key: Option<String>,
 ) -> Result<(), KupferdrahtError> {
     let (client, room, room_id) = resume_with_room(room_id).await?;
     let timeline = room.timeline()?;
@@ -188,10 +189,7 @@ pub(crate) async fn send(
     if let Some(secs) = ephemeral_secs {
         let ttl = std::time::Duration::from_secs(secs);
         let handle = timeline.send_ephemeral_text(body, ttl).await?;
-        println!("send ok");
-        println!("  room_id:    {room_id}");
-        println!("  message_id: {}", handle.message_id);
-        println!("  sent_at:    {}", super::fmt_ms(handle.sent_at_ms));
+        print_send_handle(&room_id, &handle);
         println!("  ephemeral:  {secs}s");
         let expires_at_ms = handle.sent_at_ms + i64::try_from(secs * 1_000).unwrap_or(i64::MAX);
         println!("  expires_at: {}", super::fmt_ms(expires_at_ms));
@@ -202,19 +200,31 @@ pub(crate) async fn send(
     // qualified user-ids. Unknown handles are left as plain text.
     let mentions = client.resolve_mentions_in_body(&body).await?;
     let resolved_count = mentions.len();
-    let handle = if mentions.is_empty() {
-        timeline.send_text(body).await?
-    } else {
-        timeline.send_text_with_mentions(body, mentions).await?
+    let handle = match idempotency_key.clone() {
+        // Step 130a: a keyed send answers a repeat of its key from the store.
+        Some(key) => {
+            let content = OutgoingContent::Text { body, mentions };
+            timeline.send_keyed(key, content).await?
+        }
+        None if mentions.is_empty() => timeline.send_text(body).await?,
+        None => timeline.send_text_with_mentions(body, mentions).await?,
     };
+    print_send_handle(&room_id, &handle);
+    if resolved_count > 0 {
+        println!("  mentions:   {resolved_count}");
+    }
+    if let Some(key) = idempotency_key {
+        println!("  idempotency_key: {key}");
+    }
+    Ok(())
+}
+
+/// The `send ok` block every `send` variant prints first.
+fn print_send_handle(room_id: &str, handle: &kupferdraht::MessageHandle) {
     println!("send ok");
     println!("  room_id:    {room_id}");
     println!("  message_id: {}", handle.message_id);
     println!("  sent_at:    {}", super::fmt_ms(handle.sent_at_ms));
-    if resolved_count > 0 {
-        println!("  mentions:   {resolved_count}");
-    }
-    Ok(())
 }
 
 /// Step 26 — send a `Knock` (nudge) to a room.
@@ -357,18 +367,35 @@ pub(crate) async fn react(
     room_id: Option<String>,
     message_id: String,
     emoji: String,
+    idempotency_key: Option<String>,
 ) -> Result<(), KupferdrahtError> {
     let (_client, room, room_id) = resume_with_room_for_message(room_id, &message_id).await?;
     let timeline = room.timeline()?;
-    let handle = timeline
-        .toggle_reaction(message_id.clone(), emoji.clone())
-        .await?;
+    let handle = match idempotency_key.clone() {
+        // Step 130a: a repeat of the key answers the first toggle's
+        // handle and never flips the reaction back.
+        Some(key) => {
+            let content = OutgoingContent::Reaction {
+                item_id: message_id.clone(),
+                emoji: emoji.clone(),
+            };
+            timeline.send_keyed(key, content).await?
+        }
+        None => {
+            timeline
+                .toggle_reaction(message_id.clone(), emoji.clone())
+                .await?
+        }
+    };
     println!("react ok");
     println!("  room_id:        {room_id}");
     println!("  target:         {message_id}");
     println!("  emoji_toggled:  {emoji}");
     println!("  reaction_event: {}", handle.message_id);
     println!("  applied_at:     {}", super::fmt_ms(handle.sent_at_ms));
+    if let Some(key) = idempotency_key {
+        println!("  idempotency_key: {key}");
+    }
     Ok(())
 }
 

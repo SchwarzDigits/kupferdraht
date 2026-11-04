@@ -471,8 +471,15 @@ enum Command {
         /// (1 … 31536000): official clients show a countdown and delete
         /// their copy; Kupferdraht's own copy self-redacts too (Step 89).
         /// `@handle` mentions are not parsed in this mode.
-        #[arg(long, value_name = "SECS")]
+        #[arg(long, value_name = "SECS", conflicts_with = "idempotency_key")]
         ephemeral: Option<u64>,
+        /// Send under this idempotency key (1–128 characters, Step 130a):
+        /// a repeat with the same key prints the first send's handle — or
+        /// resends a failed one under the same id — instead of sending
+        /// twice. Keys live 28 days. Joins the room's MLS group first when
+        /// it is missing.
+        #[arg(long, value_name = "KEY")]
+        idempotency_key: Option<String>,
     },
     /// Re-drive a failed send (a `delivery_status='failed'` row —
     /// the upload never reached the backend) from its persisted row
@@ -770,6 +777,11 @@ enum Command {
         /// Emoji to toggle (e.g. `👍`, `❤️`).
         #[arg(long = "emoji")]
         emoji: String,
+        /// Toggle under this idempotency key (1–128 characters, Step
+        /// 130a): a repeat with the same key prints the first toggle's
+        /// handle and never flips the reaction back.
+        #[arg(long, value_name = "KEY")]
+        idempotency_key: Option<String>,
     },
     /// Delete-for-everyone a previously-sent text message (Step
     /// 6-II-d). Wire-side emits a `MessageDelete { message_id }`
@@ -1265,7 +1277,8 @@ async fn async_main() -> ExitCode {
             id,
             message,
             ephemeral,
-        } => cli::timeline::send(id, message, ephemeral).await,
+            idempotency_key,
+        } => cli::timeline::send(id, message, ephemeral, idempotency_key).await,
         Command::Reply { id, to, message } => cli::timeline::reply(id, to, message).await,
         Command::Resend { id, message, all } => cli::resend::resend(id, message, all).await,
         Command::FailedSends { id } => cli::resend::failed_sends(id).await,
@@ -1275,7 +1288,12 @@ async fn async_main() -> ExitCode {
             new_body,
         } => cli::timeline::edit(id, message, new_body).await,
         Command::DeleteMessage { id, message } => cli::timeline::delete_message(id, message).await,
-        Command::React { id, message, emoji } => cli::timeline::react(id, message, emoji).await,
+        Command::React {
+            id,
+            message,
+            emoji,
+            idempotency_key,
+        } => cli::timeline::react(id, message, emoji, idempotency_key).await,
         Command::MarkRead {
             id,
             message,

@@ -36,8 +36,40 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **Keyed sends** (Step 130a): `Timeline::send_keyed(idempotency_key,
+  OutgoingContent)` sends a text (with mentions, MLS auto-join), reply,
+  knock, location, file or reaction toggle under a caller-chosen key of
+  1–128 characters. A repeat of the key answers the first call's
+  `MessageHandle` instead of sending twice; a message whose send failed or
+  was cut off is resent under the same id; a reaction is never toggled
+  back; a key still in flight, of another room or of the other kind fails
+  `InvalidInput`. Keys are kept 28 days in the account store (migration
+  V32, `send_keys`). `Store` gains `send_key`,
+  `insert_timeline_event_keyed` and `replace_user_reactions_keyed` with
+  default bodies that keep no key — a custom store compiles unchanged and
+  sends every call. Kotlin / Swift: `Timeline.sendKeyed` and the
+  `OutgoingContent` enum. CLI: `send --idempotency-key <KEY>`, `react
+  --idempotency-key <KEY>`.
+- **Keyed sends on the browser surface** (Step 130a): `sendText`,
+  `sendReply`, `sendKnock`, `sendLocation`, `sendFile` and
+  `toggleReaction` take a trailing `options` object `{ idempotencyKey? }`
+  (a UUID is generated when it is missing) and resolve
+  `{ messageId, sentAtMs, idempotencyKey }`. Existing calls without
+  options keep working.
+
 ### Changed
 
+- **kupferdraht-tabs failover in three classes** (Step 130a, ADR-0026
+  revision 2026-11-04): the six keyed sends in flight at a leader change
+  are re-issued to the new leader with their key — the proxy adds one when
+  the caller gave none — and resolve once, instead of rejecting
+  `LeaderChangedError`; `markAsRead`, `markAsUnread`, `startTyping`,
+  `stopTyping`, `redact`, `createDm`, `renameRoom`, `setRoomAccess`,
+  `allowGuests` and `setDisplayName` are re-issued like reads; every other
+  mutation (`createRoom`, `editMessage`, `invite`, `kick`, `leave`,
+  `deleteRoom`, `setHandle`, login and setup, `logout`, …) still rejects
+  `LeaderChangedError`. The class of every method is the table in
+  `bindings/web/kupferdraht-tabs/README.md`.
 - **sqlite-remote-vfs 0.6.0** (Step 140): the browser's storage follows
   the server's page size and page count only within SQLite's limits; no
   interface change for embedders.

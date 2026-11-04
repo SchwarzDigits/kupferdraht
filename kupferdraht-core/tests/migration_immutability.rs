@@ -159,6 +159,10 @@ const PINNED_DIGESTS: &[(&str, &str)] = &[
         "V31__step_138_unread_flag.sql",
         "25709621483bad4e646afff7ebc133a12ea9fbbec588288c9f27d90f18b6eb55",
     ),
+    (
+        "V32__step_130a_send_keys.sql",
+        "46a079e6c80725128c8198679ecf5077dc9e0ab665cf7fa532ea059a0945f07e",
+    ),
 ];
 
 fn migrations_dir() -> PathBuf {

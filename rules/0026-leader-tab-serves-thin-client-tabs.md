@@ -2,7 +2,8 @@
 
 Condensed from `docs/adrs/0026-leader-tab-serves-thin-client-tabs.md`.
 
-Accepted 2026-09-25 (Step 94 implements it). Extends
+Accepted 2026-09-25 (Step 94 implements it); the failover classes
+amended 2026-11-04 (Step 130a: the `keyed` class). Extends
 `rules/0023-single-active-kupferdraht-instance-per-origin.md` — every rule
 there stays in force; this file adds the multi-tab layer on top.
 
@@ -22,10 +23,20 @@ there stays in force; this file adds the multi-tab layer on top.
   announcements on `kupferdraht:tabs`, responses on `kupferdraht:tabs/<tabId>`;
   the leader answers each `(tabId, requestId)` once. **Don't** broker
   `MessagePort`s; **don't** rely on ordering across the two channels.
-- **Failover is honest:** idempotent calls re-issue to the new leader;
-  **mutations in flight reject typed `LeaderChanged` and are never
-  auto-resent**; no leader known → bounded wait, then typed `NoLeader`.
-  **Don't** retry a mutation for the embedder; **don't** queue
+- **Failover is honest — by class** (`protocol.js`'s `METHODS`; the
+  table in `bindings/web/kupferdraht-tabs/README.md`, pinned against
+  it): `idempotent` calls (reads, and mutations a repeat converges)
+  re-issue to the new leader; `keyed` calls (`sendText`, `sendReply`,
+  `sendKnock`, `sendLocation`, `sendFile`, `toggleReaction`) re-issue
+  with their idempotency key — the proxy adds one when the caller gave
+  none — and the leader's `send_keyed` answers a key already used from
+  the store; **every other mutation in flight rejects typed
+  `LeaderChanged` and is never auto-resent**; no leader known → bounded
+  wait, then typed `NoLeader`. **Don't** retry a `mutation` for the
+  embedder; **don't** re-issue a keyed call without its key; **don't**
+  class a call `idempotent` unless a repeat after a call that landed is
+  known to answer like the first (`invite`, `kick`, `leave`, `deleteRoom`,
+  `revokeJoinLink`, `setHandle` stay `mutation`); **don't** queue
   mutations offline.
 - **The proxy mirrors the wasm surface name for name** (every public
   method of `Kupferdraht` / `PendingLogin` / `Client` / `SyncHandle` except the

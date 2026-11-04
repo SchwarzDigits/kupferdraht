@@ -22,10 +22,10 @@ use super::sync::{Subscription, TimelineListener, adapt_timeline_listener};
 use crate::error::KupferdrahtError;
 use crate::timeline::{
     AssetSource, AssetSummary, FoldedTask as CoreFoldedTask, Mention, MessageHandle,
-    MessagesOptions, ResendSummary as CoreResendSummary, TaskDraft as CoreTaskDraft,
-    TaskItem as CoreTaskItem, TaskPatch as CoreTaskPatch, TaskPriority as CoreTaskPriority,
-    TaskStatus as CoreTaskStatus, Timeline as CoreTimeline, TimelineDiff as CoreDiff,
-    TimelineItem as CoreItem, TimelineItemKind as CoreKind,
+    MessagesOptions, OutgoingContent, ResendSummary as CoreResendSummary,
+    TaskDraft as CoreTaskDraft, TaskItem as CoreTaskItem, TaskPatch as CoreTaskPatch,
+    TaskPriority as CoreTaskPriority, TaskStatus as CoreTaskStatus, Timeline as CoreTimeline,
+    TimelineDiff as CoreDiff, TimelineItem as CoreItem, TimelineItemKind as CoreKind,
 };
 
 /// The hard error a [`ResendSummary`] pass stopped at. Step 79.
@@ -765,6 +765,22 @@ impl Timeline {
         emoji: String,
     ) -> Result<MessageHandle, KupferdrahtError> {
         self.inner.toggle_reaction(item_id, emoji).await
+    }
+
+    /// Send `content` under the caller's `idempotency_key` (1–128
+    /// characters): the first call sends, a repeat with the same key
+    /// answers the stored handle — or resends a failed message under the
+    /// same id — instead of sending twice. Keys live 28 days. Step 130a.
+    ///
+    /// # Errors
+    /// See `KupferdrahtError` — `InvalidInput` for a malformed key, a key
+    /// of another room or kind, or a key whose send is still in flight.
+    pub async fn send_keyed(
+        &self,
+        idempotency_key: String,
+        content: OutgoingContent,
+    ) -> Result<MessageHandle, KupferdrahtError> {
+        self.inner.send_keyed(idempotency_key, content).await
     }
 
     /// Mark a message as read (Step 138). `Read` moves the device-local

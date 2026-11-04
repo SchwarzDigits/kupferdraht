@@ -103,7 +103,14 @@ export class StubClient {
     const all = FIXTURE_MESSAGES[roomId] ?? [];
     return (limit ? all.slice(-limit) : all).map((m) => ({ ...m }));
   }
-  async sendText(roomId, body) { await delay(SLOW_MS); return { messageId: `sent-${roomId}-${body.length}`, sentAtMs: Date.now() }; }
+  /** Step 130a: the key reaches the leader in the trailing options and comes back on the handle. */
+  async sendText(roomId, body, options) {
+    const idempotencyKey = options?.idempotencyKey ?? null;
+    report({ call: 'sendText', idempotencyKey });
+    await delay(SLOW_MS);
+    return { messageId: `sent-${roomId}-${body.length}`, sentAtMs: Date.now(), idempotencyKey };
+  }
+  async createRoom(name) { await delay(SLOW_MS); return { roomId: 'room-new', name }; }
   /** Step 138: a read-state change made through this client, reported to `onRoomsChanged` with the room's read state. */
   async markAsRead(roomId, itemId, options) {
     if (this._onRoomsChanged) this._onRoomsChanged({ roomId, unreadCount: 0, lastReadAtMs: 3, markedUnread: false });

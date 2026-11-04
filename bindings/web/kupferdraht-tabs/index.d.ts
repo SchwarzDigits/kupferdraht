@@ -6,8 +6,12 @@
 // `Recovery` / `SyncHandle` classes (`docs/bindings.md`, "The WASM / web surface");
 // `kupferdraht-core/tests/step_94_tab_proxy_parity.rs` fails on any drift.
 
-/** How a call behaves when the leader changes while it is in flight. */
-export type FailoverKind = 'idempotent' | 'mutation' | 'subscription';
+/**
+ * How a call behaves when the leader changes while it is in flight: `idempotent` and `keyed` calls are re-issued to
+ * the new leader (`keyed` ones with their idempotency key, Step 130a), a `mutation` rejects with `LeaderChangedError`,
+ * a `subscription` is re-established.
+ */
+export type FailoverKind = 'idempotent' | 'keyed' | 'mutation' | 'subscription';
 export type WrapperClass = 'PendingLogin' | 'Client' | 'Recovery' | 'SyncHandle';
 
 /** `[class, method, kind, returns]` — the wasm surface minus the leader-only `Kupferdraht.open`. */
@@ -21,7 +25,7 @@ export const REQUEST_CHANNEL: string;
 export const LEASE_NAME: string;
 export function responseChannelName(tabId: string): string;
 
-/** A mutation was in flight when the leader changed; it was not retried. */
+/** A `mutation` was in flight when the leader changed; it was not retried. */
 export class LeaderChangedError extends Error {
   readonly name: 'LeaderChanged';
   readonly method: string;
@@ -133,6 +137,15 @@ export interface Room { roomId: string; name: string; unreadCount: number; lastR
 /** The `onRoomsChanged` payload (Step 138): a room's read state after a local change — its `rooms()` row without the name. */
 export interface ReadStateChange { roomId: string; unreadCount: number; lastReadAtMs: number | null; markedUnread: boolean }
 export interface MessageHandle { messageId: string; sentAtMs: number }
+/**
+ * The trailing options of the six keyed sends (Step 130a). A call with a key an earlier call used answers that call's
+ * outcome instead of sending again, so a retry never sends twice; the proxy adds a fresh key when none is given.
+ * 1–128 characters (`InvalidInput` otherwise); keys live 28 days. A repeated `toggleReaction` needs its key — a new
+ * key toggles back.
+ */
+export interface SendOptions { idempotencyKey?: string }
+/** The handle of a keyed send: the key the call ran under, the caller's or the generated one (Step 130a). */
+export interface KeyedMessageHandle extends MessageHandle { idempotencyKey: string }
 export interface Reaction { emoji: string; count: number; isSelf: boolean }
 export type DeliveryStatus = 'sending' | 'submitted' | 'received' | 'failed';
 export interface AssetMeta { filename: string | null; mime: string; size: number }
@@ -259,13 +272,18 @@ export class ClientProxy {
   stopTyping(roomId: string): Promise<void>;
   syncOnce(): Promise<SyncSummary>;
   rooms(): Promise<Room[]>;
-  sendText(roomId: string, body: string): Promise<MessageHandle>;
+  /** Joins the room's MLS group first if needed. Keyed (`SendOptions`): re-issued at a leader change with its key. */
+  sendText(roomId: string, body: string, options?: SendOptions): Promise<KeyedMessageHandle>;
   /** `before` is a message id: only items strictly older than it are returned. */
   messages(roomId: string, limit?: number, before?: string): Promise<TimelineItem[]>;
-  sendKnock(roomId: string, hotKnock: boolean): Promise<MessageHandle>;
-  sendLocation(roomId: string, latitude: number, longitude: number, name?: string, zoom?: number): Promise<MessageHandle>;
-  sendReply(roomId: string, parentId: string, body: string): Promise<MessageHandle>;
-  toggleReaction(roomId: string, itemId: string, emoji: string): Promise<MessageHandle>;
+  /** Keyed (`SendOptions`): re-issued at a leader change with its key. */
+  sendKnock(roomId: string, hotKnock: boolean, options?: SendOptions): Promise<KeyedMessageHandle>;
+  /** Keyed (`SendOptions`): re-issued at a leader change with its key. */
+  sendLocation(roomId: string, latitude: number, longitude: number, name?: string, zoom?: number, options?: SendOptions): Promise<KeyedMessageHandle>;
+  /** Keyed (`SendOptions`): re-issued at a leader change with its key. */
+  sendReply(roomId: string, parentId: string, body: string, options?: SendOptions): Promise<KeyedMessageHandle>;
+  /** Keyed (`SendOptions`): the same key answers the first toggle and never toggles again; a new key toggles back. */
+  toggleReaction(roomId: string, itemId: string, emoji: string, options?: SendOptions): Promise<KeyedMessageHandle>;
   editMessage(roomId: string, itemId: string, newBody: string): Promise<MessageHandle>;
   redact(roomId: string, itemId: string): Promise<MessageHandle>;
   /**
@@ -296,7 +314,8 @@ export class ClientProxy {
    * databases, registry entry — recovery data still restores it). After a purge the client is closed.
    */
   logout(options?: { purgeDevice?: boolean; password?: string; purgeLocal?: boolean }): Promise<void>;
-  sendFile(roomId: string, bytes: Uint8Array, filename: string, mimeType: string): Promise<MessageHandle>;
+  /** Keyed (`SendOptions`, one key per file): the same key answers without a second upload. */
+  sendFile(roomId: string, bytes: Uint8Array, filename: string, mimeType: string, options?: SendOptions): Promise<KeyedMessageHandle>;
   downloadAsset(roomId: string, itemId: string): Promise<Uint8Array>;
   /** The account's recovery data (ADR-0035). */
   recovery(): Promise<RecoveryProxy>;

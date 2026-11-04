@@ -206,8 +206,9 @@ impl Client {
 
     /// The resend spine: rebuild the plaintext under the persisted id,
     /// encrypt + upload once, flip the row, re-arm an ephemeral timer,
-    /// tell subscribers. A failed upload leaves the row untouched.
-    async fn resend_row(
+    /// tell subscribers. A failed upload leaves the row untouched. Also the
+    /// answer to a known idempotency key whose send failed (Step 130a).
+    pub(super) async fn resend_row(
         &self,
         row: &TimelineEventRecord,
     ) -> Result<MessageHandle, KupferdrahtError> {

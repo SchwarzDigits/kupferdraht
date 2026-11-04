@@ -43,6 +43,7 @@ mod recovery_state;
 mod room_devices;
 mod rooms;
 mod self_user;
+mod send_keys;
 mod server_config;
 mod session;
 mod sync_state;
@@ -63,8 +64,8 @@ use crate::storage::StorageEngineInfo;
 use crate::storage::records::{
     AttachmentRecord, BackendMlsKey, DeliveryReceiptRecord, DeviceRecord, ExpiredMessageRecord,
     FeatureConfigEntry, MentionRecord, ReactionRecord, ReadReceiptRecord, RecoveryStateRecord,
-    RoomMemberRecord, RoomRecord, SelfUserRecord, ServerConfigRecord, SessionRecord, Store,
-    SyncStateRecord, TimelineEventRecord, UserPropertyEntry,
+    RoomMemberRecord, RoomRecord, SelfUserRecord, SendKeyRecord, ServerConfigRecord, SessionRecord,
+    Store, SyncStateRecord, TimelineEventRecord, UserPropertyEntry,
 };
 use crate::storage::schema::run_migrations;
 
@@ -421,6 +422,24 @@ impl Store for SqliteStore {
         event_writes::insert_timeline_event_with_attachment(self, event, attachment)
     }
 
+    async fn send_key(
+        &self,
+        idempotency_key: &str,
+    ) -> Result<Option<SendKeyRecord>, KupferdrahtError> {
+        send_keys::send_key(self, idempotency_key)
+    }
+
+    async fn insert_timeline_event_keyed(
+        &self,
+        event: &TimelineEventRecord,
+        mentions: &[MentionRecord],
+        attachment: Option<&AttachmentRecord>,
+        key: &SendKeyRecord,
+    ) -> Result<bool, KupferdrahtError> {
+        let _permit = self.write_permit().await;
+        send_keys::insert_timeline_event_keyed(self, event, mentions, attachment, key)
+    }
+
     async fn insert_timeline_event_with_task(
         &self,
         event: &TimelineEventRecord,
@@ -651,6 +670,25 @@ impl Store for SqliteStore {
             sender_user_id,
             emojis,
             sent_at_ms,
+        )
+    }
+
+    async fn replace_user_reactions_keyed(
+        &self,
+        room_id: &str,
+        canonical_message_id: &str,
+        sender_user_id: &str,
+        emojis: &[String],
+        key: &SendKeyRecord,
+    ) -> Result<(), KupferdrahtError> {
+        let _permit = self.write_permit().await;
+        send_keys::replace_user_reactions_keyed(
+            self,
+            room_id,
+            canonical_message_id,
+            sender_user_id,
+            emojis,
+            key,
         )
     }
 

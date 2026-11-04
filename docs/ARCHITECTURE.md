@@ -92,7 +92,7 @@ The real layout, by responsibility:
 | `lib.rs`, `error.rs` | crate root + re-exports; `KupferdrahtError` |
 | `client/` | authentication, session lifecycle, **login pipeline**, `Client`, `ClientBuilder`, `Account`; `token_refresh.rs` is the in-session access-token refresh and its cross-process critical section (Steps 39 + 85); `input.rs` checks the app's arguments at the public entry points (Step 95c) |
 | `rooms/` | room state and membership (`Room`); `rooms/devices.rs` the device verification surface (`RoomDevice`, `RoomDevicesChange`, the diff — Step 95d) |
-| `timeline/` | message send/receive, the `Timeline` read/send surface, per-interaction send files (text, reaction, confirmation, delete, knock, location, asset, ephemeral — the latter also owns the local expiry sweep + timers, Step 89); `timeline/task/` is the task vertical slice split by responsibility (`types` / `fold` / `order` / `views` / `cache` / `encode` / `send`) |
+| `timeline/` | message send/receive, the `Timeline` read/send surface, per-interaction send files (text, reaction, confirmation, delete, knock, location, asset, ephemeral — the latter also owns the local expiry sweep + timers, Step 89; `keyed.rs` — `send_keyed`, the one entry for retryable sends, Step 130a); `timeline/task/` is the task vertical slice split by responsibility (`types` / `fold` / `order` / `views` / `cache` / `encode` / `send`) |
 | `sync/` + `sync/dispatch/` | the event-stream loop and the inbound dispatcher (one handler per interaction) |
 | `encryption/` | MLS client wrapper over openmls (`MlsClient`), the openmls storage `provider`, **asset crypto** (AES-256-CBC), **Proteus prekeys**; `mls_lock.rs` locks the shared `MlsClient` and recovers a poisoned mutex (Step 95c) |
 | `keystore/` | the `SecureKeyStore` abstraction — a raw secret store (`get`/`set`/`delete_secret`, no KEK envelope). Four in-tree impls (`KeyringStore`, `FileKeyStore`, `InMemoryKeyStore`, wasm `IndexedDbKeyStore`); mobile embedders implement the trait via the UniFFI callback |
@@ -212,6 +212,14 @@ are full-state snapshots and a stale replay could regress every
 receiver's fold. `Timeline::resend_failed` runs the room oldest-first
 and stops at the first hard error so a stuck message is never
 overtaken; `Room::failed_sends` is the enumeration.
+
+**Keyed sends (Step 130a).** `Timeline::send_keyed` (`timeline/
+keyed.rs`) writes the caller's idempotency key with the `sending` row,
+in one transaction, before the upload (`send_keys`, §7). A repeat of the
+key answers from that row instead of sending: the stored handle, or —
+for a `failed` row or a `sending` row not in flight — the resend path
+above under the same `message_id`. The browser's leader tab re-issues a
+keyed call in flight after a leader change on that basis (ADR-0026).
 
 ### 5.3 Receiving messages — the sync loop
 
@@ -546,8 +554,10 @@ the other tabs are **thin clients**: their `KupferdrahtProxy` sends
 broadcasts its sync loop's events (`message`, `typing`, `expired`, the
 per-pass `sync` summary) to all. A thin tab has no store of its own; it
 pulls through the proxy. On a leader change an idempotent call in
-flight is re-issued, a mutation in flight fails `LeaderChanged` and is
-never resent.
+flight is re-issued, a keyed send (Step 130a) is re-issued with its
+idempotency key — the new leader answers a send the old one completed
+from `send_keys` —, and any other mutation in flight fails
+`LeaderChanged` and is never resent.
 The keystore stays `IndexedDbKeyStore` (IndexedDB + WebCrypto — a
 non-extractable `CryptoKey` lives only there). The pre-ADR-0022 IndexedDB
 record store with per-record AES-256-GCM and plaintext index keys is gone;
@@ -657,8 +667,10 @@ run is atomic (Step 87): every pending migration plus its
 `refinery_schema_history` row commits in one transaction (`set_grouped`),
 so a crash mid-run leaves the file exactly as it was — never a migration
 applied but unrecorded, which the next open would re-apply. The current
-schema version is **V30**
-(`V30__step_112_recovery_state.sql` — `recovery_state`, one row: when the
+schema version is **V32**
+(`V32__step_130a_send_keys.sql` — `send_keys`, see "Idempotency keys"
+below; V31 the unread flag, below; V30
+`V30__step_112_recovery_state.sql` — `recovery_state`, one row: when the
 current recovery data was made and the PIN's local verifier, so a browser
 that restored the account knows its recovery data exists; V29
 `V29__step_95d_room_devices.sql` — `room_devices`, the device set
@@ -724,6 +736,22 @@ room flagged before it was ever read has a row without a position (NULL
 counts as "never read", like a missing row); the marker upsert clears
 the flag, so a read is the user's "this room is read". `Store::read_states`
 reads every row in one query for room lists, beside `unread_counts`.
+
+**Idempotency keys (Step 130a).** The V32 migration adds `send_keys`
+(`idempotency_key` PK, `room_id`, `kind` `message` | `reaction`,
+`message_id`, `sent_at_ms`, `created_at_ms`, an index on
+`created_at_ms`): one row per key `Timeline::send_keyed` was called
+with and the handle it answers. A message key commits in the same
+transaction as the message's `sending` row (and its mentions or
+attachment), before the upload; a reaction key with the reaction set,
+after the upload — `Store::insert_timeline_event_keyed` /
+`replace_user_reactions_keyed`. Each such write first deletes the keys
+older than 28 days (`SEND_KEY_RETENTION_MS`). No foreign key to
+`timeline_events`: a key outlives its row and still answers its handle.
+The Step-40 new-device wipe clears `send_keys` with the messaging
+tables — a failed send it drops must not be answered as sent.
+The trait's default bodies keep no key, so a custom store sends every
+keyed call.
 
 **Two processes on one home (Step 85, native).** Every native
 connection carries `busy_timeout = 5000` and an explicit

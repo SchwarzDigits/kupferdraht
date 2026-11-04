@@ -882,6 +882,8 @@ and settles it to `'submitted'` (or `'failed'`) after (Step 97a).
 ```bash
 kupferdraht-cli send --id <room>@<domain> -m "hello"
 kupferdraht-cli send --id <room>@<domain> -m "Your one-time code: 123456" --ephemeral 300
+# Retry-safe: the same key prints the first send's handle, nothing is sent twice
+kupferdraht-cli send --id <room>@<domain> -m "hello" --idempotency-key order-4711
 ```
 
 | Flag              | Required | Description                                       |
@@ -889,6 +891,7 @@ kupferdraht-cli send --id <room>@<domain> -m "Your one-time code: 123456" --ephe
 | `--id`            | yes      | Qualified room id.                                |
 | `-m`, `--message` | yes      | UTF-8 message body.                               |
 | `--ephemeral <SECS>` | no    | **Step 89.** Send as a self-deleting message with this timer (1 … 31536000 s): the body rides Wire's `Ephemeral` wrapper, official clients show a countdown and delete their copy, Kupferdraht's own row self-redacts too (`Timeline::send_ephemeral_text`). `@handle` mentions are not parsed in this mode (V1 carries none inside the wrapper). |
+| `--idempotency-key <KEY>` | no | **Step 130a.** Send under this key (1–128 characters) through `Timeline::send_keyed`: a repeat with the same key prints the first send's handle instead of sending again — or resends a failed send under the same `message_id`; a key used in another room or for a reaction, or still in flight, fails `InvalidInput`. Keys are kept 28 days. Joins the room's MLS group first when it is missing; `@handle` mentions are parsed as without the flag. Conflicts with `--ephemeral`. |
 
 Output:
 
@@ -904,6 +907,12 @@ With `--ephemeral`, two more lines follow:
 ```
   ephemeral:  300s
   expires_at: <rfc3339, local offset>
+```
+
+With `--idempotency-key`, the key closes the block:
+
+```
+  idempotency_key: order-4711
 ```
 
 ### `failed-sends` (Step 79)
@@ -1315,6 +1324,8 @@ sends the new set.
 kupferdraht-cli react --id <room>@<domain> --message <message_id> --emoji "👍"
 # Re-run with the same emoji to toggle off:
 kupferdraht-cli react --id <room>@<domain> --message <message_id> --emoji "👍"
+# Retry-safe: a repeat with the same key never toggles back
+kupferdraht-cli react --message <message_id> --emoji "👍" --idempotency-key like-4711
 ```
 
 | Flag        | Required | Description                                                                       |
@@ -1322,6 +1333,7 @@ kupferdraht-cli react --id <room>@<domain> --message <message_id> --emoji "👍"
 | `--id`      | no       | Qualified room id. Auto-resolved from `--message` when omitted (see `mark-read`). |
 | `--message` | yes      | `message_id` of the message to react to.                                          |
 | `--emoji`   | yes      | Emoji to toggle (single, e.g. `👍`).                                              |
+| `--idempotency-key <KEY>` | no | **Step 130a.** Toggle under this key (1–128 characters) through `Timeline::send_keyed`: a repeat with the same key prints the first toggle's handle and never flips the reaction back; a new key toggles again. A key used for a message, in another room, or still in flight fails `InvalidInput`. Kept 28 days. The output ends with an `idempotency_key:` line. |
 
 Output:
 

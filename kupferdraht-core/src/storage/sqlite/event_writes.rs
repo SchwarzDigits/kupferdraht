@@ -22,7 +22,7 @@ use super::timeline_events::{apply_message_edit_on, try_insert_timeline_event_on
 
 /// Run `write` in one `IMMEDIATE` transaction; an error rolls all of it
 /// back.
-fn in_write_tx<T>(
+pub(super) fn in_write_tx<T>(
     store: &SqliteStore,
     op: &str,
     write: impl FnOnce(&Connection) -> Result<T, KupferdrahtError>,

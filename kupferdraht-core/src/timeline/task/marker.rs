@@ -106,6 +106,7 @@ impl Client {
                 plaintext: &plaintext,
                 kind: "task_list_marker",
                 body: &marker_body(marked),
+                key: None,
             },
         )
         .await

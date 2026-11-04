@@ -11,6 +11,7 @@
 
 use crate::client::Client;
 use crate::error::KupferdrahtError;
+use crate::timeline::keyed::SendKey;
 use crate::timeline::{MessageHandle, Timeline};
 
 impl Timeline {
@@ -28,13 +29,21 @@ impl Timeline {
         zoom: Option<i32>,
     ) -> Result<MessageHandle, KupferdrahtError> {
         self.client
-            .send_location(&self.room_id, latitude, longitude, name.as_deref(), zoom)
+            .send_location(
+                &self.room_id,
+                latitude,
+                longitude,
+                name.as_deref(),
+                zoom,
+                None,
+            )
             .await
     }
 }
 
 impl Client {
     /// See [`Timeline::send_location`] for the caller-facing contract. Step 26.
+    /// `key` is stored with the `Sending` row (Step 130a).
     pub(crate) async fn send_location(
         &self,
         room_id: &str,
@@ -42,19 +51,13 @@ impl Client {
         longitude: f32,
         name: Option<&str>,
         zoom: Option<i32>,
+        key: Option<SendKey<'_>>,
     ) -> Result<MessageHandle, KupferdrahtError> {
         debug_assert!(
             !room_id.is_empty(),
             "send_location: room_id must be non-empty"
         );
-        // Non-finite coordinates do not survive the JSON persistence
-        // round-trip (serde_json emits `null` for NaN/Inf, which fails to
-        // decode back into f32). Reject them at the consumer boundary.
-        if !latitude.is_finite() || !longitude.is_finite() {
-            return Err(KupferdrahtError::InvalidInput(format!(
-                "send_location: coordinates must be finite (lat={latitude}, lon={longitude})"
-            )));
-        }
+        validate_coordinates(latitude, longitude)?;
         let group_id = self.resolve_room_group_id(room_id, "send_location").await?;
         let (message_id, plaintext) =
             crate::wire::proto::build_location_generic_message(latitude, longitude, name, zoom)?;
@@ -70,6 +73,7 @@ impl Client {
                     plaintext: &plaintext,
                     kind: "location",
                     body: &body,
+                    key,
                 },
             )
             .await?;
@@ -78,4 +82,16 @@ impl Client {
             sent_at_ms,
         })
     }
+}
+
+/// Non-finite coordinates do not survive the JSON persistence round-trip
+/// (`serde_json` emits `null` for NaN/Inf, which fails to decode back into
+/// f32). Reject them at the consumer boundary.
+fn validate_coordinates(latitude: f32, longitude: f32) -> Result<(), KupferdrahtError> {
+    if !latitude.is_finite() || !longitude.is_finite() {
+        return Err(KupferdrahtError::InvalidInput(format!(
+            "send_location: coordinates must be finite (lat={latitude}, lon={longitude})"
+        )));
+    }
+    Ok(())
 }
