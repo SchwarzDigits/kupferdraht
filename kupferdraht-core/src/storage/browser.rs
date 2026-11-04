@@ -585,13 +585,26 @@ pub(crate) fn open_browser_connection(path: &Path) -> Result<Connection, Kupferd
         OpenFlags::default().difference(OpenFlags::SQLITE_OPEN_CREATE)
     };
     let conn = Connection::open_with_flags_and_vfs(path, flags, vfs.as_str())
-        .map_err(|e| super::browser_open_error(path, &e))?;
+        .map_err(|e| open_error(path, &e))?;
     STORAGE.with(|s| {
         if let Some(db) = s.borrow_mut().databases.get_mut(&database_key(path)) {
             db.exists = true;
         }
     });
     Ok(conn)
+}
+
+/// The error a failed open of `path` stands for. `SQLite3MC` reads page 1
+/// when it opens the file, so a page the VFS refused as plaintext (Step
+/// 140) fails the open with `SQLITE_PERM` — the code another device's
+/// storage slot fails it with too (Step 120). The VFS's failure tells them
+/// apart: a refused page must never read as `DeviceRetired`, whose handling
+/// forgets the account's keys in this browser (Step 121).
+fn open_error(path: &Path, error: &rusqlite::Error) -> KupferdrahtError {
+    match database_failure(path) {
+        Some((Failure::Plaintext, on_server)) => super::plaintext_refused(path, on_server),
+        _ => super::browser_open_error(path, error),
+    }
 }
 
 /// Before an operation on the database at `path` (Step 111b, Step 113,
@@ -632,15 +645,7 @@ pub(crate) fn check_database(
         // build that does not encrypt, a database stored in the clear), so a
         // recoverable error, not an assertion.
         Some((Failure::Plaintext, on_server)) => {
-            return Err(KupferdrahtError::Storage(format!(
-                "{}: plaintext refused — the SQLite build in use does not encrypt{}",
-                path.display(),
-                if on_server {
-                    ", or the database on the storage server is stored in the clear"
-                } else {
-                    ""
-                }
-            )));
+            return Err(super::plaintext_refused(path, on_server));
         }
         _ => true,
     };

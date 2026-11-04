@@ -278,9 +278,10 @@ ADR-0035):** the same whole-DB-encrypted SQLite3MC store as native —
 `global.db` — opened through `sqlite-remote-vfs`, one registration per
 database, SQLite3MC encrypting above it; the VFS refuses an unencrypted
 page 1 on its own (Step 140, sqlite-remote-vfs 0.6.0), so a build that
-does not encrypt or a lost key fails with `Storage` ("plaintext
-refused") and stores nothing in the clear — in the browser and on the
-storage server alike. Step 111a uses the VFS's **local
+does not encrypt, a lost key or a database stored in the clear fails
+with `Storage` — never `DeviceRetired`, which the same SQLite code
+means for another device's storage slot — and stores nothing in the
+clear, in the browser and on the storage server alike. Step 111a uses the VFS's **local
 mode**: every database is an IndexedDB database
 `sqlite-remote-vfs-local/<home-id>/kupferdraht/…` (`kupferdraht/global.db`,
 `kupferdraht/accounts/<id>/kupferdraht.db`, `…/mls.db`), one Web Lock per database;

@@ -467,10 +467,16 @@ layer explicitly (`storage::open_connection`, the one open of `kupferdraht.db`,
 `mls.db` and `global.db`). Since Step 140 (sqlite-remote-vfs 0.6.0) every
 registration sets `Config::refuse_plaintext`: a page 1 that carries an
 unencrypted SQLite header is refused with `SQLITE_PERM` and the VFS
-reports `Failure::Plaintext`, which `check_database` maps to a `Storage`
-error naming the cause — a build that linked plain SQLite instead of
-SQLite3MC, or a lost key, stores nothing in the clear (the guard needs a
-plaintext header of at most 72 bytes; Kupferdraht's is 32). Step 111a uses the VFS's local mode: each
+reports `Failure::Plaintext`, which `check_database` and the open path
+map to a `Storage` error naming the cause (`storage::plaintext_refused`)
+— a build that linked plain SQLite instead of SQLite3MC, or a lost key,
+stores nothing in the clear (the guard needs a plaintext header of at
+most 72 bytes; Kupferdraht's is 32). SQLite3MC reads page 1 when it
+opens a file, so the refusal can fail the open itself, with the
+`SQLITE_PERM` another device's storage slot answers with too (Step
+120); `open_browser_connection` asks the VFS's failure first, so a
+refused page never reads as `DeviceRetired`, whose handling forgets
+the account's keys (Step 121). Step 111a uses the VFS's local mode: each
 database is an IndexedDB database `sqlite-remote-vfs-local/<home-id>/
 kupferdraht/…`, one Web Lock per database. In the **server mode** (Step 111b,
 `storage/remote/`) an account's `kupferdraht.db` and `mls.db` live on a

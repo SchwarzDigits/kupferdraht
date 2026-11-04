@@ -53,10 +53,12 @@ is no skill for it — it is this short procedure:
 - **The browser stores no database in the clear** (Step 140): every VFS
   registration sets sqlite-remote-vfs 0.6.0's `refuse_plaintext`, so a
   page 1 with an unencrypted SQLite header — a build that linked plain
-  SQLite instead of SQLite3MC, a forgotten or lost key — is refused and
-  the operation fails with `Storage` ("plaintext refused"); the refused
-  transaction rolls back, nothing reaches IndexedDB or the storage
-  server in plaintext.
+  SQLite instead of SQLite3MC, a forgotten or lost key, a database
+  stored in the clear — is refused and the operation fails with
+  `Storage`, never with `DeviceRetired` (the VFS answers another
+  device's storage slot with the same SQLite code; Kupferdraht tells
+  them apart by the VFS's failure). The refused transaction rolls back,
+  nothing reaches IndexedDB or the storage server in plaintext.
 
 ## [0.2.0] - 2026-11-03
 

@@ -32,8 +32,12 @@ fn both_config_sites_refuse_plaintext() {
 fn the_refused_page_is_a_named_storage_error() {
     let browser = workspace_file("kupferdraht-core/src/storage/browser.rs");
     assert!(
-        browser.contains("Failure::Plaintext"),
+        browser.contains("Some((Failure::Plaintext, on_server)) => {\n            return Err(super::plaintext_refused(path, on_server));"),
         "browser.rs: check_database maps Failure::Plaintext instead of letting it through"
+    );
+    assert!(
+        browser.contains(".map_err(|e| open_error(path, &e))?;"),
+        "browser.rs: an open the VFS refused as plaintext is told apart from another device's slot (both SQLITE_PERM)"
     );
 }
 

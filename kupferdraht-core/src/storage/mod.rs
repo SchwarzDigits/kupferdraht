@@ -580,11 +580,30 @@ pub(crate) fn browser_open_error(database: &Path, error: &rusqlite::Error) -> Ku
     }
 }
 
+/// The error of a page 1 the VFS refused as plaintext (Step 140,
+/// sqlite-remote-vfs 0.6.0's `Config::refuse_plaintext`): the SQLite build
+/// in use does not encrypt, or the database is stored in the clear. Runtime
+/// data, so a recoverable `Storage` error — never `DeviceRetired`, though
+/// the VFS answers both a refused page and another device's storage slot
+/// (Step 120) with `SQLITE_PERM`.
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn plaintext_refused(database: &Path, on_server: bool) -> KupferdrahtError {
+    let place = if on_server {
+        "on the storage server"
+    } else {
+        "in this browser"
+    };
+    KupferdrahtError::Storage(format!(
+        "{}: plaintext refused — the SQLite build in use does not encrypt, or the database {place} is stored in the clear",
+        database.display()
+    ))
+}
+
 #[cfg(test)]
 mod browser_open_error_tests {
     use std::path::Path;
 
-    use super::browser_open_error;
+    use super::{browser_open_error, plaintext_refused};
     use crate::error::KupferdrahtError;
 
     fn failure(code: rusqlite::ErrorCode, extended: i32) -> rusqlite::Error {
@@ -636,6 +655,21 @@ mod browser_open_error_tests {
     fn a_missing_database_is_nothing_stored() {
         let e = browser_open_error(Path::new(DB), &failure(rusqlite::ErrorCode::CannotOpen, 14));
         assert!(matches!(e, KupferdrahtError::NothingStored(_)), "{e:?}");
+    }
+
+    /// Step 140: a page 1 the VFS refused as plaintext is a storage error
+    /// naming the refusal and the place — never `DeviceRetired`.
+    #[test]
+    fn a_refused_plaintext_page_is_a_storage_error() {
+        for (on_server, place) in [(false, "in this browser"), (true, "on the storage server")] {
+            let e = plaintext_refused(Path::new(DB), on_server);
+            let KupferdrahtError::Storage(message) = &e else {
+                panic!("expected Storage, got {e:?}");
+            };
+            assert!(message.contains("plaintext refused"), "{message}");
+            assert!(message.contains("kupferdraht.db"), "{message}");
+            assert!(message.contains(place), "{message}");
+        }
     }
 
     /// Step 111b: the storage server rejected the token.

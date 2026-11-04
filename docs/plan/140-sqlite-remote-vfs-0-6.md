@@ -52,6 +52,18 @@ through as "reachable", so a refused page would surface as the bare
   encrypt, or the database on the server is plaintext) — runtime data, a
   recoverable error, never an assertion. An open that meets the refusal
   reports the same.
+- **D3a — the open path asks the VFS first** (found by PR #26's CI run,
+  2026-11-03). The VFS's own message never reaches rusqlite: SQLite
+  reports the bare `SQLITE_PERM` text ("access permission denied").
+  SQLite3MC reads page 1 when it opens a file (sqlite-remote-vfs
+  `539bff7`), so a database stored in the clear fails the open with
+  `SQLITE_PERM` — which `browser_open_error` maps to `DeviceRetired`
+  (Step 120, another device's storage slot), and `DeviceRetired` makes a
+  login forget the account's keys (Step 121). `open_browser_connection`
+  therefore consults `Failure::Plaintext` before the code; both sites
+  share `storage::plaintext_refused`. The browser suite writes a
+  database in the clear through a second VFS without the guard and
+  pins that Kupferdraht's open fails `Storage`, not `DeviceRetired`.
 - **D4 — no other code change**; no CLI (browser only); no new `pub`
   symbol, so no FFI mirror and no api-mapping row.
 
