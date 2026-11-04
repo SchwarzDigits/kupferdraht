@@ -205,6 +205,10 @@ struct FailoverOutcome {
     new_leader_is_b: bool,
     b_state: String,
     send_outcome: String,
+    unkeyed_outcome: String,
+    create_outcome: String,
+    keyed_reached_both_leaders: bool,
+    added_key_kept: bool,
     rooms_length: usize,
     epoch_increased: bool,
 }
@@ -218,7 +222,24 @@ async fn terminating_the_leader_promotes_the_next_tab() {
     );
     assert_eq!(o.b_state, "leader");
     assert_eq!(
-        o.send_outcome, "LeaderChanged",
+        o.send_outcome, "key-130a",
+        "an in-flight keyed send resolves on the new leader with its key (Step 130a)"
+    );
+    assert!(
+        o.keyed_reached_both_leaders,
+        "the re-issued call carried the same key"
+    );
+    assert!(
+        !o.unkeyed_outcome.is_empty() && o.unkeyed_outcome != "LeaderChanged",
+        "a send without a key gets one from the proxy and is re-issued, got {:?}",
+        o.unkeyed_outcome
+    );
+    assert!(
+        o.added_key_kept,
+        "both leaders saw the key the proxy added, and the handle carries it"
+    );
+    assert_eq!(
+        o.create_outcome, "LeaderChanged",
         "an in-flight mutation fails typed"
     );
     assert_eq!(

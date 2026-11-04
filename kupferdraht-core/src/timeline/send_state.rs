@@ -21,6 +21,7 @@ use tracing::warn;
 use crate::client::Client;
 use crate::error::KupferdrahtError;
 use crate::storage::TimelineEventRecord;
+use crate::timeline::keyed::SendKey;
 use crate::timeline::{DeliveryStatus, TimelineItem};
 
 /// The message ids of the own sends whose upload is in flight in this
@@ -61,6 +62,9 @@ pub(crate) struct ContentRow<'a> {
     pub(crate) kind: &'a str,
     /// The packed body `TimelineItem::from_record` decodes.
     pub(crate) body: &'a str,
+    /// The idempotency key stored with the row (Step 130a); `None` for an
+    /// unkeyed send.
+    pub(crate) key: Option<SendKey<'a>>,
 }
 
 /// Marks one send as in flight until dropped — at the end of the send,
@@ -158,15 +162,8 @@ impl Client {
     ) -> Result<i64, KupferdrahtError> {
         let _in_flight = self.begin_send(row.message_id);
         let sent_at_ms = crate::time::now_ms();
-        self.persist_and_emit_outgoing_content(
-            row.message_id,
-            room_id,
-            row.kind,
-            row.body,
-            sent_at_ms,
-            DeliveryStatus::Sending,
-        )
-        .await?;
+        self.persist_and_emit_outgoing_content(room_id, &row, sent_at_ms, DeliveryStatus::Sending)
+            .await?;
         let upload = self.encrypt_and_upload(group_id, op, row.plaintext).await;
         self.finish_send(room_id, row.message_id, upload.is_ok(), None)
             .await;

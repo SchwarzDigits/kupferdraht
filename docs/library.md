@@ -93,7 +93,8 @@ kupferdraht-core/src/
 │   │                          (Step 30 split): text, reaction, confirmation,
 │   │                          delete, knock, location, typing, asset_send,
 │   │                          asset_receive, lookup, ephemeral (Step 89:
-│   │                          send + expiry sweep + timers)
+│   │                          send + expiry sweep + timers), keyed
+│   │                          (Step 130a: send_keyed, OutgoingContent)
 │   └── mod.rs                — Timeline, MessageHandle, the pub-use surface
 ├── sync/                     — EventHandler, SyncSettings, SyncSummary
 │                                (SyncService is pub(crate) since Step 14b)
@@ -981,6 +982,8 @@ returns, replacing a bare `(Vec<String>, Vec<String>)` tuple.
 | `Timeline::resend_failed()`                           | `Result<ResendSummary, KupferdrahtError>`  | **Step 79.** Re-drive every failed send of the room, **oldest first**, stopping at the first hard error (a stuck message must not be overtaken); snapshot rows are skipped, rows behind the stop stay `Failed` — the pass is re-runnable. Never errors as a whole once the rows could be read; the outcome is the summary. The room-scoped analog of matrix-rust-sdk's `SendQueue::respawn_tasks_for_rooms_with_unsent_requests`. |
 | `ResendSummary { resent, skipped, stopped_at, remaining }` | (struct)                          | **Step 79.** `resent: Vec<MessageHandle>` oldest first; `skipped: Vec<String>` the snapshot rows (`task` / `case` / `task_list_marker`) left `Failed`; `stopped_at: Option<(message_id, error)>` the hard error the pass stopped at; `remaining: u32` the failed rows behind it that were not attempted (snapshot rows included — the next pass classifies them). |
 | `Room::failed_sends()`                                | `Result<Vec<TimelineItem>, KupferdrahtError>` | **Step 79.** The room's failed sends — live `Failed` rows, fully overlaid, oldest first — so a consumer wires "sync came back → resend" in three lines (see "Reconnect contract"). Includes the snapshot rows `resend` refuses (nothing hides). matrix-rust-sdk analog: the `SendingFailed` local echoes a `RoomSendQueue::subscribe()` yields. |
+| `Timeline::send_keyed(idempotency_key: String, content: OutgoingContent)` | `Result<MessageHandle, KupferdrahtError>` | **Step 130a.** Send `content` under a caller-chosen key: the first call sends, a repeat of the key answers the stored handle (or resends a failed message under the same id) instead of sending twice. matrix-rust-sdk analog: `Room::send(content).with_transaction_id(txn_id)`. See "Keyed sends (Step 130a)" below. |
+| `OutgoingContent` | (enum) | **Step 130a.** What `send_keyed` sends: `Text { body, mentions }`, `Reply { parent_id, body }`, `Knock { hot_knock }`, `Location { latitude, longitude, name, zoom }`, `File { bytes, filename, mime_type }`, `Reaction { item_id, emoji }`. Re-exported at the crate root; a `uniffi::Enum`. |
 | `Timeline::send_task(draft: TaskDraft, with_fallback: Option<bool>)` | `Result<MessageHandle, KupferdrahtError>`  | **Step 60a (ADR-0014).** Send a task: a `TaskPayload` in `GenericMessage` field 262000, *outside* the content oneof. `with_fallback: Some(true)` (normal chats) also sets the `Text` variant as human-readable fallback (assignee mention included, UTF-16 offsets; the checkbox reflects the status — `☑` done, `☒` cancelled); `Some(false)` (dedicated task-list rooms) sends the bare payload official clients ignore; `None` derives the default from the room's task-list marker (Step 75, ADR-0020: marked → off, unmarked → on) — an explicit choice always wins. The library generates the stable `task_id` and stamps `status: Open`. Persists a `timeline_events` row with `kind='task'` and the full state packed as JSON in `body`. Rejects an empty `title` with `InvalidInput`. |
 | `Timeline::update_task(task_id: &str, patch: TaskPatch, with_fallback: Option<bool>)` | `Result<MessageHandle, KupferdrahtError>`  | **Step 60b.** Read the current folded state, apply the **set-only** patch (unset fields keep their value; clearing is not expressible in V1), and send the resulting **full state** as a new task message — LWW on every receiver, `Done → Open` reopens, any transition is legal. `InvalidInput` for an unknown `task_id` or an empty patched title. |
 | `Room::tasks()` | `Result<Vec<FoldedTask>, KupferdrahtError>` | **Step 60b.** The folded task list of this room: one entry per `task_id`, latest full state wins (LWW in arrival order — the local proxy for the event stream's server order). A redacted task message (`MessageDelete` wipes the body) drops out of the fold — the prior state resurfaces; a task whose only message was deleted disappears. **Step 60c:** reads the materialized `tasks` table (fold-on-write, no per-read re-fold); ordering is `sort_key` first (manually moved tasks, lexicographic), then due date ascending (deadlines before none), then priority descending, then first-seen. |
@@ -990,6 +993,45 @@ returns, replacing a bare `(Vec<String>, Vec<String>)` tuple.
 | `Client::my_tasks()` | `Result<Vec<RoomTask>, KupferdrahtError>` | **Step 60c.** Cross-room "my open work": tasks assigned to this account with status `Open` or `InProgress`, across every room in the local replica, in the ADR-0014 ordering. Index-backed read of the materialized `tasks` table — no timeline scan. |
 | `Client::delegated_tasks()` | `Result<Vec<RoomTask>, KupferdrahtError>` | **Step 60c.** Cross-room "what I delegated": tasks this account created and assigned to someone else — any status, so progress (`done`) stays visible. Unassigned and self-assigned tasks are not delegated. |
 | `MessageHandle { message_id, sent_at_ms }`            | (struct)                              | UUID v4 picked client-side at send time + the wall-clock at which Kupferdraht finished assembling the row. The `message_id` is the same id Wire echoes back on the sync stream and the recipient's client surfaces in quote / edit / reply references. |
+
+### Keyed sends (Step 130a)
+
+`Timeline::send_keyed(idempotency_key, content)` is the send a caller may
+retry — after a network error, a restart, or a leader-tab change in the
+browser — without sending twice. matrix-rust-sdk analog:
+`Room::send(content).with_transaction_id(txn_id)`.
+
+- **The key** is the caller's: 1–128 characters (`InvalidInput`
+  otherwise, nothing uploaded), one per logical send, reused only to
+  retry that send.
+- **`OutgoingContent`:** `Text { body, mentions }` joins the room's MLS
+  group first when it is missing (as `send_text_auto_join`); `Reply`,
+  `Knock`, `Location` send as `send_reply` / `send_knock` /
+  `send_location`; `File { bytes, filename, mime_type }` sends from
+  memory (the browser's `sendFile` path); `Reaction { item_id, emoji }`
+  is a toggle (as `toggle_reaction`).
+- **The first call** sends like the unkeyed method. A message's key is
+  written in the same transaction as its `Sending` row (with its
+  mentions or attachment), before the MLS upload — a retry always
+  finds the row its key names; a reaction's key in the same
+  transaction as the reaction set, after the upload.
+- **A repeat of the key** answers instead of sending: a reaction → the
+  stored handle, never toggled back (a new key toggles again); a
+  message whose row is `Failed`, or `Sending` and no longer in flight
+  (the sender died mid-upload) → resent under the same `message_id`
+  (Step 79's `resend`); a message still in flight on this client →
+  `InvalidInput`; any other row state, a redacted row or no row → the
+  stored handle. A key used in another room or for the other kind
+  (message vs reaction) → `InvalidInput`.
+- **Retention:** 28 days (`SEND_KEY_RETENTION_MS` — the `zuid` lifetime,
+  `docs/backend-spec.md` §5.1); every keyed write first forgets the
+  older keys. The keys live in the account store (`send_keys`, V32 —
+  `docs/ARCHITECTURE.md` §7), so they survive a restart and die with the
+  account's data.
+- **Custom stores:** `Store::send_key`, `insert_timeline_event_keyed` and
+  `replace_user_reactions_keyed` have default bodies that keep no key — a
+  custom store compiles unchanged and every keyed call then sends.
+  Override all three, each as one transaction, to get the dedup.
 
 ### Assets (Step 11)
 
@@ -2059,7 +2101,9 @@ The trait has grown well beyond the original session/device/rooms core;
 its method families cover: sessions, devices, backend MLS keys,
 rooms + members, timeline events (incl. edits/redactions and the
 Step-79 resend flip `mark_message_resent`, guarded to live `failed`
-rows), mentions, reactions, read + delivery receipts, sync-state
+rows), idempotency keys (`send_key`, `insert_timeline_event_keyed`,
+`replace_user_reactions_keyed` — Step 130a; default bodies keep no key,
+see "Keyed sends"), mentions, reactions, read + delivery receipts, sync-state
 cursors, self-user and server-config snapshots, feature configs, user
 properties, asset attachments, and the browser's recovery state
 (`save_recovery_state` / `load_recovery_state`, Step 112: when the current

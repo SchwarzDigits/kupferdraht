@@ -281,7 +281,7 @@ store in a thin tab (the OPFS pool is the leader's).
 
 ## Decision
 
-**L1-A, L2-A, L3-A, L4-A, L5-A.** Kupferdraht ships
+**L1-A, L2-A, L3-A extended by L3-C (Step 130a), L4-A, L5-A.** Kupferdraht ships
 `bindings/web/kupferdraht-tabs/` — plain ES modules typed by JSDoc with a
 hand-written `index.d.ts`, no bundler, no runtime dependency — with:
 
@@ -303,10 +303,40 @@ hand-written `index.d.ts`, no bundler, no runtime dependency — with:
    A native test enumerates the `#[wasm_bindgen]` method names in
    `kupferdraht-core/src/wasm/` and fails on any name the proxy or the
    `.d.ts` does not mirror — the JS twin of the FFI-parity rule.
-3. **Transport** as L2-A; **failover** as L3-A; **election** as L4-A;
-   **broadcast set** as L5-A.
+3. **Transport** as L2-A; **failover** as L3-A extended by L3-C
+   (amended by Step 130a, see the revision history); **election** as
+   L4-A; **broadcast set** as L5-A. A call in flight at a leader change
+   is handled by its class in `protocol.js`'s `METHODS`:
+   - **idempotent** — the reads, and the mutations a repeat converges
+     and answers like the first call (`markAsRead`, `markAsUnread`,
+     `startTyping`, `stopTyping`, `redact`, `createDm`, `renameRoom`,
+     `setRoomAccess`, `allowGuests`, `setDisplayName`): re-issued to the
+     new leader;
+   - **keyed** — the six sends (`sendText`, `sendReply`, `sendKnock`,
+     `sendLocation`, `sendFile`, `toggleReaction`): re-issued to the new
+     leader with their idempotency key, which the proxy adds when the
+     caller gave none; the leader's `Timeline::send_keyed` answers a key
+     the old leader already used from the account store, so nothing
+     reaches the backend twice;
+   - **mutation** — everything else (`createRoom`, `editMessage`,
+     `invite`, `kick`, `leave`, `deleteRoom`, `createJoinLink`,
+     `revokeJoinLink`, `joinViaLink`, `setHandle`, `updateEmail`,
+     `deleteDevice`, `logout`, login and setup, `Recovery.enable` /
+     `changePin`): rejects `LeaderChanged` and is never retried by the
+     module. `invite`, `kick`, `leave`, `deleteRoom` and `revokeJoinLink`
+     stay here because a repeat after a call that landed rejects ("not
+     in cache", 404, an MLS add of a member already in the group) — an
+     honest `LeaderChanged` beats a false error; `setHandle` stays until
+     Wire's answer to the own handle set again is observed;
+   - **subscription** — `startSync`: re-established.
+
+   The table, class by class, is published in
+   `bindings/web/kupferdraht-tabs/README.md` and pinned against
+   `METHODS` by a native test.
 4. **Rust changes are limited to** the optional `onSync` callback on
-   `startSync`. Lease mechanics, `Kupferdraht.open`'s shape and the
+   `startSync` — and, since Step 130a, the keyed sends L3-C needs (the
+   core `Timeline::send_keyed`, the trailing `options` of the six wasm
+   sends). Lease mechanics, `Kupferdraht.open`'s shape and the
    single-tab path are untouched; a preservation test pins that.
 
 The rationale that carries it: the platform already has a crash-safe
@@ -327,14 +357,20 @@ failover rule wrong.
   is their counterpart and needs no leader).
 - No new dependency, no bundler; the module runs from a
   `<script type="module">` and inside a worker as is.
-- The failover contract is explicit: reads survive a leader change,
-  mutations fail typed, nothing is sent twice.
+- The failover contract is explicit: reads and the converging mutations
+  survive a leader change, the six sends are re-issued with their key
+  and arrive once (Step 130a), the other mutations fail typed, nothing
+  is sent twice.
 
 ### Negative
 
-- Mutations in flight during a leader change fail; the embedder has to
-  offer "try again" (or the Step-79 resend path once the surface
-  exposes it on wasm). Idempotency keys are a later step.
+- Mutations outside the `idempotent` and `keyed` classes in flight
+  during a leader change fail; the embedder has to offer "try again"
+  (or the Step-79 resend path once the surface exposes it on wasm).
+- The keyed class costs a table in the leader's account store
+  (`send_keys`, V32) whose keys live 28 days; an embedder that wants a
+  retry of its own (after a network error) keeps the key with the
+  pending send.
 - Payloads are cloned per hop; a large asset download costs two copies
   and lands in one tab only.
 - A thin tab holds a live candidate worker at all times (small, no
@@ -406,6 +442,29 @@ For Step 94 (`docs/plan/archive/94-leader-tab-thin-clients.md`, merged 2026-09-2
   pointing here, `README.md` Platforms bullet, `docs/ARCHITECTURE.md`
   browser data flow, `rules/0026`, CHANGELOG `[Unreleased]`.
 
+For Step 130a (`docs/plan/130-wasm-idempotency-keys.md`):
+
+- Core: `Timeline::send_keyed(idempotency_key, OutgoingContent)`
+  (`timeline/keyed.rs`), the V32 table `send_keys`, keys swept after 28
+  days on every keyed write; FFI mirror on the FFI `Timeline`; CLI
+  `send` / `react --idempotency-key`.
+- wasm: the six sends take a trailing `options: { idempotencyKey? }`,
+  generate a UUID when it is missing and resolve `{ messageId, sentAtMs,
+  idempotencyKey }`.
+- Module: `protocol.js` gains the `keyed` kind and re-classifies the ten
+  converging mutations `idempotent`; `proxy.js` adds a key to every keyed
+  call (`withKey`, `crypto.randomUUID()`) before the request leaves the
+  tab, so a re-issue carries the same key; `#failOver` rejects only
+  `mutation` and `subscription` entries; `index.d.ts` types
+  `SendOptions` and `KeyedMessageHandle`; the README publishes the table.
+- Tests: `kupferdraht-core/tests/step_130a_idempotency_keys.rs` (native:
+  uploads counted per key), `step_130a_keyed_surface_pins.rs` (the class
+  table, the README table, the wasm options, the proxy key, the doc
+  homes), the Step-94 parity test's fourth kind, and the Step-94 browser
+  driver (a keyed `sendText` in flight resolves on the new leader with
+  its key, an unkeyed one with the key the proxy added, a `createRoom`
+  still rejects `LeaderChanged`).
+
 ## References
 
 - Extends (builds on): ADR-0023 "Enforce one active Kupferdraht instance per
@@ -446,3 +505,4 @@ For Step 94 (`docs/plan/archive/94-leader-tab-thin-clients.md`, merged 2026-09-2
   repointed — no content change
 - 2026-09-26: Step 95d added a fifth optional `startSync` callback, `onDevicesChanged` (a room's MLS device set changed); the leader broadcasts it as `devices` and the proxy delivers it like `sync`. Same mechanism, current truth — not a new decision.
 - 2026-11-03: Step 138 added a seventh optional `startSync` callback, `onRoomsChanged` (a room's read state after a local `markAsRead` / `markAsUnread` — a change the backend never hears of, so no pass announces it); the leader broadcasts it as `rooms` and the proxy delivers it like `sync`. Step 113's `onStorage` (broadcast as `storage`) had taken the same path on 2026-09-30. Same mechanism, current truth — not a new decision.
+- 2026-11-04: Decision 3, decision 4, the Consequences and the Implementation Notes amended (Step 130a; Volker Zöpfel, with both browser embedders): L3-C — idempotency keys, which the 2026-09-25 text deferred to a later step — is taken on top of L3-A. A new failover class `keyed` re-issues the six sends with their key; ten mutations whose repeat converges move to `idempotent`; every other mutation keeps rejecting `LeaderChanged`, `invite` / `kick` / `leave` / `deleteRoom` / `revokeJoinLink` because a repeat after a call that landed rejects, `setHandle` until Wire's answer to the own handle set again is observed. The table is published in the tabs README. Not a supersession: L3-A's rule — nothing reaches the backend twice, a call whose repeat is not safe rejects typed — stands; the keys are the follow-up the original text named.

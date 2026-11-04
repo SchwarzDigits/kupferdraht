@@ -5,7 +5,7 @@
 //! sender's full set; Kupferdraht decomposes it into one row per emoji
 //! so per-message aggregations are cheap. Step 6-II-e.
 
-use rusqlite::params;
+use rusqlite::{Connection, params};
 
 use crate::error::KupferdrahtError;
 use crate::storage::records::ReactionRecord;
@@ -23,14 +23,38 @@ pub(super) fn replace_user_reactions(
     let mut conn = store.lock()?;
     let tx = super::write_tx::begin(&mut conn)
         .map_err(|e| KupferdrahtError::Storage(format!("replace_user_reactions begin tx: {e}")))?;
-    tx.execute(
+    replace_user_reactions_on(
+        &tx,
+        room_id,
+        canonical_message_id,
+        sender_user_id,
+        emojis,
+        sent_at_ms,
+    )?;
+    tx.commit()
+        .map_err(|e| KupferdrahtError::Storage(format!("replace_user_reactions commit: {e}")))?;
+    Ok(())
+}
+
+/// Replace `sender_user_id`'s reaction set on `canonical_message_id`
+/// inside the caller's transaction — shared by the plain replace and the
+/// keyed one (Step 130a).
+pub(super) fn replace_user_reactions_on(
+    conn: &Connection,
+    room_id: &str,
+    canonical_message_id: &str,
+    sender_user_id: &str,
+    emojis: &[String],
+    sent_at_ms: i64,
+) -> Result<(), KupferdrahtError> {
+    conn.execute(
         "DELETE FROM reactions
           WHERE message_id = ?1 AND sender_user_id = ?2",
         params![canonical_message_id, sender_user_id],
     )
     .map_err(|e| KupferdrahtError::Storage(format!("replace_user_reactions clear: {e}")))?;
     for emoji in emojis {
-        tx.execute(
+        conn.execute(
             "INSERT INTO reactions (
                 message_id, room_id, sender_user_id, emoji, sent_at_ms
              ) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -46,8 +70,6 @@ pub(super) fn replace_user_reactions(
             KupferdrahtError::Storage(format!("replace_user_reactions insert {emoji}: {e}"))
         })?;
     }
-    tx.commit()
-        .map_err(|e| KupferdrahtError::Storage(format!("replace_user_reactions commit: {e}")))?;
     Ok(())
 }
 

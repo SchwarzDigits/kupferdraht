@@ -34,11 +34,17 @@ export const DEFAULT_LEADER_WAIT_MS = 10000;
 export const DEFAULT_RETRY_MS = 5000;
 
 /**
- * `[class, method, kind, returns]` — `kind` is the failover class:
- * `idempotent` calls are re-issued to the new leader, `mutation` calls in
- * flight reject with `LeaderChanged` and are never retried, `subscription`
- * calls are re-established. `returns` names the wrapper class a call
- * hands back (the leader returns a handle; the proxy wraps it).
+ * `[class, method, kind, returns]` — `kind` is the failover class, what a
+ * call in flight when the leader changes does (ADR-0026, Step 130a):
+ * `idempotent` calls are re-issued to the new leader — reads, and the
+ * mutations a repeat converges and answers like the first call;
+ * `keyed` calls are re-issued to the new leader with their idempotency
+ * key (the proxy adds one when the caller gave none), so a send the old
+ * leader completed answers its stored outcome instead of reaching the
+ * backend twice; `mutation` calls in flight reject with `LeaderChanged`
+ * and are never retried; `subscription` calls are re-established.
+ * `returns` names the wrapper class a call hands back (the leader returns
+ * a handle; the proxy wraps it).
  */
 export const METHODS = Object.freeze([
   ["Kupferdraht", "login", "mutation", "PendingLogin"],
@@ -56,37 +62,37 @@ export const METHODS = Object.freeze([
   ["Client", "storageEngine", "idempotent", null],
   ["Client", "pushState", "idempotent", null],
   ["Client", "startSync", "subscription", "SyncHandle"],
-  ["Client", "startTyping", "mutation", null],
-  ["Client", "stopTyping", "mutation", null],
+  ["Client", "startTyping", "idempotent", null],
+  ["Client", "stopTyping", "idempotent", null],
   ["Client", "syncOnce", "idempotent", null],
   ["Client", "rooms", "idempotent", null],
-  ["Client", "sendText", "mutation", null],
+  ["Client", "sendText", "keyed", null],
   ["Client", "messages", "idempotent", null],
-  ["Client", "sendKnock", "mutation", null],
-  ["Client", "sendLocation", "mutation", null],
-  ["Client", "sendReply", "mutation", null],
-  ["Client", "toggleReaction", "mutation", null],
+  ["Client", "sendKnock", "keyed", null],
+  ["Client", "sendLocation", "keyed", null],
+  ["Client", "sendReply", "keyed", null],
+  ["Client", "toggleReaction", "keyed", null],
   ["Client", "editMessage", "mutation", null],
-  ["Client", "redact", "mutation", null],
-  ["Client", "markAsRead", "mutation", null],
-  ["Client", "markAsUnread", "mutation", null],
+  ["Client", "redact", "idempotent", null],
+  ["Client", "markAsRead", "idempotent", null],
+  ["Client", "markAsUnread", "idempotent", null],
   ["Client", "createRoom", "mutation", null],
-  ["Client", "createDm", "mutation", null],
+  ["Client", "createDm", "idempotent", null],
   ["Client", "members", "idempotent", null],
   ["Client", "roomDevices", "idempotent", null],
   ["Client", "ownDeviceThumbprint", "idempotent", null],
   ["Client", "invite", "mutation", null],
   ["Client", "kick", "mutation", null],
-  ["Client", "renameRoom", "mutation", null],
+  ["Client", "renameRoom", "idempotent", null],
   ["Client", "deleteRoom", "mutation", null],
   ["Client", "roomAccess", "idempotent", null],
-  ["Client", "setRoomAccess", "mutation", null],
-  ["Client", "allowGuests", "mutation", null],
+  ["Client", "setRoomAccess", "idempotent", null],
+  ["Client", "allowGuests", "idempotent", null],
   ["Client", "createJoinLink", "mutation", null],
   ["Client", "revokeJoinLink", "mutation", null],
   ["Client", "joinViaLink", "mutation", null],
   ["Client", "leave", "mutation", null],
-  ["Client", "setDisplayName", "mutation", null],
+  ["Client", "setDisplayName", "idempotent", null],
   ["Client", "setHandle", "mutation", null],
   ["Client", "updateEmail", "mutation", null],
   ["Client", "devices", "idempotent", null],
@@ -95,7 +101,7 @@ export const METHODS = Object.freeze([
   ["Client", "fileSharing", "idempotent", null],
   ["Client", "serviceToken", "idempotent", null],
   ["Client", "logout", "mutation", null],
-  ["Client", "sendFile", "mutation", null],
+  ["Client", "sendFile", "keyed", null],
   ["Client", "downloadAsset", "idempotent", null],
   ["Client", "recovery", "idempotent", "Recovery"],
   ["Recovery", "state", "idempotent", null],
@@ -145,11 +151,11 @@ export function getterTable() {
   return table;
 }
 
-/** Thrown for a mutation that was in flight when the leader changed. */
+/** Thrown for a `mutation` that was in flight when the leader changed. */
 export class LeaderChangedError extends Error {
   constructor(method) {
     super(`kupferdraht-tabs: the leader changed while ${method} was in flight; the call was not retried `
-      + '(a mutation must never reach the backend twice) — check the timeline, then retry deliberately');
+      + '(the module cannot know whether it reached the backend, and a repeat is not safe) — check the state, then retry deliberately');
     this.name = 'LeaderChanged';
     this.method = method;
   }

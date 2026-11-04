@@ -26,6 +26,8 @@ use crate::time::now_ms;
 
 use crate::client::Client;
 use crate::error::KupferdrahtError;
+use crate::timeline::keyed::SendKey;
+use crate::timeline::pipeline::OutgoingText;
 use crate::timeline::{MessageHandle, Timeline};
 use crate::wire::proto::{MentionInput, QuoteParent, build_text_generic_message};
 
@@ -45,7 +47,9 @@ impl Timeline {
     ///   or 4xx / 5xx response from `POST /v14/mls/messages`.
     /// * `KupferdrahtError::Storage` — `timeline_events` insert failure.
     pub async fn send_text(&self, body: String) -> Result<MessageHandle, KupferdrahtError> {
-        self.client.send_text(&self.room_id, body, None, &[]).await
+        self.client
+            .send_text(&self.room_id, body, None, &[], None)
+            .await
     }
 
     /// Step 14g — eager auto-join + send. Probes the local openmls
@@ -77,22 +81,28 @@ impl Timeline {
         &self,
         body: String,
     ) -> Result<MessageHandle, KupferdrahtError> {
+        self.join_mls_group_if_missing("send_text_auto_join")
+            .await?;
+        self.send_text(body).await
+    }
+
+    /// Join this room's MLS group when the local openmls store has none
+    /// (the Step-14g probe). `op` names the caller in error messages.
+    ///
+    /// # Errors
+    /// `InvalidInput` when the room is not cached or has no `group_id`;
+    /// the errors of [`Client::join_room`].
+    pub(super) async fn join_mls_group_if_missing(&self, op: &str) -> Result<(), KupferdrahtError> {
         let room = self.client.room(&self.room_id).await.ok_or_else(|| {
-            KupferdrahtError::InvalidInput(format!(
-                "send_text_auto_join: {} not in cache",
-                self.room_id
-            ))
+            KupferdrahtError::InvalidInput(format!("{op}: {} not in cache", self.room_id))
         })?;
         let group_id = room.group_id_bytes().ok_or_else(|| {
-            KupferdrahtError::InvalidInput(format!(
-                "send_text_auto_join: {} has no group_id",
-                self.room_id
-            ))
+            KupferdrahtError::InvalidInput(format!("{op}: {} has no group_id", self.room_id))
         })?;
         if !self.client.has_mls_group(&group_id) {
             self.client.join_room(&self.room_id).await?;
         }
-        self.send_text(body).await
+        Ok(())
     }
 
     /// Send a text message that mentions one or more users
@@ -115,7 +125,7 @@ impl Timeline {
         mentions: Vec<crate::timeline::Mention>,
     ) -> Result<MessageHandle, KupferdrahtError> {
         self.client
-            .send_text(&self.room_id, body, None, &mentions)
+            .send_text(&self.room_id, body, None, &mentions, None)
             .await
     }
 
@@ -164,15 +174,21 @@ impl Timeline {
         parent_id: String,
         body: String,
     ) -> Result<MessageHandle, KupferdrahtError> {
-        if parent_id.is_empty() {
-            return Err(KupferdrahtError::InvalidInput(
-                "send_reply: parent_id must be non-empty".into(),
-            ));
-        }
+        validate_reply_parent(&parent_id)?;
         self.client
-            .send_text(&self.room_id, body, Some(&parent_id), &[])
+            .send_text(&self.room_id, body, Some(&parent_id), &[], None)
             .await
     }
+}
+
+/// A reply names the message it quotes.
+pub(super) fn validate_reply_parent(parent_id: &str) -> Result<(), KupferdrahtError> {
+    if parent_id.is_empty() {
+        return Err(KupferdrahtError::InvalidInput(
+            "send_reply: parent_id must be non-empty".into(),
+        ));
+    }
+    Ok(())
 }
 
 impl Client {
@@ -219,12 +235,14 @@ impl Client {
     /// See [`Timeline::send_text`] for the caller-facing contract.
     /// `reply_to` populates `Text.quote.quoted_message_id` (Step 6-II-b)
     /// when `Some`. `mentions` populates `Text.mentions` (Step 6-II-g).
+    /// `key` is stored with the `Sending` row (Step 130a).
     pub(crate) async fn send_text(
         &self,
         room_id: &str,
         body: String,
         reply_to: Option<&str>,
         mentions: &[crate::timeline::Mention],
+        key: Option<SendKey<'_>>,
     ) -> Result<MessageHandle, KupferdrahtError> {
         debug_assert!(!room_id.is_empty(), "send_text: room_id must be non-empty");
         let group_id = self.resolve_room_group_id(room_id, "send_text").await?;
@@ -236,16 +254,15 @@ impl Client {
         // failed sends visible; this keeps interrupted ones too).
         let _in_flight = self.begin_send(&message_id);
         let sent_at_ms = now_ms();
-        self.persist_and_emit_outgoing_text(
-            &message_id,
+        let text = OutgoingText {
+            message_id: &message_id,
             room_id,
-            &body,
+            body: &body,
             sent_at_ms,
             reply_to,
             mentions,
-            crate::timeline::DeliveryStatus::Sending,
-        )
-        .await?;
+        };
+        self.persist_and_emit_outgoing_text(&text, key).await?;
         let upload = self
             .encrypt_and_upload(&group_id, "send_text", &plaintext)
             .await;

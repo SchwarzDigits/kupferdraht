@@ -138,6 +138,7 @@ impl Client {
                 plaintext: &plaintext,
                 kind: "case",
                 body: &case_body(snapshot, true),
+                key: None,
             },
         )
         .await

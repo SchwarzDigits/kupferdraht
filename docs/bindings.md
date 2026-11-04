@@ -122,7 +122,11 @@ object identity)
   refuse another user's message with `InvalidInput`, Step 95b),
   failed-send recovery (`resend(message_id)` — one failed row under the
   same id; `resend_failed() -> ResendSummary` — the room oldest-first,
-  stops at the first hard error; Step 79),
+  stops at the first hard error; Step 79), keyed sends
+  (`send_keyed(idempotency_key, content: OutgoingContent)` — a text,
+  reply, knock, location, file or reaction under a caller-chosen key; a
+  repeat of the key answers the stored handle instead of sending twice;
+  Step 130a, `docs/library.md`),
   typing (`send_typing_started`,
   `send_typing_stopped` — auto-stop + dedupe), `asset(message_id) -> Asset?`,
   `subscribe(listener) -> Subscription`.
@@ -140,7 +144,8 @@ foreign-implemented `RoomDevicesListener` sits with the other observers),
 `TimelineDiff`, `DeliveryStatus`, `Message`, `MessageBody` (`TimelineItem`
 and `Message` carry `expires_at_ms: Option<i64>` since Step 89 — set
 only for an ephemeral message), `AssetMeta`,
-`MessageHandle`, `Mention`, `ReactionGroup`, `DeviceInfo`, `FeatureConfigEntry`,
+`MessageHandle`, `Mention`, `OutgoingContent` (Step 130a — the content
+of `send_keyed`), `ReactionGroup`, `DeviceInfo`, `FeatureConfigEntry`,
 `UserPropertyEntry`, `FileSharingPolicy`, `ReceiptMode`, `AccountEntry`,
 `ServerConfig`, `SyncSettings`, `SyncTransport` (Step 62 — selects the
 receive transport; `WebSocket` also switches `start_sync` to the push
@@ -753,6 +758,18 @@ Since Step 110 (ADR-0035):
   `sendLocation(roomId, lat, lon, name?, zoom?)` (Step 98c), `sendReply`,
   `toggleReaction`, `editMessage`, `redact`, `markAsRead` (`editMessage` /
   `redact` reject another user's message — Step 95b, ADR-0028).
+- Keyed sends (Step 130a): `sendText`, `sendReply`, `sendKnock`,
+  `sendLocation`, `sendFile` and `toggleReaction` take a trailing
+  `options?: { idempotencyKey?: string }` (1–128 characters; the binding
+  generates a UUID when it is missing) and resolve
+  `{ messageId, sentAtMs, idempotencyKey }` — the key whoever chose it.
+  A repeat with the same key answers the first call's handle instead of
+  sending twice (a message that failed is resent under the same id; a
+  reaction is never toggled back); a key still in flight, of another room
+  or of the other kind (message vs reaction) rejects `InvalidInput`. Keys
+  live 28 days in the account store — the core `Timeline::send_keyed`
+  (`docs/library.md`). Keep the key with the pending send and retry with
+  it after a network error or a leader change.
 - Typing: `startTyping(roomId)` / `stopTyping(roomId)` — outbound only;
   the browser prototype manages start/stop explicitly (the core 11-s
   auto-stop timer is native-only, `tokio::spawn` is cfg'd out on wasm).
@@ -897,19 +914,33 @@ instance" into "served to every tab". Two halves:
   `attemptsRemaining`, `retryAfter`). The leader answers
   each `(tabId, requestId)` once. Payloads are the wasm view objects,
   structured-cloned (asset bytes are copied, not transferred).
-- **Failover, honest by construction (L3):** when a new leader announces
-  itself, an **idempotent** call in flight (`accounts`, `rooms`,
-  `messages`, `members`, `downloadAsset`, `storageEngine`, `resume`,
-  `syncOnce`, `initiateSso*`, `validateNewPin`, `recovery`,
-  `Recovery.state` / `verifyPin`) is re-issued to it (a `Client` proxy
-  re-resumes by `userId` first, a `Recovery` proxy asks its client
-  again); a **mutation** in flight (`login`, `finalizeSso`,
-  `registerDevice`, `recover`, `Recovery.enable` / `changePin`, every
-  send / edit / redact / reaction / read marker / room change / typing /
-  `logout`) rejects with
+- **Failover, honest by construction (L3, three classes since Step
+  130a):** when a new leader announces itself, an **idempotent** call in
+  flight — the reads (`accounts`, `rooms`, `messages`, `members`,
+  `downloadAsset`, `resume`, `syncOnce`, `initiateSso*`, `recovery`,
+  `Recovery.state` / `verifyPin`, …) and the mutations a repeat converges
+  (`markAsRead`, `markAsUnread`, `startTyping`, `stopTyping`, `redact`,
+  `createDm`, `renameRoom`, `setRoomAccess`, `allowGuests`,
+  `setDisplayName`) — is re-issued to it (a `Client` proxy re-resumes by
+  `userId` first, a `Recovery` proxy asks its client again); a **keyed**
+  call in flight (`sendText`, `sendReply`, `sendKnock`, `sendLocation`,
+  `sendFile`, `toggleReaction`) is re-issued with its `idempotencyKey` —
+  the proxy adds one when the caller gave none — so a send the old leader
+  completed answers its stored handle and nothing reaches the backend
+  twice; a **mutation** in flight (`login`, `finalizeSso`,
+  `registerDevice`, `recover`, `Recovery.enable` / `changePin`,
+  `createRoom`, `editMessage`, `invite`, `kick`, `leave`, `deleteRoom`,
+  `createJoinLink`, `revokeJoinLink`, `joinViaLink`, `setHandle`,
+  `updateEmail`, `deleteDevice`, `logout`, …) rejects with
   `LeaderChangedError` (`name === "LeaderChanged"`) and is **never
-  retried by the module** — a send that reached the backend before the
-  leader died must not go out twice; the embedder offers "try again".
+  retried by the module** — it cannot know whether the call reached the
+  backend, and a repeat is not safe; the embedder offers "try again".
+  `invite`, `kick`, `leave`, `deleteRoom` and `revokeJoinLink` stay
+  mutations because a repeat after a call that landed rejects (an honest
+  `LeaderChanged` beats a false error); `setHandle` until Wire's answer to
+  the own handle set again is observed. The full table, class by class,
+  is in `bindings/web/kupferdraht-tabs/README.md` (pinned against
+  `METHODS` by `step_130a_keyed_surface_pins.rs`).
   Subscriptions (`startSync`) are re-established. A call while no leader
   is known waits `leaderWaitMs` (10 s) for an announcement, then rejects
   `NoLeaderError` — no offline queue; show "connecting". The
@@ -927,14 +958,14 @@ instance" into "served to every tab". Two halves:
   in headless Firefox (`scripts/wasm-test.sh`) — RPC round trip with
   dedup and per-tab routing, event fan-out, election on
   `worker.terminate()`, read re-issue, in-flight mutation failing typed,
-  `NoLeader`, the hand-off against the real Web Locks API, the takeover
+  an in-flight keyed send re-issued with its key — the caller's or the
+  one the proxy added (Step 130a) —, `NoLeader`, the hand-off against the real Web Locks API, the takeover
   override, the recovery calls with their error detail and a `Recovery`
   handle across a leader change (Step 112b) — with a stub `Kupferdraht`; `bindings/web/opfs-smoke/tabs.html`
   is the consumer smoke with the real wasm (`?scenario=tabs` plays two
   tabs on one page: `TABS-OK`).
 - **Not there:** `SharedWorker` hosting (ADR-0023 Option C), cross-origin
-  or private-window sharing, idempotency keys for automatic mutation
-  retry (a later step, `open.md`), and the Step-79 resend path on wasm.
+  or private-window sharing, and the Step-79 resend path on wasm.
 
 Timeline items carry `deliveryStatus` (`"sending" | "submitted" | "received"
 | "failed"`) and each reaction carries `isSelf` since Step 98c.

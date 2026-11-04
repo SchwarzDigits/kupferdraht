@@ -387,6 +387,27 @@ impl std::fmt::Debug for AttachmentRecord {
     }
 }
 
+/// How long an idempotency key answers for its call: 28 days, the
+/// lifetime of the `zuid` cookie (backend-spec §5.1) — the longest a
+/// client can sleep and still resume without a new login. Every keyed
+/// write first forgets the keys older than this (Step 130a).
+pub const SEND_KEY_RETENTION_MS: i64 = 28 * 24 * 60 * 60 * 1000;
+
+/// One idempotency key and the outcome of its call (`send_keys`, V32 —
+/// Step 130a). `kind` is `message` (the key was written with the
+/// message's `Sending` row) or `reaction` (written with the reaction set,
+/// after the upload); `message_id` / `sent_at_ms` are the handle the
+/// call answered. `created_at_ms` dates the key for the 28-day sweep.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SendKeyRecord {
+    pub idempotency_key: String,
+    pub room_id: String,
+    pub kind: String,
+    pub message_id: String,
+    pub sent_at_ms: i64,
+    pub created_at_ms: i64,
+}
+
 /// The account store behind a `Client`. The shipped SQLite store is the
 /// reference; a custom implementation meets the same contract, and one
 /// expectation is easy to miss: **the combined writes are atomic**. Every
@@ -482,8 +503,9 @@ pub trait Store: MaybeSendSync {
     ) -> Result<(), KupferdrahtError>;
 
     /// Clear all per-account messaging state (rooms, members, timeline + its
-    /// reaction/mention/receipt/attachment overlays, and the sync cursor).
-    /// Used when a re-login registers a new device that supersedes a gone one
+    /// reaction/mention/receipt/attachment overlays, the sync cursor, and the
+    /// idempotency keys — nothing the old device sent answers a key, Step
+    /// 130a). Used when a re-login registers a new device that supersedes a gone one
     /// (Step 40): the new device starts clean and re-joins every room. Leaves
     /// session / device / self-user / server-config / feature-config rows
     /// intact — login re-establishes those.
@@ -586,6 +608,46 @@ pub trait Store: MaybeSendSync {
         }
         self.insert_attachment(attachment).await?;
         Ok(true)
+    }
+
+    /// The idempotency key `idempotency_key` and the outcome of its call,
+    /// `None` for a key never written or swept (Step 130a). Default `None`
+    /// (custom-store pattern: a store without keys sends every call).
+    ///
+    /// # Errors
+    /// `KupferdrahtError::Storage` on backend failure.
+    async fn send_key(
+        &self,
+        _idempotency_key: &str,
+    ) -> Result<Option<SendKeyRecord>, KupferdrahtError> {
+        Ok(None)
+    }
+
+    /// Insert an outgoing row — with its mentions, or with its attachment
+    /// — and its idempotency key as **one** write, after forgetting the
+    /// keys older than [`SEND_KEY_RETENTION_MS`] (Step 130a). `Ok(false)`
+    /// when the row already exists (nothing written). The default writes
+    /// the row as the unkeyed methods do and keeps no key.
+    ///
+    /// # Errors
+    /// `KupferdrahtError::Storage` on a failed write.
+    async fn insert_timeline_event_keyed(
+        &self,
+        event: &TimelineEventRecord,
+        mentions: &[MentionRecord],
+        attachment: Option<&AttachmentRecord>,
+        _key: &SendKeyRecord,
+    ) -> Result<bool, KupferdrahtError> {
+        match attachment {
+            Some(attachment) => {
+                self.insert_timeline_event_with_attachment(event, attachment)
+                    .await
+            }
+            None => {
+                self.insert_timeline_event_with_mentions(event, mentions)
+                    .await
+            }
+        }
     }
 
     /// Insert a task row and upsert its materialized fold row as **one**
@@ -1020,6 +1082,33 @@ pub trait Store: MaybeSendSync {
         emojis: &[String],
         sent_at_ms: i64,
     ) -> Result<(), KupferdrahtError>;
+
+    /// [`Store::replace_user_reactions`] and the toggle's idempotency key
+    /// as **one** write, after forgetting the keys older than
+    /// [`SEND_KEY_RETENTION_MS`] (Step 130a) — a key without its reaction
+    /// set would answer a toggle that never landed, a set without its key
+    /// would toggle back on the retry. The set is stamped with the key's
+    /// `sent_at_ms`. The default replaces the set and keeps no key.
+    ///
+    /// # Errors
+    /// `KupferdrahtError::Storage` on a failed write.
+    async fn replace_user_reactions_keyed(
+        &self,
+        room_id: &str,
+        canonical_message_id: &str,
+        sender_user_id: &str,
+        emojis: &[String],
+        key: &SendKeyRecord,
+    ) -> Result<(), KupferdrahtError> {
+        self.replace_user_reactions(
+            room_id,
+            canonical_message_id,
+            sender_user_id,
+            emojis,
+            key.sent_at_ms,
+        )
+        .await
+    }
 
     /// Load every reaction row for a room, grouped by `message_id`.
     /// Used by `Client::messages` to overlay reactions onto the

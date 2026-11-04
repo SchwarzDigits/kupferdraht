@@ -37,6 +37,7 @@ mod confirmation;
 mod delete;
 pub(crate) mod ephemeral;
 mod items;
+mod keyed;
 mod knock;
 mod location;
 mod lookup;
@@ -63,6 +64,7 @@ pub use items::{
     DeliveryStatus, Mention, MessagesOptions, ReactionGroup, TimelineDiff, TimelineItem,
     TimelineItemKind, TimelineListener,
 };
+pub use keyed::OutgoingContent;
 pub use resend::ResendSummary;
 pub(crate) use send_state::{ContentRow, InFlightSends};
 pub use subscription::Subscription;

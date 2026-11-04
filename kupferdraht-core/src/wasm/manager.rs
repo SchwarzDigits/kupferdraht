@@ -38,6 +38,7 @@ use crate::recovery::flow::RecoveryServices;
 use crate::storage::account_keys::AccountKeySource;
 use crate::storage::remote::service_tokens::ServiceTokenCache;
 use crate::storage::remote::wire_session::TokenExchange;
+use crate::timeline::OutgoingContent;
 
 /// Map a core error into a thrown JS `Error`: the message as before, the
 /// `name` its `KupferdrahtError` variant — JavaScript branches on it as Kotlin and
@@ -153,6 +154,28 @@ struct LogoutOptions {
     password: Option<String>,
     /// Forget the account in this browser (Step 114).
     purge_local: bool,
+}
+
+/// The options object the six keyed sends take (`{ idempotencyKey? }`,
+/// Step 130a): a call with a key an earlier call used answers that call's
+/// outcome — its handle, or a resend of a send that failed under the same
+/// message id — instead of sending again, so a retry after a lost answer
+/// never sends twice. The key is 1–128 characters (`InvalidInput`
+/// otherwise) and lives 28 days; without one the call runs under a fresh
+/// UUID, handed back on its handle.
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct SendOptions {
+    idempotency_key: Option<String>,
+}
+
+/// The key a keyed send runs under: `options.idempotencyKey`, or a fresh
+/// UUID when the caller gave none.
+fn idempotency_key(options: &JsValue) -> Result<String, JsValue> {
+    let options: SendOptions = parse_options(options, "send")?;
+    Ok(options
+        .idempotency_key
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()))
 }
 
 /// Parse the options object `what` takes; `undefined` / `null` mean all
@@ -1014,15 +1037,28 @@ impl Client {
     }
 
     /// Send a text message to `roomId`, joining the room's MLS group first if
-    /// this client hasn't yet (W3). Returns `{ messageId, sentAtMs }`.
+    /// this client hasn't yet (W3). `options` is `{ idempotencyKey?: string }`
+    /// (`SendOptions`, Step 130a): a key an earlier call used answers that
+    /// call's outcome instead of sending again; without one a fresh key is
+    /// generated. Returns `{ messageId, sentAtMs, idempotencyKey }`.
     #[wasm_bindgen(js_name = sendText)]
-    pub async fn send_text(&self, room_id: String, body: String) -> Result<JsValue, JsValue> {
+    pub async fn send_text(
+        &self,
+        room_id: String,
+        body: String,
+        options: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let key = idempotency_key(&options)?;
+        let content = OutgoingContent::Text {
+            body,
+            mentions: Vec::new(),
+        };
         let timeline = self.timeline_for(&room_id).await?;
         let handle = timeline
-            .send_text_auto_join(body)
+            .send_keyed(key.clone(), content)
             .await
             .map_err(|e| to_js(&e))?;
-        message_handle_to_js(&handle)
+        keyed_handle_to_js(&handle, &key)
     }
 
     /// The (locally stored, already-decrypted) messages of `roomId`, oldest
@@ -1061,19 +1097,30 @@ impl Client {
     }
 
     /// Send a knock ("ping") to `roomId` (Step 98c). `hotKnock` marks a
-    /// repeat nudge. Returns `{ messageId, sentAtMs }`.
+    /// repeat nudge. `options` is `{ idempotencyKey?: string }`
+    /// (`SendOptions`, Step 130a): the same key answers the first call's
+    /// outcome. Returns `{ messageId, sentAtMs, idempotencyKey }`.
     #[wasm_bindgen(js_name = sendKnock)]
-    pub async fn send_knock(&self, room_id: String, hot_knock: bool) -> Result<JsValue, JsValue> {
+    pub async fn send_knock(
+        &self,
+        room_id: String,
+        hot_knock: bool,
+        options: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let key = idempotency_key(&options)?;
         let timeline = self.timeline_for(&room_id).await?;
         let handle = timeline
-            .send_knock(hot_knock)
+            .send_keyed(key.clone(), OutgoingContent::Knock { hot_knock })
             .await
             .map_err(|e| to_js(&e))?;
-        message_handle_to_js(&handle)
+        keyed_handle_to_js(&handle, &key)
     }
 
     /// Share a map point in `roomId` (Step 98c). `name` is an optional label,
-    /// `zoom` an optional map zoom level. Returns `{ messageId, sentAtMs }`.
+    /// `zoom` an optional map zoom level. `options` is
+    /// `{ idempotencyKey?: string }` (`SendOptions`, Step 130a): the same
+    /// key answers the first call's outcome. Returns `{ messageId,
+    /// sentAtMs, idempotencyKey }`.
     #[wasm_bindgen(js_name = sendLocation)]
     pub async fn send_location(
         &self,
@@ -1082,46 +1129,65 @@ impl Client {
         longitude: f32,
         name: Option<String>,
         zoom: Option<i32>,
+        options: JsValue,
     ) -> Result<JsValue, JsValue> {
+        let key = idempotency_key(&options)?;
+        let content = OutgoingContent::Location {
+            latitude,
+            longitude,
+            name,
+            zoom,
+        };
         let timeline = self.timeline_for(&room_id).await?;
         let handle = timeline
-            .send_location(latitude, longitude, name, zoom)
+            .send_keyed(key.clone(), content)
             .await
             .map_err(|e| to_js(&e))?;
-        message_handle_to_js(&handle)
+        keyed_handle_to_js(&handle, &key)
     }
 
-    /// Send a text reply to `parentId` in `roomId`. Returns `{ messageId, sentAtMs }`.
+    /// Send a text reply to `parentId` in `roomId`. `options` is
+    /// `{ idempotencyKey?: string }` (`SendOptions`, Step 130a): the same
+    /// key answers the first call's outcome. Returns `{ messageId,
+    /// sentAtMs, idempotencyKey }`.
     #[wasm_bindgen(js_name = sendReply)]
     pub async fn send_reply(
         &self,
         room_id: String,
         parent_id: String,
         body: String,
+        options: JsValue,
     ) -> Result<JsValue, JsValue> {
+        let key = idempotency_key(&options)?;
         let timeline = self.timeline_for(&room_id).await?;
         let handle = timeline
-            .send_reply(parent_id, body)
+            .send_keyed(key.clone(), OutgoingContent::Reply { parent_id, body })
             .await
             .map_err(|e| to_js(&e))?;
-        message_handle_to_js(&handle)
+        keyed_handle_to_js(&handle, &key)
     }
 
     /// Toggle an emoji reaction on `itemId` in `roomId` (adds if absent, removes
-    /// if already reacted by this user). Returns `{ messageId, sentAtMs }`.
+    /// if already reacted by this user). `options` is
+    /// `{ idempotencyKey?: string }` (`SendOptions`, Step 130a): the same
+    /// key answers the first toggle's outcome and never toggles again — a
+    /// retry needs the key, a new key toggles back. Returns `{ messageId,
+    /// sentAtMs, idempotencyKey }`.
     #[wasm_bindgen(js_name = toggleReaction)]
     pub async fn toggle_reaction(
         &self,
         room_id: String,
         item_id: String,
         emoji: String,
+        options: JsValue,
     ) -> Result<JsValue, JsValue> {
+        let key = idempotency_key(&options)?;
         let timeline = self.timeline_for(&room_id).await?;
         let handle = timeline
-            .toggle_reaction(item_id, emoji)
+            .send_keyed(key.clone(), OutgoingContent::Reaction { item_id, emoji })
             .await
             .map_err(|e| to_js(&e))?;
-        message_handle_to_js(&handle)
+        keyed_handle_to_js(&handle, &key)
     }
 
     /// Edit `itemId`'s text in `roomId`. Returns `{ messageId, sentAtMs }` (of the
@@ -1496,7 +1562,10 @@ impl Client {
     }
 
     /// Send `bytes` as an encrypted file/image asset to `roomId` (W7, in-memory).
-    /// Returns `{ messageId, sentAtMs }`.
+    /// `options` is `{ idempotencyKey?: string }` (`SendOptions`, Step
+    /// 130a): one key per file; the same key answers the first call's
+    /// outcome without a second upload. Returns `{ messageId, sentAtMs,
+    /// idempotencyKey }`.
     #[wasm_bindgen(js_name = sendFile)]
     pub async fn send_file(
         &self,
@@ -1504,13 +1573,20 @@ impl Client {
         bytes: Vec<u8>,
         filename: String,
         mime_type: String,
+        options: JsValue,
     ) -> Result<JsValue, JsValue> {
-        let handle = self
-            .inner
-            .send_bytes(&room_id, &bytes, &filename, &mime_type)
+        let key = idempotency_key(&options)?;
+        let content = OutgoingContent::File {
+            bytes,
+            filename,
+            mime_type,
+        };
+        let timeline = self.timeline_for(&room_id).await?;
+        let handle = timeline
+            .send_keyed(key.clone(), content)
             .await
             .map_err(|e| to_js(&e))?;
-        message_handle_to_js(&handle)
+        keyed_handle_to_js(&handle, &key)
     }
 
     /// Download + decrypt the asset attached to `itemId` in `roomId`, returning
@@ -1628,6 +1704,21 @@ fn message_handle_to_js(handle: &crate::timeline::MessageHandle) -> Result<JsVal
     serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
 }
 
+/// Marshal a keyed send's `MessageHandle` to `{ messageId, sentAtMs,
+/// idempotencyKey }` — the key the call ran under, the caller's or the
+/// generated one (Step 130a).
+fn keyed_handle_to_js(
+    handle: &crate::timeline::MessageHandle,
+    idempotency_key: &str,
+) -> Result<JsValue, JsValue> {
+    let view = KeyedMessageHandleView {
+        message_id: handle.message_id.clone(),
+        sent_at_ms: handle.sent_at_ms,
+        idempotency_key: idempotency_key.to_owned(),
+    };
+    serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+}
+
 /// Marshal a `Room` to `{ roomId, name, unreadCount, lastReadAtMs,
 /// markedUnread }` — the same row `rooms()` lists it with (Step 138).
 async fn room_to_js(room: &crate::rooms::Room) -> Result<JsValue, JsValue> {
@@ -1717,6 +1808,16 @@ struct SyncSummaryView {
 struct MessageHandleView {
     message_id: String,
     sent_at_ms: i64,
+}
+
+/// Plain, JS-serializable view of a keyed send's `MessageHandle` with the
+/// key it ran under (Step 130a).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyedMessageHandleView {
+    message_id: String,
+    sent_at_ms: i64,
+    idempotency_key: String,
 }
 
 /// Plain, JS-serializable projection of a `TimelineItem` — like `ffi`'s twin,

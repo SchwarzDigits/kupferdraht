@@ -137,26 +137,40 @@ export async function eventFanOut() {
 }
 
 export async function electionAndFailover() {
+  const reports = stubReports();
   const { a, b } = await twoTabs();
   try {
     const client = await b.kupferdraht.resume(FIXTURE_ACCOUNT);
     const epochBefore = b.epoch;
-    const send = client.sendText('room-1', 'in flight');
+    // Step 130a: a keyed send in flight is re-issued with its key — the
+    // caller's, or the one the proxy added; a mutation still rejects.
+    const send = client.sendText('room-1', 'in flight', { idempotencyKey: 'key-130a' });
+    const unkeyed = client.sendText('room-1', 'no key given');
+    const create = client.createRoom('in flight');
     const read = client.rooms();
-    await wait(80); // both requests have reached A, whose stub answers slowly
+    await wait(80); // the requests have reached A, whose stub answers slowly
     const promoted = once(b, 'leader-changed', (e) => e.detail.isSelf);
     a.close(); // terminates A's worker: the browser releases the lease
     const event = await promoted;
-    const sendOutcome = await send.then(() => 'resolved', (err) => err.name);
+    const sendOutcome = await send.then((h) => h.idempotencyKey, (err) => err.name);
+    const unkeyedOutcome = await unkeyed.then((h) => h.idempotencyKey, (err) => err.name);
+    const createOutcome = await create.then(() => 'resolved', (err) => err.name);
     const rooms = await read;
+    const keys = reports.seen.filter((m) => m.call === 'sendText').map((m) => m.idempotencyKey);
+    const added = [...new Set(keys.filter((k) => k !== 'key-130a'))];
     return {
       newLeaderIsB: event.detail.leaderTabId === b.tabId,
       bState: b.state,
       sendOutcome,
+      unkeyedOutcome,
+      createOutcome,
+      keyedReachedBothLeaders: keys.filter((k) => k === 'key-130a').length === 2,
+      addedKeyKept: added.length === 1 && added[0] === unkeyedOutcome,
       roomsLength: rooms.length,
       epochIncreased: b.epoch > epochBefore,
     };
   } finally {
+    reports.close();
     b.close();
   }
 }

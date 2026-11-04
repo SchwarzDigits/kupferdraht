@@ -164,7 +164,10 @@ fn every_method_is_classified_and_typed() {
     let protocol = module_file("protocol.js");
     for row in protocol_rows(&protocol, "METHODS") {
         assert!(
-            matches!(row[2].as_str(), "idempotent" | "mutation" | "subscription"),
+            matches!(
+                row[2].as_str(),
+                "idempotent" | "keyed" | "mutation" | "subscription"
+            ),
             "{}.{} has kind {:?}",
             row[0],
             row[1],

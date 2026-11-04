@@ -10,6 +10,7 @@
 
 use crate::client::Client;
 use crate::error::KupferdrahtError;
+use crate::timeline::keyed::SendKey;
 use crate::timeline::{MessageHandle, Timeline};
 
 impl Timeline {
@@ -20,16 +21,18 @@ impl Timeline {
     /// Same downstream errors as [`Self::send_text`] (group resolve,
     /// encode, MLS encrypt, transport, storage).
     pub async fn send_knock(&self, hot_knock: bool) -> Result<MessageHandle, KupferdrahtError> {
-        self.client.send_knock(&self.room_id, hot_knock).await
+        self.client.send_knock(&self.room_id, hot_knock, None).await
     }
 }
 
 impl Client {
     /// See [`Timeline::send_knock`] for the caller-facing contract. Step 26.
+    /// `key` is stored with the `Sending` row (Step 130a).
     pub(crate) async fn send_knock(
         &self,
         room_id: &str,
         hot_knock: bool,
+        key: Option<SendKey<'_>>,
     ) -> Result<MessageHandle, KupferdrahtError> {
         debug_assert!(!room_id.is_empty(), "send_knock: room_id must be non-empty");
         let group_id = self.resolve_room_group_id(room_id, "send_knock").await?;
@@ -45,6 +48,7 @@ impl Client {
                     plaintext: &plaintext,
                     kind: "knock",
                     body: &hot_knock.to_string(),
+                    key,
                 },
             )
             .await?;
