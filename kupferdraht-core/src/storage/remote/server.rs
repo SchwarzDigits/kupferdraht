@@ -289,6 +289,11 @@ async fn register_database(
     server.on_takeover = Some(Arc::new(browser::database_taken_over));
     let mut config = Config::new(Store::Server(server));
     config.takeover = registration.take_over;
+    // Step 140 (sqlite-remote-vfs 0.6.0): a page 1 with an unencrypted SQLite
+    // header is refused — a build that linked plain SQLite, or a lost key,
+    // stores nothing in the clear on the server. Kupferdraht's plaintext
+    // header is 32 bytes; the guard allows up to 72.
+    config.refuse_plaintext = true;
     let vfs = RemoteVfs::register_async(&browser::registration_name("server"), config)
         .await
         .map_err(|e| registration_error(path, &e))?;

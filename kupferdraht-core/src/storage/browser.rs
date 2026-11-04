@@ -432,6 +432,9 @@ pub async fn prepare_browser_database(path: &Path) -> Result<(), KupferdrahtErro
         .contains(&format!("{LOCAL_DATABASE_PREFIX}/{home_id}/{key}"));
     let mut config = Config::local(home_id);
     config.takeover = take_over;
+    // Step 140 (sqlite-remote-vfs 0.6.0): as in the server mode, an
+    // unencrypted page 1 is refused — the same build defect, the same guard.
+    config.refuse_plaintext = true;
     let vfs = RemoteVfs::register_async(&registration_name("local"), config)
         .await
         .map_err(|e| KupferdrahtError::Storage(format!("browser storage: prepare {key}: {e}")))?;
@@ -582,13 +585,26 @@ pub(crate) fn open_browser_connection(path: &Path) -> Result<Connection, Kupferd
         OpenFlags::default().difference(OpenFlags::SQLITE_OPEN_CREATE)
     };
     let conn = Connection::open_with_flags_and_vfs(path, flags, vfs.as_str())
-        .map_err(|e| super::browser_open_error(path, &e))?;
+        .map_err(|e| open_error(path, &e))?;
     STORAGE.with(|s| {
         if let Some(db) = s.borrow_mut().databases.get_mut(&database_key(path)) {
             db.exists = true;
         }
     });
     Ok(conn)
+}
+
+/// The error a failed open of `path` stands for. `SQLite3MC` reads page 1
+/// when it opens the file, so a page the VFS refused as plaintext (Step
+/// 140) fails the open with `SQLITE_PERM` — the code another device's
+/// storage slot fails it with too (Step 120). The VFS's failure tells them
+/// apart: a refused page must never read as `DeviceRetired`, whose handling
+/// forgets the account's keys in this browser (Step 121).
+fn open_error(path: &Path, error: &rusqlite::Error) -> KupferdrahtError {
+    match database_failure(path) {
+        Some((Failure::Plaintext, on_server)) => super::plaintext_refused(path, on_server),
+        _ => super::browser_open_error(path, error),
+    }
 }
 
 /// Before an operation on the database at `path` (Step 111b, Step 113,
@@ -602,7 +618,8 @@ pub(crate) fn open_browser_connection(path: &Path) -> Result<Connection, Kupferd
 /// # Errors
 /// `KupferdrahtError::Evicted` after an eviction or a takeover;
 /// `StorageAccessDenied` for a refused token; `ServiceUnavailable` while
-/// the storage server is unreachable.
+/// the storage server is unreachable; `Storage` when the VFS refused an
+/// unencrypted page 1 (Step 140).
 pub(crate) fn check_database(
     path: &Path,
     probe: impl FnOnce() -> bool,
@@ -624,6 +641,12 @@ pub(crate) fn check_database(
             )));
         }
         Some((Failure::Unreachable, _)) => probe() && database_failure(path).is_none(),
+        // Step 140: the guard of sqlite-remote-vfs 0.6.0 — runtime data (a
+        // build that does not encrypt, a database stored in the clear), so a
+        // recoverable error, not an assertion.
+        Some((Failure::Plaintext, on_server)) => {
+            return Err(super::plaintext_refused(path, on_server));
+        }
         _ => true,
     };
     if let Some(account) = database_account(path) {

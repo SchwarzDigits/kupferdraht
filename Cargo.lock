@@ -3865,16 +3865,16 @@ dependencies = [
 
 [[package]]
 name = "sqlite-remote-protocol"
-version = "0.5.0"
-source = "git+https://github.com/SchwarzDigits/sqlite-remote-vfs?rev=2c6930f#2c6930fca33356049a10e8d1edd52acd088095c8"
+version = "0.6.0"
+source = "git+https://github.com/SchwarzDigits/sqlite-remote-vfs?rev=8e4e7e2#8e4e7e21ef87c8430c14ba37d0a420e52077b866"
 dependencies = [
  "prost 0.14.4",
 ]
 
 [[package]]
 name = "sqlite-remote-vfs"
-version = "0.5.0"
-source = "git+https://github.com/SchwarzDigits/sqlite-remote-vfs?rev=2c6930f#2c6930fca33356049a10e8d1edd52acd088095c8"
+version = "0.6.0"
+source = "git+https://github.com/SchwarzDigits/sqlite-remote-vfs?rev=8e4e7e2#8e4e7e21ef87c8430c14ba37d0a420e52077b866"
 dependencies = [
  "base64",
  "getrandom 0.3.4",

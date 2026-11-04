@@ -179,7 +179,7 @@ sqlite-wasm-rs = { version = "0.6.1", default-features = false, features = ["sql
 # (SchwarzDigits, Apache-2.0, public; not on crates.io): the local mode keeps
 # them in IndexedDB (111a), the server mode on a sqlite-remote-server (111b).
 # One VFS registration per database; SQLite3MC encrypts above it.
-sqlite-remote-vfs = { git = "https://github.com/SchwarzDigits/sqlite-remote-vfs", rev = "2c6930f" }
+sqlite-remote-vfs = { git = "https://github.com/SchwarzDigits/sqlite-remote-vfs", rev = "8e4e7e2" }
 # refinery stamps `applied_on` with `time::OffsetDateTime::now_utc()`; on
 # wasm32-unknown-unknown that needs time's `wasm-bindgen` backend (js Date) —
 # without it `SystemTime::now()` panics inside the first migration run.
