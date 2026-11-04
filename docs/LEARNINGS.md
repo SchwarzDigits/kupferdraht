@@ -2403,3 +2403,53 @@ touched it.
   statement) appears only on failure, so the green run does not say.
   Both paths give `Storage` and the test pins the outcome; a question
   about the path needs an assertion, not a log line.
+
+### 5.78 Three teammates, a pin from the step before, and a key that outlived its row (Step 130a)
+
+- **Where the key commits decides what a retry can do.** A message key
+  commits with its `Sending` row before the upload, so a crash or a
+  leader change between the two leaves an orphaned row the key re-drives
+  under the same id (Step 79). A reaction toggle cannot be re-driven (a
+  repeated toggle flips it back), so its key commits with the reaction
+  set after the upload and a known key only answers. One table, two
+  write points; the plan's D4 lists each answer.
+- **A wipe that forgets the rows must forget the keys.** The Step-40
+  new-device wipe cleared `timeline_events` but not `send_keys`: a key
+  whose `Failed` row was wiped would have found no row and answered
+  "sent" for a message that never left — D4's "no row → stored handle"
+  read literally. The core teammate raised it as an open question rather
+  than deciding it; the lead added `send_keys` to the wipe list, and the
+  wipe test now writes a failed row with its key and expects both gone.
+  A new table that answers for rows joins every list that deletes those
+  rows.
+- **A reclassification breaks the pins of the step before.**
+  `step_138_read_state.rs` pinned `markAsUnread` as `mutation`; 130a
+  moved it to `idempotent`. The docs teammate flagged it against the web
+  teammate's `protocol.js` before the gate ran. Before moving a name
+  between classes, grep every pin that names it (5.76 again, one step
+  later).
+- **A file-wide `allow(dead_code)` hides the function a change
+  orphans.** Once the browser's `sendFile` went through `send_keyed`, the
+  old wasm `send_bytes` had no caller; `asset_send.rs` carries
+  `#![cfg_attr(not(test), allow(dead_code))]`, so neither the native nor
+  the wasm32 clippy said so. The web teammate named it in its hand-off
+  notes, and core folded it into one `send_bytes(…, key)` per target
+  (native stages a file, wasm stays in memory). A module-wide allow is a
+  blind spot for every later change in the file, not only for the code
+  it was written for. All three findings above came from a teammate's
+  notes on what lay outside its own files — the hand-off format ("not
+  mine to edit", "say if you want …") earned its keep.
+- **Teammates format their own files.** Two concurrent `cargo fmt --all`
+  runs rewrote files another teammate was editing (whitespace only, but
+  it showed up as foreign diffs). From then on each teammate ran
+  `rustfmt` on its own files and the lead ran `cargo fmt --all` once,
+  before the gate.
+- **A smoke step that expects a failure cannot pipe under `pipefail`.**
+  Step 5 reused a message key for a reaction and expected the CLI's
+  refusal; `set -o pipefail` turned the expected non-zero exit into a
+  FAIL of the step. The manual rerun showed the right refusal. Capture
+  the output first (`out=$(… 2>&1) || true`), then assert on it.
+- **The browser scenario went green on its first CI run.** The changed
+  `electionAndFailover` (a keyed `sendText` resolving on the new leader,
+  `createRoom` still `LeaderChanged`) ran for the first time in PR #29's
+  CI, as the gate report said it would, and passed with 18 tests.
