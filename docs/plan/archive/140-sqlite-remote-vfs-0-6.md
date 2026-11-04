@@ -1,10 +1,25 @@
 # Step 140 — sqlite-remote-vfs 0.6.0: the plaintext guard
 
-**Status: in progress 2026-11-03** — red tests reviewed and approved, green
-phase on `step/140-sqlite-remote-vfs-0-6`; commissioned the same day
-(Volker: the SchwarzDigits pull requests are merged upstream and v0.6.0 is
-tagged), before Step 130a, whose idempotency-key table lives in the
-VFS-backed databases.
+**Status: MERGED 2026-11-04** — `a7d63e9` and the fix-up `bc334ec` on
+`step/140-sqlite-remote-vfs-0-6`, merged to `main` as PR #26 (`4d35f90`);
+gate and CI green, the browser tests in headless Firefox included
+(`step_140_browser_plaintext_guard`, two tests — CI only, the dev machine
+has no Firefox). The first CI run was red and found D3a: the VFS's message
+does not reach rusqlite, and a database stored in the clear would have
+failed its open as `DeviceRetired`; the fix-up maps it to `Storage` and the
+second browser test pins that. No smoke (no storage server locally; the
+local mode is covered by the browser tests in CI). Scope shipped as decided
+below (D1–D4 and D3a): the pin on `8e4e7e2`, `refuse_plaintext = true` at
+both `Config` sites, `Failure::Plaintext` → `Storage` in `check_database`
+and at open (`open_error`, `storage::plaintext_refused`); the browser tests
+check the refusal by its code (`SQLITE_PERM`), not by its message; pins in
+`tests/step_140_plaintext_guard_pins.rs`, `tests/step_91_wasm_build_glue.rs`,
+`tests/step_111a_local_vfs_pins.rs` and the unit test
+`a_refused_plaintext_page_is_a_storage_error`; retrospective LEARNINGS
+§5.77. Archived 2026-11-04 with this header. (Commissioned 2026-11-03 —
+Volker: the SchwarzDigits pull requests are merged upstream and v0.6.0 is
+tagged — before Step 130a, whose idempotency-key table lives in the
+VFS-backed databases.)
 
 **Taken 2026-11-03 (Volker):** D1–D4 as designed — the pin on the tag's
 commit, the guard in both modes, `Failure::Plaintext` as `Storage` (no new

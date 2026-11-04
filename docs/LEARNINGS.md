@@ -2365,3 +2365,41 @@ touched it.
   `node --check` cannot run here. The step's two browser scenarios went
   green for the first time in PR #23's CI job; the gate report said
   "browser tests: CI" instead of claiming a run.
+
+### 5.77 A red CI run that found a destructive misreport (Step 140)
+
+- **A VFS's message does not reach rusqlite.** sqlite-remote-vfs records
+  `Failure::Plaintext` with its own text, but SQLite turns the VFS's
+  error into the bare `SQLITE_PERM` ("access permission denied"). The
+  browser test asserted the message and went red in PR #26's first CI
+  run. Below a C boundary, assert the code and ask the layer below
+  (`Failure`) for the cause; the text is what the layer above prints.
+- **Reading the red run found the defect that mattered.** Fixing the
+  assertion alone would have gone green. Asking why the code was
+  `SQLITE_PERM` led to SQLite3MC reading page 1 at open: a database
+  stored in the clear fails the *open*, where `SQLITE_PERM` already meant
+  "another device's storage slot" (Step 120) and `DeviceRetired` makes a
+  login forget the account's keys (Step 121). A defence-in-depth guard
+  would have triggered a destructive reset. The plan's D3 said "an open
+  that meets the refusal reports the same", and no test reached the open.
+- **A new failure kind meets every existing mapping of its code.** The
+  plan read `check_database`, where the VFS's failures are matched, and
+  not `browser_open_error`, where `SQLITE_PERM` is mapped by code alone.
+  When a dependency adds a failure, grep every site that maps its error
+  code (here `PermissionDenied`) before writing the red tests; one code
+  with two causes needs the cause from the source before the mapping.
+- **A database in the clear needs a second VFS.** The guard sits in the
+  VFS, so the test writes the plaintext database through a second
+  registration of `RemoteVfs` without the guard over the same home and
+  then opens it through Kupferdraht's own path.
+- **Wasm-only code outside `src/wasm/` is linted only by the wasm32
+  runs.** A `doc_markdown` hit in `storage/browser.rs` passed the five
+  native commands and failed the wasm32 clippy: the file is
+  `cfg(target_arch = "wasm32")`, like `storage/remote/`. CLAUDE.md names
+  `src/wasm/` and `bindings/web/` as the trigger for the wasm32 lines;
+  every wasm-only file is one.
+- **`wasm-bindgen-test` hides a passing test's console.** The
+  `console_log!` line meant to show which path refused (open or first
+  statement) appears only on failure, so the green run does not say.
+  Both paths give `Storage` and the test pins the outcome; a question
+  about the path needs an assertion, not a log line.
