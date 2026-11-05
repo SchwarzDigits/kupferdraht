@@ -46,6 +46,8 @@ use tracing::debug;
 use crate::error::KupferdrahtError;
 
 use super::HttpClient;
+#[cfg(not(target_arch = "wasm32"))]
+use super::asset_redirect::is_followed_redirect;
 use super::reject_from_response;
 
 /// Multipart boundary string. Wire's `POST /assets` documentation
@@ -325,6 +327,12 @@ impl HttpClient {
             .await
             .map_err(|_| stalled_download(self.transfer_idle))?
             .map_err(|e| KupferdrahtError::Network(format!("GET {path}: {e}")))?;
+        // Step 141: a local asset answers 302 to the asset store.
+        let resp = if is_followed_redirect(resp.status()) {
+            self.fetch_redirected_asset(resp).await?
+        } else {
+            resp
+        };
         if !resp.status().is_success() {
             return Err(reject_from_response(resp, "download_asset").await);
         }
@@ -473,7 +481,7 @@ impl HttpClient {
 
 /// A download that went silent for `idle` (Step 98).
 #[cfg(not(target_arch = "wasm32"))]
-fn stalled_download(idle: std::time::Duration) -> KupferdrahtError {
+pub(super) fn stalled_download(idle: std::time::Duration) -> KupferdrahtError {
     KupferdrahtError::Network(format!("download_asset stalled: no byte for {idle:?}"))
 }
 

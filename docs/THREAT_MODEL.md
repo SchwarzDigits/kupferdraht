@@ -1,6 +1,6 @@
 # Kupferdraht Threat Model
 
-**Version:** 0.9 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-03 **Status:** working draft, for review by Markus Troßbach
+**Version:** 0.10 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-04 **Status:** working draft, for review by Markus Troßbach
 
 ------
 
@@ -55,6 +55,8 @@ Three actors:
 **The server** is the counterpart in the Wire backend or a compatible MLS delivery infrastructure. Under A7 (the server injects no device) Kupferdraht does *not* trust the server with message content. Kupferdraht trusts the server with administrative operations such as group-membership management; that relationship is formalised through MLS mechanisms and visible to every participant (see `wire/mls-deviations.md` W-5). **Limitation (ADR-0027):** under BasicCredentials the server is also the key directory: it distributes the KeyPackages with which devices are added to groups. A malicious server can therefore inject a device with an arbitrary identity (a "ghost device") that then reads along and sends MLS-authentically "as" that identity. This is the same trust model as official Wire without e2ei; the countermeasures are e2ei certificates (a non-goal) and comparing the MLS thumbprints per device. Since Step 95d Kupferdraht lists the devices of every room with their MLS thumbprint (comparable to the "MLS thumbprint" of the official apps) and reports every change in a room's devices against the last stored state, so an injected device becomes visible; it is not prevented. The statement "no trust for content" therefore holds only under A7, against a server that does not inject devices.
 
 **Foreign identifiers are data, not paths.** Envelope ids (`message_id`), sender and user ids and asset identifiers are attacker-controlled input: a malicious peer or a compromised backend can choose them freely. No foreign string becomes a path fragment: checked at the dispatch boundary (path-unsafe ids are discarded like malformed envelopes), at every path site (`storage::is_path_safe_id`) and when the account identity is materialised from server responses (Step 80, 2026-09-11; LEARNINGS §5.23 "validate the sink").
+
+**The server's redirects are not followed, but one.** The native HTTP clients follow no redirect (Step 132): a followed 3xx could re-send a login body to a host of the server's choosing or downgrade to plain HTTP. The one redirect Wire's API issues — an asset download's `302` to a pre-signed URL on the asset store — is followed by hand, once (Step 141): a plain GET without the bearer token or the `Asset-Token`, `https` only, no second hop. The server thereby chooses the host the ciphertext comes from; integrity does not depend on it (L6: the digest travels in the MLS message, a substituted blob fails `IntegrityCheck`). A malicious server can make the client issue one credential-free GET to an `https` URL of its choice when an attachment is opened — blind, the answer never goes back to the server. The browser build has no redirect policy of its own: `fetch` follows redirects (open.md §84).
 
 ------
 
@@ -252,6 +254,7 @@ Not blocking for the current implementation phase. To be picked up before the af
 | 0.7     | 2026-11-02 | Step 133: every claim matched against the code after the 2026-09-25 production-readiness review (its residuals became Steps 132 to 134 on 2026-11-01) — zeroization is best effort by type choice (G4, G6, the no-split rationale), the auth modes the code lacks are a marked design sketch, reproducible builds leave the trust model, G4's local forward secrecy points at Step 134, the server's device injection is assumption A7, the Linux keystore limit is NG-24 |
 | 0.8     | 2026-11-02 | Step 135: G1 without the X.509 exception — a message signed by a non-Basic leaf is dropped instead of attributed through the envelope (ADR-0027 decision 2 amended); every surfaced message is attributed to an authenticated leaf |
 | 0.9     | 2026-11-03 | Step 139: N8 names the service tokens of the token exchange (ADR-0036 revision 1.1) — handed to the page on the embedder's request, they live in the embedder's trust domain like the plaintexts; a bearer token without key binding |
+| 0.10    | 2026-11-04 | Step 141: the Trust Model names the redirect rule of Step 132 and its one exception — an asset download follows the backend's `302` to the asset store once, without credentials; integrity stays with L6 |
 
 ------
 

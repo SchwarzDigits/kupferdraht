@@ -2093,3 +2093,23 @@ audit, not live). Before Step 132 `wire/dto.rs` mapped 3 to
 conversation — it never reaches the room list. The code comments at those
 two sites, `docs/library.md` and the Step 132 archive pointed at §94 (the
 ciphersuite observation of the same day) until 2026-11-03.
+
+## 96) An asset download answers `302` to the asset store, and v0.2.0 refused it (2026-11-04)
+
+Measured on the wire-server-rs Docker stack: `docker/scripts/kupferdraht-smoke.sh
+--throwaway` failed its `download-asset` check since v0.2.0 —
+`BackendRejected("download_asset 302 Found: ")` — against the Haskell
+cargohold (`quay.io/wire/cargohold:5.38.9`) and the Rust cargohold alike;
+18/18 with v0.1.0 on 2026-10-31. `GET /v14/assets/{domain}/{id}` answers
+`302 Found` with `Location` a pre-signed S3 URL on cargohold's
+`s3DownloadEndpoint` (`https://localhost:8445/…?…X-Amz-Signature=…` on the
+stack, `downloadLinkTTL: 300`); the nginz log shows the `302` for both
+implementations, and the stack's `docker/tests/cargohold-contract.sh` pins
+it. Step 132 (M2) had set `redirect::Policy::none()` on both reqwest
+clients on the premise that Wire's API issues no redirect, taken from
+`backend-spec.md` §15.2 ("`200` raw ciphertext bytes"); the httpmock tests
+served `200` directly, so nothing caught it. Step 141 follows the one hop
+by hand, without credentials (`wire/http/asset_redirect.rs`,
+`docs/wire/api-notes.md` "Step 141 discovery"); smoked 2026-11-04 on the
+same stack, 18/18 against both cargohold implementations.
+

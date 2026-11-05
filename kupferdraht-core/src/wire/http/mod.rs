@@ -88,6 +88,10 @@ pub(crate) trait TokenRefresh {
     ) -> Pin<Box<dyn Future<Output = Result<String, KupferdrahtError>> + 'a>>;
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+mod asset_redirect;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod asset_redirect_tests;
 pub(crate) mod assets;
 pub(crate) mod auth;
 mod clients;
@@ -284,11 +288,13 @@ impl HttpClient {
         timeouts: HttpTimeouts,
     ) -> Result<Self, KupferdrahtError> {
         let base_url = checked_base_url(api_base_url, permit_http)?;
-        // Step 132 (M2): no redirect is followed. Wire's API issues none, and
-        // a followed 3xx could re-send a login body to a host of the
-        // server's choosing (307) or downgrade to plain HTTP; a 3xx answer
-        // surfaces as the status it is. (The browser build has no policy
-        // knob: `fetch` follows redirects by itself.)
+        // Step 132 (M2): reqwest follows no redirect. A followed 3xx could
+        // re-send a login body to a host of the server's choosing (307) or
+        // downgrade to plain HTTP; a 3xx answer surfaces as the status it
+        // is. The one redirect Wire's API issues — an asset download's 302
+        // to the asset store — `download_asset` follows by hand, without
+        // credentials (Step 141, `asset_redirect.rs`). (The browser build
+        // has no policy knob: `fetch` follows redirects by itself.)
         let client = build_reqwest(
             ReqwestClient::builder()
                 .redirect(reqwest::redirect::Policy::none())

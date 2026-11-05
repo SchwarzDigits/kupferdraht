@@ -1330,6 +1330,37 @@ route (the versioned `/v{N}/await` variants 404 at nginx; verified
   socket registered, and a frame moving the cursor would make a
   missed push permanent.
 
+## Step 141 discovery: an asset download answers `302` to the asset store
+
+`GET /v14/assets/{domain}/{id}` does not serve a local asset's bytes:
+cargohold answers `302 Found` with `Location` a pre-signed S3 URL on its
+`s3DownloadEndpoint` — path-style, the signature in the query
+(`X-Amz-Signature=…`), valid `downloadLinkTTL` seconds (300 in the chart
+and on the wire-server-rs stack). The answer is the same for the
+uploader without a token, for another user with the `Asset-Token` and
+for a public asset. Measured 2026-11-04 on the wire-server-rs stack,
+against the Haskell cargohold 5.38.9 and its Rust port; the stack's
+`docker/tests/cargohold-contract.sh` pins the `302` and the link's shape
+for both (`docs/observations.md` §96). `backend-spec.md` §15.2 had said
+"`200` raw ciphertext bytes", and Step 132 stopped following redirects
+on that premise.
+
+Kupferdraht follows the one hop by hand (Step 141,
+`wire/http/asset_redirect.rs`): a GET on the transfer client without the
+bearer token, the `Asset-Token` or a cookie; `302`, `303` and `307` only,
+an absolute `https` location (`http` with `permit_http`) without
+userinfo, no second redirect. The query is a credential for the link's
+lifetime: logs and errors name the host only, and the asset store's
+error body — S3 echoes the signature on `SignatureDoesNotMatch` — is
+dropped.
+
+**Browser (not observed).** `fetch` follows the redirect itself. Two
+questions belong to the deployment: whether the asset store answers CORS
+for the app's origin, and the custom `Asset-Token` header — the Fetch
+standard drops `Authorization` on a cross-origin redirect but keeps
+other request headers, so the token would reach the asset store, whose
+CORS answer must allow it.
+
 ## Cheat sheet: what changed between v5 and v14
 
 A tight version of the "what broke" catalogue useful when

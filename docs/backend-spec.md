@@ -1752,7 +1752,13 @@ duty is transport-level only.
 `GET /v14/assets/{asset_domain}/{asset_id}` — Bearer +
 `Asset-Token: <token>` header for private assets.
 
-- `200` raw ciphertext bytes.
+- `302` with `Location` a time-limited pre-signed URL on the asset store
+  (the normal case for a local asset: Wire's cargohold signs an S3 link on
+  its `s3DownloadEndpoint`, valid `downloadLinkTTL` seconds), or `200` with
+  the raw ciphertext bytes. The client fetches the location with a plain
+  GET — no bearer token, no `Asset-Token`: the URL carries its own
+  signature — and follows no further redirect. The location MUST be an
+  absolute `https` URL without userinfo.
 - `404` — unknown asset, or wrong/missing token (MUST NOT distinguish).
 - `asset_domain` MUST equal the deployment domain (§3.4).
 - Any authenticated user of the deployment with the correct token may
