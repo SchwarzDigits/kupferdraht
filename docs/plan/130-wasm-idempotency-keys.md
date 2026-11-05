@@ -1,13 +1,16 @@
 # Step 130 — Idempotency keys for wasm mutations (a retry across a leader change)
 
-**Status: in progress 2026-11-04** — 130a (idempotency keys) on
-`step/130a-idempotency-keys`: gate green (wasm32 lines included), smoked
+**Status: in progress** — **130a merged 2026-11-04** as PR #29
+(`224cf7a`, feature commit `2bb4b7a`): gate green (wasm32 lines
+included); CI green, the tabs failover against the stub running for the
+first time in `step_94_leader_tab` (18 tests, headless Firefox); smoked
 2026-11-04 against the self-hosted stack with the CLI (a key sent twice
 reached the second device once under one id; a keyed reaction repeated
 stayed on, a new key toggled it off; a message key reused for a reaction
 was refused); the browser end-to-end path (takeover → the new leader
-re-drives the orphaned row) is left to the embedder's app, the CI browser
-scenario runs the tabs failover against the stub. 130b and 130c follow. Commissioned
+re-drives the orphaned row) is left to the embedder's app, asked for in
+the PR. Next: 130b, after Step 141 and before the v0.2.1 release; 130c
+changes values the browser reads and waits for 0.3.0. Commissioned
 2026-11-01 (transferred from open.md's former "Proposed steps", proposed
 2026-09-25 in the Step 94 retrospective; ADR-0026 option L3-C, deferred
 there to "a later step").
@@ -27,7 +30,7 @@ suite runs in CI only and has no backend there); keys live 28 days (the
 `invite`, `kick`, `leave`, `deleteRoom`, `revokeJoinLink` and `setHandle`
 stay `mutation`; three sub-steps:
 
-- **130a — idempotency keys** (this branch): the core API, V32, the wasm
+- **130a — idempotency keys** (merged, PR #29): the core API, V32, the wasm
   options, the three-class table.
 - **130b — the Step-79 resend path on the wasm surface:** `failedSends`,
   `resend`, `resendFailed` and their tab mirrors (`idempotent`: the same id
