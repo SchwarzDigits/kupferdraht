@@ -2111,5 +2111,7 @@ clients on the premise that Wire's API issues no redirect, taken from
 served `200` directly, so nothing caught it. Step 141 follows the one hop
 by hand, without credentials (`wire/http/asset_redirect.rs`,
 `docs/wire/api-notes.md` "Step 141 discovery"); smoked 2026-11-04 on the
-same stack, 18/18 against both cargohold implementations.
+same stack, 18/18 against both cargohold implementations. The regression shipped first
+in v0.1.1, not v0.2.0: Step 132's `0818b6f` is in both tags, and the
+smoke had not run against v0.1.1 (corrected 2026-11-05).
 

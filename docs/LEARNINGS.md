@@ -2453,3 +2453,47 @@ touched it.
   `electionAndFailover` (a keyed `sendText` resolving on the new leader,
   `createRoom` still `LeaderChanged`) ran for the first time in PR #29's
   CI, as the gate report said it would, and passed with 18 tests.
+
+### 5.79 A transport rule taken from the spec, and a pin that read a version as a float (Step 141)
+
+- **A rule that forbids a backend behaviour needs the live backend's
+  word, not the spec's.** Step 132 set `redirect::Policy::none()` on
+  both reqwest clients because "Wire's API issues none", taken from
+  `backend-spec.md` §15.2 ("`200` raw ciphertext bytes"). cargohold
+  answers every local asset download with `302` to a pre-signed S3 URL.
+  The httpmock tests were written from the same section, served `200`
+  and agreed with the code: a mock built from a document confirms the
+  document. Before a step forbids something the backend might do, look
+  for it in a captured live exchange or `docs/observations.md`; a spec
+  section is a claim to check, not a measurement.
+- **A change every request passes through smokes the whole round trip.**
+  Step 132's smoke covered its own items by name (the relogin on an
+  existing device, the legacy socket's connect, the purge), not a file
+  download, which the redirect policy changed as well. The regression
+  shipped in v0.1.1 and v0.2.0 and was found by the wire-server-rs
+  stack's 18-check smoke, run by Volker against v0.2.0. A transport,
+  storage or crypto rule under every request runs the full
+  `kupferdraht-smoke.sh --throwaway`, `download-asset` included.
+- **A custom credential header is one the HTTP library does not know.**
+  reqwest drops `Authorization` on a cross-host redirect, but not
+  `Asset-Token`; a `Policy::custom` would have carried it to the asset
+  store. Following the one hop by hand with a fresh GET sends nothing
+  the URL does not carry itself. Where a library strips credentials on
+  redirect, check which headers it counts as credentials.
+- **An error body can carry the credential.** S3 echoes the request's
+  signature in its XML error body, so the refused hop names host and
+  status only and drops the body — the rule the logs already follow for
+  the query. `a_refusal_never_repeats_the_query` pins it.
+- **A version is not a float.** The gate's first run found
+  `step_135_x509_leaves_dropped` parsing THREAT_MODEL's header as an
+  `f32`: `0.10` read as `0.1 < 0.8`, so the bump to 0.10 broke a pin
+  written two revisions earlier. It now compares `(major, minor)`. The
+  third pin in four steps that broke on the value after it (5.76, 5.78):
+  write a pin on a version or a list for the values that will follow.
+- **"A regression of X" is a `git tag --contains` away.** The plan said
+  the regression shipped in v0.2.0, from the smoke's history (18/18 with
+  v0.1.0, failing with v0.2.0); `git tag --contains 0818b6f` lists
+  v0.1.1 as well, which the smoke had never run against. The CHANGELOG
+  entry said "a regression of 0.2.0" until the archive commit corrected
+  it. Name the first release from the commit, not from the last green
+  run.

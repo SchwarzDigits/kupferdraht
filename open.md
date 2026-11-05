@@ -325,15 +325,13 @@ rusqlite ≥ 0.38 can retire the fork's wasm arm for its own
 `ffi-sqlite-wasm-rs`. (The first Rust embedder dropped its own
 `[patch.crates-io]` entry on 2026-11-01.)
 
-The same policy decides gap-B.27: `openmls_sqlite_storage` 0.3.0 runs
-refinery non-grouped (`storage_provider.rs:62-65`, not configurable from
-outside), so a crash between a migration's SQL commit and its history-row
-commit re-applies it on the next open, and V2+ of its migrations are
-re-apply-fatal; Step 87 closed that window for kupferdraht.db with
-`set_grouped(true)`. The fork branch can carry the same one-line change
-ahead of upstream (issue draft: `docs/plan/archive/87-atomic-migrations.md`). A bricked mls.db is
-survivable — discard, rejoin by external commit — the account store is
-not, which is why kupferdraht.db went first.
+gap-B.27 left this item on 2026-11-05 for Step 142:
+`openmls_sqlite_storage` 0.3.0 runs refinery non-grouped, so a crash
+between a migration's SQL commit and its history-row commit leaves
+`mls.db` unopenable — measured 2026-11-05, V3–V6 fail when applied again
+(V2, a copy-and-swap, survives; V7 and V8 on upstream `main` fail too).
+Filed upstream as openmls/openmls#2322 with the fix in PR #2323; the fork
+branch carries the backport since tag `openmls-v0.9.0-schwarzdigits.2`.
 
 ## 83) The login path does not enter the manager's client cache (2026-11-01)
 
