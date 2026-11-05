@@ -262,7 +262,12 @@ private assets (below). `expires` is set for retentions other than
 ### Download response
 
 Raw bytes, the still-encrypted ciphertext, streamed in the response
-body. Beyond the status code the only header Kalium looks at is a
+body — or, for a local asset on Wire's cargohold, a `302 Found` whose
+`Location` is a pre-signed URL on the asset store, where the bytes are
+(live-confirmed, `docs/observations.md` §96; `docs/wire/api-notes.md`
+"Step 141 discovery"). Kupferdraht follows that one hop by hand, as a
+GET without the bearer token or the `Asset-Token`
+(`wire/http/asset_redirect.rs`). Beyond the status code the only header Kalium looks at is a
 logged `WWW-Authenticate` on `401`. Two authentication mechanisms are
 layered:
 

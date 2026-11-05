@@ -80,6 +80,19 @@ is no skill for it — it is this short procedure:
 
 ### Fixed
 
+- **Received files open again** (Step 141; a regression of 0.2.0): Wire
+  answers the download of a local asset with `302` to a time-limited
+  pre-signed URL on its asset store, and since Step 132 the native build
+  refused it (`BackendRejected("download_asset 302 Found: ")`), so
+  `AssetSummary::download` and `save_to` failed for every received file —
+  CLI, TUI and the Kotlin / Swift bindings. The download now follows that
+  one redirect: a GET without the access token or the `Asset-Token`, an
+  `https` location only (`http` with `permit_http`), no second hop. Every
+  other request still follows no redirect. The file is checked against
+  the digest from the message as before, so the asset store cannot
+  substitute it. The browser build was not affected (`fetch` follows the
+  redirect).
+
 ### Security
 
 - **The browser stores no database in the clear** (Step 140): every VFS
