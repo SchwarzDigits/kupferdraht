@@ -1,17 +1,32 @@
 # Step 141 — Asset downloads follow cargohold's redirect
 
-**Status: in progress 2026-11-04** — gate green (its first run found
+**Status: MERGED 2026-11-05** — `a8fb122` on
+`step/141-asset-download-redirect`, merged to `main` as PR #31
+(`9e1a11c`); gate green (its first run found
 `step_135_x509_leaves_dropped` reading THREAT_MODEL's version as an `f32`:
-0.10 parsed as 0.1 < 0.8; now compared as `(major, minor)`); smoked 2026-11-04 on the
-wire-server-rs stack with `kupferdraht-smoke.sh --throwaway`, 18/18 against
-the Rust cargohold and 18/18 against the Haskell cargohold 5.38.9 (nginz
-logs the `302` for both; `CARGOHOLD_UPSTREAM` switched by Volker between
-the runs). Proposed 2026-11-04 by Volker from the
+0.10 parsed as 0.1 < 0.8; now compared as `(major, minor)`), CI green;
+smoked 2026-11-04 on the wire-server-rs stack with
+`kupferdraht-smoke.sh --throwaway`, 18/18 against the Rust cargohold and
+18/18 against the Haskell cargohold 5.38.9 (nginz logs the `302` for both;
+`CARGOHOLD_UPSTREAM` switched by Volker between the runs). Scope shipped
+as planned below: `download_asset` follows one `302` / `303` / `307` hop
+by hand (`wire/http/asset_redirect.rs`) — a GET without the bearer token
+or the `Asset-Token`, an absolute `https` location (`http` with
+`permit_http`), no userinfo, no second hop; `301` / `308` stay refused;
+a refusal names host and status only; THREAT_MODEL 0.10. Pins: the five
+unit tests in `wire/http/asset_redirect.rs`,
+`wire/http/asset_redirect_tests.rs`,
+`tests/step_141_asset_download_redirect.rs`; retrospective LEARNINGS
+§5.79. The regression shipped first in v0.1.1, not in v0.2.0 as the text
+below says: Step 132's `0818b6f` is in both tags, and the smoke had last
+passed with v0.1.0 (CHANGELOG and observations §96 corrected on
+archiving). No PLAN.md row (proposed and built the same day). Archived
+2026-11-05 with this header. (Proposed 2026-11-04 by Volker from the
 wire-server-rs Docker stack: `docker/scripts/kupferdraht-smoke.sh
 --throwaway` fails its `download-asset` check since v0.2.0, against the
 Haskell cargohold 5.38.9 and the Rust cargohold alike; 18/18 with v0.1.0
 on 2026-10-31. Regression of Step 132 (M2, `0818b6f`, released in
-v0.2.0). Ordered before 130b; ships in v0.2.1.
+v0.2.0). Ordered before 130b; ships in v0.2.1.)
 
 **Taken 2026-11-04 (Volker), with the red tests:** THREAT_MODEL 0.10
 names the redirect rule and its one exception (Trust Model); no

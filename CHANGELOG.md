@@ -80,7 +80,7 @@ is no skill for it — it is this short procedure:
 
 ### Fixed
 
-- **Received files open again** (Step 141; a regression of 0.2.0): Wire
+- **Received files open again** (Step 141; a regression of 0.1.1): Wire
   answers the download of a local asset with `302` to a time-limited
   pre-signed URL on its asset store, and since Step 132 the native build
   refused it (`BackendRejected("download_asset 302 Found: ")`), so
