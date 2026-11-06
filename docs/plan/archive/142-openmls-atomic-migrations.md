@@ -1,15 +1,30 @@
 # Step 142 — openmls 0.9.2 and atomic openmls migrations in `mls.db`
 
-**Status: commissioned 2026-11-05** (transferred from open.md gap-B.27,
-§82), **widened the same day to openmls 0.9.2**: the fork's branch
-`schwarzdigits/openmls-0.9` merged upstream's `v0.9.2` (`2142e61e7`,
-`9a228e8e9`) on top of the grouped-runner backport (`597a098eb`, filed
-upstream as openmls/openmls#2322, PR openmls/openmls#2323) and the p256
-0.14 providers; tag `openmls-v0.9.2-schwarzdigits.1` (signed,
-2026-11-05). This step moves Kupferdraht onto that tag and onto
-crates.io's `openmls` 0.9.2. Next after the commissioning chore, before
-130b; ships in v0.2.1 with the features, no early release — the
-embedder is not in production yet (Volker, 2026-11-05).
+**Status: MERGED 2026-11-06** — `8c1b5b1` on
+`step/142-openmls-atomic-migrations`, merged to `main` as PR #34
+(`d8ee3a4`); gate green on 1.98 (fmt, 0 build warnings, clippy, 1432
+tests, deny; wasm32 check, clippy `--lib` and CI's wasm clippy line), CI
+green including the browser tests; smoked 2026-11-06 on the
+wire-server-rs stack with `kupferdraht-smoke.sh --throwaway`, 18/18.
+Scope shipped as planned below: the three fork crates on tag
+`openmls-v0.9.2-schwarzdigits.1` (`9a228e8e9`; between the two tags only
+`sqlite_storage` changed among them), `openmls = "0.9.2"` at both
+manifest sites, `Cargo.lock` with crates.io `openmls` 0.9.2; no
+Kupferdraht code change, no CLI command. Pins:
+`encryption/migration_tests.rs` (the fault-injection test, in a file of
+its own beside `provider.rs`), `tests/step_142_openmls_0_9_2_pins.rs`,
+`tests/step_90_sqlite3mc_engine.rs`; retrospective LEARNINGS §5.80. The
+advisory-watch question (Out of scope) was answered on archiving:
+Volker watches openmls/openmls's security alerts, and Step 148 checks
+upstream repository advisories in CI. Commissioned 2026-11-05 as the
+transfer of open.md gap-B.27 (§82) and widened the same day to openmls
+0.9.2: the fork's branch `schwarzdigits/openmls-0.9` merged upstream's
+`v0.9.2` (`2142e61e7`, `9a228e8e9`) on top of the grouped-runner backport
+(`597a098eb`, filed upstream as openmls/openmls#2322, PR
+openmls/openmls#2323) and the p256 0.14 providers; tag
+`openmls-v0.9.2-schwarzdigits.1` (signed, 2026-11-05). Ships in
+v0.2.1 with the features, no early release — the embedder is not in
+production yet (Volker, 2026-11-05).
 
 ## Problem
 
