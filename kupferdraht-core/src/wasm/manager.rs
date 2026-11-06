@@ -29,6 +29,7 @@ use wasm_bindgen::prelude::*;
 use zeroize::Zeroizing;
 
 use super::read_state;
+use super::resend;
 use crate::client::ServerConfig;
 use crate::error::KupferdrahtError;
 use crate::keystore::IndexedDbKeyStore;
@@ -46,6 +47,16 @@ use crate::timeline::OutgoingContent;
 #[must_use]
 pub fn js_error(e: &KupferdrahtError) -> JsValue {
     to_js(e)
+}
+
+/// The `name` [`to_js`] gives `e`: its variant, or `Evicted` once another
+/// browser took the databases over (Step 119).
+fn js_error_name(e: &KupferdrahtError) -> &'static str {
+    if crate::storage::evicted_by_takeover() {
+        KupferdrahtError::Evicted.variant_name()
+    } else {
+        e.variant_name()
+    }
 }
 
 /// [`js_error`] under the name the binding's methods use.
@@ -1094,6 +1105,50 @@ impl Client {
             .map(|it| TimelineItemView::project(it, me.as_deref()))
             .collect();
         serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+    }
+
+    /// The failed sends of `roomId`, oldest first, as the items `messages`
+    /// returns (`deliveryStatus: "failed"`) — a send whose tab went away
+    /// mid-send reads as failed too (Step 97a). Step 130b,
+    /// `Room::failed_sends`.
+    #[wasm_bindgen(js_name = failedSends)]
+    pub async fn failed_sends(&self, room_id: String) -> Result<JsValue, JsValue> {
+        let room = self.room_for(&room_id).await?;
+        let items = room.failed_sends().await.map_err(|e| to_js(&e))?;
+        let me = self.inner.user_id().map(ToString::to_string);
+        let view: Vec<TimelineItemView> = items
+            .iter()
+            .map(|it| TimelineItemView::project(it, me.as_deref()))
+            .collect();
+        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+    }
+
+    /// Re-drive the failed send `messageId` of `roomId` under its id
+    /// (`Timeline::resend`, Step 79); a row this device already sent
+    /// answers its handle without sending again (Step 130b). Returns
+    /// `{ messageId, sentAtMs }`.
+    #[wasm_bindgen(js_name = resend)]
+    pub async fn resend(&self, room_id: String, message_id: String) -> Result<JsValue, JsValue> {
+        let timeline = self.timeline_for(&room_id).await?;
+        let handle = timeline.resend(message_id).await.map_err(|e| to_js(&e))?;
+        message_handle_to_js(&handle)
+    }
+
+    /// Re-drive the failed sends of `roomId` oldest first, stopping at the
+    /// first error (`Timeline::resend_failed`, Step 79). Returns `{ resent,
+    /// skipped, stoppedAt, remaining }`; `stoppedAt` names the error as a
+    /// thrown one is named, `null` when every attempted row went through
+    /// (Step 130b).
+    #[wasm_bindgen(js_name = resendFailed)]
+    pub async fn resend_failed(&self, room_id: String) -> Result<JsValue, JsValue> {
+        self.room_for(&room_id).await?;
+        let (summary, stop_error) = self
+            .inner
+            .resend_pass(&room_id)
+            .await
+            .map_err(|e| to_js(&e))?;
+        let stop_name = stop_error.as_ref().map(js_error_name);
+        resend::to_js(&resend::summary_view(&summary, stop_name))
     }
 
     /// Send a knock ("ping") to `roomId` (Step 98c). `hotKnock` marks a

@@ -9,7 +9,8 @@ reached the second device once under one id; a keyed reaction repeated
 stayed on, a new key toggled it off; a message key reused for a reaction
 was refused); the browser end-to-end path (takeover → the new leader
 re-drives the orphaned row) is left to the embedder's app, asked for in
-the PR. Next: 130b, after Step 141 and before the v0.2.1 release; 130c
+the PR. **130b in progress** (2026-11-06, design and tests below), before
+Step 148 and the v0.2.1 release; 130c
 changes values the browser reads and waits for 0.3.0. Commissioned
 2026-11-01 (transferred from open.md's former "Proposed steps", proposed
 2026-09-25 in the Step 94 retrospective; ADR-0026 option L3-C, deferred
@@ -196,3 +197,48 @@ The plan was: two tabs on the local stack (`opfs-smoke/tabs.html`), a
 send in flight while the leader is evicted (the Step-100 takeover)
 arrives exactly once; the CLI `send --idempotency-key k` twice shows one
 message on a second client.
+
+## 130b — design
+
+Taken 2026-11-06 (Volker):
+
+- **The surface:** `Client.failedSends(roomId)` → the items `messages()`
+  returns (`Room::failed_sends`; a send whose tab went away mid-send
+  reads as failed, Step 97a); `Client.resend(roomId, messageId)` →
+  `{ messageId, sentAtMs }` (`Timeline::resend`);
+  `Client.resendFailed(roomId)` → `{ resent, skipped, stoppedAt,
+  remaining }`, `stoppedAt` `null` or `{ messageId, name, message }` —
+  the error named as a thrown one is (`Evicted` after a takeover).
+- **`resend` of a sent row answers its handle (option B), native too.**
+  The tabs class `idempotent` needs a repeat after a call that landed to
+  answer like the first; `resend` used to reject a `Submitted` row with
+  `InvalidInput`. Now a row this device sent (the account's user and
+  this client's device id) that is `Submitted`, or `Received` once its
+  echo arrived, answers `{ message_id, sent_at_ms }` without an upload.
+  Another sender's message, a send in flight and a deleted row still
+  reject. A `Changed` entry, not BREAKING: a call that failed now
+  succeeds. `resendFailed` stays `idempotent` without a change: a second
+  pass finds only the rows the first left `Failed`.
+- **No BREAKING change for the stop's name.** The public `ResendSummary`
+  keeps `stopped_at: Option<(String, String)>`; the crate-internal
+  `Client::resend_pass` returns the summary and the error it stopped at,
+  and `resend_failed` drops the error.
+- No CLI command and no FFI mirror (both have the Step-79 path); no
+  smoke (browser surface; the browser tests run in CI).
+
+## 130b — tests (red first)
+
+- **Native, `tests/step_79_failed_send_recovery.rs`:**
+  `resend_of_a_row_this_device_sent_answers_its_handle` (`Submitted`,
+  then `Received` after the echo; one upload),
+  `a_second_resend_of_a_resent_row_answers_the_first_ones_handle`,
+  `resend_rejects_rows_this_device_did_not_send` (a peer's message, an
+  unknown id; no upload) — the former
+  `resend_rejects_rows_that_are_not_failed_sends` pinned the old refusal.
+- **Native pins, `tests/step_130b_wasm_resend_pins.rs`:** the three
+  classes in `METHODS`, the wasm methods and the core calls they make,
+  the summary view's fields and the unchanged public `ResendSummary`, the
+  proxy, `index.d.ts`, the doc homes.
+- **Browser, `tests/step_130b_browser_resend.rs`:** the summary view as a
+  JS value — `stoppedAt === null` after a pass that went through, the
+  stop's id, name and message otherwise, empty lists as `[]`.

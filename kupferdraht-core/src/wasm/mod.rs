@@ -26,6 +26,8 @@ pub mod push_socket;
 pub mod push_state;
 // Step 138: a room's read state as the browser sees it.
 pub mod read_state;
+// Step 130b: `resendFailed`'s summary as the browser sees it.
+pub mod resend;
 // Step 139: service tokens for the embedder's own services.
 pub mod service_token;
 // Step 118: how long the live-sync loop waits, when it may reconnect.

@@ -144,6 +144,14 @@ impl Client {
         is_resendable_row(row, self.in_flight_sends().contains(&row.message_id))
     }
 
+    /// Whether `row` is this device's own send: the account's user and
+    /// this client's device id (Step 130b) — not a peer's message, nor one
+    /// the account sent from another device.
+    pub(crate) fn sent_by_this_device(&self, row: &TimelineEventRecord) -> bool {
+        row.sender_user_id == self.own_qualified_user_id()
+            && self.device_id() == Some(row.sender_device_id.as_str())
+    }
+
     /// The persist-first send of a non-text content row (knock,
     /// location, case snapshot, task-list marker): write the row as
     /// `Sending` and emit it, upload under `op`, settle. Returns the

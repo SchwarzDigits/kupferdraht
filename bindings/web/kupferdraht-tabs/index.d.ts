@@ -146,6 +146,14 @@ export interface MessageHandle { messageId: string; sentAtMs: number }
 export interface SendOptions { idempotencyKey?: string }
 /** The handle of a keyed send: the key the call ran under, the caller's or the generated one (Step 130a). */
 export interface KeyedMessageHandle extends MessageHandle { idempotencyKey: string }
+/** Where a `resendFailed` pass stopped (Step 130b): the row, and the error's `name` and `message` as a thrown one carries them. */
+export interface ResendStop { messageId: string; name: string; message: string }
+/**
+ * The outcome of `resendFailed` (Step 130b): the rows re-driven, oldest first; the failed task / case / marker snapshots it
+ * does not cover (send the current state instead); where it stopped, `null` when every attempted row went through; the
+ * failed rows behind the stop it did not attempt — the next pass picks them up.
+ */
+export interface ResendSummary { resent: MessageHandle[]; skipped: string[]; stoppedAt: ResendStop | null; remaining: number }
 export interface Reaction { emoji: string; count: number; isSelf: boolean }
 export type DeliveryStatus = 'sending' | 'submitted' | 'received' | 'failed';
 export interface AssetMeta { filename: string | null; mime: string; size: number }
@@ -276,6 +284,15 @@ export class ClientProxy {
   sendText(roomId: string, body: string, options?: SendOptions): Promise<KeyedMessageHandle>;
   /** `before` is a message id: only items strictly older than it are returned. */
   messages(roomId: string, limit?: number, before?: string): Promise<TimelineItem[]>;
+  /** The room's failed sends, oldest first — `deliveryStatus` `'failed'`; a send its tab abandoned is one too (Step 130b). */
+  failedSends(roomId: string): Promise<TimelineItem[]>;
+  /**
+   * Re-drive one failed send under its message id (Step 130b). A row this device already sent answers its handle without
+   * sending again, so the call is re-issued at a leader change; another sender's message rejects `InvalidInput`.
+   */
+  resend(roomId: string, messageId: string): Promise<MessageHandle>;
+  /** Re-drive the room's failed sends oldest first, stopping at the first error so no message is overtaken (Step 130b). */
+  resendFailed(roomId: string): Promise<ResendSummary>;
   /** Keyed (`SendOptions`): re-issued at a leader change with its key. */
   sendKnock(roomId: string, hotKnock: boolean, options?: SendOptions): Promise<KeyedMessageHandle>;
   /** Keyed (`SendOptions`): re-issued at a leader change with its key. */

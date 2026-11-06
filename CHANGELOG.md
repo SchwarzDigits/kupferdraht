@@ -56,8 +56,23 @@ is no skill for it — it is this short procedure:
   (a UUID is generated when it is missing) and resolve
   `{ messageId, sentAtMs, idempotencyKey }`. Existing calls without
   options keep working.
+- **Failed sends on the browser surface** (Step 130b): `failedSends(roomId)`
+  lists a room's failed sends — a send whose tab went away mid-send among
+  them — as the items `messages()` returns; `resend(roomId, messageId)`
+  re-drives one under its message id and resolves `{ messageId, sentAtMs }`;
+  `resendFailed(roomId)` re-drives them oldest first, stops at the first
+  error and resolves `{ resent, skipped, stoppedAt, remaining }`, with
+  `stoppedAt` `null` or `{ messageId, name, message }`. `kupferdraht-tabs`
+  re-issues all three at a leader change.
 
 ### Changed
+
+- **`resend` of a message this device already sent answers its handle**
+  (Step 130b): `Timeline::resend` (Kotlin, Swift and the browser alike)
+  returns the message's id and send time instead of rejecting with
+  `InvalidInput`, and sends nothing, so repeating a resend whose answer
+  was lost is safe. Another sender's message, a send still in flight and
+  a deleted message still reject `InvalidInput`.
 
 - **kupferdraht-tabs failover in three classes** (Step 130a, ADR-0026
   revision 2026-11-04): the six keyed sends in flight at a leader change
