@@ -9,9 +9,17 @@ reached the second device once under one id; a keyed reaction repeated
 stayed on, a new key toggled it off; a message key reused for a reaction
 was refused); the browser end-to-end path (takeover → the new leader
 re-drives the orphaned row) is left to the embedder's app, asked for in
-the PR. **130b in progress** (2026-11-06, design and tests below), before
-Step 148 and the v0.2.1 release; 130c
-changes values the browser reads and waits for 0.3.0. Commissioned
+the PR. **130b merged 2026-11-06** as PR #36 (`1853fbf`, feature commit
+`841f474`): `failedSends` / `resend` / `resendFailed` on the wasm surface
+and the tabs proxy, all three in the `idempotent` class, and a `resend` of
+a row this device already sent answers its handle (core API, so native
+too); gate green (wasm32 lines included, CI's clippy line among them); the
+browser suite green locally for the first time (16 suites, 71 tests,
+headless Firefox) and in CI; no smoke (the browser surface; the native
+send path is unchanged, the rejected send is the Step-79 tests'); no
+`step_94_leader_tab` scenario for a resend across a leader change — the
+re-issue is the class's, tested for the class, and the three classes are
+pinned. 130c changes values the browser reads and waits for 0.3.0. Commissioned
 2026-11-01 (transferred from open.md's former "Proposed steps", proposed
 2026-09-25 in the Step 94 retrospective; ADR-0026 option L3-C, deferred
 there to "a later step").

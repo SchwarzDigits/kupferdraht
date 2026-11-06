@@ -2556,3 +2556,60 @@ touched it.
   pull requests, so they were rewritten, signed again, re-tagged and
   force-pushed with lease. A signed tag on a commit with the wrong
   trailer costs a retag; grep the messages before `git tag -s`.
+
+### 5.81 A failover class claimed per method, a public type kept by an internal pass, and a toolchain claim that covered only what had run (Step 130b)
+
+- **A failover class is a claim about every method in it, checked per
+  method.** The tabs proxy re-issues an `idempotent` call after a leader
+  change without knowing whether the first one landed. `resend` was
+  headed for that class while it rejected a `Submitted` row with
+  `InvalidInput`: a repeat after a resend that went through would have
+  reported a failure for a message that was out. The class stayed;
+  `resend` changed (a row this device already sent answers its handle),
+  and `a_second_resend_of_a_resent_row_answers_the_first_ones_handle`
+  pins the repeat. Before a method joins a re-issued class, the test to
+  write is the repeat after success, not the first call.
+- **A binding that needs more than the public type carries gets a
+  crate-internal path.** The browser's `stoppedAt` names the error
+  (`Evicted` after a takeover); the public `ResendSummary` carries id and
+  message only, and widening its `pub` tuple would have been BREAKING in
+  a patch line. `Client::resend_pass` returns the summary with the error
+  beside it, `resend_failed` drops the error. A tuple, not a struct: a
+  field read only by `wasm/` would have been dead code natively and drawn
+  a warning, which the gate does not answer with `#[allow]`.
+- **A toolchain claim in the docs covers only what was run.** bindings.md,
+  README and CLAUDE.md said Apple clang 21 suffices for wasm32 — true for
+  `cargo check` and `clippy`, the two that ran here since 2026-10-07, and
+  neither links. The first link, the first local browser run, failed on
+  Apple's `ar`, which indexes no wasm objects; CI had set
+  `AR_wasm32_unknown_unknown` all along, so the answer was in the
+  repository. Corrected in the build docs, recorded in observations §97.
+  A doc that says "all three" needs all three run.
+- **The cause is diagnosed before the workaround is written down.**
+  `rust-lld` aborting on `libLLVM.dylib` was first noted as a path error
+  of the 1.98 toolchain on this Mac, fixed by `DYLD_LIBRARY_PATH`.
+  Measured in the archive chore: its rpath points one directory beside
+  the library, rustup's proxy covers that, and started directly the
+  `rust-lld` of 1.97.1 and 1.99.1 loads while those of 1.98 and 1.99.0
+  abort — a packaging matter of two releases that bites only a setup
+  bypassing rustup's proxies (this machine's, because Homebrew's Rust
+  shadows them). `DYLD_*` cannot cross the `#!/usr/bin/env` of
+  `wasm-test.sh` either (SIP strips it), so the workaround needs the
+  script's loop run from the shell. Written into the build docs as first
+  noted, it would have sent every macOS reader to a variable a normal
+  rustup setup does not need; it stays in observations §97.
+- **The browser suite runs here now.** 16 suites, 71 tests in headless
+  Firefox before the commit, not only in CI. CLAUDE.md asks for
+  `wasm-test.sh` on a wasm step; until Step 130b it had never run on this
+  machine, so a lesson like Step 125's (a rename only
+  `step_94_leader_tab` caught) needed a push to be learned.
+- **A test dropped from a proposal is struck where it was proposed, with
+  the reason, when it is dropped.** The proposal for decision 3 named a
+  `step_94_leader_tab` scenario "resend re-issued after a leader change";
+  the plan's test list, written later, left it out, and only the gate
+  report said so. The re-issue is the class's mechanism —
+  `step_94_leader_tab` tests it for the class, `step_130b_wasm_resend_pins`
+  pins the three methods' class — so the scenario would have tested the
+  proxy again, not `resend`. Not built either: a browser test that a
+  rejected send shows in `failedSends`; the browser suite has no backend,
+  and the Step-79 tests cover it natively.

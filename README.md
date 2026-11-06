@@ -218,11 +218,12 @@ cargo build --workspace
 Browser build (wasm-bindgen surface, from `kupferdraht-core/`; the SQLite3MC
 C needs a clang with the WebAssembly backend — Apple clang 21 (Xcode 26)
 and Homebrew LLVM have it; an older Apple clang has not, then point cargo
-at Homebrew's):
+at Homebrew's — and on macOS Homebrew's `llvm-ar` for every link, since
+Apple's `ar` cannot index wasm objects):
 
 ```sh
 export CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang   # only if `clang --print-targets` lacks wasm32
-export AR_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/llvm-ar
+export AR_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/llvm-ar # on macOS always
 wasm-pack build --target web
 scripts/wasm-test.sh            # the browser tests, headless Firefox
 ```

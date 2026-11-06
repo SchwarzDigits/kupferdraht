@@ -2115,3 +2115,40 @@ same stack, 18/18 against both cargohold implementations. The regression shipped
 in v0.1.1, not v0.2.0: Step 132's `0818b6f` is in both tags, and the
 smoke had not run against v0.1.1 (corrected 2026-11-05).
 
+
+## 97) Linking wasm32 on macOS needs `llvm-ar` even with Apple clang 21, and the pinned toolchain's `rust-lld` needs rustup's library path (2026-11-06)
+
+Measured on the development Mac (Apple clang 21.0.0, Xcode 26 command-line
+tools; Homebrew LLVM 23.1.5; the pinned 1.98 toolchain from rustup
+1.29.1) during Step 130b, the first local run of `scripts/wasm-test.sh`.
+It corrects the last bullet of §80, which was measured with an older
+Apple clang.
+
+- **Apple clang 21 compiles the SQLite3MC C for wasm32; Apple's `ar` cannot
+  archive it usefully.** `clang --print-targets` lists `wasm32`, so `cc`
+  compiles without `CC_wasm32_unknown_unknown`. But it archives with the
+  system `ar`, whose index covers Mach-O objects only: the wasm archive
+  gets no symbol table, and the link fails with `rust-lld: error: …
+  undefined symbol: sqlite3_bind_null` and every other `sqlite3_*`.
+  `AR_wasm32_unknown_unknown` pointing at Homebrew's `llvm-ar` fixes it;
+  CI sets the same variable to the runner's `llvm-ar`.
+- **`cargo check` and `cargo clippy` for wasm32 never link**, which is why
+  both went green on this machine since 2026-10-07 without `llvm-ar`. Only
+  a link shows it: the browser tests and `wasm-pack build`.
+- **The 1.98 toolchain's `rust-lld` finds `libLLVM.dylib` only through
+  rustup's proxy.** Its `LC_RPATH` is `@loader_path/../lib`, i.e.
+  `lib/rustlib/aarch64-apple-darwin/lib/`, but rustup installs the
+  library in the toolchain's `lib/`. Started through `rustup run 1.98` it
+  loads; started from a `rustc` that runs without the proxy — the
+  toolchain's `bin/` put first on `PATH`, needed here because Homebrew's
+  Rust shadows rustup's proxies — it aborts with `dyld: Library not
+  loaded: @rpath/libLLVM.dylib`. `DYLD_LIBRARY_PATH` set to the
+  toolchain's `lib/` works around it. A packaging matter of the release,
+  not of the platform: started directly, the `rust-lld` of 1.97.1 and
+  1.99.1 loads, that of 1.99.0 aborts like 1.98's.
+- **`DYLD_*` does not survive `scripts/wasm-test.sh` on macOS.** Its
+  `#!/usr/bin/env bash` starts `/usr/bin/env`, a SIP-protected binary, and
+  macOS strips every `DYLD_*` variable when it starts one. The workaround
+  above therefore holds only when the script's per-suite `cargo test`
+  loop runs from the shell itself. A setup that uses rustup's proxies
+  needs neither.

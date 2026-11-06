@@ -15,8 +15,9 @@
 # the main thread.
 #
 # Needs: the `wasm32-unknown-unknown` target, a wasm-capable clang for the
-# SQLite3MC C (Apple clang has none — `brew install llvm` and export
-# CC_wasm32_unknown_unknown / AR_wasm32_unknown_unknown, see
+# SQLite3MC C and an llvm-ar to archive it (on macOS `brew install llvm` and
+# export AR_wasm32_unknown_unknown — Apple's ar cannot index wasm objects —
+# plus CC_wasm32_unknown_unknown for an Apple clang older than 21, see
 # docs/bindings.md), Firefox + geckodriver, and `wasm-bindgen-test-runner`
 # at the lockfile's wasm-bindgen version (on PATH, or wasm-pack's cache).
 set -euo pipefail
