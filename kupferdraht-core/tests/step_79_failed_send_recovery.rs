@@ -664,8 +664,11 @@ async fn resend_keeps_the_quote_and_the_mentions_on_the_wire() {
     assert_eq!(mention_row.delivery_status, DeliveryStatus::Submitted);
 }
 
+// Step 130b: a resend of a row this device already sent answers the row's
+// handle instead of refusing — what a browser tab re-issuing `resend` after
+// a leader change meets when the old leader's resend went through.
 #[tokio::test]
-async fn resend_rejects_rows_that_are_not_failed_sends() {
+async fn resend_of_a_row_this_device_sent_answers_its_handle() {
     let server = MockServer::start();
     let fx = welcomed_client(&server, &[]).await;
     let ok = mount_mls_upload_ok(&server);
@@ -676,13 +679,65 @@ async fn resend_rejects_rows_that_are_not_failed_sends() {
         .expect("send");
     assert_eq!(ok.calls(), 1);
 
-    let err = fx
+    let again = fx
         .timeline
         .resend(sent.message_id.clone())
         .await
-        .expect_err("a submitted row is not a failed send");
+        .expect("a submitted row answers its handle");
+    assert_eq!(again.message_id, sent.message_id);
+    let row = item(&fx.client, &sent.message_id).await;
+    assert_eq!(again.sent_at_ms, row.sent_at_ms, "the row's own sent_at_ms");
+    assert_eq!(row.delivery_status, DeliveryStatus::Submitted);
+
     assert!(
-        matches!(&err, kupferdraht::KupferdrahtError::InvalidInput(msg) if msg.contains(&sent.message_id)),
+        fx.store
+            .mark_delivery_received(&room_id(), &sent.message_id)
+            .await
+            .expect("echo"),
+        "the echo moves the row to received"
+    );
+    let echoed = fx
+        .timeline
+        .resend(sent.message_id.clone())
+        .await
+        .expect("a received own row answers its handle too");
+    assert_eq!(echoed.message_id, sent.message_id);
+    assert_eq!(ok.calls(), 1, "no second upload in either case");
+}
+
+#[tokio::test]
+async fn a_second_resend_of_a_resent_row_answers_the_first_ones_handle() {
+    let server = MockServer::start();
+    let fx = welcomed_client(&server, &[]).await;
+    let mut failing = mount_mls_upload_failing(&server);
+    let id = failed_text_send(&fx, "flaky network").await;
+    failing.delete();
+    let ok = mount_mls_upload_ok(&server);
+
+    let first = fx.timeline.resend(id.clone()).await.expect("resend");
+    let second = fx
+        .timeline
+        .resend(id.clone())
+        .await
+        .expect("the repeat answers instead of refusing");
+    assert_eq!(second, first, "same id, same sent_at_ms");
+    assert_eq!(ok.calls(), 1, "one upload for two resends");
+}
+
+#[tokio::test]
+async fn resend_rejects_rows_this_device_did_not_send() {
+    let server = MockServer::start();
+    let inbound = text_generic_message("bob-says-hi", "hi");
+    let fx = welcomed_client(&server, &[inbound]).await;
+    let ok = mount_mls_upload_ok(&server);
+
+    let err = fx
+        .timeline
+        .resend("bob-says-hi".into())
+        .await
+        .expect_err("a peer's message is not this device's send");
+    assert!(
+        matches!(&err, kupferdraht::KupferdrahtError::InvalidInput(msg) if msg.contains("bob-says-hi")),
         "expected InvalidInput naming the row, got {err:?}"
     );
     let err = fx
@@ -694,10 +749,10 @@ async fn resend_rejects_rows_that_are_not_failed_sends() {
         matches!(err, kupferdraht::KupferdrahtError::InvalidInput(_)),
         "{err:?}"
     );
-    assert_eq!(ok.calls(), 1, "no upload for a refused resend");
+    assert_eq!(ok.calls(), 0, "no upload for a refused resend");
     assert_eq!(
-        item(&fx.client, &sent.message_id).await.delivery_status,
-        DeliveryStatus::Submitted
+        item(&fx.client, "bob-says-hi").await.delivery_status,
+        DeliveryStatus::Received
     );
 }
 

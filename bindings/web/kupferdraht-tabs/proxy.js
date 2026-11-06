@@ -361,6 +361,9 @@ export class ClientProxy extends HandleProxy {
   rooms() { return this.#call('rooms', []); }
   sendText(roomId, body, options) { return this.#call('sendText', [roomId, body, withKey(options)]); }
   messages(roomId, limit, before) { return this.#call('messages', [roomId, limit, before]); }
+  failedSends(roomId) { return this.#call('failedSends', [roomId]); }
+  resend(roomId, messageId) { return this.#call('resend', [roomId, messageId]); }
+  resendFailed(roomId) { return this.#call('resendFailed', [roomId]); }
   sendKnock(roomId, hotKnock, options) { return this.#call('sendKnock', [roomId, hotKnock, withKey(options)]); }
   sendLocation(roomId, latitude, longitude, name, zoom, options) {
     return this.#call('sendLocation', [roomId, latitude, longitude, name, zoom, withKey(options)]);

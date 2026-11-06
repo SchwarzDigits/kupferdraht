@@ -121,8 +121,9 @@ object identity)
   `send_ephemeral_text(body, ttl: Duration)` — Step 89; `edit` / `redact`
   refuse another user's message with `InvalidInput`, Step 95b),
   failed-send recovery (`resend(message_id)` — one failed row under the
-  same id; `resend_failed() -> ResendSummary` — the room oldest-first,
-  stops at the first hard error; Step 79), keyed sends
+  same id, a row this device already sent answers its handle, Step 130b;
+  `resend_failed() -> ResendSummary` — the room oldest-first, stops at
+  the first hard error; Step 79), keyed sends
   (`send_keyed(idempotency_key, content: OutgoingContent)` — a text,
   reply, knock, location, file or reaction under a caller-chosen key; a
   repeat of the key answers the stored handle instead of sending twice;
@@ -770,6 +771,21 @@ Since Step 110 (ADR-0035):
   live 28 days in the account store — the core `Timeline::send_keyed`
   (`docs/library.md`). Keep the key with the pending send and retry with
   it after a network error or a leader change.
+- Failed sends (Step 130b, the Step-79 path): `failedSends(roomId)` lists
+  the room's failed sends oldest first, as the items `messages()` returns
+  (`deliveryStatus: "failed"`; a send whose tab went away mid-send reads
+  as failed too). `resend(roomId, messageId)` re-drives one under its
+  message id and resolves `{ messageId, sentAtMs }`; a row this device
+  already sent answers its handle without sending again, another sender's
+  message rejects `InvalidInput`. `resendFailed(roomId)` re-drives them
+  oldest first, stopping at the first error so no message is overtaken,
+  and resolves `{ resent, skipped, stoppedAt, remaining }`: the handles,
+  the task / case / marker snapshots it does not cover (send the current
+  state instead), `stoppedAt` — `null`, or `{ messageId, name, message }`
+  with the error named as a thrown one is — and the failed rows behind
+  the stop. All three are re-issued at a leader change (`idempotent`).
+  Nothing retries on its own: call them when the user asks, or when
+  `startSync`'s `onSync` reports the first successful pass.
 - Typing: `startTyping(roomId)` / `stopTyping(roomId)` — outbound only;
   the browser prototype manages start/stop explicitly (the core 11-s
   auto-stop timer is native-only, `tokio::spawn` is cfg'd out on wasm).

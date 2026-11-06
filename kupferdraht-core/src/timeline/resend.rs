@@ -15,6 +15,10 @@
 //! overtaken (matrix's strict-order rule); rows behind the stop stay
 //! `Failed` and the next pass picks them up.
 //!
+//! A row this device already sent answers `resend` with its handle
+//! instead of a refusal (Step 130b), so a repeated call — a browser tab
+//! re-issuing it after a leader change — converges on the first one.
+//!
 //! No scheduler lives in the core — the consumer calls these when its
 //! sync loop comes back (docs/library.md "Reconnect contract"). The
 //! per-kind payload reconstruction lives in `super::resend_payload`.
@@ -54,14 +58,17 @@ impl Timeline {
     /// backend — only the MLS reference is re-sent). Re-encrypts at the
     /// current epoch, uploads once (the stale-epoch self-heal applies),
     /// flips the row to `Submitted`, re-stamps `sent_at_ms`, and emits
-    /// `TimelineDiff::UpdateAt`. matrix-rust-sdk analog:
+    /// `TimelineDiff::UpdateAt`. A row this device already sent
+    /// (`Submitted`, or `Received` once its echo arrived) answers its
+    /// handle without uploading (Step 130b). matrix-rust-sdk analog:
     /// `SendHandle::unwedge`. Step 79.
     ///
     /// # Errors
-    /// * `InvalidInput` — unknown id, the row is not a failed send, was
-    ///   deleted, or is a task / case / marker snapshot (re-send the
-    ///   current state via `update_task` / `set_case` / `set_task_list`
-    ///   instead); a reply whose parent is no longer stored locally.
+    /// * `InvalidInput` — unknown id, another sender's message, a send
+    ///   still in flight, a deleted row, or a task / case / marker
+    ///   snapshot (re-send the current state via `update_task` /
+    ///   `set_case` / `set_task_list` instead); a reply whose parent is no
+    ///   longer stored locally.
     /// * Transport / MLS / storage errors propagate; the row then stays
     ///   `Failed` for the next attempt.
     pub async fn resend(&self, message_id: String) -> Result<MessageHandle, KupferdrahtError> {
@@ -119,8 +126,22 @@ impl Client {
         room_id: &str,
         message_id: &str,
     ) -> Result<MessageHandle, KupferdrahtError> {
-        let row = self.load_failed_row(room_id, message_id).await?;
-        self.resend_row(&row).await
+        let row = self.load_live_row(room_id, message_id).await?;
+        if self.is_resendable(&row) {
+            return self.resend_row(&row).await;
+        }
+        if self.sent_by_this_device(&row) && is_sent_row(&row) {
+            // Step 130b: the first resend, or the send itself, went
+            // through — answer like it did instead of refusing.
+            return Ok(MessageHandle {
+                message_id: row.message_id,
+                sent_at_ms: row.sent_at_ms,
+            });
+        }
+        Err(KupferdrahtError::InvalidInput(format!(
+            "resend: {message_id} is not a failed send of this device (delivery_status = {})",
+            row.delivery_status
+        )))
     }
 
     /// See [`Timeline::resend_failed`] for the caller-facing contract.
@@ -128,9 +149,21 @@ impl Client {
         &self,
         room_id: &str,
     ) -> Result<ResendSummary, KupferdrahtError> {
+        let (summary, _stop_error) = self.resend_pass(room_id).await?;
+        Ok(summary)
+    }
+
+    /// One [`Timeline::resend_failed`] pass and the error it stopped at,
+    /// which the summary carries as text only — the browser names it as a
+    /// thrown error is named (Step 130b).
+    pub(crate) async fn resend_pass(
+        &self,
+        room_id: &str,
+    ) -> Result<(ResendSummary, Option<KupferdrahtError>), KupferdrahtError> {
         let rows = self.failed_rows(room_id).await?;
         let total = rows.len();
         let mut summary = ResendSummary::default();
+        let mut stop_error = None;
         for (index, row) in rows.iter().enumerate() {
             if snapshot_recovery_hint(&row.kind).is_some() {
                 summary.skipped.push(row.message_id.clone());
@@ -142,6 +175,7 @@ impl Client {
                     warn!(room_id, message_id = %row.message_id, %error, "resend pass stopped");
                     summary.stopped_at = Some((row.message_id.clone(), error.to_string()));
                     summary.remaining = u32::try_from(total - index - 1).unwrap_or(u32::MAX);
+                    stop_error = Some(error);
                     break;
                 }
             }
@@ -154,7 +188,7 @@ impl Client {
                 == total,
             "resend_failed: every failed row is accounted for exactly once"
         );
-        Ok(summary)
+        Ok((summary, stop_error))
     }
 
     /// The raw `failed` rows of `room_id`, oldest first (no overlays —
@@ -175,9 +209,9 @@ impl Client {
             .collect())
     }
 
-    /// Load the row `message_id` names and require it to be a live
-    /// failed send. Every other state is the caller's mistake.
-    async fn load_failed_row(
+    /// Load the row `message_id` names and require it to be live — an
+    /// unknown or deleted row is the caller's mistake.
+    async fn load_live_row(
         &self,
         room_id: &str,
         message_id: &str,
@@ -193,12 +227,6 @@ impl Client {
         if row.redacted_at_ms.is_some() {
             return Err(KupferdrahtError::InvalidInput(format!(
                 "resend: {message_id} was deleted — nothing to resend"
-            )));
-        }
-        if !self.is_resendable(&row) {
-            return Err(KupferdrahtError::InvalidInput(format!(
-                "resend: {message_id} is not a failed send (delivery_status = {})",
-                row.delivery_status
             )));
         }
         Ok(row)
@@ -269,4 +297,13 @@ impl Client {
         }
         Ok(())
     }
+}
+
+/// A row whose send went through: `Submitted`, or `Received` once its
+/// echo arrived (Step 130b).
+fn is_sent_row(row: &TimelineEventRecord) -> bool {
+    matches!(
+        DeliveryStatus::from_db_str(&row.delivery_status),
+        Some(DeliveryStatus::Submitted | DeliveryStatus::Received)
+    )
 }
