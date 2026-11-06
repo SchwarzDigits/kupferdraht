@@ -2497,3 +2497,62 @@ touched it.
   entry said "a regression of 0.2.0" until the archive commit corrected
   it. Name the first release from the commit, not from the last green
   run.
+
+### 5.80 Advisories no tool reported, a failure mode measured instead of read, and a gate summary that could have hidden a failure (Step 142)
+
+- **An advisory can exist where no scanner looks.** The three openmls
+  advisories are repository advisories of openmls/openmls. RustSec does
+  not carry them, and GitHub's global advisory database — what
+  Dependabot matches — takes a repository advisory only once GitHub has
+  reviewed it: `gh api /advisories/<id>` answers 404 for all three and
+  for GHSA-w62v-gv48-63rh of 2026-08-25, while openmls's GHSA-8x3w was
+  reviewed the day it was published, as were the checked advisories of
+  rustls, hpke-rs and RustCrypto (2026-11-06). So `cargo deny` and
+  Dependabot had nothing to match. The high one,
+  GHSA-gc79-23g3-8g52, was published 2026-10-08; v0.2.0 was tagged on
+  2026-11-03 with openmls 0.9.0 locked. They surfaced when the new fork
+  tag was reviewed for Step 142 — its upstream merge commits and
+  upstream's CHANGELOG name them — not through a tool.
+  `gh api /repos/openmls/openmls/security-advisories?state=published`
+  lists them with their patched versions without special rights: for a
+  dependency whose maintainers publish there, a green `cargo deny` says
+  nothing about it. Step 148 reads that list in CI; until it lands,
+  Volker watches openmls's security alerts.
+- **A library's security floor belongs in its requirement, not only in
+  its lockfile.** `Cargo.lock` binds Kupferdraht's own builds; a Rust
+  consumer resolves `openmls = "0.9"` on its own and could land on 0.9.0
+  or 0.9.1. Both manifest sites now require 0.9.2, and
+  `step_142_openmls_0_9_2_pins` reads lockfile and manifest alike.
+- **A failure mode read from the SQL is a hypothesis.** open.md §82
+  said "V2+" would fail when applied again. A `BEFORE INSERT` trigger on
+  refinery's history table that `RAISE(ABORT)`s one version's row
+  reproduces the crash window deterministically, without killing a
+  process; three runs showed V2 (a copy-and-swap) surviving and V3–V6
+  failing for good. The same trigger is now the step's regression test.
+  It is cheap enough to measure before writing the claim down.
+- **A gate script reports each command's exit status.** `gate142.sh`
+  piped `cargo test` through `sort | uniq -c | sort -rn | head -40` and
+  ran without `pipefail`: the "gate exit 0" covered only the last
+  command, and a single `FAILED` line could have fallen below line 40.
+  The rerun with full output was green (1432 passed, 0 failed), but the
+  first report would not have shown a red one. Gate scripts record
+  every command's own exit code and count failures separately, never a
+  truncated listing.
+- **A fork branch is built in its own workspace before it is tagged.**
+  `9a228e8e9` records two build breaks on `schwarzdigits/openmls-0.9`
+  since Step 128's `a41077bba`: the fork crates name crates.io's
+  `openmls_traits` 0.6.0 while `openmls` takes the workspace path, so the
+  fork's `cargo check --workspace` failed; and the cherry-picked
+  `openmls/Cargo.toml` from upstream `main` broke `test-utils`. Neither
+  reached Kupferdraht, which builds only the three crates, so the tags
+  of Steps 127/128 shipped with the fork's own CI red. The fix is a root
+  `[patch.crates-io]` in the fork; Cargo honours `[patch]` only in a
+  build's root manifest, so it stays out of every git consumer
+  (ADR-0042's fork table). The consumer's gate does not vouch for the
+  fork's.
+- **Attribution is checked before a commit is tagged, not after.** The
+  fork's merge and build-fix commits first carried a `Co-Authored-By:
+  Claude` trailer; the fork is the staging area for upstream
+  pull requests, so they were rewritten, signed again, re-tagged and
+  force-pushed with lease. A signed tag on a commit with the wrong
+  trailer costs a retag; grep the messages before `git tag -s`.
