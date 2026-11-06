@@ -1060,7 +1060,7 @@ it binds.
 ### Web — wasm-pack
 ```
 export CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang     # only if `clang --print-targets` lacks wasm32
-export AR_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/llvm-ar
+export AR_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/llvm-ar   # on macOS always: Apple's ar cannot index wasm objects
 wasm-pack build --target web
 ```
 Builds the `wasm32-unknown-unknown` artifact + generated TypeScript
@@ -1068,10 +1068,15 @@ glue from the `wasm/` module. There is no `bindings/wasm/` build script
 yet — the invocation above is the whole build (run from the
 `kupferdraht-core` crate directory). Since Step 91 the build compiles the
 SQLite3MC C for wasm (`sqlite-wasm-rs` over `vendor/sqlite3mc/`), so it
-needs a clang with the WebAssembly backend: Apple clang 21 (Xcode 26)
-has it, so the two exports above are only for an older Apple clang
-(`brew install llvm`, paths as above — machine-specific, never
-committed); distro clang and the GitHub runners' clang have it too. The browser
+needs a clang with the WebAssembly backend and an `llvm-ar`: Apple clang
+21 (Xcode 26) has the backend, so the `CC_…` export is only for an older
+Apple clang; Apple's `ar` indexes Mach-O objects only, so on macOS the
+`AR_…` export is needed for every link — `wasm-pack build` and the browser
+tests, not `cargo check` / `clippy`, which never link — or every
+`sqlite3_*` symbol comes up undefined (`docs/observations.md` §97;
+`brew install llvm`, paths as above — machine-specific, never committed).
+Distro clang and the GitHub runners' clang have the backend; CI points
+`AR_wasm32_unknown_unknown` at the runner's `llvm-ar`. The browser
 tests run through `scripts/wasm-test.sh` (headless Firefox via
 geckodriver; the storage tests in a dedicated worker — the test runner
 serves the page cross-origin isolated) — the same script CI runs;

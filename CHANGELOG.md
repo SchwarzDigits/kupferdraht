@@ -118,6 +118,14 @@ is no skill for it — it is this short procedure:
   87). Through the SchwarzDigits openmls fork, the backport of
   openmls/openmls#2323.
 
+- **The browser build instructions name `llvm-ar` on macOS**: README and
+  `docs/bindings.md` said Apple clang 21 suffices for wasm32. It compiles
+  the SQLite3MC C, but Apple's `ar` indexes no wasm objects, so every
+  link — `wasm-pack build`, the browser tests — failed with each
+  `sqlite3_*` symbol undefined; `cargo check` and `clippy` never link and
+  stayed green. On macOS `AR_wasm32_unknown_unknown` must point at
+  Homebrew's `llvm-ar` whatever the clang (`docs/observations.md` §97).
+
 ### Security
 
 - **openmls 0.9.2** (Step 142): Kupferdraht required openmls 0.9 and
