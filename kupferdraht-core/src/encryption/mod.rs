@@ -14,6 +14,8 @@ mod group_resync;
 mod group_state;
 mod leaf_identity;
 mod messages;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod migration_tests;
 mod mls_client;
 mod mls_lock;
 pub(crate) mod prekeys;

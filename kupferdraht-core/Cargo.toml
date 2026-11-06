@@ -66,9 +66,11 @@ refinery = { git = "https://github.com/SchwarzDigits/refinery", tag = "v0.9.1-sq
 # `mls.db` on native and, over sqlite-remote-vfs, in the browser (Step 91,
 # Step 111). The openmls fork's branch `schwarzdigits/openmls-0.9` carries
 # every SchwarzDigits change on the 0.9 release line under one tag: this
-# crate is upstream's 0.3.0 over the two forks above (Step 127), the two
-# crypto crates below are upstream's 0.6.0 on the p256 0.14 line (Step 128).
-openmls_sqlite_storage = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.0-schwarzdigits.1", version = "0.3" }
+# crate is upstream's 0.3.0 over the two forks above (Step 127) with its
+# migrations in one transaction (Step 142, the backport of
+# openmls/openmls#2323), the two crypto crates below are upstream's 0.6.0
+# on the p256 0.14 line (Step 128).
+openmls_sqlite_storage = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.2-schwarzdigits.1", version = "0.3" }
 # Step 1c: MLS (RFC 9420). Wire targets ciphersuite 0x0002
 # (MLS_128_DHKEMP256_AES128GCM_SHA256_P256) with ECDSA_SECP256R1_SHA256
 # signatures so iOS clients can back keys with Secure Enclave (LEARNINGS §1.2).
@@ -76,15 +78,19 @@ openmls_sqlite_storage = { git = "https://github.com/SchwarzDigits/openmls", tag
 # every installation, so no 0.8.1-format mls.db exists that would have to
 # stay readable, and for Kupferdraht's self-describing JsonCodec both
 # feature states wrote identical bytes anyway (observations §73).
-openmls = "0.9"
+# At least 0.9.2 (Step 142): 0.9.1 and 0.9.2 fix GHSA-gc79-23g3-8g52,
+# GHSA-94v4-rg25-x625 and GHSA-p276-g3f3-wwgh, which the RustSec database
+# does not carry — the requirement keeps a consumer of the library off the
+# affected releases.
+openmls = "0.9.2"
 openmls_traits = "0.6"
 # Step 128: the HPKE / ECDSA P-256 providers from the openmls fork's branch
 # above — upstream's crypto-crate migration (openmls/openmls#2249, `p256`
 # 0.14, `hpke-rs` 0.8) ahead of an openmls release, so `crypto-bigint` 0.5
 # (RUSTSEC-2026-0387) is out of the graph. Code upstream's, manifests only;
 # `openmls_traits` resolves to the crates.io crate the line above names.
-openmls_rust_crypto = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.0-schwarzdigits.1", version = "0.6" }
-openmls_basic_credential = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.0-schwarzdigits.1", version = "0.6" }
+openmls_rust_crypto = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.2-schwarzdigits.1", version = "0.6" }
+openmls_basic_credential = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.2-schwarzdigits.1", version = "0.6" }
 tls_codec = { version = "0.5", features = ["derive"] }
 # Step 4: Wire's text-message envelope is a Protobuf
 # `GenericMessage`. `prost` + the build-time `prost-build` plugin
@@ -167,7 +173,7 @@ getrandom = { version = "0.2", features = ["js"] }
 uuid = { version = "1", features = ["js"] }
 # OpenMLS needs JS APIs for secure randomness + current time on wasm; its `js`
 # feature wires those (and pulls the wasm timer). Native uses OS entropy/clock.
-openmls = { version = "0.9", features = ["js"] }
+openmls = { version = "0.9.2", features = ["js"] }
 # Step 91 (ADR-0022) — the browser runs the same SQLite3MC store as native.
 # `sqlite-wasm-rs` compiles the vendored amalgamation for wasm (the root
 # `.cargo/config.toml` points SQLITE_WASM_RS_SOURCE_DIR at it) and is reached

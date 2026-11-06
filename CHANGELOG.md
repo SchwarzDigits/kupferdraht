@@ -93,7 +93,28 @@ is no skill for it — it is this short procedure:
   substitute it. The browser build was not affected (`fetch` follows the
   redirect).
 
+- **An interrupted first open no longer breaks `mls.db`** (Step 142):
+  openmls's storage migrations run in one transaction, so a process
+  killed during them — on the first open of a new device's store, or
+  after an update that adds migrations — leaves the store as it was and
+  the next open migrates it. Before, each migration and its bookkeeping
+  row committed separately, and a kill between the two left a store that
+  failed to open for good (the account store has had this since Step
+  87). Through the SchwarzDigits openmls fork, the backport of
+  openmls/openmls#2323.
+
 ### Security
+
+- **openmls 0.9.2** (Step 142): Kupferdraht required openmls 0.9 and
+  locked 0.9.0, which three advisories affect — GHSA-gc79-23g3-8g52
+  (high: invalid nested extensions in data from the backend or a peer
+  could abort the process by unbounded recursion), GHSA-94v4-rg25-x625
+  (removed members could reappear after an external commit regrows the
+  tree) and GHSA-p276-g3f3-wwgh (a rejected message could block later
+  messages of its sender). `kupferdraht-core` now requires openmls
+  0.9.2, so a Rust consumer cannot resolve an affected release either;
+  the three crates from the SchwarzDigits openmls fork move to the tag
+  `openmls-v0.9.2-schwarzdigits.1`, which carries upstream's 0.9.2.
 
 - **The browser stores no database in the clear** (Step 140): every VFS
   registration sets sqlite-remote-vfs 0.6.0's `refuse_plaintext`, so a

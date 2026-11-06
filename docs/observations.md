@@ -1467,7 +1467,7 @@ test instead of a plaintext file.
 
 ## ~~78) refinery's default runner commits a migration and its history row separately — and `openmls_sqlite_storage` 0.3.0 inherits the window (2026-09-24)~~
 
-*Closed 2026-09-24 — resolved for kupferdraht.db by Step 87 (grouped runner); mls.db residual tracked as open.md gap-B.27 (upstream issue draft in the archived Step-87 doc). Text kept unchanged as the findings log.*
+*Closed 2026-09-24 — resolved for kupferdraht.db by Step 87 (grouped runner); the mls.db residual (open.md gap-B.27) resolved by Step 142 on 2026-11-05 through the openmls fork's grouped runner, filed upstream as openmls/openmls#2322 / #2323. Text kept unchanged as the findings log.*
 
 Step 87 fix + verification. refinery-core 0.9.1's rusqlite driver
 opens one transaction per `execute` (`src/drivers/rusqlite.rs:33-47`);

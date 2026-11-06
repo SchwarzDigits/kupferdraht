@@ -302,17 +302,21 @@ license file where ORT reports NOASSERTION.
 Since Step 127 (ADR-0042) the engine comes from three SchwarzDigits forks
 consumed by git tag: rusqlite `v0.37.0-sqlite3mc-2.5.1` (branch
 `sqlite3mc/0.37`), refinery `v0.9.1-sqlite3mc` (`sqlite3mc/0.9`), openmls
-`openmls-v0.9.0-schwarzdigits.1` (branch `schwarzdigits/openmls-0.9` — since Step 128
+`openmls-v0.9.2-schwarzdigits.1` (branch `schwarzdigits/openmls-0.9` — since Step 128
 the one branch per openmls release line that carries every SchwarzDigits
-change under one tag, `sqlite_storage` over the forks and the p256 0.14
-providers; the first tag `sqlite_storage-v0.3.0-sqlite3mc` stays for the
-consumers that pin it). The openmls and SQLite3MultipleCiphers forks of
+change under one tag: `sqlite_storage` over the forks with its migrations
+in one transaction (Step 142), the p256 0.14 providers; upstream's patch
+releases of the line are merged into it, v0.9.2 on 2026-11-05; the first
+tag `sqlite_storage-v0.3.0-sqlite3mc` and the earlier
+`openmls-v0.9.0-schwarzdigits.1` / `.2` stay for the consumers and the
+Kupferdraht releases that pin them). The openmls and SQLite3MultipleCiphers forks of
 the organisation are also the staging area for upstream pull requests, so
 a long-lived downstream branch now sits beside the PR heads; the forks'
 `main` stays identical to upstream. GitHub's "ahead/behind" on that
-branch measures against upstream `main`, while the branch tracks the
-`openmls-v0.9.0` release tag, which is not on `main`: all but the last
-two "ahead" commits are upstream's own release-branch commits, and
+branch measures against upstream `main`, while the branch tracks
+upstream's `v0.9` release line (`openmls-v0.9.0`, then `v0.9.2`), which
+is not on `main`: most "ahead" commits are upstream's own release-branch
+commits, and
 `main`'s `sqlite_storage` is unreleased code (async storage, rusqlite
 0.40, refinery 0.10). The branch is not rebased onto `main` on purpose;
 the next branch comes from the next release tag.
@@ -324,14 +328,6 @@ forks; the next bump — when `openmls_sqlite_storage` releases on rusqlite
 rusqlite ≥ 0.38 can retire the fork's wasm arm for its own
 `ffi-sqlite-wasm-rs`. (The first Rust embedder dropped its own
 `[patch.crates-io]` entry on 2026-11-01.)
-
-gap-B.27 left this item on 2026-11-05 for Step 142:
-`openmls_sqlite_storage` 0.3.0 runs refinery non-grouped, so a crash
-between a migration's SQL commit and its history-row commit leaves
-`mls.db` unopenable — measured 2026-11-05, V3–V6 fail when applied again
-(V2, a copy-and-swap, survives; V7 and V8 on upstream `main` fail too).
-Filed upstream as openmls/openmls#2322 with the fix in PR #2323; the fork
-branch carries the backport since tag `openmls-v0.9.0-schwarzdigits.2`.
 
 ## 83) The login path does not enter the manager's client cache (2026-11-01)
 

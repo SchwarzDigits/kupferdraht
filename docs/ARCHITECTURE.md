@@ -666,7 +666,10 @@ Shipped migrations are immutable and SHA-pinned (Step 18b). A migration
 run is atomic (Step 87): every pending migration plus its
 `refinery_schema_history` row commits in one transaction (`set_grouped`),
 so a crash mid-run leaves the file exactly as it was — never a migration
-applied but unrecorded, which the next open would re-apply. The current
+applied but unrecorded, which the next open would re-apply. `mls.db` has
+the same since Step 142: the openmls fork's `openmls_sqlite_storage` runs
+openmls's migrations grouped (history table
+`openmls_sqlite_storage_migrations`). The current
 schema version is **V32**
 (`V32__step_130a_send_keys.sql` — `send_keys`, see "Idempotency keys"
 below; V31 the unread flag, below; V30
