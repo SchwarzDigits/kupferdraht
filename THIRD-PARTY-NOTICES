@@ -42,7 +42,7 @@ Components with notices outside the crate graph
   (https://github.com/utelle/SQLite3MultipleCiphers); vendored as
   vendor/sqlite3mc/ with its LICENSE and a PROVENANCE.txt. It embeds SQLite
   3.53.4, which is in the public domain.
-- sqlite-remote-vfs 0.5.0 and sqlite-remote-protocol 0.5.0 — Schwarz Digits,
+- sqlite-remote-vfs 0.6.0 and sqlite-remote-protocol 0.6.0 — Schwarz Digits,
   Apache-2.0 (https://github.com/SchwarzDigits/sqlite-remote-vfs); a git
   dependency of the browser target.
 - protoc — the Protocol Buffers compiler binary shipped by the

@@ -2613,3 +2613,60 @@ touched it.
   proxy again, not `resend`. Not built either: a browser test that a
   rejected send shows in `failedSends`; the browser suite has no backend,
   and the Step-79 tests cover it natively.
+
+### 5.82 A complete sweep that beat the curated list, a count taken from a tool's summary, and a stale version fixed in one of three places (Step 149)
+
+- **The complete list cost less than assumed, and the curated one would
+  have missed both high advisories.** Plan 148 recommended a curated list
+  of upstreams — the crates that hold key material, decode peer data or
+  run the storage — and called every repository complete but costly. The
+  probe measured the cost: 251 repositories, about 265 requests, 14 s
+  with eight in parallel, about a quarter of the workflow token's hourly
+  limit. It found GHSA-7fx9-626j-vqph in unicode-org/icu4x and
+  GHSA-jh2m-fhpj-3vr7 in bytecodealliance/rustix, neither on the curated
+  list: a Unicode crate behind `idna` and a filesystem crate behind
+  `tempfile` are not what "holds key material" brings to mind. The
+  recommendation was written before the measurement. A proposal that
+  trades completeness for cost names the measured cost.
+- **A floor is read from the fix, and its source is written beside it.**
+  rustix's advisory names no patched version, so its floor is the release
+  whose `src/fs/xattr.rs` changes (1.1.6); icu_normalizer's patched field
+  holds a range, so its floor comes from icu4x 2.4's CHANGELOG. The
+  plan's table names each source, and `step_149_advisory_floors` holds
+  the five floors. Plan 148 records the matching rule the probe's
+  free-text ranges call for (five of nine range-only hits wrong, one
+  missed).
+- **A count in a commit message is taken from the diff.** Plan, commit
+  message and PR body said "17 packages move": cargo's "Locking 17
+  packages", which counts the added `synstructure` as well. The
+  lockfile diff's `version` lines give 16 moved and one added; corrected
+  before the commit. A tool's summary line counts something else until
+  it is checked against the artifact.
+- **A stale value is grepped across the repository, not fixed where it
+  was found.** Step 149 found the notices' crate list still naming
+  sqlite-remote-vfs and sqlite-remote-protocol 0.5.0, the version before
+  Step 140, and corrected those two lines; the commit message said the
+  notices were corrected. The same version stood in the notices'
+  paragraph on components outside the crate graph and in the hand-kept
+  block of `about.hbs`, so the regenerated HTML report carried it again.
+  The archive chore compared every version the notices name with the
+  build graph (444 versions of 377 crates, both ways; only that
+  paragraph differed) and fixed all three places. Its first comparison
+  also reported wasi and wasip2 as different: the regex dropped the
+  `+…` build metadata the notices do carry — a check's parser is tried
+  on the entries it is unsure of before its result is reported.
+  Regenerating a file proves only its generated part; a hand-kept block
+  in the template is checked like any hand-written doc. The same
+  comparison showed the HTML report covering a different graph from the
+  notices (the bindgen member's dependencies in, `zerocopy-derive`
+  out). Neither file is checked by a test: Step 150, commissioned by
+  Volker for after Step 148 and before v0.2.1.
+- **What was left.** Whether Kupferdraht's use reaches the affected
+  functions (idna's normalisation, tempfile's xattr calls) was not
+  traced; the fix does not depend on it, and the CHANGELOG claims no
+  more than "calls none of these crates directly". quinn-udp moved
+  although it is never compiled: it is in the lockfile Step 148's check
+  reads, and an ignore saying "never compiled" would hold only while
+  reqwest's HTTP/3 feature stays off. Once Step 148 lands, its check
+  covers the five floors as well; whether `step_149_advisory_floors`
+  stays is Step 148's call.
