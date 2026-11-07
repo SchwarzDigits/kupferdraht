@@ -3,8 +3,42 @@
 **Status: commissioned 2026-11-06** from Step 142's retrospective
 (LEARNINGS §5.80): Volker chose a CI check as a step, and watches
 openmls/openmls's security alerts on GitHub in the meantime
-(outside the repository). After Step 130b, before the v0.2.1 release —
+(outside the repository). After Step 149, before the v0.2.1 release —
 the release procedure runs the check before it tags.
+
+**Phase 1 taken 2026-11-06 (Volker)**, on a probe run by hand the same
+day:
+
+- **Every GitHub repository `cargo metadata` names**, not a curated
+  list. The probe read the published advisories of all 251 (14 s with
+  eight requests in parallel, about 265 requests): 77 advisories, 20 of
+  them not in GitHub's reviewed database. Four apply to the locked
+  versions — GHSA-7fx9-626j-vqph (zerovec, zerovec-derive; high),
+  GHSA-jh2m-fhpj-3vr7 (rustix; high), GHSA-3jjw-63vg-v3hh
+  (icu_normalizer; low), GHSA-6pp4-4cxf-xf88 (quinn-udp; locked, never
+  compiled). The curated candidates below would have missed the two
+  high ones: `unicode-org/icu4x` and `bytecodealliance/rustix` were not
+  on it. Step 149 fixes the four first, so the check starts on a clean
+  lockfile. Six crates name no GitHub repository (sqlite-remote-vfs and
+  sqlite-remote-protocol name none at all; libredox, redox_users,
+  oorandom elsewhere; serde_regex none): the report lists them as
+  unchecked.
+- **The release procedure runs it; the per-step gate does not.**
+- **The ranges are the maintainers' free text.** Of nine hits by range
+  alone, five were wrong — the locked version already at or above a
+  patched one (quinn-proto `>= 0.1.0`, patched `>= 0.11.15`, locked
+  0.11.19) — and one hit was missed: quinn-udp's `< 0.5.16, >= 0.6.0 <
+  0.6.3` uses the comma for "or". Other shapes seen: a bare version
+  (`0.11.17`), `none`, a patched field holding a range (`<= 2.3.0`), an
+  empty patched field. So a hit needs the range **and** no patched
+  version at or below the locked one on its release line; an entry
+  whose two fields do not decide it is reported as "needs review",
+  never passed.
+- **The rate limit:** a run costs one request per repository, the
+  workflow's `GITHUB_TOKEN` has 1,000 an hour. The job runs on the daily
+  schedule, on `push` to `main` and on a pull request that changes
+  `Cargo.lock` or the ignore file; a pull request that changes neither
+  cannot add a crate, and a new advisory is the schedule's to find.
 
 ## Problem
 
@@ -45,7 +79,8 @@ the release procedure runs the check before it tags.
    advisory applies until an ignore entry (3.) says the fork's tag
    carries the fix. Any hit fails the check, naming the advisory, its
    severity, the crate, the locked version and the patched versions.
-2. **The list of repositories** — phase 1, with Volker. Candidates: the
+2. **The list of repositories** — taken: every one `cargo metadata`
+   names (above); the rest of this item is the proposal it replaced. Candidates: the
    repositories above that publish advisories, plus the crates that hold
    key material, decode peer or backend data, or run the storage
    (openmls, the RustCrypto crates, hpke-rs, rustls, rusqlite, refinery,
@@ -104,6 +139,11 @@ seven, recorded 2026-11-06), `Cargo.lock` from fixture files.
 - Range matching, known vectors: `>= 0.9.0, < 0.9.2` holds 0.9.0 and
   0.9.1, not 0.9.2 or 0.8.9; `< 0.8.3`; `= 0.9.0`; an advisory with one
   entry per release line (openmls's 0.8 and 0.9) hits on either line.
+- The probe's shapes (fixtures recorded 2026-11-06): a range wider than
+  its patched version (quinn-proto 0.11.19 → no hit); the comma used for
+  "or" (quinn-udp 0.5.14 → hit); a bare version, `none`, a range in the
+  patched field, an empty patched field → "needs review" unless the
+  other field decides it.
 - `Cargo.lock`: crates.io and git sources alike; two versions of one
   crate are both checked; a crate not in the lockfile never hits.
 - Step 141's lockfile (openmls 0.9.0) against the fixture → GHSA-gc79,
