@@ -1,8 +1,21 @@
 # Step 149 — Transitive crates past four repository advisories no scanner carries
 
-**Status: in progress** — commissioned 2026-11-06 (Volker) from Step
-148's phase-1 probe: before Step 148, so `main` is clean when the check
-arrives, and before the v0.2.1 release.
+**Status: MERGED 2026-11-07** — `f929d20` on
+`step/149-advisory-floors`, merged to `main` as PR #38 (`1efc21f`); gate
+green on 1.98 (fmt, 0 build warnings, clippy, 1442 tests, deny; wasm32
+check, clippy `--lib` and CI's wasm clippy line), the browser suite green
+locally (16 suites, 71 tests), CI green including the browser tests and
+the ORT license analysis; smoked 2026-11-06 on the wire-server-rs stack
+with the CLI built from this lockfile, `kupferdraht-smoke.sh
+--throwaway`, 18/18. Scope shipped as planned below: 16 packages moved
+within SemVer and `synstructure` 0.14.0 added, the pin test
+`step_149_advisory_floors`; no manifest or code change, no CLI command.
+Scope item 3 was incomplete: the notices' paragraph on components outside
+the crate graph and the hand-kept block of `about.hbs`, from which the
+HTML report is generated, still named sqlite-remote-vfs 0.5.0; the
+archive chore corrected both (LEARNINGS §5.82). Commissioned 2026-11-06
+(Volker) from Step 148's phase-1 probe: before Step 148, so `main` is
+clean when the check arrives, and before the v0.2.1 release.
 
 ## Problem
 

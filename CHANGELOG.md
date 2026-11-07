@@ -126,6 +126,13 @@ is no skill for it — it is this short procedure:
   stayed green. On macOS `AR_wasm32_unknown_unknown` must point at
   Homebrew's `llvm-ar` whatever the clang (`docs/observations.md` §97).
 
+- **The third-party notices name sqlite-remote-vfs 0.6.0**:
+  `THIRD-PARTY-NOTICES` and `docs/THIRD_PARTY_LICENSES.html` still named
+  sqlite-remote-vfs and sqlite-remote-protocol 0.5.0, the browser
+  target's storage VFS before Step 140 moved it to 0.6.0. An application
+  that reproduces the notices for the browser bindings takes the
+  corrected versions.
+
 ### Security
 
 - **Transitive crates past four advisories no scanner reported** (Step

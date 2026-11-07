@@ -114,7 +114,12 @@ day:
    `gh api` or reqwest), whose matching the five-command gate unit-tests;
    or a Python script in `.github/scripts/`, which would bring a second
    language into the repository with tests outside the gate.
-   Recommendation: the workspace crate.
+   Recommendation: the workspace crate. A workspace crate's dependencies
+   ship in no artifact and stay out of `THIRD-PARTY-NOTICES` and
+   `docs/THIRD_PARTY_LICENSES.html`; cargo-about reads every workspace
+   member, so `about.toml` or the generate command leaves the tool out
+   (Step 150 brings both files to one graph; whichever lands second
+   checks it).
 7. **Docs:** the release procedure in `CHANGELOG.md` (a step before the
    tag), CLAUDE.md's gate section if phase 1 decides so (with Volker),
    `README.md` where it describes the checks CI runs. A decision on
