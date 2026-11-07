@@ -463,7 +463,8 @@ Components licensed under the MIT License
 - slab 0.4.12 — Carl Lerche — https://github.com/tokio-rs/slab
 - strsim 0.11.1 (native targets only) — Danny Guo; maxbachmann —
   https://github.com/rapidfuzz/strsim-rs
-- synstructure 0.13.2 — Nika Layzell — https://github.com/mystor/synstructure
+- synstructure 0.13.2, synstructure 0.14.0 — Nika Layzell —
+  https://github.com/mystor/synstructure
 - tokio 1.54.1, tokio-macros 2.7.0, tokio-stream 0.1.18, tokio-util 0.7.18 —
   Tokio Contributors — https://github.com/tokio-rs/tokio
 - tokio-tungstenite 0.26.2 (native targets only) — Daniel Abramov; Alexey
@@ -503,18 +504,18 @@ Components licensed under the Apache License 2.0
   https://github.com/conradkleinespel/rpassword
 - rtoolbox 0.0.5 (native targets only) — Conrad Kleinespel —
   https://github.com/conradkleinespel/rtoolbox
-- sqlite-remote-protocol 0.5.0 (browser target only)
-- sqlite-remote-vfs 0.5.0 (browser target only)
+- sqlite-remote-protocol 0.6.0 (browser target only)
+- sqlite-remote-vfs 0.6.0 (browser target only)
 - sync_wrapper 1.0.2 — Actyx AG — https://github.com/Actyx/sync_wrapper
 
 Components licensed under the Unicode License v3
 ------------------------------------------------
 
-- icu_collections 2.2.0, icu_locale_core 2.2.0, icu_normalizer 2.2.0,
-  icu_normalizer_data 2.2.0, icu_properties 2.2.0, icu_properties_data 2.2.0,
-  icu_provider 2.2.0, litemap 0.8.2, potential_utf 0.1.5, tinystr 0.8.3,
-  writeable 0.6.3, yoke 0.8.2, yoke-derive 0.8.2, zerofrom 0.1.7,
-  zerofrom-derive 0.1.7, zerotrie 0.2.4, zerovec 0.11.6, zerovec-derive 0.11.3
+- icu_collections 2.4.0, icu_locale_core 2.4.0, icu_normalizer 2.4.0,
+  icu_normalizer_data 2.4.0, icu_properties 2.4.0, icu_properties_data 2.4.0,
+  icu_provider 2.4.0, litemap 0.8.2, potential_utf 0.1.5, tinystr 0.8.5,
+  writeable 0.6.4, yoke 0.8.4, yoke-derive 0.8.4, zerofrom 0.1.7,
+  zerofrom-derive 0.1.7, zerotrie 0.2.5, zerovec 0.11.9, zerovec-derive 0.11.7
   — The ICU4X Project Developers; Manish Goregaokar —
   https://github.com/unicode-org/icu4x
 
@@ -562,7 +563,7 @@ Dual- or multi-licensed; used here under the Apache License 2.0.
 
 - linux-raw-sys 0.12.1 (native targets only) — Dan Gohman —
   https://github.com/sunfishcode/linux-raw-sys
-- rustix 1.1.4 — Dan Gohman; Jakub Konka —
+- rustix 1.1.6 — Dan Gohman; Jakub Konka —
   https://github.com/bytecodealliance/rustix
 - wasi 0.11.1+wasi-snapshot-preview1 (native targets only) — The Cranelift
   Project Developers — https://github.com/bytecodealliance/wasi

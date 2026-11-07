@@ -128,6 +128,20 @@ is no skill for it — it is this short procedure:
 
 ### Security
 
+- **Transitive crates past four advisories no scanner reported** (Step
+  149): zerovec 0.11.9 and zerovec-derive 0.11.7 (GHSA-7fx9-626j-vqph,
+  high: types deriving `ULE` validated only the first element of a
+  buffer), rustix 1.1.6 (GHSA-jh2m-fhpj-3vr7, high: undefined behaviour
+  in the Linux xattr getters on a zero-size query), icu_normalizer 2.4.0
+  (GHSA-3jjw-63vg-v3hh, low: `normalize_utf8` could return invalid UTF-8)
+  and quinn-udp 0.5.16 (GHSA-6pp4-4cxf-xf88, high; locked, never
+  compiled). These are repository advisories in neither RustSec nor
+  GitHub's reviewed database, so `cargo deny` and Dependabot stayed
+  silent. Kupferdraht calls none of these crates directly; it reaches
+  zerovec and icu through `url` / `idna`, rustix through `tempfile` in
+  the build tooling. A Rust consumer's own lockfile takes the fixed
+  versions with `cargo update`.
+
 - **openmls 0.9.2** (Step 142): Kupferdraht required openmls 0.9 and
   locked 0.9.0, which three advisories affect — GHSA-gc79-23g3-8g52
   (high: invalid nested extensions in data from the backend or a peer
