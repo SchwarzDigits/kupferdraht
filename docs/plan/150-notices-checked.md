@@ -14,16 +14,17 @@ one comparison by hand, before that.
   every package in the local registry: with a fresh `CARGO_HOME` fetched for
   the host only it fails, after a plain `cargo fetch --locked` it passes.
   CI's `check` job runs that fetch already, for Step 90's pin.
-- **The markers (scope 3):** they read normal edges, per target: in the
-  wasm32 graph of `kupferdraht-core` and a native one means unmarked, in only
-  one of them the matching marker. A crate in neither is a build tool or
-  behind a `cfg` no build sets: in no artifact, so no graph contradicts its
-  marker. The CLI is no browser artifact, so the wasm32 graph is the library's.
-  Twelve native targets: desktop, Android, iOS. The first plan counted build
-  dependencies too, and CI refuted it: `cargo tree --target` resolves a build
-  dependency for the host, so `errno` and `linux-raw-sys` changed sides between
-  a Mac and Linux. `chacha20`'s wrong marker went with the lockfile update of
-  PR #46.
+- **The markers (scope 3):** they read what ends up in an artifact, `-e
+  normal,no-proc-macro` per target: in the wasm32 graph of `kupferdraht-core`
+  and a native one means unmarked, in only one of them the matching marker. A
+  crate in neither is a build tool, a proc-macro or behind a `cfg` no build
+  sets: in no artifact, so no graph contradicts its marker. The CLI is no
+  browser artifact, so the wasm32 graph is the library's. Twelve native
+  targets: desktop, Android, iOS. The first plan counted build dependencies,
+  and CI refuted it twice: `cargo tree --target` resolves a build dependency
+  and a proc-macro's for the host, so `errno` and `linux-raw-sys` changed sides
+  between a Mac and Linux. `chacha20`'s wrong marker went with the lockfile
+  update of PR #46.
 - **One graph (scope 6): `cargo about generate about.hbs -m
   kupferdraht-cli/Cargo.toml -c about.toml`.** The report then lists 442
   versions, the notices' 445 without the two unpublished sqlite-remote crates

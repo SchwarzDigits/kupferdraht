@@ -224,7 +224,7 @@ Dual-licensed; used here under the Apache License 2.0.
   Developers — https://github.com/RustCrypto/signatures
 - either 1.19.0 — bluss — https://github.com/rayon-rs/either
 - equivalent 1.0.3 — https://github.com/indexmap-rs/equivalent
-- errno 0.3.14 — Chris Wong; Dan Gohman —
+- errno 0.3.14 (native targets only) — Chris Wong; Dan Gohman —
   https://github.com/lambda-fairy/rust-errno
 - fallible-iterator 0.3.0 — Steven Fackler —
   https://github.com/sfackler/rust-fallible-iterator
@@ -608,7 +608,7 @@ Dual- or multi-licensed; used here under the Apache License 2.0.
 
 - linux-raw-sys 0.12.1 (native targets only) — Dan Gohman —
   https://github.com/sunfishcode/linux-raw-sys
-- rustix 1.1.6 — Dan Gohman; Jakub Konka —
+- rustix 1.1.6 (native targets only) — Dan Gohman; Jakub Konka —
   https://github.com/bytecodealliance/rustix
 - wasi 0.11.1+wasi-snapshot-preview1 (native targets only) — The Cranelift
   Project Developers — https://github.com/bytecodealliance/wasi
@@ -697,7 +697,7 @@ Components licensed under (MIT OR Apache-2.0) AND Unicode-3.0
 
 The choice in the expression is used here under the Apache License 2.0.
 
-- unicode-ident 1.0.27 — David Tolnay —
+- unicode-ident 1.0.27 (browser target only) — David Tolnay —
   https://github.com/dtolnay/unicode-ident
 - unicode-normalization 0.1.26 — kwantam; Manish Goregaokar —
   https://github.com/unicode-rs/unicode-normalization

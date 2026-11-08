@@ -43,6 +43,9 @@ const NOT_IN_THE_REPORT: [&str; 3] = [
     "zerocopy-derive",
 ];
 
+/// The edges of what ends up in an artifact.
+const ARTIFACT_EDGES: &str = "normal,no-proc-macro";
+
 type CrateVersion = (String, String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -262,9 +265,9 @@ fn sections_with_an_unstated_choice(notices: &str) -> Vec<String> {
         .collect()
 }
 
-/// Whether `marker` fits a crate's normal edges. A crate in neither graph is
-/// a build tool or behind a `cfg` no build sets: in no artifact, so its marker
-/// says nothing a graph could contradict.
+/// Whether `marker` fits the artifact graphs. A crate in neither is a build
+/// tool, a proc-macro or behind a `cfg` no build sets: in no artifact, so its
+/// marker says nothing a graph could contradict.
 fn marker_fits(marker: Marker, in_browser: bool, in_native: bool) -> bool {
     match (in_browser, in_native) {
         (true, true) => marker == Marker::EveryTarget,
@@ -539,14 +542,18 @@ fn graphs() -> &'static Graphs {
         let shipped = ["kupferdraht-core", "kupferdraht-cli"];
         Graphs {
             all: cargo_tree("normal,build", &shipped, &["all"]),
-            // The markers read normal edges: `cargo tree` resolves a build
-            // dependency for the host, so a graph with them differs between
-            // a Mac and CI. The CLI is no browser artifact: only the library
-            // counts there.
-            browser: cargo_tree("normal", &["kupferdraht-core"], &["wasm32-unknown-unknown"])
-                .into_keys()
-                .collect(),
-            native: cargo_tree("normal", &shipped, &NATIVE_TARGETS)
+            // The markers read what ends up in an artifact. `cargo tree`
+            // resolves a build dependency and a proc-macro's for the host, so
+            // a graph with them differs between a Mac and CI. The CLI is no
+            // browser artifact: only the library counts there.
+            browser: cargo_tree(
+                ARTIFACT_EDGES,
+                &["kupferdraht-core"],
+                &["wasm32-unknown-unknown"],
+            )
+            .into_keys()
+            .collect(),
+            native: cargo_tree(ARTIFACT_EDGES, &shipped, &NATIVE_TARGETS)
                 .into_keys()
                 .collect(),
         }
