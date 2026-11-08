@@ -67,6 +67,17 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **Dependencies are kept current by a weekly Dependabot pull request**
+  (Step 148): `.github/dependabot.yml` proposes every update
+  `Cargo.lock` can take within the manifests' requirements, transitive
+  crates included, in one pull request a week for releases at least
+  seven days old, and the workflow actions likewise; a maintainer
+  reviews and merges it. A fix for an advisory that reaches neither
+  RustSec nor GitHub's reviewed database arrives this way too: the five
+  found on transitive crates (Step 149's four and inout's below) were
+  each fixed by a lockfile update alone. CI also runs `cargo deny` daily,
+  not only on a pull request or a push.
+
 - **`resend` of a message this device already sent answers its handle**
   (Step 130b): `Timeline::resend` (Kotlin, Swift and the browser alike)
   returns the message's id and send time instead of rejecting with
@@ -134,6 +145,15 @@ is no skill for it — it is this short procedure:
   corrected versions.
 
 ### Security
+
+- **inout 0.2.6** (Step 148): GHSA-2943-gp7x-qg39 (low, published
+  2026-11-07, not in RustSec or GitHub's reviewed database): in-place
+  buffers in `InOutBufReserved::split_reserved` and `into_padded_blocks`
+  were undefined behaviour through the safe API in inout 0.2.0–0.2.5.
+  Kupferdraht reaches inout through the AEADs of the openmls providers;
+  whether its use goes through those functions was not traced. A read
+  of the upstream repositories' published advisories found it. A Rust
+  consumer's own lockfile takes 0.2.6 with `cargo update`.
 
 - **Transitive crates past four advisories no scanner reported** (Step
   149): zerovec 0.11.9 and zerovec-derive 0.11.7 (GHSA-7fx9-626j-vqph,
