@@ -8,6 +8,7 @@ asset-sha256: 4125f8ff275ea953dabb3289331b20a0e76d4fc060f57148f4a5df3bf3b0d5e0
 sqlite3mc_amalgamation.c sha256: 59e30889a7b0106152e6d4fc3c18ac1592f252cb4defbb0a7e618fdecf1a221c
 sqlite3mc_amalgamation.h sha256: 034c22a23268735059850aa22ea79333865c093c90c32287cc03cc606dcbc177
 license: MIT (LICENSE next to this file, from the v2.5.1 tag); SQLite itself is public domain
+embedded-licenses: BSD-3-Clause (SHA-2); MIT (AEGIS, miniz); Unlicense (a part of miniz); CC0-1.0 (fastpbkdf2, Argon2's Base64); CC0-1.0 OR Apache-2.0 (Argon2); public domain (MD5, SHA-1, Rijndael, ChaCha20 and Poly1305, Ascon)
 
 Verification performed at vendoring (2026-09-24):
 - asset-sha256 recomputed locally (`shasum -a 256`) equals the asset's line in the
@@ -27,6 +28,7 @@ Verification performed at vendoring (2026-09-24):
   shell3mc_amalgamation.c, sqlite3.h, sqlite3ext.h, README.md.
 
 Re-vendoring (an SQLite3MC release bump): download the new amalgamation zip plus
-SHA256SUMS / .sig / .pem, verify as above, replace the two files, update every line of
-this record, then run `cargo test -p kupferdraht-core --test step_90_sqlite3mc_engine` — it
+SHA256SUMS / .sig / .pem, verify as above, replace the two files, read the amalgamation's
+embedded license headers file by file (no tool sees them), update every line of this
+record, `THIRD-PARTY-NOTICES` and the block in `about.hbs`, then run `cargo test -p kupferdraht-core --test step_90_sqlite3mc_engine` — it
 pins the header's version defines and the SHA-256 of both files against this record.
