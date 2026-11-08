@@ -1,12 +1,24 @@
 # Step 148 — Dependencies kept current by Dependabot
 
-**Status: in progress** — commissioned 2026-11-06 from Step 142's
-retrospective (LEARNINGS §5.80) as a check of upstream repository
+**Status: MERGED 2026-11-08** — `458c87a` on
+`step/148-dependabot-updates`, merged to `main` as PR #40 (`44a2dcd`);
+gate green on 1.98 (fmt, 0 build warnings, clippy, 1444 tests, deny;
+wasm32 check, clippy `--lib` and CI's wasm clippy line), CI green; no
+smoke (no backend surface). Scope shipped as planned below; no manifest
+or library change, no CLI command. Commissioned 2026-11-06 from Step
+142's retrospective (LEARNINGS §5.80) as a check of upstream repository
 advisories; turned into this step on 2026-11-08 (Volker): the lockfile
 is kept current by a weekly Dependabot pull request that a maintainer
-reviews, instead of a tool that judges advisories. After Step 149,
-before Step 150 and the v0.2.1 release. Red test approved by Volker on
-2026-11-08.
+reviews, instead of a tool that judges advisories. Red test approved by
+Volker on 2026-11-08.
+
+**What the first run answered (2026-11-08).** Volker enabled Dependabot's
+security updates the same day. Dependabot opened PR #41 (the actions) and
+PR #42 (cargo). `lockfile-only`, `dependency-type: all` and one group
+work together for cargo: PR #42 changes `Cargo.lock` alone. The required
+`license/cla` check stays pending for `dependabot[bot]`, so both pull
+requests are blocked until the CLA Assistant allows it. LEARNINGS §5.83
+has the review of both.
 
 **Course change 2026-11-08 (Volker).** Built on 2026-11-07 and dropped
 before it was committed: an unpublished workspace crate that read the

@@ -19,7 +19,9 @@ headless Firefox) and in CI; no smoke (the browser surface; the native
 send path is unchanged, the rejected send is the Step-79 tests'); no
 `step_94_leader_tab` scenario for a resend across a leader change — the
 re-issue is the class's, tested for the class, and the three classes are
-pinned. 130c changes values the browser reads and waits for 0.3.0. Commissioned
+pinned. 130c changes values the browser reads: it follows the v0.2.1 release
+and ships alone as v0.3.0, before Step 143 (Volker, 2026-11-08: the browser
+embedder integrates it before the new features). Commissioned
 2026-11-01 (transferred from open.md's former "Proposed steps", proposed
 2026-09-25 in the Step 94 retrospective; ADR-0026 option L3-C, deferred
 there to "a later step").

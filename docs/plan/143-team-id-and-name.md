@@ -6,7 +6,8 @@ requirements for a work-queue client, R1, measured there against
 commissioning: the names `team_id` / `team_name` (`teamId` / `teamName`
 in the browser), as of the last login with no live refresh, and after
 the v0.2.1 release (141, 142, 130b) — the FFI record `Account` grows by
-two fields.
+two fields. Moved 2026-11-08 (Volker): after the v0.3.0 release, which
+carries Step 130c alone.
 
 ## Problem
 
