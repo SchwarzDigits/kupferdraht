@@ -40,6 +40,10 @@ allow = [
     "Unicode-3.0",
     "CC0-1.0",
     "Zlib",
+    # `sqlite3mc-src`, the SQLite3MC amalgamation as a crate and a build
+    # dependency of `sqlite-wasm-rs`, names it for the amalgamation's
+    # miniz. Permissive, no copyleft trigger.
+    "Unlicense",
     # `webpki-roots` (Mozilla's root-CA list, pulled in via reqwest's
     # rustls stack) uses this permissive license. It's the standard
     # license for the CDLA `data` track and contains no copyleft

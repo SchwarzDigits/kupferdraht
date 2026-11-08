@@ -257,7 +257,7 @@ pre-commit contract.
 request a week with every update `Cargo.lock` can take within the
 manifests' requirements, transitive crates included, for releases at
 least seven days old, and one for the workflow actions. A maintainer
-updates the third-party notices on the pull request's branch, reviews
+updates the third-party notices on a cargo pull request's branch, reviews
 and merges it (no step; `CLAUDE.md` "Branches and Commits"); a release
 that needs a manifest change is left to a step. `cargo deny` matches RustSec and Dependabot's alerts match
 GitHub's reviewed advisory database; an advisory published only in a
@@ -277,7 +277,8 @@ enumerates every crate Kupferdraht links against, grouped by license
 SQLite3MC build line and openmls's P-256 providers on the p256 0.14 line
 are git dependencies and listed like any crate),
 plus a hand-kept section for the two components outside the crate
-graph: the vendored SQLite3MC engine (MIT) and the git-pinned
+graph: the vendored SQLite3MC engine (MIT, and the licenses of the code
+it embeds) and the git-pinned
 `sqlite-remote-vfs` (Apache-2.0), which cargo-about skips as an
 unpublished crate (`publish = false`).
 Regenerate it when the dependency graph changes:

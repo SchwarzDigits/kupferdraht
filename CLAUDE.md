@@ -207,7 +207,7 @@ A change to a `pub` consumer-facing symbol in `kupferdraht-core` is mirrored in 
 
 One branch per Step/sub-step: `step/{N}-{slug}`, sub-steps `step/{N}{letter}-{slug}`. Never multiple sub-steps per branch; no work on `main`. One commit per Step/sub-step, bundling library + the CLI command that validates it (small fix-ups inside a branch are fine). Merge to `main` only on a green gate + smoke.
 
-Exception: a Dependabot pull request (the weekly one of `.github/dependabot.yml` — lockfile and workflow-action updates within the manifests' requirements — or a security update) is no step — it merges once CI is green and `THIRD-PARTY-NOTICES` and `docs/THIRD_PARTY_LICENSES.html` are updated on its branch; no smoke.
+Exception: a Dependabot pull request (a weekly one of `.github/dependabot.yml` — lockfile updates within the manifests' requirements, workflow-action updates of any size — or a security update) is no step — it merges once CI is green and, when it changes `Cargo.lock`, `THIRD-PARTY-NOTICES` and `docs/THIRD_PARTY_LICENSES.html` are updated on its branch; no smoke.
 
 ## Implementation References (priority order)
 

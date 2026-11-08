@@ -63,7 +63,8 @@ hand, before that.
    targets the bindings are built for, or the markers stay unchecked.
 4. **The components outside the graph.** SQLite3MC and SQLite against
    `PROVENANCE.txt`, the sqlite-remote crates against `Cargo.lock`, in the
-   notices and in `about.hbs`'s block alike. The Kotlin section against
+   notices and in `about.hbs`'s block alike, and the embedded licenses
+   `PROVENANCE.txt` records in both. The Kotlin section against
    the Gradle files' literal versions (jna, kotlinx-coroutines,
    kotlin-stdlib, the gobley plugins). Recommendation: all of it — the
    same drift, the same kind of test.

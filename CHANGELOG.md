@@ -106,6 +106,19 @@ is no skill for it — it is this short procedure:
 
 ### Fixed
 
+- **The third-party notices name what the SQLite3MC amalgamation embeds**:
+  `THIRD-PARTY-NOTICES` and `docs/THIRD_PARTY_LICENSES.html` named MIT and
+  SQLite's public domain alone. Every build also compiles SHA-2 under
+  BSD-3-Clause, whose notice a binary redistribution has to reproduce, and
+  AEGIS under MIT with its own copyright holder; the vendored source further
+  carries miniz (MIT, a part under the Unlicense; not compiled), Argon2 and
+  fastpbkdf2 (CC0-1.0) and public-domain code. An application that ships
+  Kupferdraht reproduces the notices from the updated file; no code changed.
+  `vendor/sqlite3mc/PROVENANCE.txt` records the embedded licenses, and
+  re-vendoring reads them again. `Unlicense` joins the license allow-list of
+  `deny.toml` and `about.toml` for `sqlite3mc-src`, the amalgamation as a
+  crate, which sqlite-wasm-rs 0.6.2 builds on.
+
 - **Received files open again** (Step 141; a regression of 0.1.1): Wire
   answers the download of a local asset with `302` to a time-limited
   pre-signed URL on its asset store, and since Step 132 the native build

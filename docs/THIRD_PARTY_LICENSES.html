@@ -81,6 +81,53 @@
                     <code>vendor/sqlite3mc/PROVENANCE.txt</code>. SQLite itself is in
                     the public domain.
                 </p>
+                <p>The amalgamation embeds this third-party code as well:</p>
+                <ul>
+                    <li>AEGIS: Copyright (c) 2023-2024 Frank Denis, MIT License (the
+                    terms of <code>vendor/sqlite3mc/LICENSE</code>).</li>
+                    <li>miniz: Copyright 2013-2014 RAD Game Tools and Valve Software,
+                    Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC,
+                    Copyright 2016 Martin Raiber, MIT License (the same terms), with
+                    a part under the Unlicense. In the vendored source only:
+                    Kupferdraht's builds do not enable the compression extensions
+                    that compile it.</li>
+                    <li>Argon2: Copyright 2015 Daniel Dinu, Dmitry Khovratovich,
+                    Jean-Philippe Aumasson and Samuel Neves, CC0-1.0 or Apache-2.0,
+                    used here under CC0-1.0. Its Base64 code: Thomas Pornin,
+                    CC0-1.0.</li>
+                    <li>fastpbkdf2: Joseph Birr-Pixton, CC0-1.0.</li>
+                    <li>MD5 (Alexander Peslyak), SHA-1 (Steve Reid), Rijndael (Szymon
+                    Stefanek, after Rijmen, Bosselaers and Barreto), ChaCha20 and
+                    Poly1305 (the sqleet project) and Ascon: in the public
+                    domain.</li>
+                    <li>SHA-2: BSD 3-Clause License, with this notice:
+                    <pre class="license-text">Copyright (C) 2005, 2007 Olivier Gay &lt;olivier.gay@a3.epfl.ch&gt;
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. Neither the name of the project nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE PROJECT OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.</pre></li>
+                </ul>
             </li>
             <li class="license">
                 <h3>sqlite-remote-vfs 0.6.0 and sqlite-remote-protocol 0.6.0</h3>
