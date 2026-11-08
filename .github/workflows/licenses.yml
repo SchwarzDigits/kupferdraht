@@ -39,7 +39,7 @@ jobs:
           toolchain: ${{ steps.toolchain.outputs.channel }}
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-about
-        run: cargo install --locked cargo-about --version 0.9.2
+        run: cargo install --locked cargo-about --version 0.9.2 --features cli
       - name: Regenerate the report
         run: cargo about generate about.hbs -m kupferdraht-cli/Cargo.toml -c about.toml > docs/THIRD_PARTY_LICENSES.html
       - name: The committed report matches

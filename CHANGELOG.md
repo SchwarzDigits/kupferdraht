@@ -77,8 +77,7 @@ is no skill for it — it is this short procedure:
   regenerates the report at cargo-about 0.9.2 and fails on a diff. Both files
   now cover what ships: the report no longer lists the 13 crate versions only
   `kupferdraht-uniffi-bindgen` pulls, which is in no artifact. The notices
-  correct the markers of `pkg-config`, `shlex` 1.3.0 and the `hax-lib` crates,
-  and say which license the dual-licensed crates are used under.
+  say which license the dual-licensed crates are used under.
 
 - **Dependencies are kept current by a weekly Dependabot pull request**
   (Step 148): `.github/dependabot.yml` proposes every update

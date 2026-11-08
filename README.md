@@ -284,7 +284,7 @@ unpublished crate (`publish = false`).
 Regenerate it when the dependency graph changes:
 
 ```sh
-cargo install --locked cargo-about --version 0.9.2   # once per machine
+cargo install --locked cargo-about --version 0.9.2 --features cli   # once per machine
 cargo about generate about.hbs -m kupferdraht-cli/Cargo.toml -c about.toml > docs/THIRD_PARTY_LICENSES.html
 ```
 

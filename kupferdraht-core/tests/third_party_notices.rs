@@ -262,15 +262,15 @@ fn sections_with_an_unstated_choice(notices: &str) -> Vec<String> {
         .collect()
 }
 
-fn expected_marker(
-    key: &CrateVersion,
-    browser: &BTreeSet<CrateVersion>,
-    native: &BTreeSet<CrateVersion>,
-) -> Marker {
-    match (browser.contains(key), native.contains(key)) {
-        (true, true) => Marker::EveryTarget,
-        (true, false) => Marker::BrowserOnly,
-        (false, _) => Marker::NativeOnly,
+/// Whether `marker` fits a crate's normal edges. A crate in neither graph is
+/// a build tool or behind a `cfg` no build sets: in no artifact, so its marker
+/// says nothing a graph could contradict.
+fn marker_fits(marker: Marker, in_browser: bool, in_native: bool) -> bool {
+    match (in_browser, in_native) {
+        (true, true) => marker == Marker::EveryTarget,
+        (true, false) => marker == Marker::BrowserOnly,
+        (false, true) => marker == Marker::NativeOnly,
+        (false, false) => true,
     }
 }
 
@@ -282,10 +282,10 @@ fn marker_differences(
     let mut differences = Vec::new();
     for entry in entries {
         let key = crate_version(&entry.name, &entry.version);
-        let expected = expected_marker(&key, browser, native);
-        if entry.marker != expected {
+        let (in_browser, in_native) = (browser.contains(&key), native.contains(&key));
+        if !marker_fits(entry.marker, in_browser, in_native) {
             differences.push(format!(
-                "{} {}: marked {:?}, the graphs say {expected:?}",
+                "{} {}: marked {:?}; in the browser graph: {in_browser}, in a native graph: {in_native}",
                 entry.name, entry.version, entry.marker
             ));
         }
@@ -485,15 +485,18 @@ fn workspace_file(relative: &str) -> String {
         .unwrap_or_else(|error| panic!("read {relative}: {error}"))
 }
 
-/// `name|version` → license of one `cargo tree` over the locked graph.
-fn cargo_tree(packages: &[&str], targets: &[&str]) -> BTreeMap<CrateVersion, String> {
+/// Crate version → license of one `cargo tree` over the locked graph.
+fn cargo_tree(edges: &str, packages: &[&str], targets: &[&str]) -> BTreeMap<CrateVersion, String> {
     let mut command = Command::new(env!("CARGO"));
     command.current_dir(workspace_root()).args([
         "tree",
         "--offline",
         "--locked",
+        // CI sets CARGO_TERM_COLOR=always, which would color the `(*)` of a repeated crate.
+        "--color",
+        "never",
         "-e",
-        "normal,build",
+        edges,
         "--prefix",
         "none",
         "--format",
@@ -535,12 +538,17 @@ fn graphs() -> &'static Graphs {
     GRAPHS.get_or_init(|| {
         let shipped = ["kupferdraht-core", "kupferdraht-cli"];
         Graphs {
-            all: cargo_tree(&shipped, &["all"]),
-            // The CLI is no browser artifact: only the library counts there.
-            browser: cargo_tree(&["kupferdraht-core"], &["wasm32-unknown-unknown"])
+            all: cargo_tree("normal,build", &shipped, &["all"]),
+            // The markers read normal edges: `cargo tree` resolves a build
+            // dependency for the host, so a graph with them differs between
+            // a Mac and CI. The CLI is no browser artifact: only the library
+            // counts there.
+            browser: cargo_tree("normal", &["kupferdraht-core"], &["wasm32-unknown-unknown"])
                 .into_keys()
                 .collect(),
-            native: cargo_tree(&shipped, &NATIVE_TARGETS).into_keys().collect(),
+            native: cargo_tree("normal", &shipped, &NATIVE_TARGETS)
+                .into_keys()
+                .collect(),
         }
     })
 }
@@ -813,9 +821,12 @@ fn a_wrong_target_marker_is_named() {
         1
     );
 
-    // A `cfg(any())` dependency is in no target's graph: not a browser crate, so native only.
-    let in_no_graph = [entry("zerocopy-derive", "0.8.63", DUAL, Marker::NativeOnly)];
-    assert!(marker_differences(&in_no_graph, &nowhere, &nowhere).is_empty());
+    // In no normal graph, a build tool or a `cfg(any())` dependency: in no
+    // artifact, so no graph contradicts its marker.
+    for marker in [Marker::NativeOnly, Marker::EveryTarget, Marker::BrowserOnly] {
+        let build_tool = [entry("cc", "1.11.1", DUAL, marker)];
+        assert!(marker_differences(&build_tool, &nowhere, &nowhere).is_empty());
+    }
 }
 
 fn outside_graph_sources() -> [String; 5] {
@@ -989,7 +1000,16 @@ fn the_notices_header_claims_no_date() {
 #[test]
 fn ci_and_the_readme_regenerate_the_report_the_same_way() {
     let command = "cargo about generate about.hbs -m kupferdraht-cli/Cargo.toml -c about.toml";
+    let install = "cargo install --locked cargo-about --version 0.9.2 --features cli";
     let ci = workspace_file(".github/workflows/licenses.yml");
+    assert!(
+        ci.contains(install),
+        "without the feature it installs no binary: {install}"
+    );
+    assert!(
+        workspace_file("README.md").contains(install),
+        "README installs the same: {install}"
+    );
     assert!(
         ci.contains(command),
         "the CI job regenerates with: {command}"

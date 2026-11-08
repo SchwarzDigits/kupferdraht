@@ -14,14 +14,16 @@ one comparison by hand, before that.
   every package in the local registry: with a fresh `CARGO_HOME` fetched for
   the host only it fails, after a plain `cargo fetch --locked` it passes.
   CI's `check` job runs that fetch already, for Step 90's pin.
-- **The markers (scope 3):** "(browser target only)" means in the wasm32
-  graph of `kupferdraht-core` and in no native one; "(native targets only)"
-  means in no wasm32 graph, a `cfg(any())` dependency included; unmarked
-  means in both. The CLI is no browser artifact, so the wasm32 graph is the
-  library's. Twelve native targets: desktop, Android, iOS. A build dependency
-  counts, so `pkg-config` loses its marker; `chacha20`'s wrong one went with
-  the lockfile update of PR #46. The check also found `shlex` 1.3.0 and the
-  `hax-lib` crates (behind `cfg(hax)`) unmarked though in no wasm32 graph.
+- **The markers (scope 3):** they read normal edges, per target: in the
+  wasm32 graph of `kupferdraht-core` and a native one means unmarked, in only
+  one of them the matching marker. A crate in neither is a build tool or
+  behind a `cfg` no build sets: in no artifact, so no graph contradicts its
+  marker. The CLI is no browser artifact, so the wasm32 graph is the library's.
+  Twelve native targets: desktop, Android, iOS. The first plan counted build
+  dependencies too, and CI refuted it: `cargo tree --target` resolves a build
+  dependency for the host, so `errno` and `linux-raw-sys` changed sides between
+  a Mac and Linux. `chacha20`'s wrong marker went with the lockfile update of
+  PR #46.
 - **One graph (scope 6): `cargo about generate about.hbs -m
   kupferdraht-cli/Cargo.toml -c about.toml`.** The report then lists 442
   versions, the notices' 445 without the two unpublished sqlite-remote crates
@@ -32,8 +34,9 @@ one comparison by hand, before that.
 - **The CI job (scope 5):** a workflow of its own, `licenses.yml`, on `push`
   to `main` and on a pull request changing `Cargo.lock`, `about.hbs`,
   `about.toml` or the report. It gets cargo-about as the `audit` job gets
-  cargo-deny, `cargo install --locked`, at the pinned 0.9.2. The release
-  procedure does not regenerate.
+  cargo-deny, `cargo install --locked`, at the pinned 0.9.2 with `--features
+  cli`: without the feature the crate installs no binary, and cargo still
+  reports success. The release procedure does not regenerate.
 
 **From the first Dependabot run (LEARNINGS §5.83):** `unicode-normalization`
 0.1.26 added `Unicode-3.0` to its license, which only the section check

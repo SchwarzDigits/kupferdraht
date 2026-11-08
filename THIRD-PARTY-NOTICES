@@ -21,10 +21,11 @@ file contents, the MIT and BSD copyright and permission notices, the
 MPL-2.0 source-availability terms for the MPL-licensed crates), and
 Kupferdraht's own GPL-3.0-only terms apply to the combined work.
 
-Target scope: a crate marked "(browser target only)" is pulled only by
-the wasm32 build of the library, one marked "(native targets only)" by no
-wasm32 build (some, behind a `cfg` no build sets, by no build at all);
-unmarked crates are in the graph of both.
+Target scope: a crate marked "(browser target only)" ends up only in the
+wasm32 build of the library, one marked "(native targets only)" only in
+native builds (desktop, Android, iOS); unmarked crates are in both. A crate
+used only at build time, or behind a `cfg` no build sets, is in no artifact;
+its marker says at most which build uses it.
 Where a crate is offered under a choice of licenses, the section says
 which one Kupferdraht uses it under.
 
