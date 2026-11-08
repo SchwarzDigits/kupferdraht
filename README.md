@@ -284,9 +284,18 @@ unpublished crate (`publish = false`).
 Regenerate it when the dependency graph changes:
 
 ```sh
-cargo install --locked cargo-about   # once per machine
-cargo about generate about.hbs > docs/THIRD_PARTY_LICENSES.html
+cargo install --locked cargo-about --version 0.9.2   # once per machine
+cargo about generate about.hbs -m kupferdraht-cli/Cargo.toml -c about.toml > docs/THIRD_PARTY_LICENSES.html
 ```
+
+`cargo test -p kupferdraht-core --test third_party_notices`, part of the
+gate, compares both files with their sources: the crate lists with the
+locked build graph both ways, each crate's section with its license, the
+target markers with the graphs per target, and the components outside the
+graph with `vendor/sqlite3mc/PROVENANCE.txt`, `Cargo.lock` and the Gradle
+files. It needs every package in the local registry (`cargo fetch
+--locked`). `.github/workflows/licenses.yml` regenerates the report at the
+same cargo-about version and fails on a diff.
 
 `about.toml`'s accepted-license set is kept in sync with
 `deny.toml` — any drift between the two is a review defect.

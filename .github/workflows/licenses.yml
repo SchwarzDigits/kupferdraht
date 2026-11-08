@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2026 Schwarz Digits KG
+# SPDX-License-Identifier: GPL-3.0-only
+
+# docs/THIRD_PARTY_LICENSES.html regenerated at the pinned cargo-about; a
+# diff fails (Step 150). The test `third_party_notices` compares the report's
+# crate list with the build graph in the gate; this job also covers the
+# license texts, which only cargo-about can produce.
+
+name: Licenses
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - Cargo.lock
+      - about.hbs
+      - about.toml
+      - docs/THIRD_PARTY_LICENSES.html
+      - .github/workflows/licenses.yml
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  report:
+    name: HTML license report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # dtolnay/rust-toolchain@master needs the toolchain named: read the
+      # channel from rust-toolchain.toml, the one place it is pinned.
+      - name: Pinned toolchain
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-about
+        run: cargo install --locked cargo-about --version 0.9.2
+      - name: Regenerate the report
+        run: cargo about generate about.hbs -m kupferdraht-cli/Cargo.toml -c about.toml > docs/THIRD_PARTY_LICENSES.html
+      - name: The committed report matches
+        run: git diff --exit-code docs/THIRD_PARTY_LICENSES.html

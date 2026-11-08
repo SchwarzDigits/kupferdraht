@@ -1,10 +1,48 @@
 # Step 150 — The third-party notices checked against their sources
 
-**Status: commissioned 2026-11-07** (Volker) from Step 149's
-retrospective (LEARNINGS §5.82): after Step 148, before the v0.2.1
-release. The repository is being made known widely now, and its
-attribution files are to be held by a check, not by one comparison by
-hand, before that.
+**Status: in progress** on `step/150-notices-checked`, red tests approved
+by Volker on 2026-11-08 — commissioned 2026-11-07 (Volker) from Step 149's retrospective (LEARNINGS §5.82): after
+Step 148, before the v0.2.1 release. The repository is being made known
+widely now, and its attribution files are to be held by a check, not by
+one comparison by hand, before that.
+
+**Phase 1, measured 2026-11-08:**
+
+- **The graph (scope 1): route (a).** `cargo tree --offline --locked`
+  through `env!("CARGO")` takes 0.6 s and runs inside `cargo test`, as
+  `step_90_sqlite3mc_engine`'s `cargo metadata --offline` does. It needs
+  every package in the local registry: with a fresh `CARGO_HOME` fetched for
+  the host only it fails, after a plain `cargo fetch --locked` it passes.
+  CI's `check` job runs that fetch already, for Step 90's pin.
+- **The markers (scope 3):** "(browser target only)" means in the wasm32
+  graph of `kupferdraht-core` and in no native one; "(native targets only)"
+  means in no wasm32 graph, a `cfg(any())` dependency included; unmarked
+  means in both. The CLI is no browser artifact, so the wasm32 graph is the
+  library's. Twelve native targets: desktop, Android, iOS. A build dependency
+  counts, so `pkg-config` loses its marker; `chacha20`'s wrong one went with
+  the lockfile update of PR #46. The check also found `shlex` 1.3.0 and the
+  `hax-lib` crates (behind `cfg(hax)`) unmarked though in no wasm32 graph.
+- **One graph (scope 6): `cargo about generate about.hbs -m
+  kupferdraht-cli/Cargo.toml -c about.toml`.** The report then lists 442
+  versions, the notices' 445 without the two unpublished sqlite-remote crates
+  (the hand-kept block) and `zerocopy-derive`. That one was the open question
+  of Problem 3: zerocopy names it as a `cfg(any())` dependency, which holds
+  its version in the lockfile and which no target compiles. `cargo tree
+  --target all` lists it, cargo-about evaluates the `cfg`.
+- **The CI job (scope 5):** a workflow of its own, `licenses.yml`, on `push`
+  to `main` and on a pull request changing `Cargo.lock`, `about.hbs`,
+  `about.toml` or the report. It gets cargo-about as the `audit` job gets
+  cargo-deny, `cargo install --locked`, at the pinned 0.9.2. The release
+  procedure does not regenerate.
+
+**From the first Dependabot run (LEARNINGS §5.83):** `unicode-normalization`
+0.1.26 added `Unicode-3.0` to its license, which only the section check
+(scope 2) catches. A choice of licenses is stated in every section that has
+one; the dual-licensed section, the largest, did not state it, and the
+stated choices agree with the report's. The
+amalgamation's embedded licenses (`PROVENANCE.txt`) are named in both files,
+and SHA-2's BSD notice is compared with the amalgamation's text, since a
+binary redistribution has to reproduce it.
 
 ## Problem
 
@@ -105,11 +143,9 @@ No network in tests; the graph is the locked one (`--offline`).
   versions in one entry; a target marker after a version; build
   metadata; the author / URL tail after the dash not read as a crate
   ("Gradle plugins 0.3.7" is the Kotlin section's, not a crate).
-- Today's notices against today's graph: green. The notices of
-  `d862fb0` (before Step 149) against today's graph: 18 crates fail by
-  name — 15 of the 16 moved ones at their old versions (quinn-udp is not
-  in the graph), sqlite-remote-vfs / -protocol at 0.5.0, and
-  `synstructure` 0.14.0 missing.
+- Today's notices against today's graph: green. A stale version on a small
+  input: named with the side that lacks it. The small inputs hold no real
+  version, so a weekly lockfile update moves none of them.
 - A crate in the wrong license section fails; a wrong target marker
   fails (if 3. is in).
 - `about.hbs`'s block and the notices' paragraph naming sqlite-remote

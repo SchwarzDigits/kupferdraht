@@ -2,8 +2,11 @@
 # allow-list. Any drift between the two is a review defect.
 #
 # Used to generate `docs/THIRD_PARTY_LICENSES.html` via
-# `cargo about generate about.hbs > docs/THIRD_PARTY_LICENSES.html`
-# (see README's "Building" section).
+# `cargo about generate about.hbs -m kupferdraht-cli/Cargo.toml -c about.toml
+# > docs/THIRD_PARTY_LICENSES.html` (see README's "Building" section). The
+# manifest is the CLI's: it and the library it depends on are what ships,
+# which leaves `kupferdraht-uniffi-bindgen`'s dependencies out, as the
+# notices do.
 
 # The workspace crates (`publish = false`) carry Kupferdraht's own license
 # (`GPL-3.0-only`, ADR-0016) and are not third-party — exclude them,

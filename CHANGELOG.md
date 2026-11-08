@@ -67,6 +67,19 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **The third-party notices are checked against their sources** (Step 150):
+  the test `third_party_notices`, part of the gate, compares
+  `THIRD-PARTY-NOTICES` and `docs/THIRD_PARTY_LICENSES.html` with the locked
+  build graph both ways, each crate's section with its license expression,
+  the target markers with the graphs per target, and the components outside
+  the graph with `vendor/sqlite3mc/PROVENANCE.txt`, `Cargo.lock` and the
+  Gradle files; a crate that changes its license fails it. A CI job
+  regenerates the report at cargo-about 0.9.2 and fails on a diff. Both files
+  now cover what ships: the report no longer lists the 13 crate versions only
+  `kupferdraht-uniffi-bindgen` pulls, which is in no artifact. The notices
+  correct the markers of `pkg-config`, `shlex` 1.3.0 and the `hax-lib` crates,
+  and say which license the dual-licensed crates are used under.
+
 - **Dependencies are kept current by a weekly Dependabot pull request**
   (Step 148): `.github/dependabot.yml` proposes every update
   `Cargo.lock` can take within the manifests' requirements, transitive

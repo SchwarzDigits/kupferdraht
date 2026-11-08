@@ -8,7 +8,7 @@ asset-sha256: 4125f8ff275ea953dabb3289331b20a0e76d4fc060f57148f4a5df3bf3b0d5e0
 sqlite3mc_amalgamation.c sha256: 59e30889a7b0106152e6d4fc3c18ac1592f252cb4defbb0a7e618fdecf1a221c
 sqlite3mc_amalgamation.h sha256: 034c22a23268735059850aa22ea79333865c093c90c32287cc03cc606dcbc177
 license: MIT (LICENSE next to this file, from the v2.5.1 tag); SQLite itself is public domain
-embedded-licenses: BSD-3-Clause (SHA-2); MIT (AEGIS, miniz); Unlicense (a part of miniz); CC0-1.0 (fastpbkdf2, Argon2's Base64); CC0-1.0 OR Apache-2.0 (Argon2); public domain (MD5, SHA-1, Rijndael, ChaCha20 and Poly1305, Ascon)
+embedded-licenses: BSD-3-Clause (SHA-2); MIT (AEGIS, miniz); Unlicense (a part of miniz); CC0-1.0 (fastpbkdf2, Base64); CC0-1.0 OR Apache-2.0 (Argon2); public domain (MD5, SHA-1, Rijndael, ChaCha20 and Poly1305, Ascon)
 
 Verification performed at vendoring (2026-09-24):
 - asset-sha256 recomputed locally (`shasum -a 256`) equals the asset's line in the
