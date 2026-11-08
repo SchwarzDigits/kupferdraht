@@ -77,9 +77,7 @@ hand, before that.
    `kupferdraht-uniffi-bindgen`'s dependencies (cargo-about's workspace
    selection or `about.toml`) and gains `zerocopy-derive`, or the
    notices say which graph each file covers. Recommendation: one graph,
-   the notices'. Step 148's tool crate (`tools/advisories`) is a fourth
-   workspace member whose dependencies must stay out of both files;
-   whichever lands second checks it.
+   the notices'.
 7. **The notices' header** drops "on 2026-11-02": with the test, the date
    says nothing about how current the list is.
 8. **Docs:** README's "Building" section (how the notices are updated,

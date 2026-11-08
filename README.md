@@ -251,6 +251,20 @@ cargo install --locked cargo-deny
 `CLAUDE.md` lists the same five commands as the non-negotiable
 pre-commit contract.
 
+### Dependency updates
+
+[`.github/dependabot.yml`](.github/dependabot.yml) opens one pull
+request a week with every update `Cargo.lock` can take within the
+manifests' requirements, transitive crates included, for releases at
+least seven days old, and one for the workflow actions. A maintainer
+updates the third-party notices on the pull request's branch, reviews
+and merges it (no step; `CLAUDE.md` "Branches and Commits"); a release
+that needs a manifest change is left to a step. `cargo deny` matches RustSec and Dependabot's alerts match
+GitHub's reviewed advisory database; an advisory published only in a
+dependency's own repository reaches neither until it is reviewed, and a
+lockfile kept current moves past most of them anyway. CI runs `cargo
+deny` daily as well as on every pull request.
+
 ### Third-party licenses
 
 [`THIRD-PARTY-NOTICES`](THIRD-PARTY-NOTICES) is the attribution file an

@@ -131,7 +131,7 @@ Components dual-licensed Apache-2.0 OR MIT
   sha2 0.11.0 — RustCrypto Developers — https://github.com/RustCrypto/hashes
 - block-buffer 0.10.4, block-buffer 0.12.1, block-padding 0.3.3, cmov 0.5.4,
   cpubits 0.1.1, cpufeatures 0.2.17 (native targets only), cpufeatures 0.3.1
-  (native targets only), ctutils 0.4.7, inout 0.1.4, inout 0.2.5, opaque-debug
+  (native targets only), ctutils 0.4.7, inout 0.1.4, inout 0.2.6, opaque-debug
   0.3.1, zeroize 1.9.0, zeroize_derive 1.5.0 — RustCrypto Developers; The
   RustCrypto Project Developers — https://github.com/RustCrypto/utils
 - bumpalo 3.20.2 (browser target only) — Nick Fitzgerald —
