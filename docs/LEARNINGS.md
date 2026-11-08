@@ -2670,3 +2670,75 @@ touched it.
   reqwest's HTTP/3 feature stays off. Once Step 148 lands, its check
   covers the five floors as well; whether `step_149_advisory_floors`
   stays is Step 148's call.
+
+### 5.83 A check built before the question was put, a first Dependabot run a license gate stopped, and a pull request's table that was not the lockfile (Step 148)
+
+- **The check was built before anyone asked whether a check was wanted.**
+  Step 148 began as a crate that reads the published advisories of every
+  repository behind `Cargo.lock` and decides from their free-text fields
+  whether one applies: 2,170 lines, about 700 of them heuristics for those
+  fields. Its first run reported seven entries and decided one itself;
+  four others needed a reader because the advisory's own fields were
+  malformed, two because they concern a feature the rusqlite fork does not
+  build. That was the signal, and it was read as more heuristics to write.
+  Volker put the question: should a person not look at updates and decide?
+  A check that needs heuristics to decide its own hits is a review queue.
+  What the existing tools leave open, and the smallest thing that closes
+  it, is measured before building, not after. The code was never
+  committed, and a dropped approach that never worked leaves no ADR.
+- **The measurement that settled it was cheap and came late.** Of the 79
+  advisories in the lockfile's repositories, 16 are in neither database;
+  eight of those applied to locked versions: openmls's three (the fork,
+  Step 142) and five transitive ones, each fixed by a lockfile update
+  within the manifests' requirements. A lockfile kept current moves past
+  them without anyone knowing the advisory. The numbers took one lookup
+  per advisory on top of the sweep phase 1 had already made, and they
+  came after the tool. They could have come first.
+- **The first run proved the combination and stopped at the gate it should
+  stop at.** `lockfile-only`, `dependency-type: all` and one group work
+  together for cargo: PR #42 changes `Cargo.lock` alone. `cargo deny`
+  failed on it: sqlite-wasm-rs 0.6.2 takes the engine's source from a new
+  build dependency, `sqlite3mc-src`, whose license expression names
+  `Unlicense`, which `deny.toml` does not allow. A read of the two crates
+  behind that: `SQLITE_WASM_RS_SOURCE_DIR` is still honoured, so the
+  browser keeps compiling `vendor/sqlite3mc/` (ADR-0022), and the crate's
+  amalgamation has the checksums `PROVENANCE.txt` names. "Merges once CI
+  is green" is what held; a maintainer's read of 128 moved versions would
+  not have looked at a license. Volker: `Unlicense` goes on the allow-list
+  of `deny.toml` and `about.toml`; it is permissive, and the list stays
+  license-based with no crate exceptions.
+- **The license was news only to the gate, and the crate's expression was
+  not the whole answer.** The Unlicense is miniz's, and the same expression
+  names fastpbkdf2 (CC0-1.0) and Argon2 (CC0-1.0 or Apache-2.0). All three
+  stand in `vendor/sqlite3mc/`, byte for byte, since Step 90, while the
+  notices and `about.hbs` name MIT and SQLite's public domain alone. A
+  sweep of the amalgamation by embedded file found what the expression does
+  not name either: sha2 under BSD-3-Clause (Olivier Gay), whose second
+  clause asks a binary redistribution to reproduce the notice, and the
+  copyright lines of the MIT parts by other holders, AEGIS (Frank Denis)
+  and miniz. A vendored C file has no license field for a tool to read, so
+  the file is read, once, when it is vendored. Step 150's check of the
+  components outside the graph compares versions and would not have found
+  this.
+- **A pull request's table is not the lockfile.** PR #42's title says 128
+  updates, its body 129, and its table lists prost 0.13.5 → 0.14.4, sha2
+  0.10.9 → 0.11.0, hkdf, aes and ed25519-dalek 2.2.0 → 3.0.0. None of them
+  moved: both versions were locked before and after. The lockfile diff
+  says 128 versions out, 128 in; eight of the new ones start a new SemVer
+  line because a dependency's own update asks for it (base64 0.23,
+  fixedbitset 0.5, hashbrown 0.17, itertools 0.13 and 0.14, petgraph 0.7,
+  shlex 2, wit-bindgen 0.57), and `sqlite3mc-src` and `utf_types` are new
+  crates. A Dependabot pull request is reviewed from its diff; the same
+  lesson as §5.82's count, from another tool's summary.
+- **An exception names every source of what it governs, in that source's
+  terms.** The CLAUDE.md exception first named only the weekly pull
+  request; security updates came in when Volker asked where to switch them
+  on. And "within the manifests' requirements" fits cargo, not actions: a
+  workflow names a tag, so the first actions pull request (#41) is a major
+  bump, `actions/checkout` 4 → 7, green on CI. Volker: action updates of
+  any size fall under the exception, and its wording says so.
+- **What was left.** `license/cla` stays pending for `dependabot[bot]`,
+  the question the plan left to the first run, and blocks both pull
+  requests. Every cargo pull request needs the notices by hand until Step
+  150 checks them. §5.82 left `step_149_advisory_floors` to this step's
+  check; the check is gone, so the pin test stays.
