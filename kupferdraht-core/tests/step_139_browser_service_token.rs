@@ -13,7 +13,8 @@
 #![cfg(target_arch = "wasm32")]
 
 use kupferdraht::KupferdrahtError;
-use kupferdraht::wasm::service_token::{ServiceTokenView, exchange, to_js};
+use kupferdraht::wasm::js_view::to_js;
+use kupferdraht::wasm::service_token::{ServiceTokenView, exchange};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 

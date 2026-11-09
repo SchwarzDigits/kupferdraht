@@ -8,7 +8,6 @@
 //! failed rows behind the stop.
 
 use serde::Serialize;
-use wasm_bindgen::JsValue;
 
 use crate::timeline::{MessageHandle, ResendSummary};
 
@@ -69,15 +68,4 @@ fn handle_view(handle: &MessageHandle) -> HandleView {
         message_id: handle.message_id.clone(),
         sent_at_ms: handle.sent_at_ms,
     }
-}
-
-/// Serialize the summary with no stop as `null`.
-///
-/// # Errors
-/// An `Encoding` error when the value cannot be serialized (never for the
-/// view above).
-pub fn to_js(view: &ResendSummaryView) -> Result<JsValue, JsValue> {
-    let serializer = serde_wasm_bindgen::Serializer::new().serialize_missing_as_null(true);
-    view.serialize(&serializer)
-        .map_err(|e| super::manager::named_error("Encoding", &e.to_string()))
 }

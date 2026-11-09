@@ -41,16 +41,6 @@ pub fn exchange() -> Result<ServiceTokenExchange, KupferdrahtError> {
     crate::storage::service_token_exchange().map(ServiceTokenExchange)
 }
 
-/// Serialize the view for the page.
-///
-/// # Errors
-/// An `Encoding` error when the value cannot be serialized (never for the
-/// view above).
-pub fn to_js(view: &ServiceTokenView) -> Result<JsValue, JsValue> {
-    // One serializer for the browser's views — the read-state module's.
-    super::read_state::to_js(view)
-}
-
 /// `Client.serviceToken`: a token for `audience` from `cache` — served while
 /// within half its lifetime, else bought from the exchange with the
 /// client's Wire session (`SessionExpired` once the client is gone).
@@ -71,5 +61,5 @@ pub(super) async fn service_token(
         expires_in: token.expires_in.as_secs(),
     };
     debug_assert!(!view.token.is_empty(), "the exchange answers with a token");
-    to_js(&view)
+    super::js_view::to_js(&view)
 }

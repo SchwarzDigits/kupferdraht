@@ -38,6 +38,21 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **BREAKING: a missing value in a browser view is `null`, not `undefined`**
+  (Step 130c): every object the browser surface and `kupferdraht-tabs` hand
+  over carries a missing value as `null`, as `index.d.ts` has always declared
+  it: `TimelineItem` (`body`, `replyTo`, `asset`, `expiresAtMs`, `hotKnock`,
+  `location` with its `name` and `zoom`), `AssetMeta.filename`, the
+  `onMessage` payload (`body`, `replyToId`, `expiresAtMs`), `Member` and
+  `AccountEntry` (`displayName`, `handle`), `DeviceInfo`'s optional fields,
+  `RoomDevice` (`userId`, `deviceId`, `thumbprint`) and `FeatureConfig.status`.
+  `storageEngine()` answers `null` for a backend without an engine, and its
+  type says so. A comparison `=== undefined` on one of these stops matching;
+  `== null`, `??` and a truthiness check do not notice. The getters `userId`,
+  `email` and `handle`, the tabs' `homeId` and `cookieLabel` and the error
+  details stay `undefined`, as their types declare, and `Recovery.state()`
+  keeps `{ state: 'disabled' }` without an `exportedAt`.
+
 ### Deprecated
 
 ### Removed

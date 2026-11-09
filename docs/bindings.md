@@ -278,6 +278,12 @@ module is cfg'd off on wasm32, so this layer is **parallel to `ffi/`,
 not layered on it**. All method names are camelCase on the JS side; payload objects use
 camelCase fields (serde-projected view structs).
 
+A missing value in a view crosses as `null` (Step 130c, through the one
+serializer in `wasm/js_view.rs`), as `index.d.ts` declares it, and so does a
+whole missing view (`storageEngine()`). What is no view keeps `undefined`, as
+its type declares: the getters on `Client`, the tabs' `homeId` and
+`cookieLabel`, a thrown error's details.
+
 **Persistence (Step 91, ADR-0022; on sqlite-remote-vfs since Step 111,
 ADR-0035):** the same whole-DB-encrypted SQLite3MC store as native —
 `kupferdraht.db`, `mls.db` (openmls state, persisted continuously) and
@@ -693,7 +699,7 @@ Since Step 110 (ADR-0035):
   `deviceReplaced` (Step 110: this login's device replaced the recorded
   one, which the backend no longer had — older messages are gone).
 - `storageEngine() -> {engine, version, cipher, plaintextHeaderSize,
-  location} | undefined` (async) — what the app-data store's encryption
+  location} | null` (async) — what the app-data store's encryption
   engine reports about itself, read off the live connection (the browser
   flavor of `Client::storage_engine`; `SQLite3 Multiple Ciphers` /
   `2.5.1` / `chacha20` / `32` on today's build); `location` (Step 122)

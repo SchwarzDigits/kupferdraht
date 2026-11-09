@@ -19,9 +19,11 @@ headless Firefox) and in CI; no smoke (the browser surface; the native
 send path is unchanged, the rejected send is the Step-79 tests'); no
 `step_94_leader_tab` scenario for a resend across a leader change — the
 re-issue is the class's, tested for the class, and the three classes are
-pinned. 130c changes values the browser reads: it follows the v0.2.1 release
-and ships alone as v0.3.0, before Step 143 (Volker, 2026-11-08: the browser
-embedder integrates it before the new features). Commissioned
+pinned. **130c in progress** on `step/130c-null-views`, red tests approved by
+Volker on 2026-11-09 with D2 and D4 below. It changes values the browser
+reads, so it follows the v0.2.1 release and ships alone as v0.3.0, before
+Step 143 (Volker, 2026-11-08: the browser embedder integrates it before the
+new features). Commissioned
 2026-11-01 (transferred from open.md's former "Proposed steps", proposed
 2026-09-25 in the Step 94 retrospective; ADR-0026 option L3-C, deferred
 there to "a later step").
@@ -252,3 +254,50 @@ Taken 2026-11-06 (Volker):
 - **Browser, `tests/step_130b_browser_resend.rs`:** the summary view as a
   JS value — `stoppedAt === null` after a pass that went through, the
   stop's id, name and message otherwise, empty lists as `[]`.
+
+## 130c — design
+
+Measured 2026-11-09: 20 `serde_wasm_bindgen::to_value` sites in `wasm/`
+(`manager.rs` 15, `live_sync.rs` 3, `devices.rs`, `logging.rs`), the three
+helpers Steps 130b, 138 and 139 added (`resend::to_js`, `read_state::to_js`,
+`service_token::to_js`), 12 views with 28 `Option` fields that cross. Every
+one of those fields is `| null` in `index.d.ts`, so the types stay; only
+`storageEngine()` returns `| undefined`. `RecoveryStateView` skips its one
+`Option` field when missing, as its type's `disabled` arm declares. No
+JavaScript in `bindings/web` tests a view's field against `undefined`.
+
+- **D1 — one serializer:** `wasm/js_view.rs`, `to_js(&view)` with
+  `serialize_missing_as_null(true)`. Every view crosses through it, the
+  callbacks' too (`onMessage`, `onDevicesChanged`, `onLog`). The three
+  helpers go, their tests import `js_view::to_js`. A view without an `Option`
+  field goes through it as well, so a field added later cannot miss it.
+- **D2 — `storageEngine()` answers `null`** for a backend without an engine:
+  the rule holds for a whole view as for a field. `index.d.ts` and
+  `docs/bindings.md` follow. A browser store always has an engine, so no
+  embedder meets the value today.
+- **D3 — `Recovery.state()` keeps `{ state: 'disabled' }`:** its
+  `skip_serializing_if` on `exportedAt` stays, the serializer leaves a
+  skipped field absent, and the union's arm has no such field.
+- **D4 — what stays `undefined`:** the `wasm-bindgen` getters `userId`,
+  `email` and `handle`, the tabs' `homeId` and `cookieLabel`, and the error
+  details `reason`, `attemptsRemaining`, `retryAfter`. They are no views,
+  and their values agree with their types today.
+- **D5 — `BREAKING`:** a `Changed` entry, shipped alone as v0.3.0 (Volker,
+  2026-11-08). `=== undefined` on a view's field stops matching; `== null`,
+  `??` and truthiness do not notice.
+- **D6 — no core, FFI or CLI change, no smoke:** the browser surface only,
+  and the browser suite covers it. open.md §85 leaves at the archive.
+
+## 130c — tests (red first)
+
+- **Browser, `tests/step_130c_browser_null_views.rs`:** `to_js` on a view
+  fixture: a missing field is `null` (`=== null`, not `undefined`), inside a
+  present object and inside a list too; a missing view is `null`; a present
+  value crosses unchanged; a skipped field stays absent.
+- **Native pins, `tests/step_130c_null_views_pins.rs`:** no `to_value` and no
+  second serializer in `wasm/`; the one serializer writes `null`; every
+  `Option` field of a view is `| null` in its `index.d.ts` declaration (green
+  from the start, the types are right; a small input proves it names a wrong
+  type and a view without a row); `storageEngine()`'s type; the `BREAKING` entry and the rule in
+  `docs/bindings.md`; the browser test in `wasm-test.sh` and CI's clippy
+  line.

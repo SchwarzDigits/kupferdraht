@@ -12,7 +12,8 @@
 //! Run: `scripts/wasm-test.sh` (headless Firefox).
 #![cfg(target_arch = "wasm32")]
 
-use kupferdraht::wasm::resend::{summary_view, to_js};
+use kupferdraht::wasm::js_view::to_js;
+use kupferdraht::wasm::resend::summary_view;
 use kupferdraht::{MessageHandle, ResendSummary};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};

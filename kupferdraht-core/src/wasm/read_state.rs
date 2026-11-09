@@ -8,7 +8,6 @@
 //! thin tab compares against it.
 
 use serde::Serialize;
-use wasm_bindgen::JsValue;
 
 use crate::storage::ReadStateRecord;
 
@@ -66,15 +65,4 @@ pub fn read_state_change(
         last_read_at_ms: state.and_then(|s| s.last_read_at_ms),
         marked_unread: state.is_some_and(|s| s.marked_unread),
     }
-}
-
-/// Serialize a read-state view with `None` as `null`.
-///
-/// # Errors
-/// An `Encoding` error when the value cannot be serialized (never for the
-/// two views above).
-pub fn to_js<T: Serialize>(view: &T) -> Result<JsValue, JsValue> {
-    let serializer = serde_wasm_bindgen::Serializer::new().serialize_missing_as_null(true);
-    view.serialize(&serializer)
-        .map_err(|e| super::manager::named_error("Encoding", &e.to_string()))
 }
