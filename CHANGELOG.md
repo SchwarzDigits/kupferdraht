@@ -36,6 +36,20 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.5.0] - 2026-11-09
+
+### Added
+
 - **Room events as timeline items** (Step 145): a room's creation, renames, joins
   and leaves show in `messages()` and reach `Timeline::subscribe`, as
   `TimelineItemKind::{MembershipChange, RoomNameChange, RoomCreated}` with
@@ -82,10 +96,6 @@ is no skill for it — it is this short procedure:
   showed every item as a message shows them too until it does. In the browser,
   `kind` was a string and an unknown one falls to the embedder's default branch.
 
-### Deprecated
-
-### Removed
-
 ### Fixed
 
 - **A reply's quote is verified on the other side** (Step 151): the hash in
@@ -93,8 +103,6 @@ is no skill for it — it is this short procedure:
   backend's. Kalium then treats the quote as invalid: a Natrium client showed the
   reply without the quoted text whenever the two fell into different seconds, and
   always after a catch-up.
-
-### Security
 
 ## [0.4.0] - 2026-11-09
 

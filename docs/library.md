@@ -21,13 +21,13 @@ task.
 ## Consuming from Rust
 
 `kupferdraht-core` is not on crates.io (`publish = false`); a Rust
-consumer takes it from the repository by release tag (`v0.4.0` is the
-current, `v0.3.0`, `v0.2.1`, `v0.2.0`, `v0.1.1` and `v0.1.0` came before it;
-`rev = "<sha>"` pins a commit between tags):
+consumer takes it from the repository by release tag (`v0.5.0` is the
+current, `v0.4.0`, `v0.3.0`, `v0.2.1`, `v0.2.0`, `v0.1.1` and `v0.1.0` came before
+it; `rev = "<sha>"` pins a commit between tags):
 
 ```toml
 [dependencies]
-kupferdraht-core = { git = "https://github.com/SchwarzDigits/kupferdraht", tag = "v0.4.0" }
+kupferdraht-core = { git = "https://github.com/SchwarzDigits/kupferdraht", tag = "v0.5.0" }
 ```
 
 That one line is the whole integration. Kupferdraht brings its own
