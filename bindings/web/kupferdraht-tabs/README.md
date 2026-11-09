@@ -32,7 +32,7 @@ host.addEventListener('leader-changed', (e) => console.log(e.detail)); // { lead
 
 const [account] = await host.kupferdraht.accounts();     // through the leader, whichever tab that is
 const client = await host.kupferdraht.resume(account.accountId);
-const handle = client.startSync((m) => render(m), undefined, () => relogin(), (s) => { if (s.roomsUpdated) refreshRooms(); });
+const handle = client.startSync((m) => render(m), undefined, () => relogin(), (s) => s.changedRooms.forEach(refreshRoom));
 const sent = await client.sendText(roomId, 'hello'); // keyed: survives a leader change, sent once
 // sent.idempotencyKey is the key the proxy added — a retry with it never sends twice
 try {

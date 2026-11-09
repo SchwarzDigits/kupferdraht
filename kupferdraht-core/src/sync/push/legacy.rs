@@ -242,7 +242,7 @@ where
         return Ok(None);
     }
     let events_dispatched = dispatch_transient(client, service, &notif).await?;
-    Ok(tick(on_frame, events_dispatched))
+    Ok(tick(service, on_frame, events_dispatched))
 }
 
 /// Settle a finished drain: dispatch the transient frames held during
@@ -272,7 +272,7 @@ where
         events_dispatched = events_dispatched.saturating_add(n);
     }
     debug_assert!(bell.held.is_empty(), "every held frame was dispatched");
-    Ok(tick(on_frame, events_dispatched))
+    Ok(tick(service, on_frame, events_dispatched))
 }
 
 /// The socket ended: let a running drain finish (never cancelled
@@ -341,15 +341,11 @@ async fn send_keepalive(
 
 /// Tick the consumer after one settled drain or transient frame —
 /// one iteration, like a polling round; `Break` stops the cycle.
-fn tick<F>(on_frame: &mut F, events_dispatched: u32) -> Next
+fn tick<F>(service: &SyncService, on_frame: &mut F, events_dispatched: u32) -> Next
 where
     F: FnMut(SyncSummary) -> ControlFlow<()> + Send,
 {
-    let summary = SyncSummary {
-        rooms_updated: 0,
-        events_dispatched,
-    };
-    on_frame(summary)
+    on_frame(service.summary(events_dispatched))
         .is_break()
         .then_some(ControlFlow::Break(()))
 }

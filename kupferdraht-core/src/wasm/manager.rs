@@ -938,8 +938,8 @@ impl Client {
     /// receivedAtMs }`). `onTyping` (optional) fires per typing event
     /// (`{ roomId, typingUsers }`); `onExpired` (optional) fires once if the
     /// session's refresh token dies; `onSync` (optional, Step 94) fires after
-    /// every successful pass with `{ roomsUpdated, eventsDispatched }` — the
-    /// signal a thin tab re-pulls the room list on; `onDevicesChanged`
+    /// every successful pass with `{ changedRooms, eventsDispatched }` — the
+    /// rooms a tab re-reads (Step 146); `onDevicesChanged`
     /// (optional, Step 95d) fires per room whose MLS device set changed
     /// with `{ roomId, added, removed }` (devices as in `roomDevices`);
     /// `onStorage` (optional, Step 113) fires with `"reconnecting"` /
@@ -1025,7 +1025,8 @@ impl Client {
 
     /// Run one sync pass — drain notifications + refresh the conversations list,
     /// applying everything to the account's store. Returns
-    /// `{ roomsUpdated, eventsDispatched }`.
+    /// `{ changedRooms, eventsDispatched }`: the rooms that changed since the
+    /// previous summary (Step 146).
     #[wasm_bindgen(js_name = syncOnce)]
     pub async fn sync_once(&self) -> Result<JsValue, JsValue> {
         let summary = self
@@ -1034,7 +1035,7 @@ impl Client {
             .await
             .map_err(|e| to_js(&e))?;
         let view = SyncSummaryView {
-            rooms_updated: summary.rooms_updated,
+            changed_rooms: summary.changed_rooms,
             events_dispatched: summary.events_dispatched,
         };
         js_view::to_js(&view)
@@ -1918,7 +1919,7 @@ impl From<&crate::rooms::RoomMember> for MemberView {
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SyncSummaryView {
-    rooms_updated: u32,
+    changed_rooms: Vec<String>,
     events_dispatched: u32,
 }
 

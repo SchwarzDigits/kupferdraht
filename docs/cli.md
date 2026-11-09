@@ -414,11 +414,14 @@ Drives `Client::sync_once(SyncSettings::default())`:
 kupferdraht-cli sync
 ```
 
-No flags. Idempotent. Output is a one-line summary:
+No flags. Idempotent. Output is a short summary: the rooms that changed
+since the previous pass (Step 146), each on a line of its own, and the
+events drained. A new device's first `sync` names every room.
 
 ```
 sync ok
-  rooms synced:           18
+  rooms changed:          1
+    <uuid>@<domain>
   notifications drained:  3
 ```
 

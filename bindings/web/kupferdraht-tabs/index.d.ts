@@ -128,7 +128,8 @@ export function serveTab(options: ServeTabOptions): void;
 // ── payloads (the wasm view objects, camelCase) ────────────────────────────
 export interface AccountEntry { accountId: string; server: string; handle: string | null; displayName: string | null; lastActiveMs: number }
 export interface StorageEngineInfo { engine: string; version: string; cipher: string; plaintextHeaderSize: number; location: 'server' | 'local' }
-export interface SyncSummary { roomsUpdated: number; eventsDispatched: number }
+/** A pass's outcome (Step 146): the rooms that changed since the previous summary — re-read their `members()` and, if open, `messages()`; one missing from `rooms()` is gone. */
+export interface SyncSummary { changedRooms: string[]; eventsDispatched: number }
 /**
  * A room with its device-local read state (Step 138): `unreadCount` inbound messages newer than the
  * read position, `lastReadAtMs` that position (`null` when never read), `markedUnread` the hand-set flag.

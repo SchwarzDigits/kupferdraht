@@ -10,7 +10,7 @@
 //!
 //! * `sync_once(SyncSettings)` composes a conversations-metadata
 //!   refresh + one `/v14/notifications` drain + cursor advance,
-//!   returns a `SyncSummary { rooms_updated, events_dispatched }`.
+//!   returns a `SyncSummary { changed_rooms, events_dispatched }`.
 //! * `sync_with_callback(settings, F)` loops `sync_once` and invokes
 //!   the callback per iteration; `ControlFlow::Break(())` exits.
 //! * `sync_stream(settings)` surfaces the same loop as a
@@ -128,7 +128,11 @@ async fn sync_once_returns_summary_with_room_and_event_counts() {
         .sync_once(SyncSettings::default())
         .await
         .expect("sync_once must succeed");
-    assert_eq!(summary.rooms_updated, 1, "one room in the mocked list");
+    assert_eq!(
+        summary.changed_rooms,
+        vec!["room-a@example.test".to_string()],
+        "a new device's first pass names every room"
+    );
     assert_eq!(summary.events_dispatched, 2, "two events in the frame");
 }
 
@@ -243,10 +247,10 @@ async fn sync_stream_yields_summary_per_iteration() {
         .expect("stream must not terminate")
         .expect("second item must be Ok");
     // Both items are zero-events summaries (empty notification
-    // queue), but the rooms-updated count from the metadata refresh
-    // is consistent across iterations.
-    assert_eq!(first.rooms_updated, 1);
-    assert_eq!(second.rooms_updated, 1);
+    // queue); the first names the room the device just learned, the
+    // second nothing (Step 146).
+    assert_eq!(first.changed_rooms, vec!["room-a@example.test".to_string()]);
+    assert_eq!(second.changed_rooms, Vec::<String>::new());
 }
 
 #[tokio::test]

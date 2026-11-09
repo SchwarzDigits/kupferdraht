@@ -110,17 +110,14 @@ impl Default for SyncTransport {
 }
 
 /// Per-iteration outcome of a `sync_once` (or one tick of a `sync*`
-/// loop). Counts are advisory — they aggregate the work the
-/// iteration did so callers can log or react. Detailed per-event
-/// callbacks still fire through the registered
-/// [`crate::sync::EventHandler`]s.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, uniffi::Record)]
+/// loop): the rooms that changed, and how many events the iteration
+/// dispatched. Detailed per-event callbacks still fire through the
+/// registered [`crate::sync::EventHandler`]s.
+#[derive(Debug, Clone, Default, PartialEq, Eq, uniffi::Record)]
 pub struct SyncSummary {
-    /// Number of rooms the conversations-list refresh touched. `0`
-    /// when the cached list was already up to date (subject to
-    /// `/v14/conversations/list-ids` reporting `has_more = false`
-    /// on the first page).
-    pub rooms_updated: u32,
+    /// The rooms that changed since this client's previous summary, in
+    /// order (Step 146).
+    pub changed_rooms: Vec<String>,
     /// Number of events the notifications-drain dispatched through
     /// the registered `EventHandler`s during this iteration. `0`
     /// when the Wire queue was empty for this device's cursor.

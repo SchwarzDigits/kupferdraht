@@ -126,7 +126,7 @@ export async function eventFanOut() {
     await Promise.race([both, wait(5000).then(() => { throw new Error('no fan-out within 5 s'); })]);
     return {
       messageId: message.messageId,
-      roomsUpdated: sync.roomsUpdated,
+      changedRooms: sync.changedRooms,
       hostEventMessageId: (await hostEvent).detail.messageId,
       otherTabMessageId: (await otherTabEvent).detail.messageId,
     };
@@ -303,7 +303,7 @@ export async function aStaleLeaderMessageMovesNoTab() {
     b.addEventListener('sync', () => { staleEventDelivered = true; });
     const channel = new BroadcastChannel(REQUEST_CHANNEL);
     channel.postMessage({ kind: 'leader', v: PROTOCOL_VERSION, leaderTabId: a.tabId, epoch: oldEpoch, getters: {} });
-    channel.postMessage({ kind: 'event', v: PROTOCOL_VERSION, leaderTabId: a.tabId, epoch: oldEpoch, event: 'sync', userId: FIXTURE_ACCOUNT, payload: { roomsUpdated: 0, eventsDispatched: 0 } });
+    channel.postMessage({ kind: 'event', v: PROTOCOL_VERSION, leaderTabId: a.tabId, epoch: oldEpoch, event: 'sync', userId: FIXTURE_ACCOUNT, payload: { changedRooms: [], eventsDispatched: 0 } });
     channel.close();
     await wait(300);
     return {

@@ -135,6 +135,7 @@ impl Client {
     /// only possible if another task panicked while holding the
     /// write guard, which is itself a bug.
     pub async fn sync_metadata(&self) -> Result<(), KupferdrahtError> {
+        let before = self.known_room_list().await?;
         let all_ids = self.collect_conversation_ids().await?;
         let conversations = self.list_conversations_chunked(&all_ids).await?;
         let rooms = if conversations.is_empty() {
@@ -148,6 +149,8 @@ impl Client {
             self.backfill_user_profiles(raw).await?
         };
         self.persist_rooms(&rooms).await?;
+        // Step 146: every replacement of the list names what it changed.
+        self.note_room_list_changes(&before, &rooms);
         self.rooms_loaded
             .store(true, std::sync::atomic::Ordering::Release);
         *self.rooms.write().expect("rooms lock poisoned") =
@@ -181,8 +184,8 @@ impl Client {
     /// stale — at start, and after a drain that handed over an event
     /// changing it (`client/room_freshness.rs`); an idle pass is the
     /// drain alone. Returns
-    /// a [`SyncSummary`] aggregating the counts (rooms touched,
-    /// events dispatched).
+    /// a [`SyncSummary`]: the rooms that changed since the previous
+    /// summary (Step 146) and the events dispatched.
     ///
     /// `SyncSettings::poll_interval` is **ignored** here — one-shot
     /// iterations never sleep. The loop variants (`sync`,
@@ -220,8 +223,6 @@ impl Client {
         // Phase 1: the conversations-metadata refresh, when the room list
         // is stale (Step 118).
         self.refresh_rooms_if_stale().await?;
-        let rooms_updated = u32::try_from(self.rooms.read().expect("rooms lock poisoned").len())
-            .unwrap_or(u32::MAX);
         // Step 95d: every room gets its device baseline before the drain
         // can change its tree — every pass, a local read per room.
         self.ensure_device_baselines().await;
@@ -233,7 +234,7 @@ impl Client {
         let events_dispatched = service.drain_pending().await?;
 
         Ok(crate::sync::SyncSummary {
-            rooms_updated,
+            changed_rooms: self.take_changed_rooms(),
             events_dispatched,
         })
     }
@@ -272,11 +273,12 @@ impl Client {
             let Some(summary) = sync_once_waiting_out_rate_limits(self, &settings).await? else {
                 continue;
             };
+            let idle = summary.events_dispatched == 0;
             match callback(summary) {
                 std::ops::ControlFlow::Break(()) => return Ok(()),
                 std::ops::ControlFlow::Continue(()) => {}
             }
-            if summary.events_dispatched == 0 {
+            if idle {
                 crate::time::sleep(settings.idle_pause()).await;
             }
         }

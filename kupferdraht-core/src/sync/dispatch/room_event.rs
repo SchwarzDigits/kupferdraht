@@ -49,6 +49,8 @@ pub(crate) async fn dispatch_room_event(
         .insert_timeline_event_with_mentions(&record, &[])
         .await?
     {
+        // Step 146: a new item is a change to pull, whatever the list says.
+        client.note_room_changed(&record.room_id);
         client.dispatch_timeline_diff(&TimelineDiff::Append {
             room_id: record.room_id.clone(),
             item: TimelineItem::from_record(record),

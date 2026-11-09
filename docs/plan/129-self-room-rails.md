@@ -10,7 +10,7 @@ measured there against `4f30f02`) and split into two sub-steps (Volker):
 - **129a — read state across devices**: `LastRead` and the hand-set
   unread flag through the self conversation, behind the browser surface
   of Step 138 unchanged. After Step 147; it reports through Step 146's
-  `roomsUpdated`.
+  `changedRooms`.
 - **129b — the personal task list** in the self conversation and the
   Step-89 hide marker. After 129a, no fixed slot.
 
@@ -89,7 +89,7 @@ implements.
    compares (the flag's last change and the last applied read), one
    migration (the next free number when the step starts).
 4. **Reporting.** A change sync applies notes its room in Step 146's set,
-   so `rooms_updated` / `roomsUpdated` counts it, and `rooms()` shows the
+   so `changed_rooms` / `changedRooms` names it, and `rooms()` shows the
    new `unreadCount` / `lastReadAtMs` / `markedUnread`. `onRoomsChanged`
    stays the report of a local change: the core-level hook this item first
    rode went with Step 146's rewrite. Phase 1 confirms with the browser
@@ -140,7 +140,7 @@ tests' real second device (`common::mls::PeerDevice`) does:
   one does not, one for an unknown room is dropped; it clears a flag set
   before it and not one set after it; a flag message sets and clears
   under the same order — red;
-- a sync-applied change is reported: `rooms_updated` counts the room
+- a sync-applied change is reported: `changed_rooms` names the room
   (native), `rooms()` shows the new state (a browser test, CI) — red;
 - the migration over the previous schema; `migration_immutability`.
 

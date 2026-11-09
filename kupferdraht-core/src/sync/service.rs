@@ -355,6 +355,21 @@ impl SyncService {
         }
     }
 
+    /// A summary of `events_dispatched` with the rooms that changed since the
+    /// previous one (Step 146): what a push tick reports, like a pass. The
+    /// native push loops are its callers.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn summary(&self, events_dispatched: u32) -> crate::sync::SyncSummary {
+        crate::sync::SyncSummary {
+            changed_rooms: self
+                .client
+                .upgrade()
+                .map(|client| client.take_changed_rooms())
+                .unwrap_or_default(),
+            events_dispatched,
+        }
+    }
+
     /// Absorb a `conversation.mls-welcome` event (Step 69, closes
     /// gap-B.24 — the skip-and-heal path lost the initiator's first
     /// message to forward secrecy, observations §67).
@@ -724,6 +739,8 @@ fn dispatch_conversation_delete(client: &Arc<Client>, ev: &serde_json::Value) {
         warn!("conversation.delete: missing qualified_conversation; skip");
         return;
     };
+    // Step 146: named also when the own `delete_room` took it off already.
+    client.note_room_changed(&room_id);
     if client.remove_cached_room(&room_id) {
         debug!(room_id = %room_id, "conversation.delete: pruned room from cache");
     }

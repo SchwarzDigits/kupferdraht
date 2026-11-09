@@ -34,7 +34,10 @@ pub(crate) async fn sync() -> Result<(), KupferdrahtError> {
         .sync_once(kupferdraht::SyncSettings::default())
         .await?;
     println!("sync ok");
-    println!("  rooms synced:           {}", summary.rooms_updated);
+    println!("  rooms changed:          {}", summary.changed_rooms.len());
+    for room_id in &summary.changed_rooms {
+        println!("    {room_id}");
+    }
     println!("  notifications drained:  {}", summary.events_dispatched);
     Ok(())
 }

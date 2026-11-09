@@ -156,10 +156,7 @@ where
     F: FnMut(SyncSummary) -> ControlFlow<()> + Send,
 {
     match service.drain_pending().await {
-        Ok(events_dispatched) => Ok(on_frame(SyncSummary {
-            rooms_updated: 0,
-            events_dispatched,
-        })),
+        Ok(events_dispatched) => Ok(on_frame(service.summary(events_dispatched))),
         Err(e @ (KupferdrahtError::Network(_) | KupferdrahtError::BackendRejected(_))) => {
             service.notify_error(&format!("push drain without a socket: {e}"));
             warn!(error = %e, "push: drain without a socket failed; retrying at the pace");
@@ -241,10 +238,7 @@ where
                     warn!(error = %e, "push: ack failed; reconnecting");
                     return Ok(ControlFlow::Continue(Ended::Closed));
                 }
-                let summary = SyncSummary {
-                    rooms_updated: 0,
-                    events_dispatched,
-                };
+                let summary = service.summary(events_dispatched);
                 if on_frame(summary).is_break() {
                     return Ok(ControlFlow::Break(()));
                 }

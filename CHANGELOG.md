@@ -50,6 +50,19 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **BREAKING: a sync pass names the rooms that changed** (Step 146):
+  `SyncSummary::changed_rooms` (FFI too, browser `changedRooms: string[]` in
+  `onSync` and `syncOnce()`) replaces `rooms_updated` / `roomsUpdated`, which
+  was the number of all rooms on every pass and `0` on a push tick. It names
+  the rooms whose name or members changed (all that `members()` shows, the
+  avatar keys of Step 144 included), a new or gone room, and a room that got
+  a room event (Step 145) or was deleted, since the previous summary and in
+  order; not messages (`onMessage`) and not read state (`onRoomsChanged`). The
+  client's own room calls are named by the next pass too, so another tab
+  learns of them. A new device's first summary names every room, a resumed one
+  what changed while it was away. Re-read those rooms' `members()` and, if
+  open, `messages()`; one missing from `rooms()` is gone. `SyncSummary` is no
+  longer `Copy`, and the CLI's `sync` prints `rooms changed:` with the ids.
 - **BREAKING: `sent_at_ms` is the backend's time** (Step 151): an inbound row's
   event `time`, an own row's answer `time`, this device's clock only until the
   answer, on a failed send and where no time could be read. So a device back from

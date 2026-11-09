@@ -737,8 +737,8 @@ Since Step 110 (ADR-0035):
   its `onSync` — is the embedder's cue to read the timeline again (the
   message itself is in `messages()` as soon as `sendText` resolves);
   `onSync` (Step 94) fires after every successful pass with the
-  `{roomsUpdated, eventsDispatched}` summary. `syncOnce()` runs one pass and
-  returns `{roomsUpdated, eventsDispatched}`.
+  `{changedRooms, eventsDispatched}` summary. `syncOnce()` runs one pass and
+  returns `{changedRooms, eventsDispatched}`.
 - Rooms: `rooms() -> {roomId, name, unreadCount, lastReadAtMs,
   markedUnread}[]` (Step 138 — the device-local read state of every room
   from two grouped queries; `lastReadAtMs` is `null` for a room never
@@ -817,8 +817,8 @@ Since Step 110 (ADR-0035):
   (`name`, `null` for a room without one). Each of these fields is `null` on every other
   kind. Kupferdraht words nothing; `users` names the own user where it is one of them,
   and the actor is the backend's statement, not authenticated by MLS.
-  - **No `onMessage`:** they are no messages. `onSync` reports `roomsUpdated > 0` for the
-    pass that brought one, which is the signal to pull `messages()` again.
+  - **No `onMessage`:** they are no messages. `onSync`'s `changedRooms` names the room of
+    one, which is the signal to pull its `messages()` again.
   - **Not unread,** and `toggleReaction`, `sendReply`, `editMessage` and `redact` on one reject.
   - **`markAsRead` on one moves the local marker and tells the room nothing.** To confirm
     messages to the room, name the newest message, not the newest item.
@@ -889,10 +889,18 @@ Since Step 110 (ADR-0035):
 - `onExpired()` — optional; fires once on the terminal
   `KupferdrahtError::SessionExpired`, then the loop stops (W10). Surface a
   re-login gate.
-- `onSync({roomsUpdated, eventsDispatched})` — optional (Step 94); the
+- `onSync({changedRooms, eventsDispatched})` — optional (Step 94); the
   per-pass summary `syncOnce` returns, after every successful pass of
-  the loop. The leader tab broadcasts it as `sync`; a thin tab re-pulls
-  `rooms()` when `roomsUpdated > 0` (the wasm surface has no room-list
+  the loop. The leader tab broadcasts it as `sync`. `changedRooms` (Step
+  146) names, in order, the rooms that changed since the previous summary:
+  a name or what `members()` shows (avatar keys included), a new or gone
+  room, a room event or a deletion — also the client's own calls, so every
+  tab learns of them. The recipe: for each id re-read `members(roomId)` and,
+  where the room is open, `messages(roomId)`; an id missing from `rooms()` is
+  a room this client is no longer in. A new device's first summary names
+  every room, a resumed one what changed while it was away. Messages come
+  through `onMessage`, read state through `onRoomsChanged` (a change on this
+  device), and neither puts a room here (the wasm surface has no room-list
   or timeline-diff events).
 - `onDevicesChanged({roomId, added, removed})` — optional (Step 95d);
   one call per room whose MLS device set changed against the last
