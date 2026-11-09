@@ -9,8 +9,8 @@ measured there against `4f30f02`) and split into two sub-steps (Volker):
 
 - **129a — read state across devices**: `LastRead` and the hand-set
   unread flag through the self conversation, behind the browser surface
-  of Step 138 unchanged. After Step 147; it uses Step 146's room-change
-  hook.
+  of Step 138 unchanged. After Step 147; it reports through Step 146's
+  `roomsUpdated`.
 - **129b — the personal task list** in the self conversation and the
   Step-89 hide marker. After 129a, no fixed slot.
 
@@ -88,13 +88,13 @@ implements.
    rule. Storage: `room_read_markers` gains the server times the rule
    compares (the flag's last change and the last applied read), one
    migration (the next free number when the step starts).
-4. **Reporting.** A change sync applies reports like a local one: in the
-   browser `onRoomsChanged` fires and `rooms()` shows the new
-   `unreadCount` / `lastReadAtMs` / `markedUnread` — the embedder changes
-   nothing — through Step 146's core-level room-change hook, which the
-   sync fires here as the own room changes do there; natively the same
-   through the path phase 1 picks (an existing listener or a room-list
-   update).
+4. **Reporting.** A change sync applies notes its room in Step 146's set,
+   so `rooms_updated` / `roomsUpdated` counts it, and `rooms()` shows the
+   new `unreadCount` / `lastReadAtMs` / `markedUnread`. `onRoomsChanged`
+   stays the report of a local change: the core-level hook this item first
+   rode went with Step 146's rewrite. Phase 1 confirms with the browser
+   embedder that this serves R7, which was not part of that agreement; if
+   not, a narrow hook for read state belongs to this step.
 5. **A device not in the self room.** The Step-86 join inheritance of
    `send_text_auto_join` applies (join, then send); a device that cannot
    join logs it and keeps the local effect. Phase 1 confirms that a
@@ -140,9 +140,8 @@ tests' real second device (`common::mls::PeerDevice`) does:
   one does not, one for an unknown room is dropped; it clears a flag set
   before it and not one set after it; a flag message sets and clears
   under the same order — red;
-- a sync-applied change is reported: the core report fires (native),
-  `onRoomsChanged` fires and `rooms()` shows the new state (a browser
-  test, CI) — red;
+- a sync-applied change is reported: `rooms_updated` counts the room
+  (native), `rooms()` shows the new state (a browser test, CI) — red;
 - the migration over the previous schema; `migration_immutability`.
 
 Smoke (two devices of one account on the wire-server-rs stack, the Step 86
