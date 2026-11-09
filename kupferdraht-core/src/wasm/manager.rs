@@ -843,6 +843,23 @@ impl Client {
         self.inner.account().handle().map(str::to_owned)
     }
 
+    /// The user's team, or `undefined` for a personal account (Step 143) — as
+    /// of the last login, like `displayName`; lowercase.
+    #[wasm_bindgen(getter, js_name = teamId)]
+    #[must_use]
+    pub fn team_id(&self) -> Option<String> {
+        self.inner.account().team_id().map(str::to_owned)
+    }
+
+    /// The team's name, or `undefined` for a personal account and for a team
+    /// whose name the login could not fetch (Step 143). A resume does not
+    /// fetch it: it stays `undefined` until the next login.
+    #[wasm_bindgen(getter, js_name = teamName)]
+    #[must_use]
+    pub fn team_name(&self) -> Option<String> {
+        self.inner.account().team_name().map(str::to_owned)
+    }
+
     /// Whether sync runs on push (Step 122): `"connected"` while the sync
     /// loop has an open socket, `"polling"` while it runs without one,
     /// `"stopped"` without a running loop (`startSync`).

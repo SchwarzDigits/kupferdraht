@@ -249,6 +249,10 @@ export class ClientProxy {
   readonly email: string | undefined;
   /** The account's handle; `undefined` when it has none on record (Step 125). */
   readonly handle: string | undefined;
+  /** The user's team as of the last login; `undefined` for a personal account (Step 143). */
+  readonly teamId: string | undefined;
+  /** The team's name as of the last login; `undefined` for a personal account, or when the login could not fetch it (Step 143). */
+  readonly teamName: string | undefined;
   /** The recorded device was gone, so this login registered a new one (older messages are gone). */
   readonly deviceReplaced: boolean;
   /** Snapshot when the handle was returned; `startSync`'s `onStorage` reports each change (Step 113). */

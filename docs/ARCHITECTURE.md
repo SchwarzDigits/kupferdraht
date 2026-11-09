@@ -670,8 +670,10 @@ applied but unrecorded, which the next open would re-apply. `mls.db` has
 the same since Step 142: the openmls fork's `openmls_sqlite_storage` runs
 openmls's migrations grouped (history table
 `openmls_sqlite_storage_migrations`). The current
-schema version is **V32**
-(`V32__step_130a_send_keys.sql` — `send_keys`, see "Idempotency keys"
+schema version is **V33**
+(`V33__step_143_own_team.sql` — `team_id` and `team_name` on `self_user`, the
+own team as of the last login, read back by `build_resume_account`;
+`V32__step_130a_send_keys.sql` — `send_keys`, see "Idempotency keys"
 below; V31 the unread flag, below; V30
 `V30__step_112_recovery_state.sql` — `recovery_state`, one row: when the
 current recovery data was made and the PIN's local verifier, so a browser

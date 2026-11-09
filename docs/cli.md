@@ -345,6 +345,7 @@ kupferdraht-cli status
 session:
   user_id:                   f7da3466-…@example.com
   device_id:                 3a1f…
+  team:                      Acme (6ba7b810-…)
   api_version:               14
   access_token_prefix:       eyJhbGciOiJI…
   mls_public_key_prefix:     MCowBQYDK2VwAy…
@@ -357,6 +358,11 @@ storage: SQLite3 Multiple Ciphers 2.5.1 · chacha20 · plaintext header 32
 A `session_label` that differs from `cookie_label` (or shows `—`) is a
 two-home diagnosis in one glance: this session was not logged in under
 this home's label.
+
+`team:` (Step 143) is the team's name and id as of the last login: `—` for a
+personal account, and `— (<id>)` when the login could not fetch the name. It
+stays that way until the next login, since `status` makes no network calls.
+`login`, `activate` and `sso finalize` print the same line.
 
 No flags. No network calls. Run this first when something feels
 off. An `access_token_issued_at_ms` older than ~15 minutes is no

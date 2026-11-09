@@ -21,17 +21,21 @@ pub(super) fn save_self_user(
     let conn = store.lock()?;
     conn.execute(
         "INSERT INTO self_user (
-            id, handle, name, email
-         ) VALUES (?1, ?2, ?3, ?4)
+            id, handle, name, email, team_id, team_name
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
          ON CONFLICT(id) DO UPDATE SET
-             handle = excluded.handle,
-             name   = excluded.name,
-             email  = excluded.email",
+             handle    = excluded.handle,
+             name      = excluded.name,
+             email     = excluded.email,
+             team_id   = excluded.team_id,
+             team_name = excluded.team_name",
         params![
             user.id,
             user.handle,
             user.name,
             user.email.as_deref().map(str::as_bytes),
+            user.team_id,
+            user.team_name,
         ],
     )
     .map_err(|e| KupferdrahtError::Storage(format!("save_self_user: {e}")))?;
@@ -46,7 +50,7 @@ pub(super) fn load_self_user(
     let raw = {
         let conn = store.lock()?;
         conn.query_row(
-            "SELECT handle, name, email
+            "SELECT handle, name, email, team_id, team_name
              FROM self_user WHERE id = ?1",
             params![id],
             |row| {
@@ -54,13 +58,15 @@ pub(super) fn load_self_user(
                     row.get::<_, Option<String>>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, Option<Vec<u8>>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
                 ))
             },
         )
         .optional()
         .map_err(|e| KupferdrahtError::Storage(format!("load_self_user: {e}")))?
     };
-    let Some((handle, name, email)) = raw else {
+    let Some((handle, name, email, team_id, team_name)) = raw else {
         return Ok(None);
     };
     let email = email.map(|b| utf8_column(b, "email")).transpose()?;
@@ -69,5 +75,7 @@ pub(super) fn load_self_user(
         handle,
         name,
         email,
+        team_id,
+        team_name,
     }))
 }

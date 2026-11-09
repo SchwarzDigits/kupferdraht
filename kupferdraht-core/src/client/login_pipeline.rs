@@ -28,6 +28,7 @@ use base64::Engine as _;
 use openmls_sqlite_storage::Connection;
 use tracing::{debug, warn};
 
+use crate::client::account::OwnTeam;
 use crate::client::{Account, Client, ServerConfig};
 use crate::encryption::{
     INITIAL_KEY_PACKAGE_COUNT, KupferdrahtProvider, MLS_PUBLIC_KEY_TYPE, MlsClient,
@@ -684,6 +685,37 @@ impl LoginPipeline {
         Ok(())
     }
 
+    /// The user's own team for the account snapshot (Step 143): the id from
+    /// `/self`, the name by one `GET /teams/{tid}`. An enrichment like the
+    /// feature configs (ADR-0012): any failure is a warning and the login goes
+    /// on without the name. A personal account makes no request, and an empty
+    /// `team` is no team.
+    pub(super) async fn fetch_own_team(&self, self_user: &SelfUser, access_token: &str) -> OwnTeam {
+        let Some(id) = self_user
+            .team
+            .as_deref()
+            .filter(|team| !team.is_empty())
+            .map(str::to_ascii_lowercase)
+        else {
+            return OwnTeam::default();
+        };
+        let name = match self
+            .http
+            .get_team(self.api_version, access_token, &id)
+            .await
+        {
+            Ok(team) => Some(team.name),
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    "GET /teams/{{tid}} failed; the account has no team name until the next login"
+                );
+                None
+            }
+        };
+        OwnTeam { id: Some(id), name }
+    }
+
     /// Assemble the final `Client`. Consumes the pipeline to signal the
     /// end of the flow. The per-account `home` is echoed onto `Client` so
     /// a subsequent `ClientBuilder::resume` call (or any future rebuild)
@@ -692,6 +724,7 @@ impl LoginPipeline {
     pub(super) fn finalize(
         self,
         self_user: SelfUser,
+        own_team: OwnTeam,
         login: LoginOutcome,
         registration: RegistrationOutcome,
         backend_removal_key: Vec<u8>,
@@ -705,6 +738,8 @@ impl LoginPipeline {
             self_user.name,
             self_user.handle,
             self_user.email,
+            own_team.id,
+            own_team.name,
         );
         Client::new(
             user_id,

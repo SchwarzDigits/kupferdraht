@@ -270,6 +270,8 @@ fn build_resume_account(
         self_user.name.clone(),
         self_user.handle.clone(),
         self_user.email.clone(),
+        self_user.team_id.clone(),
+        self_user.team_name.clone(),
     ))
 }
 

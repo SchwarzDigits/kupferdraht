@@ -11,6 +11,14 @@ use httpmock::{Mock, MockServer};
 
 /// Authentication: api-version → login → self.
 pub fn mount_login(server: &MockServer) {
+    mount_login_with_self(
+        server,
+        r#"{"id":"user-uuid","qualified_id":{"id":"user-uuid","domain":"example.test"},"handle":"alice","name":"Alice Example","email":"alice@example.test"}"#,
+    );
+}
+
+/// [`mount_login`] with the caller's `GET /self` body.
+pub fn mount_login_with_self(server: &MockServer, self_body: &str) {
     server.mock(|when, then| {
         when.method(GET).path("/api-version");
         then.status(200)
@@ -28,7 +36,7 @@ pub fn mount_login(server: &MockServer) {
         when.method(GET).path("/v14/self");
         then.status(200)
             .header("content-type", "application/json")
-            .body(r#"{"id":"user-uuid","qualified_id":{"id":"user-uuid","domain":"example.test"},"handle":"alice","name":"Alice Example","email":"alice@example.test"}"#);
+            .body(self_body);
     });
 }
 

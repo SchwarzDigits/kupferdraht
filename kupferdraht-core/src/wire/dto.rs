@@ -399,6 +399,15 @@ pub struct SelfUser {
     pub team: Option<String>,
 }
 
+/// Response body of `GET /v{N}/teams/{tid}` (Step 143). Wire's `Team` carries
+/// more (`creator`, `icon`, `binding`, `splash_screen`); Kupferdraht consumes
+/// the id and the name.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Team {
+    pub id: String,
+    pub name: String,
+}
+
 /// One element of `GET /v{N}/clients`. Wire's `Client` schema carries
 /// more fields (`mls_public_keys`, `prekeys`, `cookie`, …) — Kupferdraht's
 /// 1d device-management surface only consumes the user-visible ones.

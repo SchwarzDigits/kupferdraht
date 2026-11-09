@@ -66,6 +66,10 @@ pub struct SelfUserRecord {
     pub handle: Option<String>,
     pub name: String,
     pub email: Option<String>,
+    /// The user's team as of the last login, lowercase (Step 143).
+    pub team_id: Option<String>,
+    /// The team's name as of the last login (Step 143).
+    pub team_name: Option<String>,
 }
 
 /// The `ServerConfig` values Kupferdraht booted with, persisted so

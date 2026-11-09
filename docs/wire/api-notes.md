@@ -1148,6 +1148,7 @@ Fetch the authenticated user's own profile.
   "handle": "alice",
   "email": "alice@example.com",
   "accent_id": 3,
+  "team": "<uuid>",                    // absent for a personal account
   …
 }
 ```
@@ -1155,9 +1156,49 @@ Fetch the authenticated user's own profile.
 **Kupferdraht usage:** `kupferdraht-core/src/wire/http/auth.rs::fetch_self`.
 Called once at login time to populate the `self_users` row in
 `kupferdraht.db` (`Account::display_name` / `handle` / `email` /
-`domain` come from this).
+`domain` / `team_id` come from this).
 
 **v5 → v14:** shape unchanged in the fields Kupferdraht reads.
+
+#### `GET /v14/teams/{tid}`
+
+The name of the user's own team, for the account snapshot (Step 143).
+
+**Response 200:**
+
+```json
+{
+  "id": "<uuid>",
+  "name": "Acme",
+  "creator": "<uuid>",
+  "icon": "default",
+  "binding": true,
+  "splash_screen": "default"
+}
+```
+
+The Swagger names `id`, `creator`, `name` and `icon` as required and only
+`200` and `404`. Observed on the wire-server-rs stack (2026-11-09), with
+throwaway accounts:
+
+| Caller → team | Answer |
+|---|---|
+| owner → own team | `200` |
+| plain member → own team | `200` |
+| plain member → own team, id in uppercase | `200` |
+| plain member → another team | `404`, label `no-team` |
+| plain member → unknown UUID | `404`, label `no-team` |
+| plain member → not a UUID | `404`, label `no-endpoint` |
+
+So a plain member reads the own team, and another team is indistinguishable
+from an unknown one. A personal account was not observed: the stack's brig
+answers `500` to creating one through `/i/users`. Kupferdraht makes no request
+for an account without a `team`.
+
+**Kupferdraht usage:** `kupferdraht-core/src/wire/http/teams.rs::get_team`,
+once at the end of a login with the device-rebound token, for a user whose
+`/self` names a `team`. Any failure is a warning and `Account::team_name` stays
+`None` (the ADR-0012 posture); a resume does not ask again.
 
 ---
 
