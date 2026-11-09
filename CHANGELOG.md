@@ -36,6 +36,20 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.2.1] - 2026-11-09
+
+### Added
+
 - **Keyed sends** (Step 130a): `Timeline::send_keyed(idempotency_key,
   OutgoingContent)` sends a text (with mentions, MLS auto-join), reply,
   knock, location, file or reaction toggle under a caller-chosen key of
@@ -107,14 +121,11 @@ is no skill for it — it is this short procedure:
   mutation (`createRoom`, `editMessage`, `invite`, `kick`, `leave`,
   `deleteRoom`, `setHandle`, login and setup, `logout`, …) still rejects
   `LeaderChangedError`. The class of every method is the table in
-  `bindings/web/kupferdraht-tabs/README.md`.
+  `bindings/web/kupferdraht-tabs/README.md`. `FailoverKind` gains
+  `'keyed'`, so a TypeScript `switch` exhaustive over it has a case to add.
 - **sqlite-remote-vfs 0.6.0** (Step 140): the browser's storage follows
   the server's page size and page count only within SQLite's limits; no
   interface change for embedders.
-
-### Deprecated
-
-### Removed
 
 ### Fixed
 
