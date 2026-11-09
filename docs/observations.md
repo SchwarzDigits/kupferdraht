@@ -2165,3 +2165,31 @@ Measured on the team's dev backend: a reply sent a minute after the parent arriv
 without the quoted text. A reply in the same second did not show it, which is why smokes against
 one fast client passed. Since Step 151 `sent_at_ms` is the backend's `time`, for inbound and own
 rows alike. A test of interop against the webapp alone would not have found this.
+
+## 99) `team.update` reaches only the team's admins and is not stored; `user.update` reaches the own devices and is (2026-11-09)
+
+Read in wire-server `develop` at `0551a534` (the same day), not measured live;
+indexed as reading 25 in `docs/wire/kalium-readings.md`.
+
+- **`team.update`.** `updateTeamH` in galley's `Galley/API/Teams.hs` pushes it
+  to the acting user and `getTeamAdmins`, with `transient = True`. Gundeck's
+  `pushAllLegacy` writes a transient notification to no stream
+  (`Gundeck/Push.hs`, `unless (ntfTransient …)`), so `GET /notifications` never
+  returns it: only a live socket delivers it, and only to an admin. The path for
+  clients with consumable notifications also branches on the flag and was not
+  read further.
+- **What follows.** An ordinary member never receives a team's rename or icon
+  change; an admin without a socket does not either; nobody catches up over the
+  cursor after an offline time. `GET /teams/{tid}` is the only way, and a plain
+  member may read the own team (`docs/wire/api-notes.md`).
+- **`user.update`.** `dispatchNotifications` in brig's `Brig/IO/Intra.hs` sends a
+  profile change through `notifyContacts`: the user, the accepted contacts and the
+  team unless the member list is truncated. `notify` sets no `transient`, so it is
+  stored. The fields are optional (`Wire/API/UserEvent.hs`): `name`, `assets` and
+  `handle` are present only when changed, and `id` is unqualified.
+- **The local stack differs.** `wire-server-rs` sends `user.update` with the
+  changed fields, but no `team.update`, and has no public `PUT /teams/{tid}`
+  (`docs/wire/api-notes.md`), so a team rename cannot be exercised on it.
+
+Kupferdraht's answer is Step 152: the embedder reads on request, and neither event
+is dispatched. A rename on a Haskell backend is that step's first live check.

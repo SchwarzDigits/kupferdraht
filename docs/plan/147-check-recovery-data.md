@@ -17,7 +17,7 @@ commissioning:
   `InvalidRecoveryData` carries today —, `RecoveryDataVerdict` in the
   core; browser-only like `recover` (ADR-0035), so no FFI mirror and no
   CLI command; matrix-rust-sdk has no analog (Kupferdraht-specific);
-- after Step 146, before 129a.
+- after Step 152, before 129a.
 
 ## Problem
 
