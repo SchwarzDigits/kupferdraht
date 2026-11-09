@@ -10,7 +10,8 @@ import Kupferdraht
 // xcframework links and the UniFFI bridge runs end to end.
 final class KupferdrahtTests: XCTestCase {
     func testVersionFlowsThroughFromRust() {
-        XCTAssertEqual(kupferdrahtVersion(), "0.1.0")
+        // The workspace version, whichever release this is.
+        XCTAssertNotNil(kupferdrahtVersion().range(of: #"^\d+\.\d+\.\d+$"#, options: .regularExpression))
     }
 
     func testParseUserIdReturnsStructuredParts() throws {
@@ -37,6 +38,7 @@ final class KupferdrahtTests: XCTestCase {
 final class PinnedSyncListener: SyncListener, @unchecked Sendable {
     func onSummary(summary: SyncSummary) -> Bool { true }
     func onError(description: String) -> Bool { false }
+    func onSessionExpired() {}
 }
 
 /// A foreign-implemented `SecureKeyStore` — the `with_foreign` callback

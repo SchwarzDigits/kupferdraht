@@ -1635,6 +1635,12 @@ membership from openmls state + `sync_metadata`; since Step 118 these
 events tell it to run `sync_metadata` — which is the correct handling,
 not a gap.
 
+**`time` is the message's time (Step 151).** Every event and the answer to
+`POST /mls/messages` MUST carry `time` in `UTCTimeMillis`, the same moment
+for one message: Kupferdraht shows it and hashes it into a reply's quote, and
+Wire's clients compare that hash. Without a readable one it falls back to the
+device's clock, and such a reply fails their check.
+
 **Since Step 145 Kupferdraht also shows `conversation.create`,
 `conversation.rename`, `conversation.member-join` and
 `conversation.member-leave` as timeline items,** display only. So a

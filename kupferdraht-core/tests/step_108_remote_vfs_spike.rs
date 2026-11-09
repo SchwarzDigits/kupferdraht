@@ -92,6 +92,7 @@ fn text_row(n: u32) -> TimelineEventRecord {
         kind: "text".into(),
         body: format!("message {n}"),
         sent_at_ms: i64::from(n),
+        arrived_at_ms: i64::from(n),
         delivery_status: "received".into(),
         ..TimelineEventRecord::default()
     }

@@ -55,8 +55,8 @@ fn insert_timeline_event_on(
             message_id, room_id, sender_user_id, sender_device_id,
             kind, body,
             sent_at_ms, delivery_status, reply_to_id, expires_at_ms,
-            ephemeral_ttl_ms
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            ephemeral_ttl_ms, arrived_at_ms
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
             event.message_id,
             event.room_id,
@@ -69,6 +69,7 @@ fn insert_timeline_event_on(
             event.reply_to_id,
             event.expires_at_ms,
             event.ephemeral_ttl_ms,
+            event.arrived_at_ms,
         ],
     )?;
     Ok(())
@@ -96,7 +97,7 @@ pub(super) fn load_timeline_event(
             "SELECT message_id, room_id, sender_user_id, sender_device_id,
                     kind, body,
                     sent_at_ms, delivery_status, reply_to_id,
-                    edited_at_ms, redacted_at_ms, expires_at_ms, ephemeral_ttl_ms
+                    edited_at_ms, redacted_at_ms, expires_at_ms, ephemeral_ttl_ms, arrived_at_ms
              FROM timeline_events
              WHERE message_id = ?1 OR current_edit_event_id = ?1
              LIMIT 1",
@@ -124,7 +125,7 @@ pub(super) fn load_timeline_event_in_room(
             "SELECT message_id, room_id, sender_user_id, sender_device_id,
                     kind, body,
                     sent_at_ms, delivery_status, reply_to_id,
-                    edited_at_ms, redacted_at_ms, expires_at_ms, ephemeral_ttl_ms
+                    edited_at_ms, redacted_at_ms, expires_at_ms, ephemeral_ttl_ms, arrived_at_ms
              FROM timeline_events
              WHERE room_id = ?1
                AND (message_id = ?2 OR current_edit_event_id = ?2)
@@ -287,10 +288,10 @@ fn read_raw_timeline_rows(
             "SELECT message_id, room_id, sender_user_id, sender_device_id,
                     kind, body,
                     sent_at_ms, delivery_status, reply_to_id,
-                    edited_at_ms, redacted_at_ms, expires_at_ms, ephemeral_ttl_ms
+                    edited_at_ms, redacted_at_ms, expires_at_ms, ephemeral_ttl_ms, arrived_at_ms
              FROM timeline_events
              WHERE room_id = ?1
-             ORDER BY sent_at_ms ASC, rowid ASC",
+             ORDER BY arrived_at_ms ASC, rowid ASC",
         )
         .map_err(|e| KupferdrahtError::Storage(format!("load_timeline_events prepare: {e}")))?;
     stmt.query_map(params![room_id], read_raw_timeline_row)
@@ -310,6 +311,7 @@ pub(super) fn assemble_timeline_event(
         kind: raw.kind,
         body: utf8_column(raw.body, "body")?,
         sent_at_ms: raw.sent_at_ms,
+        arrived_at_ms: raw.arrived_at_ms,
         delivery_status: raw.delivery_status,
         reply_to_id: raw.reply_to_id,
         edited_at_ms: raw.edited_at_ms,
@@ -333,6 +335,7 @@ pub(super) struct RawTimelineRow {
     redacted_at_ms: Option<i64>,
     expires_at_ms: Option<i64>,
     ephemeral_ttl_ms: Option<i64>,
+    arrived_at_ms: i64,
 }
 
 pub(super) fn read_raw_timeline_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawTimelineRow> {
@@ -350,6 +353,7 @@ pub(super) fn read_raw_timeline_row(row: &rusqlite::Row<'_>) -> rusqlite::Result
         redacted_at_ms: row.get(10)?,
         expires_at_ms: row.get(11)?,
         ephemeral_ttl_ms: row.get(12)?,
+        arrived_at_ms: row.get(13)?,
     })
 }
 
@@ -475,6 +479,7 @@ pub(super) fn mark_send_outcome(
     message_id: &str,
     delivered: bool,
     expires_at_ms: Option<i64>,
+    sent_at_ms: Option<i64>,
 ) -> Result<bool, KupferdrahtError> {
     let status = if delivered { "submitted" } else { "failed" };
     let conn = store.lock()?;
@@ -482,16 +487,26 @@ pub(super) fn mark_send_outcome(
         .execute(
             "UPDATE timeline_events
                 SET delivery_status = ?3,
-                    expires_at_ms   = COALESCE(?4, expires_at_ms)
+                    expires_at_ms   = COALESCE(?4, expires_at_ms),
+                    sent_at_ms      = COALESCE(?5, sent_at_ms)
               WHERE room_id = ?1 AND message_id = ?2
                 AND delivery_status = 'sending'",
-            params![room_id, message_id, status, expires_at_ms],
+            params![room_id, message_id, status, expires_at_ms, sent_at_ms],
         )
         .map_err(|e| KupferdrahtError::Storage(format!("mark_send_outcome: {e}")))?;
     debug_assert!(
         changed <= 1,
         "mark_send_outcome: message_id is a PK per room"
     );
+    // A repeat of the send's key answers this handle even when the row is gone.
+    if changed > 0 && sent_at_ms.is_some() {
+        conn.execute(
+            "UPDATE send_keys SET sent_at_ms = ?3
+              WHERE room_id = ?1 AND message_id = ?2 AND kind = 'message'",
+            params![room_id, message_id, sent_at_ms],
+        )
+        .map_err(|e| KupferdrahtError::Storage(format!("mark_send_outcome key: {e}")))?;
+    }
     Ok(changed > 0)
 }
 
@@ -505,8 +520,7 @@ pub(super) fn mark_message_resent(
     store: &SqliteStore,
     room_id: &str,
     message_id: &str,
-    sent_at_ms: i64,
-    expires_at_ms: Option<i64>,
+    times: &crate::storage::ResentTimes,
 ) -> Result<bool, KupferdrahtError> {
     let conn = store.lock()?;
     let changed = conn
@@ -514,11 +528,18 @@ pub(super) fn mark_message_resent(
             "UPDATE timeline_events
                 SET delivery_status = 'submitted',
                     sent_at_ms      = ?3,
-                    expires_at_ms   = ?4
+                    expires_at_ms   = ?4,
+                    arrived_at_ms   = ?5
               WHERE room_id = ?1 AND message_id = ?2
                 AND delivery_status IN ('failed', 'sending')
                 AND redacted_at_ms IS NULL",
-            params![room_id, message_id, sent_at_ms, expires_at_ms],
+            params![
+                room_id,
+                message_id,
+                times.sent_at_ms,
+                times.expires_at_ms,
+                times.arrived_at_ms
+            ],
         )
         .map_err(|e| KupferdrahtError::Storage(format!("mark_message_resent: {e}")))?;
     debug_assert!(
@@ -532,7 +553,7 @@ pub(super) fn mark_message_resent(
 mod tests {
     use super::super::fresh_store;
     use crate::storage::Store as _;
-    use crate::storage::records::{ExpiredMessageRecord, TimelineEventRecord};
+    use crate::storage::records::{ExpiredMessageRecord, ResentTimes, TimelineEventRecord};
 
     /// Step 79: the resend flip is guarded — it moves exactly a live
     /// `failed` row to `submitted` (re-stamping `sent_at_ms`, setting
@@ -550,6 +571,7 @@ mod tests {
             kind: "text".into(),
             body: "stuck".into(),
             sent_at_ms: 1000,
+            arrived_at_ms: 1000,
             delivery_status: "failed".into(),
             ephemeral_ttl_ms: Some(5_000),
             ..TimelineEventRecord::default()
@@ -567,7 +589,15 @@ mod tests {
 
         assert!(
             store
-                .mark_message_resent(room_id, "m-failed", 2000, Some(7_000))
+                .mark_message_resent(
+                    room_id,
+                    "m-failed",
+                    &ResentTimes {
+                        sent_at_ms: 2000,
+                        arrived_at_ms: 2500,
+                        expires_at_ms: Some(7_000)
+                    }
+                )
                 .await
                 .expect("flip")
         );
@@ -577,28 +607,53 @@ mod tests {
             .find(|r| r.message_id == "m-failed")
             .expect("row");
         assert_eq!(row.delivery_status, "submitted");
-        assert_eq!(row.sent_at_ms, 2000, "re-stamped to the resend instant");
+        assert_eq!(row.sent_at_ms, 2000, "the backend's time of the resend");
+        assert_eq!(row.arrived_at_ms, 2500, "to the tail of the timeline");
         assert_eq!(row.expires_at_ms, Some(7_000), "timer armed");
         assert_eq!(row.ephemeral_ttl_ms, Some(5_000), "the ttl survives (V28)");
         assert_eq!(row.body, "stuck");
 
         assert!(
             !store
-                .mark_message_resent(room_id, "m-failed", 3000, None)
+                .mark_message_resent(
+                    room_id,
+                    "m-failed",
+                    &ResentTimes {
+                        sent_at_ms: 3000,
+                        arrived_at_ms: 3000,
+                        expires_at_ms: None
+                    }
+                )
                 .await
                 .expect("second flip"),
             "idempotent: the row is no longer failed"
         );
         assert!(
             !store
-                .mark_message_resent(room_id, "m-sent", 3000, None)
+                .mark_message_resent(
+                    room_id,
+                    "m-sent",
+                    &ResentTimes {
+                        sent_at_ms: 3000,
+                        arrived_at_ms: 3000,
+                        expires_at_ms: None
+                    }
+                )
                 .await
                 .expect("submitted row"),
             "a submitted row is not a failed send"
         );
         assert!(
             !store
-                .mark_message_resent(room_id, "nope", 3000, None)
+                .mark_message_resent(
+                    room_id,
+                    "nope",
+                    &ResentTimes {
+                        sent_at_ms: 3000,
+                        arrived_at_ms: 3000,
+                        expires_at_ms: None
+                    }
+                )
                 .await
                 .expect("absent row")
         );
@@ -619,6 +674,7 @@ mod tests {
             kind: "text".into(),
             body: "on its way".into(),
             sent_at_ms: 1000,
+            arrived_at_ms: 1000,
             delivery_status: "sending".into(),
             ..TimelineEventRecord::default()
         };
@@ -637,13 +693,13 @@ mod tests {
 
         assert!(
             store
-                .mark_send_outcome(room_id, "m-sending", true, Some(9_000))
+                .mark_send_outcome(room_id, "m-sending", true, Some(9_000), Some(1_500))
                 .await
                 .expect("settle")
         );
         assert!(
             !store
-                .mark_send_outcome(room_id, "m-sending", false, None)
+                .mark_send_outcome(room_id, "m-sending", false, None, None)
                 .await
                 .expect("second settle"),
             "a settled row is not settled again"
@@ -657,13 +713,21 @@ mod tests {
         );
         assert!(
             !store
-                .mark_send_outcome(room_id, "m-echoed", true, None)
+                .mark_send_outcome(room_id, "m-echoed", true, None, Some(1_500))
                 .await
                 .expect("late outcome"),
             "the outcome update never downgrades an echoed row"
         );
 
         let rows = store.load_timeline_events(room_id).await.expect("load");
+        let sent_at = |id: &str| {
+            rows.iter()
+                .find(|r| r.message_id == id)
+                .map(|r| r.sent_at_ms)
+                .expect("row")
+        };
+        assert_eq!(sent_at("m-sending"), 1_500, "the answer's time");
+        assert_eq!(sent_at("m-echoed"), 1_000, "a settled row keeps its own");
         assert_eq!(
             status(&rows, "m-sending"),
             ("submitted".to_string(), Some(9_000))
@@ -688,6 +752,7 @@ mod tests {
             kind: "text".into(),
             body: "v0".into(),
             sent_at_ms: 1000,
+            arrived_at_ms: 1000,
             delivery_status: "received".into(),
             reply_to_id: None,
             edited_at_ms: None,
@@ -731,6 +796,7 @@ mod tests {
             kind: "text".into(),
             body: "body".into(),
             sent_at_ms: 1000,
+            arrived_at_ms: 1000,
             delivery_status: "received".into(),
             reply_to_id: None,
             edited_at_ms: None,

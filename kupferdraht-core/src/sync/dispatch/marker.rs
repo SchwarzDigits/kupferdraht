@@ -24,22 +24,16 @@ impl SyncService {
     pub(crate) async fn dispatch_inbound_task_list_marker(
         &self,
         client: &Arc<Client>,
-        room_id: &str,
-        sender_user_id: &str,
-        sender_device_id: Option<&str>,
-        message_id: &str,
+        origin: super::InboundOrigin<'_>,
         marked: bool,
     ) -> Result<(), KupferdrahtError> {
         debug_assert!(
-            !message_id.is_empty(),
+            !origin.message_id.is_empty(),
             "dispatch_inbound_task_list_marker: message_id must be non-empty"
         );
         self.dispatch_inbound_simple(
             client,
-            room_id,
-            sender_user_id,
-            sender_device_id,
-            message_id,
+            origin,
             crate::sync::event_handler::MessageBody::TaskListMarker { marked },
         )
         .await?;

@@ -20,27 +20,25 @@ use crate::sync::service::SyncService;
 use crate::time::now_ms;
 use crate::timeline::DeliveryStatus;
 
-use super::{mentions_to_records, message_to_record};
+use super::{InboundOrigin, mentions_to_records, message_to_record};
 
 /// Project an inbound `Text` into the consumer-facing `Message`.
 /// `ttl_ms` is `Some` for an `Ephemeral(Text)` (Step 89): the
 /// timer starts at dispatch, so `expires_at_ms = received_at_ms + ttl`.
 pub(super) fn inbound_text_message(
-    room_id: &str,
-    sender_user_id: &str,
-    sender_device_id: Option<&str>,
-    message_id: &str,
+    origin: InboundOrigin<'_>,
     text: crate::wire::proto::Text,
     ttl_ms: Option<i64>,
 ) -> Message {
     let received_at_ms = now_ms();
     Message {
-        room_id: room_id.to_string(),
-        sender_user_id: sender_user_id.to_string(),
-        sender_device_id: sender_device_id.map(str::to_string),
+        room_id: origin.room_id.to_string(),
+        sender_user_id: origin.sender_user_id.to_string(),
+        sender_device_id: origin.sender_device_id.map(str::to_string),
         body: MessageBody::Text(text.content),
+        sent_at_ms: origin.sent_at_ms,
         received_at_ms,
-        message_id: message_id.to_string(),
+        message_id: origin.message_id.to_string(),
         reply_to_id: text.quote.map(|q| q.quoted_message_id),
         expires_at_ms: ttl_ms.map(|ttl| received_at_ms.saturating_add(ttl)),
     }
@@ -50,21 +48,12 @@ impl SyncService {
     pub(crate) async fn dispatch_inbound_text(
         &self,
         client: &Arc<Client>,
-        room_id: &str,
-        sender_user_id: &str,
-        sender_device_id: Option<&str>,
-        message_id: &str,
+        origin: InboundOrigin<'_>,
         text: crate::wire::proto::Text,
     ) -> Result<(), KupferdrahtError> {
-        let mention_records = mentions_to_records(room_id, message_id, &text.mentions);
-        let message = inbound_text_message(
-            room_id,
-            sender_user_id,
-            sender_device_id,
-            message_id,
-            text,
-            None,
-        );
+        let mention_records =
+            mentions_to_records(origin.room_id, origin.message_id, &text.mentions);
+        let message = inbound_text_message(origin, text, None);
         self.dispatch_inbound_text_message(client, message, mention_records)
             .await
     }
@@ -181,7 +170,8 @@ impl SyncService {
             sender_device_id: message.sender_device_id.clone().unwrap_or_default(),
             kind: "text".into(),
             body: body.clone(),
-            sent_at_ms: message.received_at_ms,
+            sent_at_ms: message.sent_at_ms,
+            arrived_at_ms: message.received_at_ms,
             delivery_status: DeliveryStatus::Received.as_db_str().into(),
             reply_to_id: message.reply_to_id.clone(),
             edited_at_ms: None,

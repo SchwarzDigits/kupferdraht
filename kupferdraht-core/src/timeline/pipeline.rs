@@ -63,12 +63,15 @@ impl Client {
     /// the current epoch, then re-encrypt + resend **once**. A second stale (the
     /// epoch raced again mid-resync) or any other error propagates. The
     /// `group_id` is stable across the resync, so the resend is valid.
+    ///
+    /// Returns the time of the backend's answer, `None` where it could not be
+    /// read (Step 151).
     pub(crate) async fn encrypt_and_upload(
         &self,
         group_id: &[u8],
         op: &'static str,
         plaintext: &[u8],
-    ) -> Result<(), KupferdrahtError> {
+    ) -> Result<Option<i64>, KupferdrahtError> {
         match self.encrypt_and_send_once(group_id, op, plaintext).await {
             // Step 132 item 13: a queued Remove (its flush refused, or the
             // client restarted since) blocks every send in the room — commit
@@ -81,7 +84,7 @@ impl Client {
                 })?;
                 self.commit_pending_external_removal(&room_id).await?;
                 self.ack_removal_flush(&room_id);
-                self.encrypt_and_send_once(group_id, op, plaintext).await?;
+                self.encrypt_and_send_once(group_id, op, plaintext).await
             }
             Err(KupferdrahtError::MlsStaleMessage) => {
                 let room_id = self.room_id_for_group(group_id).await.ok_or_else(|| {
@@ -90,11 +93,10 @@ impl Client {
                     ))
                 })?;
                 self.resync_room(&room_id).await?;
-                self.encrypt_and_send_once(group_id, op, plaintext).await?;
+                self.encrypt_and_send_once(group_id, op, plaintext).await
             }
-            other => other?,
+            other => other,
         }
-        Ok(())
     }
 
     /// A single encrypt-at-current-epoch + `POST /v14/mls/messages` attempt.
@@ -104,7 +106,7 @@ impl Client {
         group_id: &[u8],
         op: &'static str,
         plaintext: &[u8],
-    ) -> Result<(), KupferdrahtError> {
+    ) -> Result<Option<i64>, KupferdrahtError> {
         let mls = self.mls_client_required(op)?;
         let ciphertext = {
             // Step 97e (ADR-0032): never inside an open notification window.
@@ -343,6 +345,7 @@ impl Client {
             kind: kind.to_string(),
             body: body.to_string(),
             sent_at_ms,
+            arrived_at_ms: sent_at_ms,
             delivery_status: status.as_db_str().into(),
             reply_to_id: None,
             edited_at_ms: None,

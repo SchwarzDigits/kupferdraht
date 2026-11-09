@@ -100,6 +100,9 @@ pub struct Message {
     /// logged + acked but not surfaced as a distinct
     /// `MessageBody` so consumers don't need to handle them.
     pub body: MessageBody,
+    /// When it was sent, as the backend knows it, in milliseconds since
+    /// Unix epoch (Step 151); this device's clock where it could not be read.
+    pub sent_at_ms: i64,
     /// Wall-clock at which Kupferdraht finished decrypt + dispatch, in
     /// milliseconds since Unix epoch. Independent from Wire's
     /// `time` ISO string on the source event.

@@ -735,6 +735,7 @@ fn outgoing_row(message_id: &str, at_ms: i64) -> TimelineEventRecord {
         kind: "text".into(),
         body: format!("row {message_id}"),
         sent_at_ms: at_ms,
+        arrived_at_ms: at_ms,
         delivery_status: "submitted".into(),
         ..TimelineEventRecord::default()
     }

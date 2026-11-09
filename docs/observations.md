@@ -649,8 +649,8 @@ Where:
 * `0xFE 0xFF` is a literal two-byte UTF-16 BOM.
 * `body_utf16_be` is the parent message's plaintext encoded as
   UTF-16 big-endian (no separate BOM beyond the prefix above).
-* `timestamp_seconds_be` is the parent's send-time floored to
-  seconds, encoded as a big-endian i64 (`(sent_at_ms / 1000)
+* `timestamp_seconds_be` is the parent's send-time, the backend's
+  (§98), floored to seconds, encoded as a big-endian i64 (`(sent_at_ms / 1000)
   .to_be_bytes()` in Rust).
 
 **Fix:** `wire/proto.rs::compute_quote_sha256` does the SHA-256;
@@ -2152,3 +2152,16 @@ Apple clang.
   above therefore holds only when the script's per-suite `cargo test`
   loop runs from the shell itself. A setup that uses rustup's proxies
   needs neither.
+
+## 98) A quote's hash needs the backend's time, and only Kalium checks it (2026-11-09, fixed in Step 151)
+
+§33's format names the parent's "send-time", and Kupferdraht read it from `sent_at_ms`, which on
+an inbound row was the receive time. Wire's webapp never noticed: `QuoteDecoderMiddleware.ts`
+keeps the hash and reports only `MESSAGE_NOT_FOUND`. Kalium compares it
+(`ReceivedMessage.kt`: `isVerified = hash.contentEquals(...)` over the stored `date`), and
+`!isVerified` becomes `QuotedMessageDetails.Invalid`, which Natrium maps to `previewText = null`.
+
+Measured on the team's dev backend: a reply sent a minute after the parent arrived reached Natrium
+without the quoted text. A reply in the same second did not show it, which is why smokes against
+one fast client passed. Since Step 151 `sent_at_ms` is the backend's `time`, for inbound and own
+rows alike. A test of interop against the webapp alone would not have found this.

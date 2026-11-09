@@ -103,7 +103,7 @@ impl Timeline {
         {
             Some(record) => {
                 store
-                    .set_read_marker(&self.room_id, record.sent_at_ms)
+                    .set_read_marker(&self.room_id, record.arrived_at_ms)
                     .await
             }
             None => store.set_unread_flag(&self.room_id, false).await,

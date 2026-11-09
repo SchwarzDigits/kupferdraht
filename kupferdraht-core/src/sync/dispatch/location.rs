@@ -17,10 +17,7 @@ impl SyncService {
     pub(crate) async fn dispatch_inbound_location(
         &self,
         client: &Arc<Client>,
-        room_id: &str,
-        sender_user_id: &str,
-        sender_device_id: Option<&str>,
-        message_id: &str,
+        origin: super::InboundOrigin<'_>,
         location: crate::wire::proto::Location,
     ) -> Result<(), KupferdrahtError> {
         // Non-finite coordinates from a buggy/hostile remote do not survive
@@ -29,17 +26,14 @@ impl SyncService {
         // stored row.
         if !location.latitude.is_finite() || !location.longitude.is_finite() {
             warn!(
-                message_id,
+                message_id = origin.message_id,
                 "discarding inbound Location with non-finite coordinates"
             );
             return Ok(());
         }
         self.dispatch_inbound_simple(
             client,
-            room_id,
-            sender_user_id,
-            sender_device_id,
-            message_id,
+            origin,
             MessageBody::Location {
                 latitude: location.latitude,
                 longitude: location.longitude,

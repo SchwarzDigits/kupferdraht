@@ -969,9 +969,10 @@ from token claim + `message/mls`).
 — the ciphertext produced by
 `openmls::MlsGroup::create_message`.
 
-**Response 201:** `{ "events": [...] }` list of events the
-message produced (delivery acks, subconversation updates). Body
-ignored today.
+**Response 201:** `{ "events": [...], "time": "<UTCTimeMillis>" }`:
+the events the message produced (delivery acks, subconversation
+updates), ignored, and the backend's time of the message, which
+becomes the own row's `sent_at_ms` (Step 151).
 
 **Status codes:** same as commit-bundles (400 mls-*, 409, 422, 533).
 
@@ -1374,6 +1375,20 @@ route (the versioned `/v{N}/await` variants 404 at nginx; verified
   a drain before the connect would miss events stored before the
   socket registered, and a frame moving the cursor would make a
   missed push permanent.
+
+## Step 151 discovery: whose time a message has
+
+The Swagger requires `time` on an `Event` and on `MLSMessageSendingStatus`, the answer to
+`POST /mls/messages`. Wire's clients take it as the message's time: the webapp sets an own
+message's `time` from the answer's `sentAt`, and Kalium hashes a quote over the stored message's
+`date`. The stack builds the event and the answer from one `now`.
+
+Measured with a real Kalium client (Natrium, Kalium `digits/0.0.7`, API v15) and Kupferdraht (API
+v14) in one MLS room on the team's dev backend (2026-11-09), Kupferdraht still on its receive
+time: a reply after a minute away reached Natrium with its `quoted` id and `previewText` null,
+Kalium's `QuotedMessageDetails.Invalid`, and the same message stood 67 s apart on the two sides.
+Natrium's replies and room events reached Kupferdraht. Results after the fix:
+`docs/plan/archive/151-send-time.md`.
 
 ## Step 145 discovery: the four room events
 

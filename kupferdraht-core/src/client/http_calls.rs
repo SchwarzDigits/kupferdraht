@@ -25,12 +25,13 @@ impl Client {
         &self,
         api_version: u32,
         ciphertext: &[u8],
-    ) -> Result<(), KupferdrahtError> {
-        self.http
+    ) -> Result<Option<i64>, KupferdrahtError> {
+        let sent_at_ms = self
+            .http
             .send_mls_message(api_version, &self.current_access_token(), ciphertext)
             .await?;
         self.sent.note();
-        Ok(())
+        Ok(sent_at_ms)
     }
 
     /// Step 122: the signal of a successful message upload.

@@ -158,7 +158,12 @@ export interface Reaction { emoji: string; count: number; isSelf: boolean }
 export type DeliveryStatus = 'sending' | 'submitted' | 'received' | 'failed';
 export interface AssetMeta { filename: string | null; mime: string; size: number }
 export interface TimelineItem {
-  itemId: string; senderUserId: string; sentAtMs: number; kind: string; body: string | null;
+  itemId: string; senderUserId: string;
+  /** When it was sent, as the backend knows it. A timeline's times need not rise: do not sort by it (Step 151). */
+  sentAtMs: number;
+  /** When it entered this device's timeline, on the clock of `lastReadAtMs`: compare those two (Step 151). */
+  arrivedAtMs: number;
+  kind: string; body: string | null;
   replyTo: string | null; reactions: Reaction[]; edited: boolean; redacted: boolean;
   asset: AssetMeta | null; expiresAtMs: number | null; deliveryStatus: DeliveryStatus;
   /** Set for `kind === 'knock'`. */
@@ -181,7 +186,7 @@ export type AvatarSize = 'thumbnail' | 'full';
 export interface Avatar { bytes: Uint8Array; mimeType: 'image/jpeg' | 'image/png' }
 export interface MessageEvent_ {
   roomId: string; senderUserId: string; messageId: string; body: string | null;
-  replyToId: string | null; receivedAtMs: number; expiresAtMs: number | null;
+  replyToId: string | null; sentAtMs: number; receivedAtMs: number; expiresAtMs: number | null;
 }
 export interface TypingEvent_ { roomId: string; typingUsers: string[] }
 /** A server-administered feature config (Step 98d); `configJson` stays raw. */

@@ -87,6 +87,15 @@ pub struct ServerConfigRecord {
     pub title: String,
 }
 
+/// What a successful resend writes to its row (Step 151): the backend's time,
+/// the new position at the tail of the timeline and the re-armed timer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResentTimes {
+    pub sent_at_ms: i64,
+    pub arrived_at_ms: i64,
+    pub expires_at_ms: Option<i64>,
+}
+
 /// One row of `backend_mls_keys` — a Wire-backend-scoped public key
 /// for a specific `(purpose, signature_scheme)` pair. Today Kupferdraht
 /// uses exactly one entry, `("removal", "ecdsa_secp256r1_sha256")`,
@@ -262,7 +271,13 @@ pub struct TimelineEventRecord {
     pub sender_device_id: String,
     pub kind: String,
     pub body: String,
+    /// When it was sent, as the backend knows it (Step 151): an inbound row's
+    /// event `time`, an own row's answer `time`, this device's clock until
+    /// then and where no such time could be read.
     pub sent_at_ms: i64,
+    /// When the row entered this device's timeline, by its clock: the row's
+    /// position, for the order and the read marker (Step 151).
+    pub arrived_at_ms: i64,
     pub delivery_status: String,
     pub reply_to_id: Option<String>,
     /// Wall-clock at which the most recent `MessageEdit` replaced
@@ -933,8 +948,7 @@ pub trait Store: MaybeSendSync {
         &self,
         _room_id: &str,
         _message_id: &str,
-        _sent_at_ms: i64,
-        _expires_at_ms: Option<i64>,
+        _times: &ResentTimes,
     ) -> Result<bool, KupferdrahtError> {
         Ok(false)
     }
@@ -956,6 +970,7 @@ pub trait Store: MaybeSendSync {
         _message_id: &str,
         _delivered: bool,
         _expires_at_ms: Option<i64>,
+        _sent_at_ms: Option<i64>,
     ) -> Result<bool, KupferdrahtError> {
         Ok(false)
     }

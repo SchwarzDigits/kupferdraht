@@ -9,7 +9,7 @@
 //!
 //! 1. **Send** — `Timeline::send_ephemeral_text` wraps the body with
 //!    `expire_after_millis = ttl` and persists the own copy with
-//!    `expires_at_ms = sent_at_ms + ttl`. The stamp is set only when
+//!    `expires_at_ms = arrived_at_ms + ttl`, on this device's clock. The stamp is set only when
 //!    the upload reached the backend (an official sender starts its
 //!    countdown on the backend ack; a `Failed` row keeps its body
 //!    and gets no timer).
@@ -145,19 +145,18 @@ impl Client {
         let upload = self
             .encrypt_and_upload(&group_id, "send_ephemeral_text", &plaintext)
             .await;
-        // The timer counts from the send (`sent_at_ms`, Step 89's
-        // contract: expires_at = sent_at + ttl); only a delivered send
-        // gets it.
+        // The timer counts from the send on this device's clock, not from
+        // the backend's answer (Step 151): expires_at = arrived_at + ttl.
+        // Only a delivered send gets it.
         let expires_at_ms = upload.is_ok().then(|| sent_at_ms.saturating_add(ttl_ms));
-        self.finish_send(room_id, &message_id, upload.is_ok(), expires_at_ms)
+        self.finish_send(room_id, &message_id, &upload, expires_at_ms)
             .await;
         if persisted && let Some(at) = expires_at_ms {
             self.arm_ephemeral_timer(at);
         }
-        upload?;
         Ok(MessageHandle {
             message_id,
-            sent_at_ms,
+            sent_at_ms: upload?.unwrap_or(sent_at_ms),
         })
     }
 

@@ -104,6 +104,7 @@ uuid = { version = "1", features = ["v4"] }
 # Without it Wire's clients render the reply as a plain message
 # instead of a quote (see observations.md §33).
 sha2 = "0.10"
+time = { version = "0.3", features = ["parsing"] }
 # ADR-0035: in the browser an account's database keys derive from the
 # account's seed (HKDF-SHA-256, `storage::account_keys`).
 hkdf = "0.12"

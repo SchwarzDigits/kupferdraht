@@ -216,12 +216,11 @@ impl Client {
         let mls_upload = self
             .encrypt_and_upload(send.group_id, send.op, &plaintext_pb)
             .await;
-        self.finish_send(room_id, &message_id, mls_upload.is_ok(), None)
+        self.finish_send(room_id, &message_id, &mls_upload, None)
             .await;
-        mls_upload?;
         Ok(MessageHandle {
             message_id,
-            sent_at_ms,
+            sent_at_ms: mls_upload?.unwrap_or(sent_at_ms),
         })
     }
 
@@ -351,6 +350,7 @@ impl Client {
             kind: "asset".into(),
             body: filename.unwrap_or_default().to_string(),
             sent_at_ms,
+            arrived_at_ms: sent_at_ms,
             delivery_status: status.as_db_str().into(),
             reply_to_id: None,
             edited_at_ms: None,
@@ -503,11 +503,11 @@ impl Client {
         let mls_upload = self
             .encrypt_and_upload(&group_id, "send_bytes", &plaintext_pb)
             .await;
-        self.finish_send(room_id, &message_id, mls_upload.is_ok(), None)
+        self.finish_send(room_id, &message_id, &mls_upload, None)
             .await;
-        mls_upload.map(|()| MessageHandle {
+        mls_upload.map(|answered| MessageHandle {
             message_id: message_id.clone(),
-            sent_at_ms: out.sent_at_ms,
+            sent_at_ms: answered.unwrap_or(out.sent_at_ms),
         })
     }
 }
@@ -629,6 +629,7 @@ impl Client {
             kind: "asset".into(),
             body: out.filename.to_string(),
             sent_at_ms: out.sent_at_ms,
+            arrived_at_ms: out.sent_at_ms,
             delivery_status: DeliveryStatus::Sending.as_db_str().into(),
             reply_to_id: None,
             edited_at_ms: None,

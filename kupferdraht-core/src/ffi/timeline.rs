@@ -433,7 +433,11 @@ pub struct TimelineItem {
     pub room_id: String,
     pub sender_user_id: String,
     pub sender_device_id: String,
+    /// When it was sent, as the backend knows it (Step 151).
     pub sent_at_ms: i64,
+    /// When it entered this device's timeline, on the clock of the read
+    /// marker (Step 151).
+    pub arrived_at_ms: i64,
     pub kind: TimelineItemKind,
     pub edited_at_ms: Option<i64>,
     pub redacted: bool,
@@ -455,6 +459,7 @@ impl From<&CoreItem> for TimelineItem {
             sender_user_id: item.sender_user_id.clone(),
             sender_device_id: item.sender_device_id.clone(),
             sent_at_ms: item.sent_at_ms,
+            arrived_at_ms: item.arrived_at_ms,
             kind: TimelineItemKind::from(&item.kind),
             edited_at_ms: item.edited_at_ms,
             redacted: item.redacted,

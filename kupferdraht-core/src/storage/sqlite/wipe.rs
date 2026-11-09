@@ -84,6 +84,7 @@ mod tests {
             kind: "text".to_string(),
             body: "never left".to_string(),
             sent_at_ms: 1,
+            arrived_at_ms: 1,
             delivery_status: "failed".to_string(),
             ..TimelineEventRecord::default()
         };

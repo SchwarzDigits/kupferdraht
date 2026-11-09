@@ -538,16 +538,17 @@ async fn resend_flips_a_failed_text_row_to_submitted_with_one_more_upload() {
         .await
         .expect("resend goes through once the backend is back");
     assert_eq!(handle.message_id, id, "the row keeps its message_id");
-    assert!(
-        handle.sent_at_ms >= before.sent_at_ms,
-        "sent_at_ms is re-stamped to the resend instant"
-    );
+
     assert_eq!(ok.calls(), 1, "exactly one more upload");
 
     let after = item(&fx.client, &id).await;
     assert_eq!(after.delivery_status, DeliveryStatus::Submitted);
     assert_eq!(text_body(&after.kind), Some("stuck in the outage"));
     assert_eq!(after.sent_at_ms, handle.sent_at_ms);
+    assert!(
+        after.arrived_at_ms >= before.arrived_at_ms,
+        "the position moves to the resend instant, sent_at_ms to the answer's"
+    );
     let updates = fx.recorder.updates_for(&id);
     assert!(
         updates
@@ -859,13 +860,13 @@ async fn resend_of_a_failed_ephemeral_text_re_wraps_the_ttl_and_starts_the_timer
 
     failing.delete();
     let ok = mount_mls_upload_ok(&server);
-    let handle = fx.timeline.resend(id.clone()).await.expect("resend");
+    fx.timeline.resend(id.clone()).await.expect("resend");
     assert_eq!(ok.calls(), 1);
     let row = item(&fx.client, &id).await;
     assert_eq!(row.delivery_status, DeliveryStatus::Submitted);
     assert_eq!(
         row.expires_at_ms,
-        Some(handle.sent_at_ms + 1_000),
+        Some(row.arrived_at_ms + 1_000),
         "the timer starts on the delivered resend with the ORIGINAL ttl"
     );
 
@@ -884,7 +885,7 @@ async fn resend_of_a_failed_ephemeral_text_re_wraps_the_ttl_and_starts_the_timer
     tokio::time::sleep(Duration::from_millis(1_500)).await;
     let expired = item(&fx.client, &id).await;
     assert!(expired.redacted, "the re-armed timer tombstones the row");
-    assert_eq!(expired.expires_at_ms, Some(handle.sent_at_ms + 1_000));
+    assert_eq!(expired.expires_at_ms, Some(row.arrived_at_ms + 1_000));
 }
 
 #[tokio::test]

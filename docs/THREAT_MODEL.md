@@ -1,6 +1,6 @@
 # Kupferdraht Threat Model
 
-**Version:** 0.12 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-09 **Status:** working draft, for review by Markus Troßbach
+**Version:** 0.13 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-09 **Status:** working draft, for review by Markus Troßbach
 
 ------
 
@@ -55,6 +55,8 @@ Three actors:
 **The server** is the counterpart in the Wire backend or a compatible MLS delivery infrastructure. Under A7 (the server injects no device) Kupferdraht does *not* trust the server with message content. Kupferdraht trusts the server with administrative operations such as group-membership management; that relationship is formalised through MLS mechanisms and visible to every participant (see `wire/mls-deviations.md` W-5). **Limitation (ADR-0027):** under BasicCredentials the server is also the key directory: it distributes the KeyPackages with which devices are added to groups. A malicious server can therefore inject a device with an arbitrary identity (a "ghost device") that then reads along and sends MLS-authentically "as" that identity. This is the same trust model as official Wire without e2ei; the countermeasures are e2ei certificates (a non-goal) and comparing the MLS thumbprints per device. Since Step 95d Kupferdraht lists the devices of every room with their MLS thumbprint (comparable to the "MLS thumbprint" of the official apps) and reports every change in a room's devices against the last stored state, so an injected device becomes visible; it is not prevented. The statement "no trust for content" therefore holds only under A7, against a server that does not inject devices.
 
 **What a room event's item says is the backend's word** (Step 145). "Alice removed Bob" in a timeline names `qualified_from` as the actor, which MLS does not authenticate: a hostile backend can forge it, as it can any room metadata. The item changes no membership, which stays the MLS group's, and no member can rewrite or delete it.
+
+**The time a message shows is the backend's word too** (Step 151). `sent_at_ms` is the event's `time`, which MLS does not authenticate: a hostile backend can backdate what a timeline shows. It cannot move a message or make it read, since the order and the unread count run on the device's clock.
 
 **Foreign identifiers are data, not paths.** Envelope ids (`message_id`), sender and user ids and asset identifiers are attacker-controlled input: a malicious peer or a compromised backend can choose them freely. No foreign string becomes a path fragment: checked at the dispatch boundary (path-unsafe ids are discarded like malformed envelopes), at every path site (`storage::is_path_safe_id`) and when the account identity is materialised from server responses (Step 80, 2026-09-11; LEARNINGS §5.23 "validate the sink").
 
@@ -261,6 +263,7 @@ Not blocking for the current implementation phase. To be picked up before the af
 | 0.10    | 2026-11-04 | Step 141: the Trust Model names the redirect rule of Step 132 and its one exception — an asset download follows the backend's `302` to the asset store once, without credentials; integrity stays with L6 |
 | 0.11    | 2026-11-09 | Step 144: L7 names the image decoders in Kupferdraht's process, what writing every avatar anew removes, and what remains. |
 | 0.12    | 2026-11-09 | Step 145: the Trust Model names room events in the timeline as the backend's word. |
+| 0.13    | 2026-11-09 | Step 151: the Trust Model names the time a message shows as the backend's word. |
 
 ------
 

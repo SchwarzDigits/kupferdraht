@@ -523,6 +523,23 @@ impl HttpClient {
         Ok(())
     }
 
+    /// [`Self::send_no_body`] for a caller that reads the answer; one that
+    /// cannot be read is empty, since the request succeeded.
+    pub(super) async fn send_keeping_answer(
+        &self,
+        req: reqwest::RequestBuilder,
+        op: &str,
+    ) -> Result<String, KupferdrahtError> {
+        let resp = self.send_with_auth_retry(req, op).await?;
+        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(KupferdrahtError::Unauthorized);
+        }
+        if !resp.status().is_success() {
+            return Err(reject_from_response(resp, op).await);
+        }
+        Ok(resp.text().await.unwrap_or_default())
+    }
+
     /// Send `req`; on a `401` refresh the access token once (guarded)
     /// and replay the request with the rotated bearer. Returns the
     /// final response — the retried one when a refresh happened, else

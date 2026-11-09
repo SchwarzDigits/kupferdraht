@@ -115,6 +115,7 @@ fn ephemeral_event(message_id: &str, expires_at_ms: Option<i64>) -> TimelineEven
         kind: "text".into(),
         body: "self-deleting body".into(),
         sent_at_ms: 1_700_000_000_000,
+        arrived_at_ms: 1_700_000_000_000,
         delivery_status: "acknowledged".into(),
         reply_to_id: None,
         edited_at_ms: None,

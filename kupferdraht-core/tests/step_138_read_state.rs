@@ -260,6 +260,7 @@ fn inbound(room_id: &str, message_id: &str, sent_at_ms: i64) -> TimelineEventRec
         kind: "text".into(),
         body: format!("msg {message_id}"),
         sent_at_ms,
+        arrived_at_ms: sent_at_ms,
         delivery_status: "received".into(),
         ..TimelineEventRecord::default()
     }

@@ -776,6 +776,11 @@ Since Step 110 (ADR-0035):
   `sendLocation(roomId, lat, lon, name?, zoom?)` (Step 98c), `sendReply`,
   `toggleReaction`, `editMessage`, `redact`, `markAsRead` (`editMessage` /
   `redact` reject another user's message — Step 95b, ADR-0028).
+- The two times of an item (Step 151): `sentAtMs` is when the backend took the message, the one
+  to show. `arrivedAtMs` is when it entered this device's timeline, on the clock of
+  `lastReadAtMs`. `messages()` is in order of arrival, so its `sentAtMs` need not rise: do not
+  sort by it, and compare `lastReadAtMs` with `arrivedAtMs`. Rows from before this release show
+  their receive time.
 - Keyed sends (Step 130a): `sendText`, `sendReply`, `sendKnock`,
   `sendLocation`, `sendFile` and `toggleReaction` take a trailing
   `options?: { idempotencyKey?: string }` (1–128 characters; the binding
@@ -819,7 +824,7 @@ Since Step 110 (ADR-0035):
     messages to the room, name the newest message, not the newest item.
   - **The history starts with the device:** Wire has no API to fetch these events later,
     and `room_created` reaches only the members at that moment.
-  - `sentAtMs` is when this device processed the event, as for a message.
+  - `sentAtMs` is the event's time, as for a message; the item stands where it arrived.
   - A direct room starts with an `added` naming both users; hide it by the room's type if
     it is unwanted.
 - Avatars (Step 144): `avatar(userId, "thumbnail" | "full") -> { bytes: Uint8Array,
@@ -871,8 +876,8 @@ Since Step 110 (ADR-0035):
 
 **JS callbacks** (plain functions passed to `startSync`):
 - `onMessage({roomId, senderUserId, messageId, body, replyToId,
-  receivedAtMs, expiresAtMs})` — one call per inbound decrypted
-  message (`expiresAtMs` is set only for an ephemeral message, Step 89;
+  sentAtMs, receivedAtMs, expiresAtMs})` — one call per inbound decrypted
+  message (`sentAtMs` is when the backend took it, Step 151; `expiresAtMs` is set only for an ephemeral message, Step 89;
   `messages()` items carry the same field). `senderUserId` is the
   MLS-authenticated signer, not the backend's envelope — the same
   rule on every surface (Step 95a, ADR-0027; `docs/library.md`

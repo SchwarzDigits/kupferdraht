@@ -56,6 +56,7 @@ async fn seed_received_file(store: &dyn kupferdraht::storage::Store, blob: &[u8]
             kind: "asset".into(),
             body: "notes.txt".into(),
             sent_at_ms: 1,
+            arrived_at_ms: 1,
             delivery_status: "received".into(),
             ..TimelineEventRecord::default()
         })

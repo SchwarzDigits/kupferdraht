@@ -462,10 +462,9 @@ async fn an_event_for_a_room_not_stored_yet_is_kept_for_that_room() {
     assert_eq!(items(&fx).await, Vec::new(), "not in the fixture's room");
 }
 
-/// Every row of a timeline carries this device's clock (an inbound message
-/// its receive time), so an item with the server's would sort by another
-/// clock: before everything a catch-up drain delivers, or past the next
-/// message and over a read marker set on it.
+/// The position is this device's clock, on every row (Step 151): by the
+/// event's `time` an item would stand before everything a catch-up drain
+/// delivers, or past the next message and over a read marker set on it.
 #[tokio::test]
 async fn an_item_stands_where_it_arrived_whatever_the_servers_clock_says() {
     let server = MockServer::start();
@@ -504,9 +503,10 @@ async fn an_item_stands_where_it_arrived_whatever_the_servers_clock_says() {
         .collect();
     assert_eq!(order, [false, true, false, true, false]);
     assert!(
-        all.windows(2).all(|w| w[0].sent_at_ms <= w[1].sent_at_ms),
+        all.windows(2)
+            .all(|w| w[0].arrived_at_ms <= w[1].arrived_at_ms),
         "one clock: {:?}",
-        all.iter().map(|i| i.sent_at_ms).collect::<Vec<_>>()
+        all.iter().map(|i| i.arrived_at_ms).collect::<Vec<_>>()
     );
 }
 
@@ -604,7 +604,7 @@ async fn mark_as_read_on_an_item_moves_the_marker_and_sends_nothing() {
     assert_eq!(read.map(|h| h.message_id), None);
     assert_eq!(
         fx.store.read_marker(&room_id()).await.expect("marker"),
-        Some(item.sent_at_ms)
+        Some(item.arrived_at_ms)
     );
     assert_eq!(uploads.lock().expect("uploads").len(), 0);
 }
