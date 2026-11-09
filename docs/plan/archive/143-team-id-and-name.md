@@ -1,9 +1,18 @@
 # Step 143 — The own team on the account: id and name
 
-**Status: in progress** on `step/143-team-id-and-name`; phase 1 taken and
-red tests approved by Volker on 2026-11-09, with the fetch where both login
-kinds end and `SelfUserRecord`'s growth named `BREAKING`, which makes the next
-release a minor. Commissioned 2026-11-05 (from the
+**Status: MERGED 2026-11-09** — `0c9b770` on `step/143-team-id-and-name`,
+merged to `main` as PR #55 (`ccd93a9`); gate green on 1.98 (fmt, 0 build
+warnings, clippy, 1487 tests, deny; wasm32 check, clippy `--lib` and CI's wasm
+clippy line); the browser suite green locally (17 suites, 76 tests, headless
+Firefox) and in CI. Smoked 2026-11-09 on the wire-server-rs stack with the CLI
+built from this tree: `kupferdraht-smoke.sh --throwaway` 24/24, and the `team:`
+lines of an owner and a plain member from `login` and `status` match the team
+settings. The Kotlin and Swift bindings were not built: no JDK here, and CI
+builds neither. Their tests do not construct `Account`. Scope shipped as
+planned below, with the two corrections that follow. Red tests approved by
+Volker on 2026-11-09, with the fetch where both login kinds end and
+`SelfUserRecord`'s growth named `BREAKING`, which makes the next release a
+minor. LEARNINGS §5.86 has the retrospective. Commissioned 2026-11-05 (from the
 browser embedder's requirements for a work-queue client, R1, measured there
 against `4f30f02` and re-checked against `main` `9e1a11c`). Taken with Volker
 on commissioning: the names `team_id` / `team_name` (`teamId` / `teamName`
