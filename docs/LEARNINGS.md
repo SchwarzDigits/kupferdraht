@@ -2791,3 +2791,53 @@ touched it.
   run warns and blocks nothing. A cargo Dependabot pull request stays red
   until the notices follow, by design, and §5.83's `license/cla` question is
   still open.
+
+### 5.85 A pin that read a list as text, an assumption a green test exposed, and one fix written three times (Step 130c)
+
+- **The browser suite caught what the gate and a pin passed.** An edit to
+  `scripts/wasm-test.sh` ran two names together:
+  `step_130c_browser_null_viewsindexeddb_keystore`. Neither suite would have
+  run, and `indexeddb_keystore` had run until then. The five were green, the
+  wasm32 lines were green, and the pin written for exactly this,
+  `contains("step_130c_browser_null_views")`, was green too: the joined word
+  contains the name. Only running the whole suite here showed it. A pin on a
+  list reads the list's entries, not its text. It now compares whole words,
+  and it was seen red against the defect before the fix.
+- **A test that should have been red and was not found a wrong assumption.**
+  The plan's first D3 added `skip_serializing_if` to `RecoveryStateView`, so
+  the pin reading every optional field was to stay red until then. It was
+  green. Either the parser found nothing or the assumption was wrong, and one
+  look told: the parser found 28 fields, and the attribute was already there.
+  The listing it was missing from had been cut by a `head -20` above that
+  line. A truncated listing is not a negative result. The same draft's counts
+  were off too (21 sites, 12 views), corrected by counting, as in §5.82.
+- **A check green from the start needs its own proof.** The types were right,
+  so this step's change could never show
+  `every_optional_view_field_is_declared_nullable` red. A small input with a
+  wrong type and a view without a row shows it names both, as Step 150's small
+  inputs do.
+- **One fix had been written three times.** §85 said one helper and a sweep.
+  Steps 130b and 138 each wrote `serialize_missing_as_null` for their own
+  view, Step 139 borrowed Step 138's, and each pinned its own view while the
+  older ones stayed as they were. The sweep came to 20 mechanical lines, and
+  it needs a breaking release only because the values had shipped against
+  their types since the first browser build.
+- **What a fixture cannot say.** The views are private to their modules and
+  the browser suite has no logged-in client, so the browser test crosses a
+  fixture of the same shapes and a source pin holds that every view uses the
+  serializer. No test sees a real `messages()` row as a JS value. The
+  embedder's integration is the last check, one more reason v0.3.0 ships this
+  alone.
+- **A red check that said nothing about the code.** The secret and
+  vulnerability scan failed twice within ten minutes, on PR #52 and on its
+  merge commit, on `curl: (22) … 504`: the job fetches Trivy from GitHub's
+  release host without a retry and stopped before any scan ran. A re-run of
+  the job went green both times. The log is read before a red is called a
+  code failure, or a flake.
+- **A release was the first live run over 130 moved versions.** PRs #46 and
+  #50 landed without a smoke, as the Dependabot exception allows, and CHANGELOG's
+  release process names none either. v0.2.1 was smoked because that seemed
+  owed, 24/24. Nothing yet requires it.
+- **What was left.** The browser surface has two forms now by decision: `null`
+  in views, `undefined` in the getters, the tabs' `homeId` and `cookieLabel`
+  and a thrown error's details, each as its type declares.
