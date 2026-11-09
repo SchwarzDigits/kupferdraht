@@ -4,7 +4,8 @@ This file is the **open backlog** — the steps still in progress, pending, or b
 
 ## Status overview
 
-Last update: **2026-11-08** — 
+Last update: **2026-11-09** — 
+v0.2.1 released: the security fixes (openmls 0.9.2, inout 0.2.6, Step 149's crates) without a breaking change. A second Dependabot lockfile update landed as a maintainer's commit (#50, regex 1.13.1), and Step 150's check named what it moved. Order: 130c, the v0.3.0 release with 130c alone, then 143, 144, 145, 146, 147, 129a, 129b. Before (2026-11-08): 
 Step 150 (the third-party notices checked against their sources; PR #47) merged + archived; no smoke. A test in the gate and `licenses.yml` hold both attribution files now. Order: the v0.2.1 release, 130c, the v0.3.0 release with 130c alone, then 143, 144, 145, 146, 147, 129a, 129b. Before (the same day): 
 Step 150 in progress (the third-party notices checked against their sources). The first Dependabot updates landed as a maintainer's commits (#45, #46), since `license/cla` stays pending for `dependabot[bot]`; PR #44 named what the SQLite3MC amalgamation embeds and allowed the Unlicense. Before (the same day): 
 Step 148 (dependencies kept current by Dependabot; PR #40) merged + archived; no smoke. The first Dependabot pull requests are open (#41 the actions, #42 cargo; `cargo deny` stops #42 on a license, `license/cla` is pending on both). Step 130c moved up (Volker, 2026-11-08): the browser embedder integrates its breaking change before the new features land. Order: 150, the v0.2.1 release, 130c, the v0.3.0 release with 130c alone, then 143, 144, 145, 146, 147, 129a, 129b. Before (the same day): 
