@@ -1,7 +1,19 @@
 # Step 145 — Room events as timeline items
 
-**Status: in progress** on `step/145-room-events-in-the-timeline`; phase 1 taken
-and red tests approved by Volker on 2026-11-09. Commissioned 2026-11-05 (from the browser embedder's
+**Status: MERGED 2026-11-09** — `c8539a6` on
+`step/145-room-events-in-the-timeline`, merged to `main` as PR #61 (`763cb71`); gate
+green on 1.98 (fmt, 0 build warnings, clippy, 1567 tests, deny; wasm32 check, clippy
+`--lib` and CI's wasm clippy line); the browser suite green locally (18 suites, 80
+tests, headless Firefox) and in CI, without a logged-in client, so the projection
+is held by the wasm32 check, a unit test of the names and a pin on the sources.
+Smoked 2026-11-09 on the wire-server-rs stack with the CLI built from this tree:
+`kupferdraht-smoke.sh --throwaway` 24/24, then a room's life with five accounts:
+seven items at the creator in order, the own events among them; a member added later
+without the creation; unread 0; a reaction refused; `mark-read` naming its reason; a
+join by link starting that member's history; an account deleted; a direct room. The
+Kotlin and Swift bindings were generated and read, not compiled: no JDK here, and CI
+builds neither. Phase 1 taken and red tests approved by Volker on 2026-11-09.
+Commissioned 2026-11-05 (from the browser embedder's
 requirements for a work-queue client, R6, measured there against
 `4f30f02` and re-checked against `main` `9e1a11c`). Taken with Volker on
 commissioning:
