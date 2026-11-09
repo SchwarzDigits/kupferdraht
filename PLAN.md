@@ -5,6 +5,7 @@ This file is the **open backlog** — the steps still in progress, pending, or b
 ## Status overview
 
 Last update: **2026-11-09** — 
+`bindings/kmp` and gobley removed (Volker, NG-27): nothing in reach consumed the module, and no check covered it. Before (the same day): 
 Step 143 in progress (the own team on the account: id and name). Before (the same day): 
 v0.3.0 released with Step 130c alone (a missing value in a browser view is `null`, BREAKING), so the browser embedder integrates it before the new features. Order: 143, 144, 145, 146, 147, 129a, 129b. Before (the same day): 
 Step 130 merged + archived with 130c (a missing value in a browser view is `null`, BREAKING; PR #52, no smoke, the browser suite green locally and in CI); open.md §85 resolved. Order: the v0.3.0 release with 130c alone, then 143, 144, 145, 146, 147, 129a, 129b. Before (the same day): 

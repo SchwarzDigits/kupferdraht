@@ -102,8 +102,8 @@ Components with notices outside the crate graph
   follows its conceptual model; no code was taken from it. Named here with
   thanks, not as a dependency.
 
-Kotlin, Android and Kotlin Multiplatform bindings
--------------------------------------------------
+Kotlin and Android bindings
+---------------------------
 
 The Gradle builds under bindings/ do not bundle these components; the
 consumer's build resolves them from Maven Central. An application that
@@ -112,20 +112,14 @@ ships the bindings must reproduce their notices as described above.
 - net.java.dev.jna:jna 5.15.0 — Timothy Wall and contributors —
   dual-licensed Apache-2.0 OR LGPL-2.1-or-later; used here under the
   Apache License 2.0 — https://github.com/java-native-access/jna
-- org.jetbrains.kotlinx:kotlinx-coroutines-core 1.8.1 (JVM, Android) and
-  1.10.2 (Multiplatform) — JetBrains s.r.o. — Apache-2.0 —
-  https://github.com/Kotlin/kotlinx.coroutines
-- org.jetbrains.kotlin:kotlin-stdlib 2.0.21 (JVM, Android) and 2.3.10
-  (Multiplatform), with kotlin-test for the tests — JetBrains s.r.o. /
-  Kotlin Foundation — Apache-2.0 — https://github.com/JetBrains/kotlin
-- org.jetbrains.kotlinx:atomicfu (Multiplatform, through the atomicfu
-  Gradle plugin 2.3.10) — JetBrains s.r.o. — Apache-2.0 —
-  https://github.com/Kotlin/kotlinx-atomicfu
+- org.jetbrains.kotlinx:kotlinx-coroutines-core 1.8.1 — JetBrains s.r.o. —
+  Apache-2.0 — https://github.com/Kotlin/kotlinx.coroutines
+- org.jetbrains.kotlin:kotlin-stdlib 2.0.21, with kotlin-test for the tests —
+  JetBrains s.r.o. / Kotlin Foundation — Apache-2.0 —
+  https://github.com/JetBrains/kotlin
 
 Build tooling of these builds, not part of any artifact: the Android
-Gradle Plugin (Google LLC, Apache-2.0), the gobley cargo and uniffi
-Gradle plugins 0.3.7 (MPL-2.0, https://github.com/gobley/gobley) and the
-Gradle wrapper listed above.
+Gradle Plugin (Google LLC, Apache-2.0) and the Gradle wrapper listed above.
 
 Trademarks
 ----------
