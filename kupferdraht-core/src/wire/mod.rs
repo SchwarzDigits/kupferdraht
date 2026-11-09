@@ -9,6 +9,7 @@ pub(crate) mod notification_dto;
 pub(crate) mod proto;
 pub(crate) mod push_frame;
 pub(crate) mod room_event;
+pub(crate) mod time;
 mod version;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod websocket;

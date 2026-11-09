@@ -357,6 +357,7 @@ async fn download_with_persisted_hostile_id_writes_nothing() {
             kind: "asset".into(),
             body: "x.bin".into(),
             sent_at_ms: 1,
+            arrived_at_ms: 1,
             delivery_status: "received".into(),
             reply_to_id: None,
             edited_at_ms: None,

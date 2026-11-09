@@ -45,12 +45,24 @@ is no skill for it — it is this short procedure:
   `actor`, `users` and `name`, and in the CLI's `timeline` as a system line. They
   are no messages: not unread, no `on_message` or `onMessage`, and a reaction,
   reply, edit or delete on one is refused. `mark_as_read` on one moves the local
-  marker and tells the room nothing. The history starts with the device, and
-  `sent_at_ms` is when it processed the event, as for a message. In the browser,
-  `onSync`'s `roomsUpdated` says to pull `messages()` again.
+  marker and tells the room nothing. The history starts with the device. In the
+  browser, `onSync`'s `roomsUpdated` says to pull `messages()` again.
 
 ### Changed
 
+- **BREAKING: `sent_at_ms` is the backend's time** (Step 151): an inbound row's
+  event `time`, an own row's answer `time`, this device's clock only until the
+  answer, on a failed send and where no time could be read. So a device back from
+  offline shows when a message was sent, not when it synced. The order and the
+  read marker stay on this device's clock, in the new `arrived_at_ms` on
+  `TimelineItem` (FFI too, browser `arrivedAtMs`): a timeline's `sent_at_ms` need
+  not rise, so do not sort by it, and compare `Room::read_marker` or `lastReadAtMs`
+  with `arrived_at_ms`, not with it. `Message` and the browser's `onMessage` gain
+  `sent_at_ms` / `sentAtMs` beside `received_at_ms`. Code building
+  `TimelineEventRecord`, `TimelineItem` or `Message` from a struct literal has the
+  fields to add, a custom `Store` the new shapes of `mark_send_outcome` and
+  `mark_message_resent` (`ResentTimes`). Migration V35; rows from before it keep
+  their position and their receive time, since the backend's was never stored.
 - **BREAKING: `TimelineItemKind` has three new kinds** (Step 145): an exhaustive
   `match`, `when` or `switch` over a timeline item's kind has `MembershipChange`,
   `RoomNameChange` and `RoomCreated` to add, on the FFI as well, and code that
@@ -62,6 +74,12 @@ is no skill for it — it is this short procedure:
 ### Removed
 
 ### Fixed
+
+- **A reply's quote is verified on the other side** (Step 151): the hash in
+  `Text.quote` carried the parent's receive time, where Wire's clients hash the
+  backend's. Kalium then treats the quote as invalid: a Natrium client showed the
+  reply without the quoted text whenever the two fell into different seconds, and
+  always after a catch-up.
 
 ### Security
 

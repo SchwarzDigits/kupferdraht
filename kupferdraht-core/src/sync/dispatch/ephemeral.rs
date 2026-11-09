@@ -22,8 +22,8 @@ use crate::error::KupferdrahtError;
 use crate::sync::service::SyncService;
 use crate::wire::proto::ephemeral;
 
-use super::mentions_to_records;
 use super::text::inbound_text_message;
+use super::{InboundOrigin, mentions_to_records};
 
 /// A peer's `expire_after_millis` within Wire's range. Peer data, never
 /// a panic: a non-positive TTL expires now (the sweep retires it); one
@@ -50,12 +50,14 @@ impl SyncService {
     pub(crate) async fn dispatch_inbound_ephemeral(
         &self,
         client: &Arc<Client>,
-        room_id: &str,
-        sender_user_id: &str,
-        sender_device_id: Option<&str>,
-        message_id: &str,
+        origin: InboundOrigin<'_>,
         ephemeral: crate::wire::proto::Ephemeral,
     ) -> Result<(), KupferdrahtError> {
+        let InboundOrigin {
+            room_id,
+            message_id,
+            ..
+        } = origin;
         debug_assert!(
             !message_id.is_empty(),
             "dispatch_inbound_ephemeral: message_id must be non-empty"
@@ -64,14 +66,7 @@ impl SyncService {
         match ephemeral.content {
             Some(ephemeral::Content::Text(text)) => {
                 let mention_records = mentions_to_records(room_id, message_id, &text.mentions);
-                let message = inbound_text_message(
-                    room_id,
-                    sender_user_id,
-                    sender_device_id,
-                    message_id,
-                    text,
-                    Some(ttl_ms),
-                );
+                let message = inbound_text_message(origin, text, Some(ttl_ms));
                 self.dispatch_inbound_text_message(client, message, mention_records)
                     .await
             }

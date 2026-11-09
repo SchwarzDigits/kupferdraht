@@ -21,6 +21,7 @@ use crate::timeline::{
 };
 use crate::wire::dto::QualifiedId;
 use crate::wire::room_event::{MemberLeftReason, RoomEvent, RoomEventData, parse_room_event};
+use crate::wire::time::parse_time_ms;
 
 /// Store one room event as a timeline item and emit its `Append`, once: a
 /// redelivered event has the same id and writes nothing. Such an event may
@@ -57,13 +58,14 @@ pub(crate) async fn dispatch_room_event(
 }
 
 /// The row of `event`, or `None` when an id in it is unaddressable. Its
-/// `sent_at_ms` is this device's clock, as on every other row: the server's
-/// `time` would sort it against messages by another clock, and a read marker
-/// set on it could pass the next message. The `time` goes into the id only.
+/// `sent_at_ms` is the event's `time` (Step 151), and its position this
+/// device's clock like every other row's, so a server clock can neither sort
+/// it against messages nor take a read marker past the next one.
 fn record_of(event_type: &str, event: &RoomEvent) -> Option<TimelineEventRecord> {
     let room_id = qualified(&event.qualified_conversation)?;
     let actor = qualified(&event.qualified_from)?;
     let (kind, body) = pack_room_event(&item_kind(&event.data, &actor)?)?;
+    let arrived_at_ms = now_ms();
     Some(TimelineEventRecord {
         message_id: room_event_id(event_type, &room_id, &actor, &event.time, &body),
         room_id,
@@ -71,7 +73,8 @@ fn record_of(event_type: &str, event: &RoomEvent) -> Option<TimelineEventRecord>
         sender_device_id: String::new(),
         kind: kind.to_string(),
         body,
-        sent_at_ms: now_ms(),
+        sent_at_ms: parse_time_ms(&event.time).unwrap_or(arrived_at_ms),
+        arrived_at_ms,
         delivery_status: DeliveryStatus::Received.as_db_str().into(),
         reply_to_id: None,
         edited_at_ms: None,

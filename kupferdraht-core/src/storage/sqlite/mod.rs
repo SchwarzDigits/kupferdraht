@@ -345,11 +345,10 @@ impl Store for SqliteStore {
         &self,
         room_id: &str,
         message_id: &str,
-        sent_at_ms: i64,
-        expires_at_ms: Option<i64>,
+        times: &crate::storage::ResentTimes,
     ) -> Result<bool, KupferdrahtError> {
         let _permit = self.write_permit().await;
-        timeline_events::mark_message_resent(self, room_id, message_id, sent_at_ms, expires_at_ms)
+        timeline_events::mark_message_resent(self, room_id, message_id, times)
     }
 
     async fn mark_send_outcome(
@@ -358,9 +357,17 @@ impl Store for SqliteStore {
         message_id: &str,
         delivered: bool,
         expires_at_ms: Option<i64>,
+        sent_at_ms: Option<i64>,
     ) -> Result<bool, KupferdrahtError> {
         let _permit = self.write_permit().await;
-        timeline_events::mark_send_outcome(self, room_id, message_id, delivered, expires_at_ms)
+        timeline_events::mark_send_outcome(
+            self,
+            room_id,
+            message_id,
+            delivered,
+            expires_at_ms,
+            sent_at_ms,
+        )
     }
 
     async fn set_read_marker(&self, room_id: &str, at_ms: i64) -> Result<(), KupferdrahtError> {

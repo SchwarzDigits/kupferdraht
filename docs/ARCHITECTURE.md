@@ -671,8 +671,10 @@ applied but unrecorded, which the next open would re-apply. `mls.db` has
 the same since Step 142: the openmls fork's `openmls_sqlite_storage` runs
 openmls's migrations grouped (history table
 `openmls_sqlite_storage_migrations`). The current
-schema version is **V34**
-(`V34__step_144_avatars.sql` — `avatar_thumbnail_key` and `avatar_full_key` on
+schema version is **V35**
+(`V35__step_151_arrived_at.sql` — `timeline_events.arrived_at_ms`, the position
+on this device's clock, read by the order, the unread queries and the read marker,
+while `sent_at_ms` becomes the backend's time; `V34__step_144_avatars.sql` — `avatar_thumbnail_key` and `avatar_full_key` on
 `room_members` and `self_user`, `team_avatar_key` on `self_user`: the asset keys a
 profile names and the team's icon; `V33__step_143_own_team.sql` — `team_id` and `team_name` on `self_user`, the
 own team as of the last login, read back by `build_resume_account`;

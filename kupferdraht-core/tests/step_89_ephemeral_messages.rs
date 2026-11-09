@@ -7,7 +7,7 @@
 //! Send side: `Timeline::send_ephemeral_text(body, ttl)` wraps the
 //! `Text` in Wire's `Ephemeral` content variant (`GenericMessage`
 //! field 18, `expire_after_millis` + inner `Text`), persists the row
-//! with `expires_at_ms = sent_at_ms + ttl`, and self-redacts the own
+//! with `expires_at_ms = arrived_at_ms + ttl`, and self-redacts the own
 //! copy once the TTL elapses. Receive side: an inbound
 //! `Ephemeral(Text)` surfaces as an ordinary `Text` item / `Message`
 //! decorated with `expires_at_ms`, fires `on_message`, and
@@ -392,8 +392,8 @@ async fn send_ephemeral_text_uploads_once_and_persists_the_expiry() {
     );
     assert_eq!(
         item.expires_at_ms,
-        Some(handle.sent_at_ms + 300_000),
-        "the sender's timer starts at send: expires_at = sent_at + ttl"
+        Some(item.arrived_at_ms + 300_000),
+        "the sender's timer starts at send, on this device's clock"
     );
     assert!(!item.redacted, "not redacted before the TTL");
 
@@ -419,7 +419,7 @@ async fn send_ephemeral_text_uploads_once_and_persists_the_expiry() {
         })
         .expect("UpdateAt diff settling the own send");
     assert_eq!(settled.delivery_status, DeliveryStatus::Submitted);
-    assert_eq!(settled.expires_at_ms, Some(handle.sent_at_ms + 300_000));
+    assert_eq!(settled.expires_at_ms, Some(settled.arrived_at_ms + 300_000));
 }
 
 #[tokio::test]
@@ -472,7 +472,7 @@ async fn sent_ephemeral_text_self_redacts_after_ttl() {
     assert!(matches!(item.kind, TimelineItemKind::Redacted));
     assert_eq!(
         item.expires_at_ms,
-        Some(handle.sent_at_ms + 1_000),
+        Some(item.arrived_at_ms + 1_000),
         "the expiry stamp survives the tombstone (distinguishes expiry from a delete)"
     );
     let updated = recorder.diffs().into_iter().any(|d| {
@@ -576,7 +576,7 @@ async fn inbound_ephemeral_text_surfaces_with_expiry_and_notifies() {
         .find(|r| r.message_id == "eph-m1")
         .expect("row persisted");
     assert_eq!(row.kind, "text");
-    assert_eq!(row.expires_at_ms, Some(row.sent_at_ms + 60_000));
+    assert_eq!(row.expires_at_ms, Some(row.arrived_at_ms + 60_000));
 
     let all = items(&client).await;
     let item = all
@@ -584,7 +584,7 @@ async fn inbound_ephemeral_text_surfaces_with_expiry_and_notifies() {
         .find(|i| i.item_id == "eph-m1")
         .expect("timeline item");
     assert_eq!(text_body(&item.kind), Some("Your one-time code: 654321"));
-    assert_eq!(item.expires_at_ms, Some(item.sent_at_ms + 60_000));
+    assert_eq!(item.expires_at_ms, Some(item.arrived_at_ms + 60_000));
     assert!(!item.redacted);
 
     // The live Append carries the TTL metadata too.
@@ -661,7 +661,7 @@ async fn inbound_ephemeral_text_self_redacts_after_ttl() {
     assert!(matches!(item.kind, TimelineItemKind::Redacted));
     assert_eq!(
         item.expires_at_ms,
-        Some(item.sent_at_ms + 400),
+        Some(item.arrived_at_ms + 400),
         "expiry stamp survives the tombstone"
     );
     let updated = recorder.diffs().into_iter().any(|d| {
@@ -691,6 +691,7 @@ async fn overdue_ephemerals_are_swept_on_resume() {
         kind: "text".into(),
         body: "secret".into(),
         sent_at_ms: now - 10_000,
+        arrived_at_ms: now - 10_000,
         delivery_status: "received".into(),
         expires_at_ms,
         ..TimelineEventRecord::default()

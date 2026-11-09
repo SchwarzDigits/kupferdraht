@@ -34,35 +34,29 @@ impl SyncService {
     pub(crate) async fn dispatch_inbound_task(
         &self,
         client: &Arc<Client>,
-        room_id: &str,
-        sender_user_id: &str,
-        sender_device_id: Option<&str>,
-        message_id: &str,
+        origin: super::InboundOrigin<'_>,
         task: crate::wire::proto::TaskPayload,
     ) -> Result<(), KupferdrahtError> {
         debug_assert!(
-            !message_id.is_empty(),
+            !origin.message_id.is_empty(),
             "dispatch_inbound_task: message_id must be non-empty"
         );
         let item = crate::timeline::task::item_from_payload(&task);
         let cached = crate::timeline::FoldedTask {
             item: item.clone(),
-            creator_user_id: sender_user_id.to_string(),
+            creator_user_id: origin.sender_user_id.to_string(),
             created_at_ms: crate::time::now_ms(),
             updated_at_ms: crate::time::now_ms(),
-            latest_message_id: message_id.to_string(),
+            latest_message_id: origin.message_id.to_string(),
         };
         // Step 105: the task row and its fold row are one write — only a
         // fresh row updates the fold (a replayed old message must not
         // regress it; LWW is arrival order, Step 60c).
         let message = super::inbound_message(
-            room_id,
-            sender_user_id,
-            sender_device_id,
-            message_id,
+            origin,
             crate::sync::event_handler::MessageBody::Task(Box::new(item)),
         );
-        let fold = crate::timeline::task::task_record_from_folded(room_id, &cached);
+        let fold = crate::timeline::task::task_record_from_folded(origin.room_id, &cached);
         self.surface_inbound_message(client, &message, Some(&fold))
             .await?;
         Ok(())

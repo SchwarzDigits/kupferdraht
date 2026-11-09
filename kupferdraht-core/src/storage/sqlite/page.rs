@@ -111,6 +111,7 @@ mod tests {
             kind: "text".into(),
             body: "hi".into(),
             sent_at_ms: 1_000,
+            arrived_at_ms: 1_000,
             delivery_status: "received".into(),
             reply_to_id: None,
             edited_at_ms: None,

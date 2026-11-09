@@ -510,6 +510,7 @@ mod tests {
             sender_user_id: "alice@d".into(),
             sender_device_id: String::new(),
             sent_at_ms: 0,
+            arrived_at_ms: 0,
             kind,
             edited_at_ms: None,
             redacted: false,

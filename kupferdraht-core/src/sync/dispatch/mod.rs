@@ -48,6 +48,18 @@ use crate::sync::service::SyncService;
 use crate::time::now_ms;
 use crate::timeline::DeliveryStatus;
 
+/// Where an inbound message came from and when it was sent: its room, its
+/// MLS-authenticated sender (ADR-0027), its id and the event's `time`, this
+/// device's clock where that could not be read (Step 151).
+#[derive(Clone, Copy)]
+pub(crate) struct InboundOrigin<'a> {
+    pub(crate) room_id: &'a str,
+    pub(crate) sender_user_id: &'a str,
+    pub(crate) sender_device_id: Option<&'a str>,
+    pub(crate) message_id: &'a str,
+    pub(crate) sent_at_ms: i64,
+}
+
 impl SyncService {
     /// Persist an inbound non-text content message (knock / location /
     /// case / marker / task) via [`message_to_record`] — a task together
@@ -87,13 +99,10 @@ impl SyncService {
     async fn dispatch_inbound_simple(
         &self,
         client: &Arc<Client>,
-        room_id: &str,
-        sender_user_id: &str,
-        sender_device_id: Option<&str>,
-        message_id: &str,
+        origin: InboundOrigin<'_>,
         body: MessageBody,
     ) -> Result<bool, KupferdrahtError> {
-        let message = inbound_message(room_id, sender_user_id, sender_device_id, message_id, body);
+        let message = inbound_message(origin, body);
         self.surface_inbound_message(client, &message, None).await
     }
 
@@ -125,20 +134,15 @@ impl SyncService {
 }
 
 /// The consumer-facing `Message` of an inbound content event, received now.
-pub(super) fn inbound_message(
-    room_id: &str,
-    sender_user_id: &str,
-    sender_device_id: Option<&str>,
-    message_id: &str,
-    body: MessageBody,
-) -> Message {
+pub(super) fn inbound_message(origin: InboundOrigin<'_>, body: MessageBody) -> Message {
     Message {
-        room_id: room_id.to_string(),
-        sender_user_id: sender_user_id.to_string(),
-        sender_device_id: sender_device_id.map(str::to_string),
+        room_id: origin.room_id.to_string(),
+        sender_user_id: origin.sender_user_id.to_string(),
+        sender_device_id: origin.sender_device_id.map(str::to_string),
         body,
+        sent_at_ms: origin.sent_at_ms,
         received_at_ms: now_ms(),
-        message_id: message_id.to_string(),
+        message_id: origin.message_id.to_string(),
         reply_to_id: None,
         expires_at_ms: None,
     }
@@ -266,7 +270,8 @@ fn message_to_record(message: &Message) -> TimelineEventRecord {
         sender_device_id: message.sender_device_id.clone().unwrap_or_default(),
         kind: kind.into(),
         body,
-        sent_at_ms: message.received_at_ms,
+        sent_at_ms: message.sent_at_ms,
+        arrived_at_ms: message.received_at_ms,
         delivery_status: DeliveryStatus::Received.as_db_str().into(),
         reply_to_id: message.reply_to_id.clone(),
         edited_at_ms: None,

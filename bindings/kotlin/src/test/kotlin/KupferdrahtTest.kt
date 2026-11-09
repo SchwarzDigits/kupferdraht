@@ -25,7 +25,8 @@ import uniffi.kupferdraht.kupferdrahtVersion
 class KupferdrahtTest {
     @Test
     fun versionFlowsThroughFromRust() {
-        assertEquals("0.1.0", kupferdrahtVersion())
+        // The workspace version, whichever release this is.
+        assertEquals(true, Regex("\\d+\\.\\d+\\.\\d+").matches(kupferdrahtVersion()))
     }
 
     @Test
@@ -51,6 +52,7 @@ class KupferdrahtTest {
 class PinnedSyncListener : SyncListener {
     override fun onSummary(summary: SyncSummary): Boolean = true
     override fun onError(description: String): Boolean = false
+    override fun onSessionExpired() {}
 }
 
 /// A foreign-implemented `SecureKeyStore` — the `with_foreign` callback

@@ -173,14 +173,14 @@ impl Client {
         self.persist_and_emit_outgoing_content(room_id, &row, sent_at_ms, DeliveryStatus::Sending)
             .await?;
         let upload = self.encrypt_and_upload(group_id, op, row.plaintext).await;
-        self.finish_send(room_id, row.message_id, upload.is_ok(), None)
+        self.finish_send(room_id, row.message_id, &upload, None)
             .await;
-        upload.map(|()| sent_at_ms)
+        upload.map(|answered| answered.unwrap_or(sent_at_ms))
     }
 
-    /// Settle a send after its upload: `sending` → `submitted`
-    /// (`delivered`, with `expires_at_ms` for a delivered ephemeral) or
-    /// `failed`, then tell subscribers. Never an error: the upload's
+    /// Settle a send after its upload: `sending` → `submitted` (with the
+    /// time of the backend's answer, and `expires_at_ms` for a delivered
+    /// ephemeral) or `failed`, then tell subscribers. Never an error: the upload's
     /// outcome is what the caller must see — a failed status write
     /// leaves the row `sending`, which reads as `Failed` once the send is
     /// over, and a resend reuses the id (receivers dedupe on it).
@@ -188,9 +188,11 @@ impl Client {
         &self,
         room_id: &str,
         message_id: &str,
-        delivered: bool,
+        upload: &Result<Option<i64>, KupferdrahtError>,
         expires_at_ms: Option<i64>,
     ) {
+        let delivered = upload.is_ok();
+        let sent_at_ms = upload.as_ref().ok().copied().flatten();
         debug_assert!(
             !room_id.is_empty() && !message_id.is_empty(),
             "finish_send: room_id and message_id must be set"
@@ -199,7 +201,7 @@ impl Client {
             return;
         };
         match store
-            .mark_send_outcome(room_id, message_id, delivered, expires_at_ms)
+            .mark_send_outcome(room_id, message_id, delivered, expires_at_ms, sent_at_ms)
             .await
         {
             Ok(true) => {}

@@ -39,6 +39,7 @@ use tracing::{debug, warn};
 use crate::client::Client;
 use crate::encryption::{DecodedMessage, LeafIdentity, LeafIdentityError};
 use crate::error::KupferdrahtError;
+use crate::sync::dispatch::InboundOrigin;
 use crate::sync::event_handler::{EventHandler, Message, TypingEvent};
 use crate::sync::follow_ups::FollowUp;
 use crate::sync::outbox::{self, Held};
@@ -453,7 +454,8 @@ impl SyncService {
         let Some(sender) = attribute_sender(&claimed, leaf, &generic.message_id) else {
             return Ok(());
         };
-        self.dispatch_generic_message(client, &env.room_id, sender, generic)
+        let sent_at_ms = env.sent_at_ms.unwrap_or_else(crate::time::now_ms);
+        self.dispatch_generic_message(client, &env.room_id, sender, sent_at_ms, generic)
             .await
     }
 
@@ -465,41 +467,30 @@ impl SyncService {
         client: &Arc<Client>,
         room_id: &str,
         sender: InboundSender,
+        sent_at_ms: i64,
         mut generic: GenericMessage,
     ) -> Result<(), KupferdrahtError> {
-        let InboundSender {
-            user_id: sender_user_id,
-            device_id: sender_device_id,
-        } = sender;
         let (case, task) = take_valid_kupferdraht_payloads(&mut generic);
+        let message_id = generic.message_id.clone();
+        let origin = InboundOrigin {
+            room_id,
+            sender_user_id: &sender.user_id,
+            sender_device_id: sender.device_id.as_deref(),
+            message_id: &message_id,
+            sent_at_ms,
+        };
         // Step 72b (ADR-0018): the case payload (field 262001) is
         // checked FIRST — it never carries a fallback, and a message
         // holds at most one of the two Kupferdraht fields.
         if let Some(case) = case {
-            return self
-                .dispatch_inbound_case(
-                    client,
-                    room_id,
-                    &sender_user_id,
-                    sender_device_id.as_deref(),
-                    &generic.message_id,
-                    case,
-                )
-                .await;
+            return self.dispatch_inbound_case(client, origin, case).await;
         }
         // Step 75 (ADR-0020): the task-list marker (field 262002) —
         // the third Kupferdraht sibling outside the oneof, never with a
         // fallback; any member may flip it.
         if let Some(marker) = generic.task_list_marker.take() {
             return self
-                .dispatch_inbound_task_list_marker(
-                    client,
-                    room_id,
-                    &sender_user_id,
-                    sender_device_id.as_deref(),
-                    &generic.message_id,
-                    marker.marked,
-                )
+                .dispatch_inbound_task_list_marker(client, origin, marker.marked)
                 .await;
         }
         // Step 60a (ADR-0014): the task payload travels OUTSIDE the
@@ -507,25 +498,9 @@ impl SyncService {
         // fallback. Check it BEFORE the oneof — a task message with
         // fallback must become a Task item, not a Text item.
         if let Some(task) = task {
-            return self
-                .dispatch_inbound_task(
-                    client,
-                    room_id,
-                    &sender_user_id,
-                    sender_device_id.as_deref(),
-                    &generic.message_id,
-                    task,
-                )
-                .await;
+            return self.dispatch_inbound_task(client, origin, task).await;
         }
-        self.dispatch_content_variant(
-            client,
-            room_id,
-            &sender_user_id,
-            sender_device_id.as_deref(),
-            generic,
-        )
-        .await
+        self.dispatch_content_variant(client, origin, generic).await
     }
 
     /// Route an edit or delete of an earlier message to its handler —
@@ -560,22 +535,17 @@ impl SyncService {
     async fn dispatch_content_variant(
         &self,
         client: &Arc<Client>,
-        room_id: &str,
-        sender_user_id: &str,
-        sender_device_id: Option<&str>,
+        origin: InboundOrigin<'_>,
         generic: GenericMessage,
     ) -> Result<(), KupferdrahtError> {
+        let InboundOrigin {
+            room_id,
+            sender_user_id,
+            ..
+        } = origin;
         match generic.content {
             Some(generic_message::Content::Text(t)) => {
-                self.dispatch_inbound_text(
-                    client,
-                    room_id,
-                    sender_user_id,
-                    sender_device_id,
-                    &generic.message_id,
-                    t,
-                )
-                .await
+                self.dispatch_inbound_text(client, origin, t).await
             }
             Some(
                 content @ (generic_message::Content::Edited(_)
@@ -611,48 +581,18 @@ impl SyncService {
                 .await
             }
             Some(generic_message::Content::Asset(asset)) => {
-                self.dispatch_inbound_asset(
-                    client,
-                    room_id,
-                    sender_user_id,
-                    sender_device_id,
-                    &generic.message_id,
-                    asset,
-                )
-                .await
+                self.dispatch_inbound_asset(client, origin, asset).await
             }
             Some(generic_message::Content::Knock(knock)) => {
-                self.dispatch_inbound_knock(
-                    client,
-                    room_id,
-                    sender_user_id,
-                    sender_device_id,
-                    &generic.message_id,
-                    knock,
-                )
-                .await
+                self.dispatch_inbound_knock(client, origin, knock).await
             }
             Some(generic_message::Content::Location(location)) => {
-                self.dispatch_inbound_location(
-                    client,
-                    room_id,
-                    sender_user_id,
-                    sender_device_id,
-                    &generic.message_id,
-                    location,
-                )
-                .await
+                self.dispatch_inbound_location(client, origin, location)
+                    .await
             }
             Some(generic_message::Content::Ephemeral(ephemeral)) => {
-                self.dispatch_inbound_ephemeral(
-                    client,
-                    room_id,
-                    sender_user_id,
-                    sender_device_id,
-                    &generic.message_id,
-                    ephemeral,
-                )
-                .await
+                self.dispatch_inbound_ephemeral(client, origin, ephemeral)
+                    .await
             }
             None => {
                 warn!(
@@ -839,6 +779,8 @@ fn extract_notification_events(payload: &serde_json::Value) -> Vec<serde_json::V
 /// JSON event, ready for the decrypt + dispatch passes.
 struct MlsEnvelope {
     room_id: String,
+    /// The event's `time`; `None` where it could not be read (Step 151).
+    sent_at_ms: Option<i64>,
     /// What the backend claims — a cross-check only (ADR-0027).
     sender_user_id: Option<String>,
     sender_device_id: Option<String>,
@@ -889,8 +831,13 @@ fn extract_mls_envelope(ev: &serde_json::Value) -> Result<MlsEnvelope, Kupferdra
             "mls-message-add: empty data".into(),
         ));
     }
+    let sent_at_ms = ev
+        .get("time")
+        .and_then(serde_json::Value::as_str)
+        .and_then(crate::wire::time::parse_time_ms);
     Ok(MlsEnvelope {
         room_id,
+        sent_at_ms,
         sender_user_id,
         sender_device_id,
         ciphertext,

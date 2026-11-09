@@ -149,6 +149,7 @@ mod tests {
             kind: "text".into(),
             body: "hi".into(),
             sent_at_ms: 1,
+            arrived_at_ms: 1,
             delivery_status: "sending".into(),
             ..TimelineEventRecord::default()
         }

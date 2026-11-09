@@ -123,6 +123,8 @@ pub struct Message {
     pub sender_user_id: String,
     pub sender_device_id: Option<String>,
     pub body: MessageBody,
+    /// When it was sent, as the backend knows it (Step 151).
+    pub sent_at_ms: i64,
     pub received_at_ms: i64,
     pub message_id: String,
     pub reply_to_id: Option<String>,
@@ -139,6 +141,7 @@ impl From<&CoreMessage> for Message {
             sender_user_id: message.sender_user_id.clone(),
             sender_device_id: message.sender_device_id.clone(),
             body: MessageBody::from(&message.body),
+            sent_at_ms: message.sent_at_ms,
             received_at_ms: message.received_at_ms,
             message_id: message.message_id.clone(),
             reply_to_id: message.reply_to_id.clone(),

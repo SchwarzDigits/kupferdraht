@@ -38,7 +38,7 @@ impl HttpClient {
         api_version: u32,
         access_token: &str,
         ciphertext: &[u8],
-    ) -> Result<(), KupferdrahtError> {
+    ) -> Result<Option<i64>, KupferdrahtError> {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
         debug_assert!(!ciphertext.is_empty(), "ciphertext must be non-empty");
         let path = format!("/v{api_version}/mls/messages");
@@ -50,8 +50,21 @@ impl HttpClient {
             .bearer_auth(access_token)
             .header("content-type", "message/mls")
             .body(ciphertext.to_vec());
-        self.send_no_body(req, "send_mls_message").await
+        let answer = self.send_keeping_answer(req, "send_mls_message").await?;
+        Ok(send_time_of(&answer))
     }
+}
+
+/// The `time` of an answer to `POST /mls/messages`: when the backend took the
+/// message, which is what every member's copy of it says (Step 151). `None`
+/// for an answer without a readable one: the message is sent all the same.
+fn send_time_of(answer: &str) -> Option<i64> {
+    #[derive(serde::Deserialize)]
+    struct SendingStatus {
+        time: String,
+    }
+    let status: SendingStatus = serde_json::from_str(answer).ok()?;
+    crate::wire::time::parse_time_ms(&status.time)
 }
 
 #[cfg(test)]

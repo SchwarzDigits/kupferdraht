@@ -15,6 +15,8 @@ use crate::sync::service::SyncService;
 use crate::time::now_ms;
 use crate::timeline::DeliveryStatus;
 
+use super::InboundOrigin;
+
 impl SyncService {
     /// Step 11g: dispatch an inbound `GenericMessage::Asset`
     /// content variant. Replaces the warn-and-skip stub added in
@@ -33,12 +35,16 @@ impl SyncService {
     pub(crate) async fn dispatch_inbound_asset(
         &self,
         client: &Arc<Client>,
-        room_id: &str,
-        sender_user_id: &str,
-        sender_device_id: Option<&str>,
-        message_id: &str,
+        origin: InboundOrigin<'_>,
         asset: crate::wire::proto::Asset,
     ) -> Result<(), KupferdrahtError> {
+        let InboundOrigin {
+            room_id,
+            sender_user_id,
+            sender_device_id,
+            message_id,
+            sent_at_ms,
+        } = origin;
         let Some(decoded) = decode_inbound_asset(message_id, asset)? else {
             // NotUploaded / AES_GCM / no-status — log was done
             // inside the decoder; skip silently here.
@@ -49,17 +55,8 @@ impl SyncService {
             return Ok(());
         };
         let received_at_ms = now_ms();
-        let Some((attachment, timeline_record)) = persist_inbound_asset(
-            &store,
-            client,
-            room_id,
-            sender_user_id,
-            sender_device_id,
-            message_id,
-            decoded,
-            received_at_ms,
-        )
-        .await?
+        let Some((attachment, timeline_record)) =
+            persist_inbound_asset(&store, client, origin, decoded, received_at_ms).await?
         else {
             return Ok(());
         };
@@ -73,6 +70,7 @@ impl SyncService {
             sender_user_id: sender_user_id.to_string(),
             sender_device_id: sender_device_id.map(str::to_string),
             body: MessageBody::Asset(Box::new(summary.clone())),
+            sent_at_ms,
             received_at_ms,
             message_id: message_id.to_string(),
             reply_to_id: None,
@@ -170,17 +168,20 @@ fn decode_inbound_asset(
     }))
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn persist_inbound_asset(
     store: &Arc<dyn crate::storage::Store>,
     _client: &Arc<Client>,
-    room_id: &str,
-    sender_user_id: &str,
-    sender_device_id: Option<&str>,
-    message_id: &str,
+    origin: InboundOrigin<'_>,
     decoded: DecodedAsset,
     received_at_ms: i64,
 ) -> Result<Option<(crate::storage::AttachmentRecord, TimelineEventRecord)>, KupferdrahtError> {
+    let InboundOrigin {
+        room_id,
+        sender_user_id,
+        sender_device_id,
+        message_id,
+        sent_at_ms,
+    } = origin;
     // The otr_key is stored verbatim in the whole-DB-encrypted
     // `attachments.otr_key` column (the asset content is separately
     // E2E-encrypted under it for Wire).
@@ -192,7 +193,8 @@ async fn persist_inbound_asset(
         sender_device_id: sender_device_id.map(str::to_string).unwrap_or_default(),
         kind: "asset".into(),
         body: decoded.original.name.clone().unwrap_or_default(),
-        sent_at_ms: received_at_ms,
+        sent_at_ms,
+        arrived_at_ms: received_at_ms,
         delivery_status: DeliveryStatus::Received.as_db_str().into(),
         reply_to_id: None,
         edited_at_ms: None,

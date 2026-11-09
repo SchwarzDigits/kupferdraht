@@ -207,10 +207,10 @@ pub(super) fn load_task_timeline_rows(
             "SELECT message_id, room_id, sender_user_id, sender_device_id,
                     kind, body,
                     sent_at_ms, delivery_status, reply_to_id,
-                    edited_at_ms, redacted_at_ms, expires_at_ms, ephemeral_ttl_ms
+                    edited_at_ms, redacted_at_ms, expires_at_ms, ephemeral_ttl_ms, arrived_at_ms
              FROM timeline_events
              WHERE kind = 'task'
-             ORDER BY room_id ASC, sent_at_ms ASC, rowid ASC",
+             ORDER BY room_id ASC, arrived_at_ms ASC, rowid ASC",
         )
         .map_err(|e| KupferdrahtError::Storage(format!("load_task_timeline_rows prepare: {e}")))?;
     let raw = stmt
@@ -260,6 +260,7 @@ mod tests {
             kind: "task".into(),
             body: "{}".into(),
             sent_at_ms: 1000,
+            arrived_at_ms: 1000,
             delivery_status: "submitted".into(),
             ..Default::default()
         };

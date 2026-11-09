@@ -30,6 +30,8 @@ struct MessageView {
     message_id: String,
     body: Option<String>,
     reply_to_id: Option<String>,
+    /// When it was sent, as the backend knows it (Step 151).
+    sent_at_ms: i64,
     received_at_ms: i64,
     /// Step 89: set only for a self-deleting message.
     expires_at_ms: Option<i64>,
@@ -47,6 +49,7 @@ impl From<&Message> for MessageView {
             message_id: m.message_id.clone(),
             body,
             reply_to_id: m.reply_to_id.clone(),
+            sent_at_ms: m.sent_at_ms,
             received_at_ms: m.received_at_ms,
             expires_at_ms: m.expires_at_ms,
         }

@@ -1033,6 +1033,28 @@ browser — without sending twice. matrix-rust-sdk analog:
   custom store compiles unchanged and every keyed call then sends.
   Override all three, each as one transaction, to get the dedup.
 
+### The two times of an item (Step 151)
+
+| Field | What it says | Clock |
+|---|---|---|
+| `sent_at_ms` | When the backend took the message: an inbound row's event `time`, an own row's answer `time`. Show this one. | the backend's |
+| `arrived_at_ms` | When the row entered this device's timeline. The order and the read marker read it. | this device's |
+
+- **A timeline's `sent_at_ms` need not rise.** A message delivered late stands where it arrived
+  and shows when it was sent. So do not sort by it: `messages()` is in order.
+- **Compare `Room::read_marker` with `arrived_at_ms`,** not with `sent_at_ms`. A message sent
+  before the marker but arriving after it is unread.
+- **An own row** shows this device's clock until the backend answers, and keeps it on a failed
+  send. `MessageHandle::sent_at_ms` is the answer's time as well. A resend moves the row to the
+  tail and takes the new time.
+- **A `time` that cannot be read** falls back to this device's clock, never to an error.
+- **Rows from before V35** keep their position and show their receive time: the backend's was
+  never stored.
+- `Text.quote`'s hash reads `sent_at_ms` (`docs/observations.md` §33 and §98). The time is the
+  backend's statement, which MLS does not authenticate (`docs/THREAT_MODEL.md`).
+- `edited_at_ms` and the receipt times stay this device's clock, and `Message::received_at_ms`
+  keeps its meaning beside the new `Message::sent_at_ms`.
+
 ### Room events (Step 145)
 
 Who joined, left, renamed or created a room stands in the timeline as data, one item
@@ -1068,9 +1090,8 @@ TimelineItemKind::RoomCreated { name }   // `name` may be `None`
   so a new device shows none from before its registration. `conversation.create`
   reaches only the members at that moment: someone added later has their add as the
   first item.
-- **`sent_at_ms` is when this device processed the event,** as for an inbound message,
-  not the server's `time`: one clock per timeline keeps the order and the read marker
-  honest. On a device that was offline, an item shows when it was synced.
+- **`sent_at_ms` is the event's `time`,** as for a message (Step 151), and the item stands
+  where it arrived.
 - **Own actions arrive the same way,** at the next drain: the backend sends the acting
   device its own events, and a socket rings at once. So `messages()` right after
   `Client::rename_room` does not show it yet.
@@ -1241,7 +1262,7 @@ Step 129's). A UI shows a room as needing attention while
 
 | Method | Returns | Notes |
 |---|---|---|
-| `Room::read_marker()` | `Result<Option<i64>, KupferdrahtError>` | The device-local read position (Step 67's marker): the `sent_at_ms` up to which inbound messages count as read, `None` when never read. `Timeline::mark_as_read` moves it, forward only. matrix-rust-sdk analog: `Room::read_marker`. |
+| `Room::read_marker()` | `Result<Option<i64>, KupferdrahtError>` | The device-local read position (Step 67's marker): the `arrived_at_ms` up to which inbound messages count as read (Step 151), `None` when never read. `Timeline::mark_as_read` moves it, forward only. matrix-rust-sdk analog: `Room::read_marker`. |
 | `Room::set_unread_flag(flag: bool)` | `Result<(), KupferdrahtError>` | Flag the room unread by hand, or clear the flag — device-local, idempotent; a read of the room (`Timeline::mark_as_read`, either `ReceiptType`) clears it. A room read to the end (count 0) stays flagged until read again. matrix-rust-sdk analog: `Room::set_unread_flag`. |
 | `Room::is_marked_unread()` | `Result<bool, KupferdrahtError>` | Whether the room is flagged unread by hand. matrix-rust-sdk analog: `Room::is_marked_unread`. |
 | `Client::read_states()` | `Result<HashMap<String, ReadStateRecord>, KupferdrahtError>` | Every room's read state — `last_read_at_ms: Option<i64>`, `marked_unread: bool` — in one query, the room-list companion to `unread_counts()`; rooms never read and never flagged are absent. The browser's `rooms()` joins the two onto the room list. |
@@ -1395,7 +1416,8 @@ pub struct TimelineItem {
     pub room_id: String,
     pub sender_user_id: String,
     pub sender_device_id: String,
-    pub sent_at_ms: i64,
+    pub sent_at_ms: i64,             // Step 151 — the backend's time
+    pub arrived_at_ms: i64,          // Step 151 — the position, on this device's clock
     pub kind: TimelineItemKind,
     pub edited_at_ms: Option<i64>,   // Step 6-II-c
     pub redacted: bool,              // Step 6-II-d
@@ -1537,9 +1559,10 @@ Three consequences are part of the contract (Step 107):
   the item at `Sending` until it re-reads. After cancelling a send,
   re-read (`Room::messages`, `Room::failed_sends`) — the row reads
   `Failed` there.
-- **An ephemeral send's timer starts at the persist.** `sent_at_ms` is
+- **An ephemeral send's timer starts at the persist.** `arrived_at_ms` is
   stamped before the upload, so the local expiry
-  (`sent_at_ms + ttl`) counts the upload time too.
+  (`arrived_at_ms + ttl`) counts the upload time too. `expires_at_ms` runs on
+  this device's clock, not on `sent_at_ms`'s (Step 151).
 
 A row being resent is left out of `failed_sends` and cannot be resent
 a second time until that resend ends; `find_message_by_id` reads an

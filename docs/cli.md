@@ -1574,7 +1574,9 @@ Inviting a member re-broadcasts the current snapshot automatically
 
 ### `timeline`
 
-Print persisted timeline rows for a room (Step 6-II-a). Outbound
+Print persisted timeline rows for a room (Step 6-II-a), in the order they
+arrived, each with its `sent_at_ms`: when the backend took it (Step 151), so a
+row delivered late shows an earlier time than the one above it. Outbound
 rows (`→`) come from prior `send` calls; inbound rows (`←`) come
 from notifications drained on the receive path; a `✗` row is an
 outbound send whose upload failed (Step 25a) — `resend` re-drives it

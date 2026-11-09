@@ -268,12 +268,10 @@ impl Client {
         let upload = self
             .encrypt_and_upload(&group_id, "send_text", &plaintext)
             .await;
-        self.finish_send(room_id, &message_id, upload.is_ok(), None)
-            .await;
-        upload?;
+        self.finish_send(room_id, &message_id, &upload, None).await;
         Ok(MessageHandle {
             message_id,
-            sent_at_ms,
+            sent_at_ms: upload?.unwrap_or(sent_at_ms),
         })
     }
 

@@ -15,18 +15,12 @@ impl SyncService {
     pub(crate) async fn dispatch_inbound_knock(
         &self,
         client: &Arc<Client>,
-        room_id: &str,
-        sender_user_id: &str,
-        sender_device_id: Option<&str>,
-        message_id: &str,
+        origin: super::InboundOrigin<'_>,
         knock: crate::wire::proto::Knock,
     ) -> Result<(), KupferdrahtError> {
         self.dispatch_inbound_simple(
             client,
-            room_id,
-            sender_user_id,
-            sender_device_id,
-            message_id,
+            origin,
             MessageBody::Knock {
                 hot_knock: knock.hot_knock,
             },

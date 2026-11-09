@@ -395,9 +395,9 @@ async fn an_ephemeral_ttl_of_i64_max_is_clamped_not_overflowed() {
     let expires = row.expires_at_ms.expect("an expiry stamp");
     let year_ms = 365 * 24 * 60 * 60 * 1000_i64;
     assert!(
-        expires > row.sent_at_ms && expires <= row.sent_at_ms + year_ms + 60_000,
+        expires > row.arrived_at_ms && expires <= row.arrived_at_ms + year_ms + 60_000,
         "clamped into (received, received + 1 year]: {expires} vs {}",
-        row.sent_at_ms
+        row.arrived_at_ms
     );
 }
 

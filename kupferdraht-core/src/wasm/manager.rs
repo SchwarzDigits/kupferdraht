@@ -1948,7 +1948,10 @@ struct KeyedMessageHandleView {
 struct TimelineItemView {
     item_id: String,
     sender_user_id: String,
+    /// When it was sent, as the backend knows it (Step 151).
     sent_at_ms: i64,
+    /// When it entered this device's timeline, on the clock of `lastReadAtMs`.
+    arrived_at_ms: i64,
     kind: &'static str,
     body: Option<String>,
     reply_to: Option<String>,
@@ -2062,6 +2065,7 @@ impl TimelineItemView {
             item_id: it.item_id.clone(),
             sender_user_id: it.sender_user_id.clone(),
             sent_at_ms: it.sent_at_ms,
+            arrived_at_ms: it.arrived_at_ms,
             kind,
             body,
             reply_to,

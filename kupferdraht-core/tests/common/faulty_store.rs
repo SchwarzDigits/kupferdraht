@@ -306,10 +306,11 @@ impl Store for FaultyStore {
         message_id: &str,
         delivered: bool,
         expires_at_ms: Option<i64>,
+        sent_at_ms: Option<i64>,
     ) -> Result<bool, KupferdrahtError> {
         self.gate("mark_send_outcome").await?;
         self.inner
-            .mark_send_outcome(room_id, message_id, delivered, expires_at_ms)
+            .mark_send_outcome(room_id, message_id, delivered, expires_at_ms, sent_at_ms)
             .await
     }
 
@@ -355,12 +356,11 @@ impl Store for FaultyStore {
         &self,
         room_id: &str,
         message_id: &str,
-        sent_at_ms: i64,
-        expires_at_ms: Option<i64>,
+        times: &kupferdraht::storage::ResentTimes,
     ) -> Result<bool, KupferdrahtError> {
         self.gate("mark_message_resent").await?;
         self.inner
-            .mark_message_resent(room_id, message_id, sent_at_ms, expires_at_ms)
+            .mark_message_resent(room_id, message_id, times)
             .await
     }
 

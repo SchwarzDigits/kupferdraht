@@ -41,30 +41,23 @@ impl SyncService {
     pub(crate) async fn dispatch_inbound_case(
         &self,
         client: &Arc<Client>,
-        room_id: &str,
-        sender_user_id: &str,
-        sender_device_id: Option<&str>,
-        message_id: &str,
+        origin: super::InboundOrigin<'_>,
         payload: crate::wire::proto::CasePayload,
     ) -> Result<(), KupferdrahtError> {
         debug_assert!(
-            !message_id.is_empty(),
+            !origin.message_id.is_empty(),
             "dispatch_inbound_case: message_id must be non-empty"
         );
         let snapshot = crate::timeline::case::snapshot_from_payload(&payload);
-        let sender_authorized =
-            match client.room(room_id).await {
-                Some(room) => room.members().await?.iter().any(|m| {
-                    m.user_id == sender_user_id && m.role == RoomMemberRole::Administrator
-                }),
-                None => false,
-            };
+        let sender_authorized = match client.room(origin.room_id).await {
+            Some(room) => room.members().await?.iter().any(|m| {
+                m.user_id == origin.sender_user_id && m.role == RoomMemberRole::Administrator
+            }),
+            None => false,
+        };
         self.dispatch_inbound_simple(
             client,
-            room_id,
-            sender_user_id,
-            sender_device_id,
-            message_id,
+            origin,
             crate::sync::event_handler::MessageBody::Case {
                 snapshot: Box::new(snapshot),
                 sender_authorized,

@@ -110,7 +110,12 @@ pub struct TimelineItem {
     pub room_id: String,
     pub sender_user_id: String,
     pub sender_device_id: String,
+    /// When it was sent, as the backend knows it (Step 151). A timeline's
+    /// times need not rise: the order is the order of arrival.
     pub sent_at_ms: i64,
+    /// When it entered this device's timeline, on the clock of
+    /// `Room::read_marker`: compare those two, not `sent_at_ms` (Step 151).
+    pub arrived_at_ms: i64,
     pub kind: TimelineItemKind,
     /// Wall-clock at which an inbound `MessageEdit` replaced the
     /// body. `None` for unedited items. Populated in Step 6-II-c.
@@ -450,6 +455,7 @@ impl TimelineItem {
             sender_user_id: record.sender_user_id,
             sender_device_id: record.sender_device_id,
             sent_at_ms: record.sent_at_ms,
+            arrived_at_ms: record.arrived_at_ms,
             kind,
             edited_at_ms: record.edited_at_ms,
             redacted,
@@ -504,6 +510,7 @@ mod tests {
             kind: "text".into(),
             body: body.into(),
             sent_at_ms,
+            arrived_at_ms: sent_at_ms,
             delivery_status: "submitted".into(),
             reply_to_id: None,
             edited_at_ms: None,

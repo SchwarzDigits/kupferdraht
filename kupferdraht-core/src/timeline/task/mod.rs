@@ -164,6 +164,7 @@ mod tests {
             kind: "task".into(),
             body: task_body(item),
             sent_at_ms,
+            arrived_at_ms: sent_at_ms,
             delivery_status: "received".into(),
             reply_to_id: None,
             edited_at_ms: None,

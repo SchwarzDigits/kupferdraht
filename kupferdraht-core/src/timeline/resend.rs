@@ -27,6 +27,7 @@ use tracing::{debug, warn};
 
 use crate::client::Client;
 use crate::error::KupferdrahtError;
+use crate::storage::ResentTimes;
 use crate::storage::TimelineEventRecord;
 use crate::time::now_ms;
 use crate::timeline::items::DeliveryStatus;
@@ -253,12 +254,18 @@ impl Client {
         })?;
         let payload = self.rebuild_failed_payload(row).await?;
         let group_id = self.resolve_room_group_id(room_id, "resend").await?;
-        self.encrypt_and_upload(&group_id, "resend", &payload.plaintext)
+        let answered = self
+            .encrypt_and_upload(&group_id, "resend", &payload.plaintext)
             .await?;
-        let sent_at_ms = now_ms();
-        let expires_at_ms = payload.ttl_ms.map(|ttl| sent_at_ms + ttl);
-        self.flip_resent_row(room_id, message_id, sent_at_ms, expires_at_ms)
-            .await?;
+        let arrived_at_ms = now_ms();
+        let sent_at_ms = answered.unwrap_or(arrived_at_ms);
+        let expires_at_ms = payload.ttl_ms.map(|ttl| arrived_at_ms + ttl);
+        let times = ResentTimes {
+            sent_at_ms,
+            arrived_at_ms,
+            expires_at_ms,
+        };
+        self.flip_resent_row(room_id, message_id, &times).await?;
         if let Some(at) = expires_at_ms {
             self.arm_ephemeral_timer(at);
         }
@@ -278,8 +285,7 @@ impl Client {
         &self,
         room_id: &str,
         message_id: &str,
-        sent_at_ms: i64,
-        expires_at_ms: Option<i64>,
+        times: &ResentTimes,
     ) -> Result<(), KupferdrahtError> {
         let store = self.store_handle().ok_or_else(|| {
             KupferdrahtError::Storage(format!(
@@ -287,7 +293,7 @@ impl Client {
             ))
         })?;
         let flipped = store
-            .mark_message_resent(room_id, message_id, sent_at_ms, expires_at_ms)
+            .mark_message_resent(room_id, message_id, times)
             .await?;
         if !flipped {
             return Err(KupferdrahtError::Storage(format!(

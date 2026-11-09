@@ -135,7 +135,7 @@ pub(super) fn unread_count_for_room(
            AND e.sender_user_id != ?2
            AND e.redacted_at_ms IS NULL
            AND e.kind NOT IN ('membership_change', 'room_name_change', 'room_created')
-           AND e.sent_at_ms > COALESCE(
+           AND e.arrived_at_ms > COALESCE(
                (SELECT m.last_read_at_ms FROM room_read_markers m
                  WHERE m.room_id = ?1), ?3)",
         params![room_id, self_user_id, NO_MARKER],
@@ -156,7 +156,7 @@ pub(super) fn unread_counts(
              WHERE e.sender_user_id != ?1
                AND e.redacted_at_ms IS NULL
            AND e.kind NOT IN ('membership_change', 'room_name_change', 'room_created')
-               AND e.sent_at_ms > COALESCE(m.last_read_at_ms, ?2)
+               AND e.arrived_at_ms > COALESCE(m.last_read_at_ms, ?2)
              GROUP BY e.room_id",
         )
         .map_err(|e| KupferdrahtError::Storage(format!("unread_counts prepare: {e}")))?;
