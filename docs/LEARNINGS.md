@@ -2742,3 +2742,52 @@ touched it.
   requests. Every cargo pull request needs the notices by hand until Step
   150 checks them. §5.82 left `step_149_advisory_floors` to this step's
   check; the check is gone, so the pin test stays.
+
+### 5.84 A check proved on one host, a plan's definition CI refuted twice, and a README command that installed nothing (Step 150)
+
+- **The gate was green on the Mac, and CI found three defects it could not
+  see.** `cargo install cargo-about` without `--features cli` installs no
+  binary at 0.9.2, and cargo still reports success. CI sets
+  `CARGO_TERM_COLOR=always`, which colors `cargo tree`'s output, so `MIT OR
+  Apache-2.0 (*)` stopped reading as a license until the test passed
+  `--color never`. And `errno` and `linux-raw-sys` changed sides between a
+  Mac and Linux. A check that reads its build environment is not proven by
+  the machine it was written on: the run on a second host is part of proving
+  it. Two of the three could have been found here, by a fresh install of the
+  pinned version and a test run with CI's environment; the third needs
+  another host. Together they took two fix-ups and three CI runs.
+- **The plan's definition was the defect, and the first fix stopped at the
+  symptom.** The plan and the approved red tests read the markers against
+  graphs with build dependencies. `cargo tree --target` resolves a build
+  dependency for the host, whatever the target, so those graphs differ per
+  host. The first fix took the build edges out, from what the log named, and
+  CI refuted it: a proc-macro's dependencies are resolved for the host too,
+  `uniffi_macros` → `uniffi_meta` → `uniffi_pipeline` → `tempfile` →
+  `rustix` → `errno`. `-e normal,no-proc-macro` holds on both hosts. Asking
+  which edges cargo resolves for the host, instead of which edge these two
+  crates came through, would have saved the round.
+- **The narrower rule has a price.** A crate in no artifact graph may carry
+  any marker, since no graph contradicts it. Of the markers this step
+  corrected, the graphs hold `errno`, `rustix` and `unicode-ident`; `shlex`
+  1.3.0, the `hax-lib` crates and `pkg-config` are in neither graph, so what
+  they carry came from the first rule and nothing checks it. The notices'
+  header says so: such a marker says at most which build uses the crate.
+  Volker kept the rule at the merge; the crate list still counts build
+  dependencies and proc-macros.
+- **A README command had installed nothing.** README told a reader to run
+  `cargo install --locked cargo-about`, which installs no binary at 0.9.2,
+  and `cargo about generate about.hbs`, which read another graph than the
+  notices. A documented command nobody reruns stays wrong without a sign; the
+  new workflow took the same form and was the first clean machine to run it.
+  `ci_and_the_readme_regenerate_the_report_the_same_way` now holds both to
+  one form.
+- **The files' claims about themselves were what failed first.** The notices
+  said the report came "from the same graph"; it listed 13 crate versions no
+  artifact holds. They said a section names its choice of licenses; the
+  largest one did not. Neither was a matter of a version moving. Both stood
+  in the text from the day the files were written, because nothing compared
+  a sentence with what it describes.
+- **What was left.** `licenses.yml` is no required check (Volker), so a red
+  run warns and blocks nothing. A cargo Dependabot pull request stays red
+  until the notices follow, by design, and §5.83's `license/cla` question is
+  still open.
