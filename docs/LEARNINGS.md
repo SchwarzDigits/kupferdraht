@@ -2927,3 +2927,49 @@ touched it.
   formats but not this case. An avatar changed on another device of
   the account shows at the next login, a member's with the next room refresh. Replaced
   avatars stay on the server, as with Wire's clients.
+
+### 5.88 A clock the plan assumed, a test that received nothing, and a build that kept the defect (Step 145)
+
+- **The plan assumed a clock the timeline does not have.** It put the event's `time` into
+  `sent_at_ms`. Reading the inbound path before the red tests showed that a message's
+  `sent_at_ms` is its receive time and no row carries the server's. Written as planned,
+  a catch-up drain would have put every item before the messages it arrived between, and
+  `mark_as_read` on an item with a server clock ahead would have set the marker past the
+  next message, which would then never count as unread. All of it invisible on a healthy
+  dev stack with one clock. Same reading, same result for "live diffs": the browser has
+  none, and its documented signal already fits.
+- **A derived id is a public id.** Hashing the event's content makes redelivery safe, and
+  it also means anyone who saw the event can compute the id. ADR-0028 lets a row's sender
+  edit or delete it, so the actor could have rewritten "Bob removed Carol" on everyone's
+  timeline. The plan had only refused it on send. A new way of making ids needs the
+  question of who else can make one.
+- **An injected defect found a test that proved nothing.** With both receive guards off,
+  the test of them stayed green: a helper had mounted an empty page for the same cursor,
+  httpmock answers with the first match, and the edits never arrived. Such a test is red
+  before the feature for the wrong reason (no item yet) and green after it for the wrong
+  reason (nothing delivered), so §5.85's and §5.86's practice caught what no red run could.
+  A test of "has no effect" needs a check that the input arrived and a control on which
+  it does have one. It now has both, and `the_same_event_twice` checks its cursor too.
+- **A restored source left the defect in the build.** The defect loop saved a copy and
+  moved it back, which keeps the older mtime, so cargo saw nothing to rebuild and the last
+  defect stayed compiled. A green-again test failed once and looked flaky; a `touch` ended
+  it. After an injected defect, restore with a fresh mtime and rebuild before believing
+  either colour.
+- **The smoke's cut line hid a false statement.** `mark-read` on an item printed `reason:
+  WIRE_RECEIPT_MODE = Off`. The check only looked for no error, and the detail was cut at
+  90 characters; the word "skipped" at the end of that cut led to the line. A check of a
+  CLI's output should name the words that must be there.
+- **wasm-only code again passed the five** (§5.87's lint, CLAUDE.md's warning): an unnamed
+  tuple in the projection, red only on the wasm clippy line. Naming it was the fix the
+  last section already wrote down, and it should have been the first draft.
+- **A red run in a screenshot was another repository's.** Volker's "some checks were not
+  successful" was `reklov/kupferdraht`, 30 October. I first guessed at a skipped job on
+  the wrong repository, then searched by job names, and the durations settled it. Asking
+  for the link would have been quicker. The repository is archived now, as planned.
+- **What was left.** The browser's projection and pull have not run against a backend,
+  like the avatars of §5.87. The Kotlin and Swift bindings were generated and read, not
+  compiled. A `Confirmation` naming an item still lands in its `read_by`, harmless and
+  shown by nobody. A rename to the same name is a second item on this stack. A direct room
+  starts with an `Added` naming both. Inbound messages show their receive time, so a device
+  back from offline shows everything at the sync's time: not this step's, and the reason
+  an item cannot do better.
