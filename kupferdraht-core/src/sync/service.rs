@@ -334,6 +334,12 @@ impl SyncService {
                 dispatch_conversation_delete(client, ev);
                 Ok(())
             }
+            "conversation.create"
+            | "conversation.rename"
+            | "conversation.member-join"
+            | "conversation.member-leave" => {
+                super::dispatch::dispatch_room_event(client, ty, ev).await
+            }
             other => {
                 // Step 118: an event Kupferdraht does not process may still
                 // change the room list (a room created or renamed, a member

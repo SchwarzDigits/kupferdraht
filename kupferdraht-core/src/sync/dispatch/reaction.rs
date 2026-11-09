@@ -54,6 +54,14 @@ impl SyncService {
             );
             return Ok(());
         };
+        // Step 145: a room event's item is no message to react to.
+        if client.is_room_event_item(room_id, &canonical_id).await? {
+            warn!(
+                reaction_event_id,
+                target, "Reaction on a room event rejected"
+            );
+            return Ok(());
+        }
         store
             .replace_user_reactions(room_id, &canonical_id, sender_user_id, &emojis, now_ms())
             .await?;

@@ -145,7 +145,10 @@ object identity)
 version marker is the first of them, else the second),
 `RoomDevice`, `DeviceCredential`, `RoomDevicesChange` (Step 95d; the
 foreign-implemented `RoomDevicesListener` sits with the other observers),
-`RoomType`, `RoomAccess`, `JoinLink`, `TimelineItem`, `TimelineItemKind`,
+`RoomType`, `RoomAccess`, `JoinLink`, `TimelineItem`, `TimelineItemKind` (with
+`MembershipChange`, `RoomNameChange` and `RoomCreated`, Step 145, carrying the records
+`RoomMembershipChange` and `MembershipChange`; the rules are in
+[library.md](library.md)),
 `TimelineDiff`, `DeliveryStatus`, `Message`, `MessageBody` (`TimelineItem`
 and `Message` carry `expires_at_ms: Option<i64>` since Step 89 — set
 only for an ephemeral message), `AssetMeta`,
@@ -803,6 +806,22 @@ Since Step 110 (ADR-0035):
 - Typing: `startTyping(roomId)` / `stopTyping(roomId)` — outbound only;
   the browser prototype manages start/stop explicitly (the core 11-s
   auto-stop timer is native-only, `tokio::spawn` is cfg'd out on wasm).
+- Room events (Step 145): `messages()` carries a room's creation, renames, joins and
+  leaves as items of the kinds `membership_change` (`change`: `joined` / `added` /
+  `left` / `kicked`, `actor`, `users`), `room_name_change` (`name`) and `room_created`
+  (`name`, `null` for a room without one). Each of these fields is `null` on every other
+  kind. Kupferdraht words nothing; `users` names the own user where it is one of them,
+  and the actor is the backend's statement, not authenticated by MLS.
+  - **No `onMessage`:** they are no messages. `onSync` reports `roomsUpdated > 0` for the
+    pass that brought one, which is the signal to pull `messages()` again.
+  - **Not unread,** and `toggleReaction`, `sendReply`, `editMessage` and `redact` on one reject.
+  - **`markAsRead` on one moves the local marker and tells the room nothing.** To confirm
+    messages to the room, name the newest message, not the newest item.
+  - **The history starts with the device:** Wire has no API to fetch these events later,
+    and `room_created` reaches only the members at that moment.
+  - `sentAtMs` is when this device processed the event, as for a message.
+  - A direct room starts with an `added` naming both users; hide it by the room's type if
+    it is unwanted.
 - Avatars (Step 144): `avatar(userId, "thumbnail" | "full") -> { bytes: Uint8Array,
   mimeType } | null`, `avatarKey(userId) -> string | null`, `teamAvatar()`,
   `uploadAvatar(image)`, `removeAvatar()`, and `avatarKey` on each `members()` entry.

@@ -1375,6 +1375,35 @@ route (the versioned `/v{N}/await` variants 404 at nginx; verified
   socket registered, and a frame moving the cursor would make a
   missed push permanent.
 
+## Step 145 discovery: the four room events
+
+Observed on the wire-server-rs stack (2026-11-09), with throwaway accounts, on each
+member's `GET /notifications`:
+
+| Action | Event, and who gets it | `from` | `data` |
+|---|---|---|---|
+| A creates a room | `conversation.create`: A alone | A | the whole conversation, `name` in it |
+| A adds B, C, D | `conversation.member-join`: all four | A | `add_type: internal_add`, `user_ids`, `users: [{ conversation_role, id, qualified_id }]`; no `qualified_user_ids` |
+| E joins by link | `conversation.member-join`: all, E too | E | as above, `users` = E, `add_type` still `internal_add` |
+| A opens a DM with B | `conversation.member-join`: both; no `conversation.create` | A | `users` = A and B |
+| A renames | `conversation.rename`: all | A | `name` |
+| A renames to the same name | another `conversation.rename`, with its own `time` | A | `name` |
+| A kicks C | `conversation.member-leave`: all, C too | A | `qualified_user_ids`, `user_ids`, `reason: removed` |
+| B leaves | `conversation.member-leave`: all, B too | B | `reason: left` |
+| D's account is deleted | `conversation.member-leave`: all | **D** | `reason: user-deleted` |
+
+Every one carries `qualified_conversation`, `qualified_from`, `time` (ISO 8601, ms) and
+`via: user`. The Swagger requires all of these on an `Event`, with `via` being `scim` or
+`user` and `reason` being `left`, `removed` or `user-deleted`. So a deleted user's leave
+names that user as the actor, and no event of these has no actor.
+
+**The acting device gets its own events,** on `/notifications` and as frames on its own
+`/await` socket. `PUT /conversations/{domain}/{id}/name` also answers with the event (`200`,
+the same JSON), which Kupferdraht does not need.
+
+**Kupferdraht usage:** `wire/room_event.rs`, `sync/dispatch/room_event.rs`; the items are in
+`docs/library.md`, "Room events".
+
 ## Step 144 discovery: avatars are public assets named on the profile
 
 Observed on the wire-server-rs stack (2026-11-09), with throwaway accounts:

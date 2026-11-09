@@ -1968,6 +1968,16 @@ struct TimelineItemView {
     hot_knock: Option<bool>,
     /// Present for `kind == "location"` — the shared map point.
     location: Option<LocationView>,
+    /// Present for `kind == "membership_change"` (Step 145): `"joined" |
+    /// "added" | "left" | "kicked"`.
+    change: Option<&'static str>,
+    /// Present for `kind == "membership_change"`: who did it, by the
+    /// backend's statement.
+    actor: Option<String>,
+    /// Present for `kind == "membership_change"`: the users it names.
+    users: Option<Vec<String>>,
+    /// The name of a `"room_name_change"` or a `"room_created"`.
+    name: Option<String>,
 }
 
 /// Plain, JS-serializable view of a `Location` timeline item (Step 98c).
@@ -2031,9 +2041,14 @@ impl TimelineItemView {
             // Task/Case; the folded room flag is `Room::is_task_list()`.
             // Its absence kept the wasm target from compiling (gap-B.28).
             K::TaskListMarker { .. } => ("task_list_marker", None, None),
+            // Room events (Step 145): the fields come from `room_event_fields`.
+            K::MembershipChange(_) => ("membership_change", None, None),
+            K::RoomNameChange { .. } => ("room_name_change", None, None),
+            K::RoomCreated { .. } => ("room_created", None, None),
         };
         // Step 98c: the two variants the projection used to flatten away.
         let (hot_knock, location) = knock_and_location(&it.kind);
+        let room_event = room_event_fields(&it.kind);
         let reactions = it
             .reactions
             .iter()
@@ -2057,8 +2072,43 @@ impl TimelineItemView {
             expires_at_ms: it.expires_at_ms,
             hot_knock,
             location,
+            change: room_event.change,
+            actor: room_event.actor,
+            users: room_event.users,
+            name: room_event.name,
             delivery_status: delivery_status_label(it.delivery_status),
         }
+    }
+}
+
+/// The payload of a room event's item (Step 145), each field `None` where
+/// the kind has none.
+#[derive(Default)]
+struct RoomEventFields {
+    change: Option<&'static str>,
+    actor: Option<String>,
+    users: Option<Vec<String>>,
+    name: Option<String>,
+}
+
+fn room_event_fields(kind: &crate::timeline::TimelineItemKind) -> RoomEventFields {
+    use crate::timeline::TimelineItemKind as K;
+    match kind {
+        K::MembershipChange(m) => RoomEventFields {
+            change: Some(m.change.as_str()),
+            actor: Some(m.actor.clone()),
+            users: Some(m.users.clone()),
+            name: None,
+        },
+        K::RoomNameChange { name } => RoomEventFields {
+            name: Some(name.clone()),
+            ..RoomEventFields::default()
+        },
+        K::RoomCreated { name } => RoomEventFields {
+            name: name.clone(),
+            ..RoomEventFields::default()
+        },
+        _ => RoomEventFields::default(),
     }
 }
 

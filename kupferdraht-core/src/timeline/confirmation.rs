@@ -40,6 +40,9 @@ impl Timeline {
     /// [`ReceiptType::ReadPrivate`] nothing leaves: the room learns
     /// nothing, and the result is always `None`.
     ///
+    /// A room event's item (Step 145) moves the position and tells nobody:
+    /// its id names no message of the room. To confirm a message, name it.
+    ///
     /// **Step 10f gate**: with the account's `WIRE_RECEIPT_MODE` off a
     /// `Read` sends no `Confirmation` either and returns `Ok(None)` — the
     /// other Wire clients respect the same setting, so peers expect no
@@ -69,6 +72,10 @@ impl Timeline {
         // the outbound wire signal, not the position (Step 67).
         self.advance_read_position(&item_id).await?;
         if receipt == ReceiptType::ReadPrivate
+            || self
+                .client
+                .is_room_event_item(&self.room_id, &item_id)
+                .await?
             || matches!(
                 self.client.receipt_mode().await?,
                 crate::client::ReceiptMode::Off

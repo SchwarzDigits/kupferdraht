@@ -226,6 +226,9 @@ section). matrix-rust-sdk equivalent: `ruma::OwnedUserId` /
 | Kupferdraht symbol                                                  | matrix-rust-sdk equivalent                                       | Status   | Notes |
 |---|---|---|---|
 | `Timeline::redact(item_id: String) async -> Result<MessageHandle>` | `Timeline::redact(item: &EventTimelineItem, reason: Option<&str>) async` | Drift    | matrix-rust-sdk takes a borrowed `EventTimelineItem` and an optional textual reason; Kupferdraht takes the message_id by value (no `EventTimelineItem` parameter type yet) and emits no reason field — Wire's `MessageDelete` schema is just `{ message_id }`. Same on-the-wire semantics: receivers tombstone the row in place. |
+| `TimelineItemKind::MembershipChange(RoomMembershipChange)`, `RoomMembershipChange { change, actor, users }`, `MembershipChange::{Joined, Added, Left, Kicked}` | `TimelineItemContent::MembershipChange(RoomMembershipChange)`, `MembershipChange` | Aligned | Step 145: one item per Wire event with a user list where matrix has one per user; `Added` beside matrix's variants, for Wire's add without invitation (matrix's nearest is `Invited`). |
+| `TimelineItemKind::RoomNameChange { name }`, `TimelineItemKind::RoomCreated { name }` | `TimelineItemContent::OtherState` with `RoomName` / `RoomCreate` | Drift | Step 145: Wire's events carry the name, so a kind of its own serves better than a state wrapper. |
+| wasm `TimelineItem` kinds `membership_change`, `room_name_change`, `room_created`, fields `change`, `actor`, `users`, `name` | as for the native rows | Kupferdraht-specific | Step 145: the browser flavor, on `kupferdraht-tabs` alike; no diffs in the browser, `onSync` is the signal. |
 | `TimelineItemKind::Redacted`                                    | `TimelineItemContent::RedactedMessage`                           | Aligned  | Both expose a tombstone variant with the original metadata (sender, sent-at) preserved and the body hidden. matrix-rust-sdk additionally carries the redaction reason; Kupferdraht does not (Wire schema lacks one). |
 
 ### Edit (Step 6-II-c)
@@ -765,3 +768,4 @@ not accidents.
 | 2026-11-06 | Step 130b (the resend path on the browser surface): the wasm row `Client.failedSends` / `resend` / `resendFailed` (Drift), mirrored in `kupferdraht-tabs`; `Timeline::resend` answers a row this device already sent with its handle (behaviour, no signature change). |
 | 2026-11-09 | Step 143 (the own team on the account): `Account::team_id` / `team_name` as Wire extensions, the FFI record `Account` and the wasm getters `teamId` / `teamName`. |
 | 2026-11-09 | Step 144 (avatars): `Client::avatar`, `avatar_key`, `team_avatar`, `upload_avatar`, `remove_avatar`, `RoomMember::avatar_key`, and their FFI and wasm rows. |
+| 2026-11-09 | Step 145 (room events as timeline items): `TimelineItemKind::{MembershipChange, RoomNameChange, RoomCreated}`, `RoomMembershipChange`, `MembershipChange`, and their FFI and wasm rows. |

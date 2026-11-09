@@ -46,6 +46,7 @@ mod pipeline;
 mod reaction;
 mod resend;
 mod resend_payload;
+pub(crate) mod room_event;
 mod send_state;
 mod subscription;
 pub(crate) mod task;
@@ -66,6 +67,7 @@ pub use items::{
 };
 pub use keyed::OutgoingContent;
 pub use resend::ResendSummary;
+pub use room_event::{MembershipChange, RoomMembershipChange};
 pub(crate) use send_state::{ContentRow, InFlightSends};
 pub use subscription::Subscription;
 pub(crate) use subscription::{ListenerRegistry, Unregister};

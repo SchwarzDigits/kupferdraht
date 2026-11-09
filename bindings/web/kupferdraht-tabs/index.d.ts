@@ -165,6 +165,14 @@ export interface TimelineItem {
   hotKnock: boolean | null;
   /** Set for `kind === 'location'`. */
   location: { latitude: number; longitude: number; name: string | null; zoom: number | null } | null;
+  /** Set for `kind === 'membership_change'` (Step 145); `kind` is one of the three room events' for these fields. */
+  change: 'joined' | 'added' | 'left' | 'kicked' | null;
+  /** Set for `kind === 'membership_change'`: who did it, by the backend's statement. */
+  actor: string | null;
+  /** Set for `kind === 'membership_change'`: the users it names, the own user among them where it is one. */
+  users: string[] | null;
+  /** Set for `kind === 'room_name_change'`, and `kind === 'room_created'` when the room has a name. */
+  name: string | null;
 }
 export interface Member { userId: string; isSelf: boolean; displayName: string | null; handle: string | null; role: string; avatarKey: string | null }
 /** Which of a user's two images (Step 144). */

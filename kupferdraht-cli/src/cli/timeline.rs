@@ -173,6 +173,36 @@ pub(super) fn item_preview(
             None,
             Vec::new(),
         ),
+        TimelineItemKind::MembershipChange(change) => (membership_line(change), None, Vec::new()),
+        TimelineItemKind::RoomNameChange { name } => (
+            format!("* {} renamed the room to \"{name}\"", item.sender_user_id),
+            None,
+            Vec::new(),
+        ),
+        TimelineItemKind::RoomCreated { name } => (
+            format!(
+                "* {} created the room{}",
+                item.sender_user_id,
+                name.as_deref()
+                    .map(|n| format!(" \"{n}\""))
+                    .unwrap_or_default(),
+            ),
+            None,
+            Vec::new(),
+        ),
+    }
+}
+
+/// The system line of a membership item (Step 145).
+fn membership_line(change: &kupferdraht::timeline::RoomMembershipChange) -> String {
+    use kupferdraht::timeline::MembershipChange as Change;
+    let users = change.users.join(", ");
+    let actor = &change.actor;
+    match change.change {
+        Change::Joined => format!("* {users} joined"),
+        Change::Added => format!("* {actor} added {users}"),
+        Change::Left => format!("* {users} left"),
+        Change::Kicked => format!("* {actor} removed {users}"),
     }
 }
 
@@ -336,15 +366,33 @@ pub(crate) async fn mark_read(
         None => {
             // Step 10f gate: WIRE_RECEIPT_MODE = 0 → no Confirmation
             // sent. Other Wire clients respect the same preference,
-            // so this is intentional — not a failure.
+            // so this is intentional — not a failure. Step 145: neither
+            // is a room event's item, which names no message.
+            let items = timeline.items().await?;
+            let target = items.iter().find(|item| item.item_id == message_id);
             println!("mark-read skipped");
             println!("  room_id:           {room_id}");
             println!("  target:            {message_id}");
-            println!("  reason:            WIRE_RECEIPT_MODE = Off");
+            println!(
+                "  reason:            {}",
+                skipped_reason(target.map(|item| &item.kind))
+            );
         }
     }
     println!("  read_marker:       {marker}");
     Ok(())
+}
+
+/// Why `mark_as_read` told the room nothing, a private read aside.
+fn skipped_reason(target: Option<&TimelineItemKind>) -> &'static str {
+    match target {
+        Some(
+            TimelineItemKind::MembershipChange(_)
+            | TimelineItemKind::RoomNameChange { .. }
+            | TimelineItemKind::RoomCreated { .. },
+        ) => "a room event, not a message",
+        _ => "WIRE_RECEIPT_MODE = Off",
+    }
 }
 
 /// Step 138: flag a room unread by hand; the room must be known locally.
@@ -445,4 +493,92 @@ pub(crate) async fn reply(
     println!("  message_id: {}", handle.message_id);
     println!("  sent_at:    {}", super::fmt_ms(handle.sent_at_ms));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use kupferdraht::timeline::{
+        DeliveryStatus, MembershipChange, RoomMembershipChange, TimelineItem, TimelineItemKind,
+    };
+
+    use super::{item_preview, skipped_reason};
+
+    fn preview(kind: TimelineItemKind) -> String {
+        item_preview(&TimelineItem {
+            item_id: "i".into(),
+            room_id: "r@d".into(),
+            sender_user_id: "alice@d".into(),
+            sender_device_id: String::new(),
+            sent_at_ms: 0,
+            kind,
+            edited_at_ms: None,
+            redacted: false,
+            reactions: Vec::new(),
+            read_by: Vec::new(),
+            delivered_to: Vec::new(),
+            delivery_status: DeliveryStatus::Received,
+            expires_at_ms: None,
+        })
+        .0
+    }
+
+    fn change(change: MembershipChange, users: &[&str]) -> TimelineItemKind {
+        TimelineItemKind::MembershipChange(RoomMembershipChange {
+            change,
+            actor: "alice@d".into(),
+            users: users.iter().map(ToString::to_string).collect(),
+        })
+    }
+
+    #[test]
+    fn a_skipped_read_names_its_real_reason() {
+        let room_event = TimelineItemKind::RoomNameChange { name: "New".into() };
+        let message = TimelineItemKind::Knock { hot_knock: false };
+
+        assert_eq!(
+            skipped_reason(Some(&room_event)),
+            "a room event, not a message"
+        );
+        assert_eq!(skipped_reason(Some(&message)), "WIRE_RECEIPT_MODE = Off");
+        assert_eq!(skipped_reason(None), "WIRE_RECEIPT_MODE = Off");
+    }
+
+    #[test]
+    fn a_room_event_prints_a_system_line() {
+        let lines = [
+            (
+                change(MembershipChange::Added, &["bob@d", "carol@d"]),
+                "* alice@d added bob@d, carol@d",
+            ),
+            (
+                change(MembershipChange::Joined, &["alice@d"]),
+                "* alice@d joined",
+            ),
+            (
+                change(MembershipChange::Left, &["alice@d"]),
+                "* alice@d left",
+            ),
+            (
+                change(MembershipChange::Kicked, &["bob@d"]),
+                "* alice@d removed bob@d",
+            ),
+            (
+                TimelineItemKind::RoomNameChange { name: "New".into() },
+                "* alice@d renamed the room to \"New\"",
+            ),
+            (
+                TimelineItemKind::RoomCreated {
+                    name: Some("Work".into()),
+                },
+                "* alice@d created the room \"Work\"",
+            ),
+            (
+                TimelineItemKind::RoomCreated { name: None },
+                "* alice@d created the room",
+            ),
+        ];
+        for (kind, line) in lines {
+            assert_eq!(preview(kind), line);
+        }
+    }
 }

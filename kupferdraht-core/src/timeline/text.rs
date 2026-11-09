@@ -222,6 +222,8 @@ impl Client {
         room_id: &str,
         parent_id: &str,
     ) -> Result<crate::storage::TimelineEventRecord, KupferdrahtError> {
+        self.ensure_not_room_event(room_id, parent_id, "send_reply")
+            .await?;
         self.lookup_timeline_event(room_id, parent_id)
             .await?
             .ok_or_else(|| {

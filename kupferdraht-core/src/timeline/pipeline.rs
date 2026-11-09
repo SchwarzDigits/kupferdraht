@@ -308,7 +308,10 @@ impl Client {
             | crate::timeline::TimelineItemKind::Location { .. }
             | crate::timeline::TimelineItemKind::Task(_)
             | crate::timeline::TimelineItemKind::Case(_)
-            | crate::timeline::TimelineItemKind::TaskListMarker { .. }) => other,
+            | crate::timeline::TimelineItemKind::TaskListMarker { .. }
+            | crate::timeline::TimelineItemKind::MembershipChange(_)
+            | crate::timeline::TimelineItemKind::RoomNameChange { .. }
+            | crate::timeline::TimelineItemKind::RoomCreated { .. }) => other,
         };
         self.dispatch_timeline_diff(&TimelineDiff::Append { room_id, item });
     }
