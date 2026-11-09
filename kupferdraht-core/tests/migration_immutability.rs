@@ -163,6 +163,10 @@ const PINNED_DIGESTS: &[(&str, &str)] = &[
         "V32__step_130a_send_keys.sql",
         "46a079e6c80725128c8198679ecf5077dc9e0ab665cf7fa532ea059a0945f07e",
     ),
+    (
+        "V33__step_143_own_team.sql",
+        "d3446b2e9f24351558731941c9770938be94a3a660a43957efb155f7941649c4",
+    ),
 ];
 
 fn migrations_dir() -> PathBuf {

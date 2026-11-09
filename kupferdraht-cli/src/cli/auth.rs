@@ -82,6 +82,10 @@ pub(crate) async fn sso_finalize(
     );
     println!("  device_id:   {}", client.device_id().unwrap_or("—"));
     println!("  handle:      {}", account.handle().unwrap_or("—"));
+    println!(
+        "  team:        {}",
+        team_line(account.team_name(), account.team_id())
+    );
     println!("  name:        {}", account.display_name());
     println!("  api_version: {}", client.api_version());
     println!("  server:      {}", client.server_title());
@@ -122,6 +126,10 @@ pub(crate) async fn login(
     );
     println!("  device_id:   {}", client.device_id().unwrap_or("—"));
     println!("  handle:      {}", account.handle().unwrap_or("—"));
+    println!(
+        "  team:        {}",
+        team_line(account.team_name(), account.team_id())
+    );
     println!("  name:        {}", account.display_name());
     println!("  api_version: {}", client.api_version());
     println!("  server:      {}", client.server_title());
@@ -225,6 +233,8 @@ pub(crate) async fn persist_session_state(
             handle: account.handle().map(str::to_string),
             name: account.display_name().to_string(),
             email: account.email().map(str::to_string),
+            team_id: account.team_id().map(str::to_string),
+            team_name: account.team_name().map(str::to_string),
         })
         .await?;
     store
@@ -302,6 +312,10 @@ pub(crate) async fn activate(
     );
     println!("  device_id:   {}", client.device_id().unwrap_or("—"));
     println!("  handle:      {}", account.handle().unwrap_or("—"));
+    println!(
+        "  team:        {}",
+        team_line(account.team_name(), account.team_id())
+    );
     println!("  name:        {}", account.display_name());
     println!("  api_version: {}", client.api_version());
     println!("  server:      {}", client.server_title());
@@ -428,6 +442,11 @@ pub(crate) async fn status() -> Result<(), KupferdrahtError> {
     println!("session:");
     println!("  user_id:                   {user_id}");
     println!("  device_id:                 {device_id}");
+    let account = client.account();
+    println!(
+        "  team:                      {}",
+        team_line(account.team_name(), account.team_id())
+    );
     println!("  api_version:               {}", client.api_version());
     println!("  access_token_prefix:       {}", prefix(&access_token, 12));
     if let Some(dev) = device.as_ref().and_then(|d| d.mls_public_key.as_deref()) {
@@ -449,6 +468,17 @@ pub(crate) async fn status() -> Result<(), KupferdrahtError> {
     );
     println!("{}", storage_line(engine.as_ref()));
     Ok(())
+}
+
+/// The `team:` value of the login commands and `status` (Step 143): the name
+/// and the id, `—` for what the account does not have. Pure, so the format is
+/// unit-tested.
+fn team_line(name: Option<&str>, id: Option<&str>) -> String {
+    match (name, id) {
+        (Some(name), Some(id)) => format!("{name} ({id})"),
+        (None, Some(id)) => format!("— ({id})"),
+        _ => "—".to_owned(),
+    }
 }
 
 /// The `status` home lines (Step 93): the home id, the cookie label in
@@ -494,7 +524,17 @@ mod tests {
     use kupferdraht::PurgeOptions;
     use kupferdraht::storage::StorageEngineInfo;
 
-    use super::{home_lines, local_state_lines, storage_line};
+    use super::{home_lines, local_state_lines, storage_line, team_line};
+
+    #[test]
+    fn team_line_names_what_the_account_has() {
+        assert_eq!(
+            team_line(Some("Fixture Team"), Some("team-uuid")),
+            "Fixture Team (team-uuid)"
+        );
+        assert_eq!(team_line(None, Some("team-uuid")), "— (team-uuid)");
+        assert_eq!(team_line(None, None), "—");
+    }
 
     #[test]
     fn storage_line_names_engine_cipher_and_header_mode() {

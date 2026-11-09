@@ -1832,7 +1832,16 @@ account.user_id();        // &str
 account.display_name();   // &str  — Wire's "name" field
 account.handle();         // Option<&str>
 account.email();          // Option<&str>
+account.team_id();        // Option<&str>  — lowercase; None for a personal account
+account.team_name();      // Option<&str>
 ```
+
+`team_id` and `team_name` (Step 143) are a snapshot of the last login, like
+`display_name` and `handle`: Wire's `team.update` does not refresh them. A
+login fetches the name once with `GET /teams/{tid}`, and any failure is a
+warning: the login stands, with `team_id` set and `team_name` `None`. A resume
+is offline and reads the stored row, so the name stays `None` until the next
+full login, and a browser session resumes for weeks.
 
 Field-name mapping Wire ↔ matrix-rust-sdk:
 
@@ -1842,6 +1851,8 @@ Field-name mapping Wire ↔ matrix-rust-sdk:
 | `name`                 | `display_name()`   | `Account::get_display_name()` (async) |
 | `handle`               | `handle()`         | (no exact analog) |
 | `email`                | `email()`          | (3PID, separate flow) |
+| `team`                 | `team_id()`        | (none) |
+| `name` of `GET /teams/{tid}` | `team_name()` | (none) |
 
 `Account::domain() -> &str` is not a separate Wire DTO field — it
 projects `self.user_id().domain()`, i.e. the Wire deployment domain

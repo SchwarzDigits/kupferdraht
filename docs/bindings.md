@@ -698,6 +698,10 @@ Since Step 110 (ADR-0035):
   the **next** session sees it),
   `deviceReplaced` (Step 110: this login's device replaced the recorded
   one, which the backend no longer had — older messages are gone).
+- Getters `teamId`, `teamName` (Step 143): the user's team as of the last
+  login, `undefined` for a personal account; `teamName` is `undefined` too when
+  the login could not fetch it, and a resume does not fetch it, so it stays
+  `undefined` until the next full login. A browser session resumes for weeks.
 - `storageEngine() -> {engine, version, cipher, plaintextHeaderSize,
   location} | null` (async) — what the app-data store's encryption
   engine reports about itself, read off the live connection (the browser
@@ -886,8 +890,8 @@ instance" into "served to every tab". Two halves:
   the wasm `Kupferdraht` / `PendingLogin` / `Client` / `Recovery` / `SyncHandle`
   classes**
   (everything but the leader-only `Kupferdraht.open`; wrapper objects come
-  back as proxies whose getters `userId` / `displayName` / `email` are
-  snapshots, so they stay synchronous; the `Kupferdraht` getters `homeId` /
+  back as proxies whose getters `userId` / `displayName` / `email` /
+  `handle` / `teamId` / `teamName` are snapshots, so they stay synchronous; the `Kupferdraht` getters `homeId` /
   `cookieLabel` ride on the leader's announcement and are `undefined`
   until one arrived). `host.state` is `electing` |
   `leader` | `thin`; `host.takeOver()` is the ADR-0023 override for a

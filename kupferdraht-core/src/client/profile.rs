@@ -107,6 +107,8 @@ impl Client {
                 handle: account.handle().map(str::to_owned),
                 name: account.display_name().to_owned(),
                 email: account.email().map(str::to_owned),
+                team_id: account.team_id().map(str::to_owned),
+                team_name: account.team_name().map(str::to_owned),
             });
         if let Some(handle) = handle {
             row.handle = Some(handle.to_owned());

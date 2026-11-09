@@ -567,6 +567,8 @@ async fn persist_session(
             handle: account.handle().map(str::to_string),
             name: account.display_name().to_string(),
             email: account.email().map(str::to_string),
+            team_id: account.team_id().map(str::to_string),
+            team_name: account.team_name().map(str::to_string),
         })
         .await?;
     store

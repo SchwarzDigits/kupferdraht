@@ -100,6 +100,12 @@ pub struct Account {
     pub display_name: String,
     pub handle: Option<String>,
     pub email: Option<String>,
+    /// The user's team as of the last login, `None` for a personal account
+    /// (Step 143).
+    pub team_id: Option<String>,
+    /// The team's name as of the last login, `None` too when the login could
+    /// not fetch it (Step 143).
+    pub team_name: Option<String>,
 }
 
 impl From<&CoreAccount> for Account {
@@ -109,6 +115,8 @@ impl From<&CoreAccount> for Account {
             display_name: account.display_name().to_owned(),
             handle: account.handle().map(str::to_owned),
             email: account.email().map(str::to_owned),
+            team_id: account.team_id().map(str::to_owned),
+            team_name: account.team_name().map(str::to_owned),
         }
     }
 }
@@ -201,6 +209,8 @@ mod tests {
             "Alice".to_owned(),
             Some("alice".to_owned()),
             Some("alice@example.test".to_owned()),
+            Some("team-uuid".to_owned()),
+            Some("Fixture Team".to_owned()),
         );
         let record = Account::from(core.as_ref());
         assert_eq!(record.user_id.localpart, "user-uuid");
@@ -208,13 +218,24 @@ mod tests {
         assert_eq!(record.display_name, "Alice");
         assert_eq!(record.handle.as_deref(), Some("alice"));
         assert_eq!(record.email.as_deref(), Some("alice@example.test"));
+        assert_eq!(record.team_id.as_deref(), Some("team-uuid"));
+        assert_eq!(record.team_name.as_deref(), Some("Fixture Team"));
     }
 
     #[test]
     fn account_record_keeps_absent_optionals_none() {
-        let core = CoreAccount::new(UserId::new("u", "d"), "n".to_owned(), None, None);
+        let core = CoreAccount::new(
+            UserId::new("u", "d"),
+            "n".to_owned(),
+            None,
+            None,
+            None,
+            None,
+        );
         let record = Account::from(core.as_ref());
         assert!(record.handle.is_none(), "missing handle stays None");
         assert!(record.email.is_none(), "missing email stays None");
+        assert!(record.team_id.is_none(), "missing team stays None");
+        assert!(record.team_name.is_none(), "missing team name stays None");
     }
 }

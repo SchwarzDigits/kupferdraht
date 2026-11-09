@@ -11,6 +11,15 @@ use std::sync::Arc;
 
 use crate::identity::UserId;
 
+/// The user's own team as a login found it (Step 143): `id` from `GET /self`,
+/// lowercase, `None` for a personal account; `name` from `GET /teams/{tid}`,
+/// `None` too when that fetch failed.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct OwnTeam {
+    pub(crate) id: Option<String>,
+    pub(crate) name: Option<String>,
+}
+
 /// User-profile snapshot loaded at login time from `GET /v14/self`.
 ///
 /// This is the matrix-rust-sdk-shaped public-API replacement for the
@@ -23,6 +32,8 @@ pub struct Account {
     display_name: String,
     handle: Option<String>,
     email: Option<String>,
+    team_id: Option<String>,
+    team_name: Option<String>,
 }
 
 impl Account {
@@ -31,12 +42,16 @@ impl Account {
         display_name: String,
         handle: Option<String>,
         email: Option<String>,
+        team_id: Option<String>,
+        team_name: Option<String>,
     ) -> Arc<Self> {
         Arc::new(Self {
             user_id,
             display_name,
             handle,
             email,
+            team_id,
+            team_name,
         })
     }
 
@@ -66,5 +81,20 @@ impl Account {
     #[must_use]
     pub fn email(&self) -> Option<&str> {
         self.email.as_deref()
+    }
+
+    /// The user's team, as of the last login (Step 143); `None` for a
+    /// personal account. Lowercase.
+    #[must_use]
+    pub fn team_id(&self) -> Option<&str> {
+        self.team_id.as_deref()
+    }
+
+    /// The team's name, as of the last login (Step 143). `None` for a
+    /// personal account, and for a team whose name the login could not
+    /// fetch: a resume is offline, so it stays `None` until the next login.
+    #[must_use]
+    pub fn team_name(&self) -> Option<&str> {
+        self.team_name.as_deref()
     }
 }

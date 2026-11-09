@@ -1,13 +1,45 @@
 # Step 143 — The own team on the account: id and name
 
-**Status: commissioned 2026-11-05** (from the browser embedder's
-requirements for a work-queue client, R1, measured there against
-`4f30f02` and re-checked against `main` `9e1a11c`). Taken with Volker on
-commissioning: the names `team_id` / `team_name` (`teamId` / `teamName`
+**Status: in progress** on `step/143-team-id-and-name`; phase 1 taken and
+red tests approved by Volker on 2026-11-09, with the fetch where both login
+kinds end and `SelfUserRecord`'s growth named `BREAKING`, which makes the next
+release a minor. Commissioned 2026-11-05 (from the
+browser embedder's requirements for a work-queue client, R1, measured there
+against `4f30f02` and re-checked against `main` `9e1a11c`). Taken with Volker
+on commissioning: the names `team_id` / `team_name` (`teamId` / `teamName`
 in the browser), as of the last login with no live refresh, and after
 the v0.2.1 release (141, 142, 130b) — the FFI record `Account` grows by
 two fields. Moved 2026-11-08 (Volker): after the v0.3.0 release, which
 carries Step 130c alone.
+
+**Phase 1, measured 2026-11-09 on the wire-server-rs stack** with throwaway
+accounts:
+
+| Caller → team | `GET /v14/teams/{tid}` |
+|---|---|
+| owner → own team | `200`, fields `binding`, `creator`, `icon`, `id`, `name`, `splash_screen` |
+| plain member → own team | `200`, the same fields |
+| plain member → own team, id in uppercase | `200` |
+| plain member → another team | `404`, label `no-team` |
+| plain member → unknown UUID | `404`, label `no-team` |
+| plain member → not a UUID | `404`, label `no-endpoint` |
+
+A plain member reads the team, so `team_name` holds for members too. `GET
+/self` carries `team` for owner and member. The personal account's case could
+not be run: brig's internal `/i/users` answers `500` for a user without a team
+on this stack. It does not decide anything, since a personal account has no
+team to ask for and makes no request.
+
+**Two corrections to the scope below, from reading the code:**
+
+- **Where the fetch runs.** `finalize_into_client`
+  (`client/pending_login.rs`) is the one path a password login and an SSO
+  login both end in, so the team is fetched there, once, with the
+  device-rebound token, instead of in `authenticate` and `finalize_sso` alike
+  as first planned. A login abandoned before its device is registered makes no
+  request, and `PendingLogin` carries nothing new.
+- **`proxy.js` does change.** `ClientProxy` defines each getter by hand (`get
+  handle()`), so `teamId` and `teamName` need one line each. `METHODS` stays.
 
 ## Problem
 
@@ -30,8 +62,8 @@ carries Step 130c alone.
    `GET /v14/teams/{tid}`, the path segment through `path_segment`
    (Step 137), a `wire::dto::Team` that reads `id` and `name` only.
    `SelfUser::team` stays as it is.
-2. **Login.** After `fetch_self`, in `authenticate` and `finalize_sso`
-   alike (`client/login_pipeline.rs`), a team member's team is fetched
+2. **Login.** In `finalize_into_client` (`client/pending_login.rs`), the
+   path both login kinds end in, a team member's team is fetched
    once. Any failure — `403`, `404`, `5xx`, transport — is a `warn!`
    and `team_name = None`; the login goes on (the ADR-0012 posture of
    the feature-config fetch). The id is stored lowercase; an empty
@@ -55,8 +87,8 @@ carries Step 130c alone.
      `string | undefined`.
    - `kupferdraht-tabs`: `["Client", "teamId"]` and
      `["Client", "teamName"]` in `protocol.js` `GETTERS`, both on
-     `ClientProxy` in `index.d.ts`. Getters are snapshotted into the
-     handle, so `METHODS` and `proxy.js` do not change.
+     `ClientProxy` in `proxy.js` and `index.d.ts`. Getters are snapshotted
+     into the handle, so `METHODS` does not change.
 5. **CLI.** `login`, `activate` and `sso finalize` print a `team:` line
    (name and id, `—` without a team); `status` prints the persisted
    values, which exercises the resume path.
@@ -84,16 +116,6 @@ carries Step 130c alone.
 - The device's account registry in `global.db` (`AccountEntry`): no
   team there.
 
-## Phase-1 questions
-
-1. **Can a plain member read the team?** The Swagger names only
-   `200` and `404`. Live probe on the wire-server-rs stack with the
-   smoke's throwaway team: `GET /v14/teams/{tid}` as its owner and as
-   its member, and as a personal account against a foreign team id;
-   record the answers in `docs/wire/api-notes.md`. If a member is
-   refused, the name stays `None` for members and the plan says so
-   before the red tests.
-
 ## TDD sketch
 
 - httpmock, login: a team member gets both values; the `GET` carries
@@ -111,6 +133,6 @@ carries Step 130c alone.
   two getters in `GETTERS` and `index.d.ts`.
 - Gate: the five, plus `cargo check` and `cargo clippy` for
   `wasm32-unknown-unknown` (the wasm getters).
-- Smoke: `kupferdraht-smoke.sh --throwaway`, 18/18, plus the CLI's
-  `login` / `status` lines for the owner and the member of the
+- Smoke: `kupferdraht-smoke.sh --throwaway`, 24/24, plus the CLI's
+  `login` / `status` lines for the owner and the member of a
   throwaway team, compared with the team settings.

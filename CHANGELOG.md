@@ -36,7 +36,24 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **The own team on the account** (Step 143): `Account::team_id()` and
+  `Account::team_name()`, the same two fields on the FFI record `Account`, and
+  the getters `teamId` and `teamName` on the browser `Client` and
+  `kupferdraht-tabs`' `ClientProxy`; `None` / `undefined` for a personal
+  account. A snapshot of the last login, like `display_name`: a login asks
+  `GET /teams/{tid}` once, and if that fails the login stands with the id alone
+  and the name stays empty until the next full login, since a resume is
+  offline. The CLI's `login`, `activate`, `sso finalize` and `status` print a
+  `team:` line.
+
 ### Changed
+
+- **BREAKING: `SelfUserRecord` carries the team** (Step 143): the public record
+  grows `team_id` and `team_name`, so a custom `Store` that builds it from a
+  struct literal has two fields to add. It stores them to keep the team across
+  a resume; the bundled store does, by migration V33. The FFI record `Account`
+  grows the same two fields, which a Kotlin or Swift consumer that only reads
+  it does not notice.
 
 ### Deprecated
 

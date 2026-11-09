@@ -108,6 +108,7 @@ pub(crate) mod notifications;
 mod one_to_one;
 mod registration;
 mod sso;
+mod teams;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod transfer_timeout_tests;
 mod users;
