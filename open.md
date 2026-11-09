@@ -379,22 +379,6 @@ through the same exchange client and shares the gap — a service token's
 response is read without a bound, a redirect is followed with the
 audience in the body. Nothing changed; the decision stays open.
 
-## 85) The older wasm views cross `None` as `undefined`, the types say `null` (2026-11-03)
-
-`serde_wasm_bindgen::to_value` serializes a Rust `None` as `undefined`
-unless the serializer is built with `serialize_missing_as_null(true)`.
-Every wasm view before Step 138 uses the default — `TimelineItem.body`,
-`replyTo`, `asset`, `expiresAtMs`, `hotKnock`, `location`,
-`MessageEvent_.replyToId` / `expiresAtMs`, `Member.displayName` / `handle`,
-`DeviceInfo`'s optional fields, `RoomDevice.userId` / `deviceId` /
-`thumbprint` — while `bindings/web/kupferdraht-tabs/index.d.ts` declares
-them `| null`. A consumer comparing `=== null` misses them; `== null` and
-truthiness checks do not, which is why nothing has surfaced. Step 138's
-own views (`wasm/read_state.rs`) serialize `null` as declared, with a
-browser pin. Aligning the rest is one serializer helper and a sweep of the
-`to_value` sites — consumer-visible (`undefined` → `null`), so a
-`Changed` entry and a d.ts review, not a silent fix.
-
 ## 86) `room_read_markers` rows outlive their rooms (2026-11-03)
 
 A marker row (Step 67) and, since Step 138, its flag stay when the room

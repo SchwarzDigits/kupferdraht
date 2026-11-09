@@ -1,6 +1,6 @@
 # Step 130 — Idempotency keys for wasm mutations (a retry across a leader change)
 
-**Status: in progress** — **130a merged 2026-11-04** as PR #29
+**Status: MERGED 2026-11-09** — all three sub-steps. **130a merged 2026-11-04** as PR #29
 (`224cf7a`, feature commit `2bb4b7a`): gate green (wasm32 lines
 included); CI green, the tabs failover against the stub running for the
 first time in `step_94_leader_tab` (18 tests, headless Firefox); smoked
@@ -19,11 +19,15 @@ headless Firefox) and in CI; no smoke (the browser surface; the native
 send path is unchanged, the rejected send is the Step-79 tests'); no
 `step_94_leader_tab` scenario for a resend across a leader change — the
 re-issue is the class's, tested for the class, and the three classes are
-pinned. **130c in progress** on `step/130c-null-views`, red tests approved by
-Volker on 2026-11-09 with D2 and D4 below. It changes values the browser
-reads, so it follows the v0.2.1 release and ships alone as v0.3.0, before
-Step 143 (Volker, 2026-11-08: the browser embedder integrates it before the
-new features). Commissioned
+pinned. **130c merged 2026-11-09** as PR #52 (`a66c72e`, feature commit
+`9390995`): gate green on 1.98 (fmt, 0 build warnings, clippy, 1475 tests,
+deny; wasm32 check, clippy `--lib` and CI's wasm clippy line); the browser
+suite green locally (17 suites, 76 tests, headless Firefox) and in CI; no
+smoke (the browser surface). Red tests approved by Volker on 2026-11-09 with
+D2 and D4 below. It changes values the browser reads, so it followed the
+v0.2.1 release and ships alone as v0.3.0, before Step 143 (Volker, 2026-11-08:
+the browser embedder integrates it before the new features). LEARNINGS §5.85
+has its retrospective. Commissioned
 2026-11-01 (transferred from open.md's former "Proposed steps", proposed
 2026-09-25 in the Step 94 retrospective; ADR-0026 option L3-C, deferred
 there to "a later step").
@@ -48,8 +52,8 @@ stay `mutation`; three sub-steps:
 - **130b — the Step-79 resend path on the wasm surface:** `failedSends`,
   `resend`, `resendFailed` and their tab mirrors (`idempotent`: the same id
   re-driven).
-- **130c — open.md §85:** `undefined` → `null` on the item views
-  `failedSends` returns too; a `Changed` entry and a `.d.ts` review.
+- **130c — open.md §85** (merged, PR #52): `undefined` → `null` on the item
+  views `failedSends` returns too; a `Changed` entry and a `.d.ts` review.
 
 ## Problem
 
