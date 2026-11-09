@@ -1149,6 +1149,10 @@ Fetch the authenticated user's own profile.
   "email": "alice@example.com",
   "accent_id": 3,
   "team": "<uuid>",                    // absent for a personal account
+  "assets": [                          // also on `list-users`; see "Step 144 discovery"
+    { "key": "3-1-<uuid>", "size": "preview", "type": "image" },
+    { "key": "3-1-<uuid>", "size": "complete", "type": "image" }
+  ],
   …
 }
 ```
@@ -1370,6 +1374,36 @@ route (the versioned `/v{N}/await` variants 404 at nginx; verified
   a drain before the connect would miss events stored before the
   socket registered, and a frame moving the cursor would make a
   missed push permanent.
+
+## Step 144 discovery: avatars are public assets named on the profile
+
+Observed on the wire-server-rs stack (2026-11-09), with throwaway accounts:
+
+| Request | Answer |
+|---|---|
+| `POST /assets`, `public: true`, `retention: eternal`, no `convId`, `filename`, `filetype` | `201`, `{ domain, key }`, no token, as owner and as plain member; this stack has no asset audit log |
+| `PUT /self` with `assets` | `200`; `/self` and `list-users` answer `{ key, size, type }` |
+| `PUT /self` with `assets: []` | `200`, `assets` empty; the old key still downloads |
+| `PUT /self` naming another user's key | `200`: the backend does not check who owns a key |
+| `PUT /self` with `size: "huge"` | `400` |
+| `GET /assets/{domain}/{key}`, owner, member, another team's owner | `302` to the asset store |
+| the hop, no credentials | `200`, `application/octet-stream`, no `Content-Disposition`, the same bytes |
+| the download without a token | `401` |
+| another domain in the path, an unknown key | `403 federation-not-enabled`, `404 not-found` |
+| `GET /users/{domain}/{id}` by another team | `404` |
+| `GET /teams/{tid}` of a new team | `icon: "default"`, no `icon_key` |
+| `PUT /teams/{tid}` | `405`, `Allow: GET,HEAD` at nginz; `405` at `galley-rs`, `403` at Haskell `galley` |
+
+So a public asset still needs the bearer token, and its domain is the user's: the
+`assets` entries name none. Wire's clients, values only: the webapp uploads a
+`preview` of 280 × 280 and a `complete` fitting 1448, JPEG quality 80; Android uses
+280 and factor 75 for avatars, and Kalium names the one key for both sizes, with
+`filename` and `filetype` on the upload and `convId` null. Kupferdraht sends those
+two as well, for a backend with an audit log, and treats one key or one size as
+serving both. A `Team`'s `icon` is an asset key or `"default"`.
+
+**Kupferdraht usage:** `wire/http/assets.rs::upload_public_image` and
+`download_public_image`, `wire/http/auth.rs::update_self_assets`.
 
 ## Step 141 discovery: an asset download answers `302` to the asset store
 

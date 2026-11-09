@@ -235,6 +235,9 @@ pub(crate) async fn persist_session_state(
             email: account.email().map(str::to_string),
             team_id: account.team_id().map(str::to_string),
             team_name: account.team_name().map(str::to_string),
+            avatar_thumbnail_key: account.login_avatar_keys().thumbnail.clone(),
+            avatar_full_key: account.login_avatar_keys().full.clone(),
+            team_avatar_key: account.team_avatar_key().map(str::to_string),
         })
         .await?;
     store

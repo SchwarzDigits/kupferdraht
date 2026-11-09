@@ -166,7 +166,11 @@ export interface TimelineItem {
   /** Set for `kind === 'location'`. */
   location: { latitude: number; longitude: number; name: string | null; zoom: number | null } | null;
 }
-export interface Member { userId: string; isSelf: boolean; displayName: string | null; handle: string | null; role: string }
+export interface Member { userId: string; isSelf: boolean; displayName: string | null; handle: string | null; role: string; avatarKey: string | null }
+/** Which of a user's two images (Step 144). */
+export type AvatarSize = 'thumbnail' | 'full';
+/** An image Kupferdraht wrote from the pixels of the original (Step 144). */
+export interface Avatar { bytes: Uint8Array; mimeType: 'image/jpeg' | 'image/png' }
 export interface MessageEvent_ {
   roomId: string; senderUserId: string; messageId: string; body: string | null;
   replyToId: string | null; receivedAtMs: number; expiresAtMs: number | null;
@@ -317,6 +321,15 @@ export class ClientProxy {
   createRoom(name: string): Promise<Room>;
   createDm(peer: string): Promise<Room>;
   members(roomId: string): Promise<Member[]>;
+  /** A user's avatar, an image Kupferdraht wrote (Step 144). Show it as `<img>` or on a canvas, never as a document. */
+  avatar(userId: string, size: AvatarSize): Promise<Avatar | null>;
+  /** The version marker of a user's avatar: a changed avatar has a new key (Step 144). */
+  avatarKey(userId: string): Promise<string | null>;
+  /** The icon of the account's team as of the last login (Step 144). */
+  teamAvatar(): Promise<Avatar | null>;
+  /** Set the own avatar from one image: JPEG, PNG, GIF or WebP, at most 4 MiB and 4096 × 4096 pixels (Step 144). */
+  uploadAvatar(image: Uint8Array): Promise<void>;
+  removeAvatar(): Promise<void>;
   roomDevices(roomId: string): Promise<RoomDevice[]>;
   ownDeviceThumbprint(): Promise<string>;
   invite(roomId: string, userIds: string[]): Promise<Room>;

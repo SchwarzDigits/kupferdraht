@@ -32,8 +32,10 @@ use std::path::Path;
 
 // File-streamed asset upload/download is native-only (tokio::fs + reqwest
 // streaming bodies). The browser asset path (OPFS/Blob, W7) is a later step.
+use base64::Engine as _;
 #[cfg(not(target_arch = "wasm32"))]
 use futures_util::stream::{self, StreamExt};
+use md5::{Digest as _, Md5};
 use serde::{Deserialize, Serialize};
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::fs::File;
@@ -436,6 +438,189 @@ impl HttpClient {
         self.send_and_decode::<AssetUploadResponse>(req, "upload_asset_bytes")
             .await
     }
+}
+
+/// The public, eternal upload of an avatar image (Step 144), with what an
+/// audit-logging backend asks for. Same multipart/mixed body as the encrypted
+/// paths, assembled in memory on either target; an avatar is small.
+#[derive(Serialize)]
+struct PublicUploadMetadata<'a> {
+    public: bool,
+    retention: &'a str,
+    filename: &'a str,
+    filetype: &'a str,
+}
+
+impl HttpClient {
+    /// `POST /v{api_version}/assets`: `image`, public and eternal.
+    ///
+    /// # Errors
+    /// `BackendRejected`, `Network` and `Encoding` as for the other uploads.
+    pub(crate) async fn upload_public_image(
+        &self,
+        api_version: u32,
+        access_token: &str,
+        image: &[u8],
+        mime_type: &str,
+    ) -> Result<AssetUploadResponse, KupferdrahtError> {
+        debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
+        debug_assert!(!image.is_empty(), "a written image is never empty");
+        let url = self.url(&format!("/v{api_version}/assets"))?;
+        let body = public_image_body(image, mime_type)?;
+        let req = self
+            .client
+            .post(url)
+            .bearer_auth(access_token)
+            .header(
+                "Content-Type",
+                format!("multipart/mixed; boundary={MULTIPART_BOUNDARY}"),
+            )
+            .header("Content-Length", body.len().to_string())
+            .body(body);
+        self.send_and_decode::<AssetUploadResponse>(req, "upload_public_image")
+            .await
+    }
+
+    /// `GET /v{api_version}/assets/{domain}/{key}` of a public image, into
+    /// memory, at most `max_bytes` (Step 144). The bearer token is needed
+    /// (live-confirmed), no `Asset-Token`.
+    ///
+    /// # Errors
+    /// `InvalidInput` when `domain` or `key` is no single URL path segment;
+    /// `BackendRejected` for a refusal and for an answer over `max_bytes`;
+    /// `Network` for a transport failure.
+    pub(crate) async fn download_public_image(
+        &self,
+        api_version: u32,
+        access_token: &str,
+        domain: &str,
+        key: &str,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>, KupferdrahtError> {
+        debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
+        let domain = Self::path_segment(domain, "download_public_image domain")?;
+        let key = Self::path_segment(key, "download_public_image key")?;
+        let path = format!("/v{api_version}/assets/{domain}/{key}");
+        let resp = self.open_public_image(&path, access_token).await?;
+        if !resp.status().is_success() {
+            return Err(reject_from_response(resp, "download_public_image").await);
+        }
+        read_bounded(resp, max_bytes).await
+    }
+
+    /// The answer behind the backend's `302`, followed by hand and without the
+    /// token (Step 141).
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn open_public_image(
+        &self,
+        path: &str,
+        access_token: &str,
+    ) -> Result<reqwest::Response, KupferdrahtError> {
+        let request = self.transfer.get(self.url(path)?).bearer_auth(access_token);
+        let resp = tokio::time::timeout(self.transfer_idle, request.send())
+            .await
+            .map_err(|_| stalled_download(self.transfer_idle))?
+            .map_err(|e| KupferdrahtError::Network(format!("GET {path}: {e}")))?;
+        if is_followed_redirect(resp.status()) {
+            self.fetch_redirected_asset(resp).await
+        } else {
+            Ok(resp)
+        }
+    }
+
+    /// The answer; `fetch` follows the `302` itself and drops the token.
+    #[cfg(target_arch = "wasm32")]
+    async fn open_public_image(
+        &self,
+        path: &str,
+        access_token: &str,
+    ) -> Result<reqwest::Response, KupferdrahtError> {
+        self.client
+            .get(self.url(path)?)
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|e| KupferdrahtError::Network(format!("GET {path}: {e}")))
+    }
+}
+
+/// The multipart/mixed body of a public upload.
+fn public_image_body(image: &[u8], mime_type: &str) -> Result<Vec<u8>, KupferdrahtError> {
+    let metadata = serde_json::to_string(&PublicUploadMetadata {
+        public: true,
+        retention: "eternal",
+        filename: "avatar",
+        filetype: mime_type,
+    })
+    .map_err(|e| KupferdrahtError::Encoding(format!("multipart metadata json: {e}")))?;
+    let md5 = base64::engine::general_purpose::STANDARD.encode(Md5::digest(image));
+    let mut body = format!(
+        "--{MULTIPART_BOUNDARY}\r\n\
+         Content-Type: application/json;charset=utf-8\r\n\
+         Content-Length: {}\r\n\
+         \r\n\
+         {metadata}\r\n\
+         --{MULTIPART_BOUNDARY}\r\n\
+         Content-Type: {mime_type}\r\n\
+         Content-Length: {}\r\n\
+         Content-MD5: {md5}\r\n\
+         \r\n",
+        metadata.len(),
+        image.len(),
+    )
+    .into_bytes();
+    body.extend_from_slice(image);
+    body.extend_from_slice(format!("\r\n--{MULTIPART_BOUNDARY}--\r\n").as_bytes());
+    Ok(body)
+}
+
+fn image_over_the_cap(max_bytes: usize) -> KupferdrahtError {
+    KupferdrahtError::BackendRejected(format!("avatar image over {max_bytes} bytes"))
+}
+
+/// The body, up to `max_bytes`: reading stops at the first chunk past it.
+#[cfg(not(target_arch = "wasm32"))]
+async fn read_bounded(
+    mut resp: reqwest::Response,
+    max_bytes: usize,
+) -> Result<Vec<u8>, KupferdrahtError> {
+    let mut body = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| KupferdrahtError::Network(format!("avatar image body: {e}")))?
+    {
+        if body.len() + chunk.len() > max_bytes {
+            return Err(image_over_the_cap(max_bytes));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
+/// The body, up to `max_bytes`. The browser's response has no chunk reader
+/// without `reqwest`'s `stream` feature, so the declared length decides before
+/// reading, and the read length after it: a store that lies about its length
+/// costs one buffered body, not a passed check.
+#[cfg(target_arch = "wasm32")]
+async fn read_bounded(
+    resp: reqwest::Response,
+    max_bytes: usize,
+) -> Result<Vec<u8>, KupferdrahtError> {
+    if resp
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
+        return Err(image_over_the_cap(max_bytes));
+    }
+    let body = resp
+        .bytes()
+        .await
+        .map_err(|e| KupferdrahtError::Network(format!("avatar image body: {e}")))?;
+    if body.len() > max_bytes {
+        return Err(image_over_the_cap(max_bytes));
+    }
+    Ok(body.to_vec())
 }
 
 // Compiled for native tests as well, so the guard on its path segments sits

@@ -28,8 +28,8 @@ use base64::Engine as _;
 use openmls_sqlite_storage::Connection;
 use tracing::{debug, warn};
 
-use crate::client::account::OwnTeam;
-use crate::client::{Account, Client, ServerConfig};
+use crate::avatar::AvatarKeys;
+use crate::client::{Account, Client, OwnTeam, ServerConfig};
 use crate::encryption::{
     INITIAL_KEY_PACKAGE_COUNT, KupferdrahtProvider, MLS_PUBLIC_KEY_TYPE, MlsClient,
 };
@@ -699,21 +699,29 @@ impl LoginPipeline {
         else {
             return OwnTeam::default();
         };
-        let name = match self
+        match self
             .http
             .get_team(self.api_version, access_token, &id)
             .await
         {
-            Ok(team) => Some(team.name),
+            Ok(team) => OwnTeam {
+                id: Some(id),
+                name: Some(team.name),
+                icon_key: team
+                    .icon
+                    .filter(|icon| !icon.is_empty() && icon != "default"),
+            },
             Err(e) => {
                 warn!(
                     error = %e,
                     "GET /teams/{{tid}} failed; the account has no team name until the next login"
                 );
-                None
+                OwnTeam {
+                    id: Some(id),
+                    ..OwnTeam::default()
+                }
             }
-        };
-        OwnTeam { id: Some(id), name }
+        }
     }
 
     /// Assemble the final `Client`. Consumes the pipeline to signal the
@@ -733,13 +741,14 @@ impl LoginPipeline {
     ) -> Arc<Client> {
         let localpart = login.user;
         let user_id = UserId::new(&localpart, &self_user.qualified_id.domain);
+        let avatar_keys = AvatarKeys::from_assets(&self_user.assets);
         let account = Account::new(
             user_id.clone(),
             self_user.name,
             self_user.handle,
             self_user.email,
-            own_team.id,
-            own_team.name,
+            own_team,
+            avatar_keys,
         );
         Client::new(
             user_id,

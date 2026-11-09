@@ -15,6 +15,7 @@
 
 uniffi::setup_scaffolding!("kupferdraht");
 
+pub mod avatar;
 pub mod client;
 pub mod error;
 // The UniFFI C-ABI wrapper layer is native/mobile only. The browser target
@@ -51,6 +52,7 @@ mod secret_debug_tests;
 pub(crate) mod time;
 pub(crate) mod wire;
 
+pub use avatar::{Avatar, AvatarSize};
 pub use client::{
     Account, Client, ClientBuilder, FileSharingPolicy, JoinSummary, PendingClient, ReceiptMode,
     ResyncSummary, ServerConfig,

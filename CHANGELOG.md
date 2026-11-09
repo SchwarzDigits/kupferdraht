@@ -45,6 +45,17 @@ is no skill for it — it is this short procedure:
   and the name stays empty until the next full login, since a resume is
   offline. The CLI's `login`, `activate`, `sso finalize` and `status` print a
   `team:` line.
+- **Avatars** (Step 144): `Client::avatar(user, size)` and
+  `Client::team_avatar()` give a user's picture and the team's icon,
+  `Client::avatar_key(user)` the version marker to key an embedder's own store
+  by, `Client::upload_avatar(image)` and `Client::remove_avatar()` set the own.
+  On the FFI `Client`, the browser `Client` and `kupferdraht-tabs` alike, and in
+  the CLI as `avatar get`, `avatar upload` and `avatar remove`; a member entry
+  carries the key too. No byte of a downloaded or given image reaches the caller:
+  Kupferdraht decodes JPEG, PNG, GIF and WebP with Rust decoders under limits (4
+  MiB, 4096 × 4096 pixels), applies a JPEG's EXIF orientation, and writes a new
+  JPEG, or PNG where the image is transparent. Metadata such as a photo's GPS
+  position is gone. Show an avatar as `<img>` or on a canvas, never as a document.
 
 ### Changed
 
@@ -54,6 +65,11 @@ is no skill for it — it is this short procedure:
   a resume; the bundled store does, by migration V33. The FFI record `Account`
   grows the same two fields, which a Kotlin or Swift consumer that only reads
   it does not notice.
+- **BREAKING: `SelfUserRecord`, `RoomMember` and `RoomMemberRecord` carry avatar
+  keys** (Step 144): `avatar_thumbnail_key` and `avatar_full_key`, and
+  `team_avatar_key` on `SelfUserRecord`, by migration V34, so code building one
+  from a struct literal has them to add. A custom `Store` can answer
+  `member_avatar_keys`; its default makes `Client::avatar` ask `list-users`.
 
 ### Deprecated
 

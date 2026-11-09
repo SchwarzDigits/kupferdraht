@@ -15,6 +15,8 @@
 //! is why the surface must be driven from a **dedicated Web Worker**.
 #![allow(clippy::unused_unit)]
 
+// Step 144: avatars as the browser sees them.
+pub mod avatar;
 mod devices;
 // Step 130c: the one serializer of the browser's views.
 pub mod js_view;

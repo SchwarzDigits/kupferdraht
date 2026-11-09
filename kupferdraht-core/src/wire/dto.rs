@@ -366,15 +366,45 @@ pub struct ListUsersResponse {
     pub failed: Vec<QualifiedId>,
 }
 
+/// One element of a profile's `assets`: a public asset by key, with what it
+/// is. The backend names no domain, so the asset's is the user's (Step 144,
+/// live-confirmed). Every field is the profile owner's choice: one this client
+/// cannot use is skipped, and does not fail the profile.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct UserAsset {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub size: Option<String>,
+    #[serde(rename = "type", default)]
+    pub asset_type: Option<String>,
+}
+
+impl UserAsset {
+    pub const PREVIEW: &'static str = "preview";
+    pub const COMPLETE: &'static str = "complete";
+
+    /// An image under `key`, as `PUT /self` names it.
+    pub fn image(key: &str, size: &str) -> Self {
+        Self {
+            key: key.to_owned(),
+            size: Some(size.to_owned()),
+            asset_type: Some("image".to_owned()),
+        }
+    }
+}
+
 /// Subset of Wire's `UserProfile` that Kupferdraht consumes. Extra fields
-/// (`accent_id`, `legalhold_status`, `assets`, ...) are ignored via
-/// serde's default behaviour.
+/// (`accent_id`, `legalhold_status`, ...) are ignored via serde's default
+/// behaviour.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UserProfile {
     pub qualified_id: QualifiedId,
     pub name: String,
     #[serde(default)]
     pub handle: Option<String>,
+    #[serde(default)]
+    pub assets: Vec<UserAsset>,
 }
 
 /// Response body of `GET /v{N}/self`.
@@ -397,15 +427,19 @@ pub struct SelfUser {
     /// the team id when deleting a team conversation (Step 23).
     #[serde(default)]
     pub team: Option<String>,
+    #[serde(default)]
+    pub assets: Vec<UserAsset>,
 }
 
 /// Response body of `GET /v{N}/teams/{tid}` (Step 143). Wire's `Team` carries
-/// more (`creator`, `icon`, `binding`, `splash_screen`); Kupferdraht consumes
-/// the id and the name.
+/// more (`creator`, `binding`, `splash_screen`); Kupferdraht consumes the id,
+/// the name and the icon (Step 144): an asset key, or `"default"` for none.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Team {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 /// One element of `GET /v{N}/clients`. Wire's `Client` schema carries

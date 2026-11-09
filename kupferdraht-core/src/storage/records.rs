@@ -70,6 +70,11 @@ pub struct SelfUserRecord {
     pub team_id: Option<String>,
     /// The team's name as of the last login (Step 143).
     pub team_name: Option<String>,
+    /// The own avatar's asset keys, thumbnail and full (Step 144).
+    pub avatar_thumbnail_key: Option<String>,
+    pub avatar_full_key: Option<String>,
+    /// The asset key of the team's icon as of the last login (Step 144).
+    pub team_avatar_key: Option<String>,
 }
 
 /// The `ServerConfig` values Kupferdraht booted with, persisted so
@@ -124,6 +129,11 @@ pub struct RoomMemberRecord {
     /// `SQLite` gets the same via V26's `DEFAULT 'member'`.
     #[serde(default = "default_member_role")]
     pub role: String,
+    /// The member's avatar asset keys from `list-users` (Step 144).
+    #[serde(default)]
+    pub avatar_thumbnail_key: Option<String>,
+    #[serde(default)]
+    pub avatar_full_key: Option<String>,
 }
 
 fn default_member_role() -> String {
@@ -624,6 +634,19 @@ pub trait Store: MaybeSendSync {
         &self,
         _idempotency_key: &str,
     ) -> Result<Option<SendKeyRecord>, KupferdrahtError> {
+        Ok(None)
+    }
+
+    /// The avatar keys of a stored member, `Ok(None)` for a user in no stored
+    /// room (Step 144). The default keeps none: a custom store's callers ask
+    /// the backend.
+    ///
+    /// # Errors
+    /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
+    async fn member_avatar_keys(
+        &self,
+        _user_id: &str,
+    ) -> Result<Option<crate::avatar::AvatarKeys>, KupferdrahtError> {
         Ok(None)
     }
 

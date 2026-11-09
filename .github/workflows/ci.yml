@@ -138,6 +138,7 @@ jobs:
           --test step_110_browser_error_names --test step_138_browser_read_state --test step_139_browser_service_token
           --test step_140_browser_plaintext_guard --test step_130b_browser_resend
           --test step_130c_browser_null_views
+          --test step_144_browser_avatar
           --test indexeddb_keystore --test wasm_fetch -- -D warnings
 
       # The runner must match the lockfile's wasm-bindgen exactly.

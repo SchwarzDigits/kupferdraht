@@ -1,6 +1,7 @@
 # Step 144 — Avatars: show every user's and the team's, set the own
 
-**Status: commissioned 2026-11-05** (from the browser embedder's
+**Status: in progress** on `step/144-avatars`; phase 1 taken and red tests
+approved by Volker on 2026-11-09. Commissioned 2026-11-05 (from the browser embedder's
 requirements for a work-queue client, R2 and R3, measured there against
 `4f30f02` and re-checked against `main` `9e1a11c`). Taken with Volker on
 commissioning:
@@ -22,6 +23,89 @@ commissioning:
   pipeline and cache, its key from Step 143's team request.
 
 After Step 143, whose V33 also touches `self_user`.
+
+## Phase 1, measured 2026-11-09
+
+**Live, on the wire-server-rs stack** with throwaway accounts:
+
+| Probe | Answer |
+|---|---|
+| `POST /assets`, `public: true`, `retention: eternal`, no `convId`, `filename`, `filetype` | `201`, `{ domain, key }`, no token, as owner and as plain member; this stack has no asset audit log |
+| `PUT /self` with `assets` | `200`; `/self` and `list-users` answer `{ key, size, type }` |
+| `PUT /self` with `assets: []` | `200`, `assets` empty; the old key still downloads |
+| `PUT /self` naming another user's key | `200`: the backend does not check who owns a key |
+| `PUT /self` with `size: "huge"` | `400` |
+| `GET /assets/{domain}/{key}`, owner, member, another team's owner | `302` to the asset store |
+| the hop, no credentials | `200`, `application/octet-stream`, no `Content-Disposition`, the same bytes |
+| the download without a token | `401` |
+| another domain in the path, an unknown key | `403 federation-not-enabled`, `404 not-found` |
+| `GET /users/{domain}/{id}` by another team | `404` |
+| `GET /teams/{tid}` of a new team | `icon: "default"`, no `icon_key` |
+| `PUT /teams/{tid}` | `405`, `Allow: GET,HEAD` at nginz; `405` at `galley-rs`, `403` at Haskell `galley` |
+
+So the asset domain is the user's, a public download still needs the bearer
+token, and the team icon cannot be set through this stack.
+
+**Wire's clients, values only (ADR-0009):** the webapp's `imageWorker.ts` scales a
+profile preview to 280 × 280 and a complete image to fit 1448, JPEG quality 80.
+Android's `ImageUtil.kt` uses 280 and factor 75 for avatars, and removes metadata
+after normalizing the rotation. Kalium's `UploadUserAvatarUseCase` uploads one
+image and names its key for both `preview` and `complete` (`UserMapper`), with
+`filename` and `filetype` on the upload and `convId` null. To be indexed in
+`docs/wire/kalium-readings.md`.
+
+**The decoders.** Two scratch builds, the same 4096 × 4096 JPEG in Firefox:
+
+| | `image` 0.25 (first plan) | the format crates directly |
+|---|---|---|
+| crates, lines of source | 23, 277 697 | 18, 87 025 |
+| matches of `unsafe` in the source | 1067 | 175, of which 85 compiled out by features |
+| JPEG decoder's SIMD on native | on, not switchable through `image` | off |
+| wasm growth, gzip | 252 KiB | 197 KiB |
+| 4096 → 1448 px | 526 ms | 361 ms |
+| own code | about 30 lines | about 200 lines |
+
+`image` pulls `moxcms` and `pxfm` without a feature to leave them out: 568 of its
+matches, in code Kupferdraht would never call. `png`, `gif`, `image-webp`, `weezl`,
+`fdeflate` and `miniz_oxide` forbid `unsafe_code` and are fuzzed upstream, as is
+`zune-jpeg`, whose `unsafe` is all behind its `x86` and `neon` features.
+
+**Taken 2026-11-09 (Volker), changing the scope below:**
+
+- **No `image` crate.** `zune-jpeg` and `zune-core` without their default features
+  (no SIMD), `png`, `gif`, `image-webp`, `jpeg-encoder` without `simd`. The module
+  that joins them is `#![forbid(unsafe_code)]`.
+- **`IJG` goes on the allow-list** of `deny.toml` and `about.toml`, for
+  `jpeg-encoder`, with the notice its license asks for in the attribution files.
+- **The EXIF orientation of a JPEG is applied before the metadata goes**, or a
+  phone's portrait photo lies on its side. A small parser reads that one tag and
+  nothing else of the EXIF.
+- **The smoke sets the team icon in `galley.team`** for a throwaway team; reading
+  and downloading it still run through the stack.
+
+**Settled by the measurements:**
+
+- Target sizes 280 and 1448, JPEG quality 80.
+- `upload_avatar` sends `filename` and `filetype`, no `convId`, as Kalium does: an
+  audit-logging backend asks for them.
+- A profile may name one key for both sizes, or only one size. `avatar` then takes
+  the other size's key and scales to the size asked for.
+- A valid JPEG carrying HTML in a comment is an image: it comes out written anew,
+  without the HTML. Only what does not decode is "no avatar".
+- The own keys are the `self_user` row's, read through the store, with the login's
+  snapshot on `Account` where there is no row (the Step 126 pattern). No new state
+  on `Client` beyond the image cache.
+- A member's keys come from `Store::member_avatar_keys`, default `Ok(None)`: a
+  custom store without it asks `list-users`.
+- A download is bounded natively by `Response::chunk`: 4 MiB + 1 fails it without
+  buffering the rest. The browser's response has no chunk reader without `reqwest`'s
+  `stream` feature, so there the declared length decides first and the read length
+  after: a store that lies about its length costs one buffered body.
+- `avatar` returns `null` for none in the browser, as Step 130c's rule says, not
+  `undefined` as first planned.
+- The FFI record `RoomMember` carries `avatar_thumbnail_key` and `avatar_full_key`,
+  which persistence needs anyway; the version marker is the first of them or else
+  the second, as `RoomMember::avatar_key()` and the browser's `avatarKey` give it.
 
 ## Problem
 
@@ -95,14 +179,14 @@ After Step 143, whose V33 also touches `self_user`.
      server (Wire's clients do not delete them either).
 3. **Every image is written anew.** No byte of a downloaded or a given
    image passes through:
-   - **Decode** with Rust decoders (the `image` crate with the format
-     features `jpeg`, `png`, `gif`, `webp` only), under limits: 4 MiB
-     per input file (a larger download fails `BackendRejected` without
-     buffering it whole), 4096 × 4096 pixels, a cap on the decoder's
+   - **Decode** with Rust decoders (the format crates, see "Phase 1"), under
+     limits: 4 MiB per input file (a larger download fails `BackendRejected`
+     without buffering it whole), 4096 × 4096 pixels, a cap on the decoder's
      allocations (decompression bombs); of an animated GIF or WebP the
      first frame. The magic bytes pick the decoder; anything else (SVG,
      HTML, …) is "no avatar" with a `warn!` on download, `InvalidInput`
      on set.
+   - **Orient** a JPEG by its EXIF orientation, then forget the EXIF.
    - **Write** a new image from the pixels: JPEG, or PNG when the image
      uses transparency (an alpha below 255 anywhere). Metadata (EXIF,
      the GPS position of a phone photo among it), trailing data and any
@@ -117,8 +201,7 @@ After Step 143, whose V33 also touches `self_user`.
    least recently used out first; an image over 1 MiB is served but not
    cached. No disk cache (Step 84's cache policy stays untouched); an
    embedder that wants persistence keys its own store by `avatarKey`.
-5. **Storage.** Migration V34 (the next free number when the step
-   starts): `avatar_thumbnail_key` and `avatar_full_key` on
+5. **Storage.** Migration V34: `avatar_thumbnail_key` and `avatar_full_key` on
    `room_members` and on `self_user`, `team_avatar_key` on `self_user`
    (Step 143's team request reads `icon` from here on); every writer of the two tables
    carries them (`replace_rooms`, the member merge of `sync_members`,
@@ -152,16 +235,15 @@ After Step 143, whose V33 also touches `self_user`.
    matrix-rust-sdk has no team, the nearest is a space's avatar), `docs/ARCHITECTURE.md` §7 (V34) and the module that writes
    images, `docs/THREAT_MODEL.md` (minor version: the re-encoding, the
    decoders now in Kupferdraht's process, the residual risks below),
-   `THIRD-PARTY-NOTICES` and `docs/THIRD_PARTY_LICENSES.html` (the
-   `image` crate and its format crates), `README.md` ("What it does"),
+   `THIRD-PARTY-NOTICES` and `docs/THIRD_PARTY_LICENSES.html` (the format
+   crates, and the IJG notice), `README.md` ("What it does"),
    `CHANGELOG.md` `[Unreleased]` under Added.
 
 ## Residual risks (THREAT_MODEL)
 
-- **The decoders run in Kupferdraht's process now.** Rust rules out
-  most memory errors, but some decoders take `unsafe` paths for speed
-  (SIMD); phase 1 checks the chosen crates and turns such paths off
-  where a feature allows it.
+- **The decoders run in Kupferdraht's process now.** Rust rules out most memory
+  errors. The chosen crates' SIMD paths are compiled out; what stays are checksum
+  and deflate helpers with a little `unsafe` (`crc32fast`, `simd-adler32`, `flate2`).
 - **A decoder panic.** A malformed image is far likelier to panic a
   Rust decoder than to run code. In the browser a panic ends the wasm
   instance: a crafted avatar could crash the client, not take it over.
@@ -182,29 +264,6 @@ After Step 143, whose V33 also touches `self_user`.
 - Room avatars (Wire conversations have none; open.md's parity list).
 - Deleting replaced avatar assets on the server; a disk cache;
   cropping or any editing beyond decode, scale and write.
-
-## Phase-1 questions
-
-1. **Live probes on the wire-server-rs stack:** a public upload as a
-   team member — does the backend demand `convId` / `filename` /
-   `filetype` when asset audit logging is on, as for file uploads? —,
-   `PUT /self` with `assets` and with `assets: []`, the download of a
-   public asset by another team member and by its owner (domain = the
-   user's domain, `302` or `200`), and what `list-users` returns for
-   `assets` afterwards; a team icon set by the owner (`PUT
-   /teams/{tid}` with `icon` after a public upload), downloaded by a
-   member, and what `icon_key` carries beside `icon`. Recorded in
-   `docs/wire/api-notes.md`.
-2. **Sizes and quality:** the dimensions and the JPEG quality of the
-   `preview` and `complete` images Wire's own clients upload — they set
-   Kupferdraht's target sizes and quality; the caps (4 MiB per input,
-   4096 × 4096, 1 MiB per cache entry) stand unless an observed avatar
-   exceeds them.
-3. **The decoder crates:** the `image` version and its format crates,
-   their `unsafe` (`cargo geiger`) and the features that avoid it, their
-   fuzzing; `cargo deny` with the new licenses; the growth of the wasm
-   binary and the time to decode and write a 4096 × 4096 image in the
-   browser.
 
 ## TDD sketch
 
@@ -236,8 +295,8 @@ After Step 143, whose V33 also touches `self_user`.
   member keys survive `replace_rooms` and a member merge.
 - FFI and tabs: the record fields and the four calls in the parity
   tests (`step_94_tab_proxy_parity`); wasm32 `check` and `clippy`.
-- Smoke: `kupferdraht-smoke.sh --throwaway` 18/18, then `avatar upload` for
-  the owner of the throwaway team with a phone photo carrying EXIF,
-  `avatar get` of the owner by the member (both sizes: images, no EXIF),
-  `avatar remove`; a team icon set by the owner (`curl`, no Kupferdraht
-  API sets it), `avatar get --team` by the member.
+- Smoke: `kupferdraht-smoke.sh --throwaway` 24/24, then `avatar upload` for
+  the owner of a throwaway team with a phone photo carrying EXIF,
+  `avatar get` of the owner by the member (both sizes: images, no EXIF, upright),
+  `avatar remove`; a team icon set in `galley.team`, `avatar get --team` by the
+  member.

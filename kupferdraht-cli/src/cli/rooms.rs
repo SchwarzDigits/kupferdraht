@@ -136,7 +136,11 @@ pub(crate) async fn room_members(room_id: String) -> Result<(), KupferdrahtError
             kupferdraht::RoomMemberRole::Administrator => "  [admin]",
             kupferdraht::RoomMemberRole::Member => "",
         };
-        println!("  {marker} {} — {name}{handle}{role}", m.user_id);
+        let avatar = m
+            .avatar_key()
+            .map(|key| format!("  avatar_key: {key}"))
+            .unwrap_or_default();
+        println!("  {marker} {} — {name}{handle}{role}{avatar}", m.user_id);
     }
     Ok(())
 }

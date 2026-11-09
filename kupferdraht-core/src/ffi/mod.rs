@@ -27,6 +27,7 @@ use crate::identity::UserId;
 use crate::storage::StorageEngineInfo;
 
 mod admin;
+mod avatars;
 mod manager;
 mod room;
 mod sync;
@@ -209,8 +210,12 @@ mod tests {
             "Alice".to_owned(),
             Some("alice".to_owned()),
             Some("alice@example.test".to_owned()),
-            Some("team-uuid".to_owned()),
-            Some("Fixture Team".to_owned()),
+            crate::client::OwnTeam {
+                id: Some("team-uuid".to_owned()),
+                name: Some("Fixture Team".to_owned()),
+                icon_key: None,
+            },
+            crate::avatar::AvatarKeys::default(),
         );
         let record = Account::from(core.as_ref());
         assert_eq!(record.user_id.localpart, "user-uuid");
@@ -229,8 +234,8 @@ mod tests {
             "n".to_owned(),
             None,
             None,
-            None,
-            None,
+            crate::client::OwnTeam::default(),
+            crate::avatar::AvatarKeys::default(),
         );
         let record = Account::from(core.as_ref());
         assert!(record.handle.is_none(), "missing handle stays None");

@@ -733,7 +733,8 @@ changed under the same `user_id`).
 
 List the members of a room as derived from the local MLS group's
 leaves (post-`room-join`). Resolves display name / handle for every
-non-self leaf via `POST /v{N}/list-users`.
+non-self leaf via `POST /v{N}/list-users`. A member with an avatar shows its
+`avatar_key` (Step 144).
 
 ```bash
 kupferdraht-cli room-members --id <uuid>@<domain>
@@ -2210,6 +2211,22 @@ before exercising the asset pipeline against a live backend:
    follow-up ADR before running the inbound smoke.
 
 ---
+
+### avatar (Step 144)
+
+Show or set avatars. Every image is decoded and written anew by Kupferdraht: JPEG,
+or PNG where it is transparent, with the metadata gone.
+
+```bash
+kupferdraht-cli avatar get --user <uuid>@<domain> [--size thumbnail|full] --out <file>
+kupferdraht-cli avatar get --team --out <file>
+kupferdraht-cli avatar upload <file>     # JPEG, PNG, GIF or WebP; at most 4 MiB, 4096 × 4096
+kupferdraht-cli avatar remove
+```
+
+`avatar get` prints the MIME type, the size and the path, or `avatar: —` for a user
+or team without one, and then writes no file. `avatar upload` prints the new
+`avatar_key`. `room-members` prints each member's `avatar_key`.
 
 ## Workflows
 

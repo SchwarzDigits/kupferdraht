@@ -44,6 +44,10 @@ allow = [
     # dependency of `sqlite-wasm-rs`, names it for the amalgamation's
     # miniz. Permissive, no copyleft trigger.
     "Unlicense",
+    # `jpeg-encoder` (Step 144), which writes avatars anew, derives from the
+    # Independent JPEG Group's code. Permissive, no copyleft trigger; it asks
+    # for an attribution, which THIRD-PARTY-NOTICES carries.
+    "IJG",
     # `webpki-roots` (Mozilla's root-CA list, pulled in via reqwest's
     # rustls stack) uses this permissive license. It's the standard
     # license for the CDLA `data` track and contains no copyleft

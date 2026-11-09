@@ -200,6 +200,8 @@ Dual-licensed; used here under the Apache License 2.0.
 - core-foundation 0.10.1 (native targets only), core-foundation 0.9.4 (native
   targets only), core-foundation-sys 0.8.7 (native targets only) — The Servo
   Project Developers — https://github.com/servo/core-foundation-rs
+- crc32fast 1.5.4 — Sam Rijs; Alex Crichton —
+  https://github.com/srijs/rust-crc32fast
 - crossbeam-deque 0.8.8, crossbeam-epoch 0.9.21, crossbeam-utils 0.8.23 —
   https://github.com/crossbeam-rs/crossbeam
 - crypto-bigint 0.7.10 — RustCrypto Developers —
@@ -225,8 +227,12 @@ Dual-licensed; used here under the Apache License 2.0.
 - fallible-streaming-iterator 0.1.9 — Steven Fackler —
   https://github.com/sfackler/fallible-streaming-iterator
 - fastrand 2.5.0 — Stjepan Glavina — https://github.com/smol-rs/fastrand
+- fdeflate 0.3.7 — The image-rs Developers —
+  https://github.com/image-rs/fdeflate
 - ff 0.14.0 — Sean Bowe; Jack Grigg — https://github.com/zkcrypto/ff
 - fixedbitset 0.5.7 — bluss — https://github.com/petgraph/fixedbitset
+- flate2 1.1.11 — Alex Crichton; Josh Triplett —
+  https://github.com/rust-lang/flate2-rs
 - form_urlencoded 1.2.2, idna 1.1.0, percent-encoding 2.3.2, url 2.5.8 — The
   rust-url developers — https://github.com/servo/rust-url
 - fs-err 2.11.0 — Andrew Hickman — https://github.com/andrewhickman/fs-err
@@ -237,6 +243,7 @@ Dual-licensed; used here under the Apache License 2.0.
   Developers — https://github.com/rust-random/getrandom
 - ghash 0.5.1, ghash 0.6.0, poly1305 0.9.1, polyval 0.6.2, polyval 0.7.3 —
   RustCrypto Developers — https://github.com/RustCrypto/universal-hashes
+- gif 0.14.2 — The image-rs Developers — https://github.com/image-rs/image-gif
 - glob 0.3.4 (native targets only) — The Rust Project Developers —
   https://github.com/rust-lang/glob
 - gloo-timers 0.3.0 (browser target only) — Rust and WebAssembly Working Group
@@ -263,6 +270,7 @@ Dual-licensed; used here under the Apache License 2.0.
   https://github.com/devashishdxt/idb
 - idna_adapter 1.2.2 — The rust-url developers —
   https://github.com/hsivonen/idna_adapter
+- image-webp 0.2.4 — https://github.com/image-rs/image-webp
 - indexmap 2.14.2 — https://github.com/indexmap-rs/indexmap
 - ipnet 2.12.2 (native targets only) — Kris Price —
   https://github.com/krisprice/ipnet
@@ -311,6 +319,7 @@ Dual-licensed; used here under the Apache License 2.0.
 - pin-project-lite 0.2.17 — https://github.com/taiki-e/pin-project-lite
 - pkg-config 0.3.34 — Alex Crichton —
   https://github.com/rust-lang/pkg-config-rs
+- png 0.18.1 — The image-rs Developers — https://github.com/image-rs/image-png
 - powerfmt 0.2.1 — Jacob Pratt — https://github.com/jhpratt/powerfmt
 - ppv-lite86 0.2.21 — The CryptoCorrosion Contributors —
   https://github.com/cryptocorrosion/cryptocorrosion
@@ -324,6 +333,8 @@ Dual-licensed; used here under the Apache License 2.0.
   https://github.com/addr-rs/psl-types
 - publicsuffix 2.3.0 (native targets only) — rushmorem —
   https://github.com/rushmorem/publicsuffix
+- quick-error 2.0.1 — Paul Colomiets; Colin Kiegel —
+  https://github.com/tailhook/quick-error
 - quote 1.0.47 — David Tolnay — https://github.com/dtolnay/quote
 - rand 0.10.1, rand 0.8.8, rand 0.9.4 (native targets only), rand_chacha
   0.10.0, rand_chacha 0.3.1, rand_chacha 0.9.0 (native targets only),
@@ -403,15 +414,16 @@ Dual-licensed; used here under the Apache License 2.0.
 - utf_types 1.0.0 — Henri Sivonen — https://github.com/hsivonen/utf_types
 - uuid 1.29.0 — Ashley Mannix; Dylan DPC; Hunar Roop Kahlon —
   https://github.com/uuid-rs/uuid
-- version_check 0.9.5 — Sergio Benitez —
-  https://github.com/SergioBenitez/version_check
 - vcpkg 0.2.15 — Jim McGrath — https://github.com/mcgoo/vcpkg-rs; a build
   dependency of libsqlite3-sys (joins the graph with the fork's full crate;
   idle on the bundled path)
+- version_check 0.9.5 — Sergio Benitez —
+  https://github.com/SergioBenitez/version_check
 - voprf-ng 0.6.0 — https://github.com/raphaelrobert/voprf-ng/
 - wasm-streams 0.4.2 (native targets only) — Mattias Buelens —
   https://github.com/MattiasBuelens/wasm-streams
 - web-time 1.1.0 (browser target only) — https://github.com/daxpedda/web-time
+- weezl 0.1.12 — The image-rs Developers — https://github.com/image-rs/weezl
 - windows-link 0.2.1 (native targets only), windows-sys 0.48.0 (native targets
   only), windows-sys 0.52.0 (native targets only), windows-sys 0.60.2 (native
   targets only), windows-sys 0.61.2 (native targets only), windows-targets
@@ -497,6 +509,8 @@ Components licensed under the MIT License
 - serde-wasm-bindgen 0.6.5 (browser target only) — Ingvar Stepanyan —
   https://github.com/RReverser/serde-wasm-bindgen
 - sharded-slab 0.1.7 — Eliza Weisman — https://github.com/hawkw/sharded-slab
+- simd-adler32 0.3.10 — Marvin Countryman —
+  https://github.com/mcountryman/simd-adler32
 - slab 0.4.12 — Carl Lerche — https://github.com/tokio-rs/slab
 - strsim 0.11.1 (native targets only) — Danny Guo; maxbachmann —
   https://github.com/rapidfuzz/strsim-rs
@@ -589,6 +603,7 @@ Dual- or multi-licensed; used here under the MIT License.
   https://github.com/BurntSushi/aho-corasick
 - byteorder 1.5.0 (native targets only) — Andrew Gallant —
   https://github.com/BurntSushi/byteorder
+- byteorder-lite 0.1.0 — https://github.com/image-rs/byteorder-lite
 - memchr 2.8.3 — Andrew Gallant; bluss — https://github.com/BurntSushi/memchr
 - same-file 1.0.6 — Andrew Gallant — https://github.com/BurntSushi/same-file
 - walkdir 2.5.0 — Andrew Gallant — https://github.com/BurntSushi/walkdir
@@ -653,7 +668,11 @@ Components licensed under Apache-2.0 OR MIT OR Zlib
 
 Dual- or multi-licensed; used here under the Apache License 2.0.
 
+- miniz_oxide 0.8.9, miniz_oxide 0.9.1 — Frommi; oyvindln; Rich Geldreich —
+  https://github.com/Frommi/miniz_oxide
 - tinyvec 1.13.3 — Lokathor — https://github.com/Lokathor/tinyvec
+- zune-core 0.5.3, zune-jpeg 0.5.15 — caleb —
+  https://github.com/etemesi254/zune-image
 
 Components licensed under the CDLA Permissive 2.0
 -------------------------------------------------
@@ -706,6 +725,23 @@ The choice in the expression is used here under CC0-1.0.
   SQLite3 Multiple Ciphers amalgamation as a crate, a build dependency of
   sqlite-wasm-rs. The browser build compiles vendor/sqlite3mc/ instead
   (SQLITE_WASM_RS_SOURCE_DIR), the same files by checksum.
+
+Components licensed under 0BSD OR Apache-2.0 OR MIT
+---------------------------------------------------
+
+Dual- or multi-licensed; used here under the Apache License 2.0.
+
+- adler2 2.0.1 — Jonas Schievink; oyvindln —
+  https://github.com/oyvindln/adler2
+
+Components licensed under (MIT OR Apache-2.0) AND IJG
+-----------------------------------------------------
+
+The choice in the expression is used here under the Apache License 2.0.
+This software is based in part on the work of the Independent JPEG Group.
+
+- jpeg-encoder 0.7.1 — Volker Ströbel —
+  https://github.com/vstroebel/jpeg-encoder
 
 Regenerating this file
 ----------------------

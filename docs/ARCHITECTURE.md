@@ -102,6 +102,7 @@ The real layout, by responsibility:
 | `wire/` + `wire/http/` | Wire HTTP API: `HttpClient`, DTOs, version negotiation |
 | `ffi/` | UniFFI wrappers for the stateful objects (`Client`, `Room`, `Timeline`, …) — native targets only |
 | `wasm/` | hand-written wasm-bindgen binding layer (`Kupferdraht`/`PendingLogin`/`Client` classes, `live_sync` polling loop) — parallel to `ffi/`, wasm32 only (Steps 44–59); driven from a **dedicated Web Worker** since Step 91 (OPFS); every view crosses through `js_view::to_js`, a missing value as `null` (Step 130c) |
+| `avatar/` | Step 144: every avatar written anew: format crates decode under limits (`decode`), EXIF orientation (`exif`), scaling (`pixels`), a new JPEG or PNG (`encode`), the per-client image cache (`cache`); `#![forbid(unsafe_code)]` |
 | `time.rs` | wall-clock shim (`now_ms`): `SystemTime` on native, `js_sys::Date` on wasm (W8, Step 48) |
 | `logging.rs` | Step 117: `init_logging` installs Kupferdraht's `tracing` subscriber that hands Kupferdraht's own events (`kupferdraht::…`) to the app's `LogListener` — Kupferdraht writes nowhere itself; UniFFI-annotated in place, `wasm/logging.rs` adapts the browser's `onLog` |
 
@@ -670,8 +671,10 @@ applied but unrecorded, which the next open would re-apply. `mls.db` has
 the same since Step 142: the openmls fork's `openmls_sqlite_storage` runs
 openmls's migrations grouped (history table
 `openmls_sqlite_storage_migrations`). The current
-schema version is **V33**
-(`V33__step_143_own_team.sql` — `team_id` and `team_name` on `self_user`, the
+schema version is **V34**
+(`V34__step_144_avatars.sql` — `avatar_thumbnail_key` and `avatar_full_key` on
+`room_members` and `self_user`, `team_avatar_key` on `self_user`: the asset keys a
+profile names and the team's icon; `V33__step_143_own_team.sql` — `team_id` and `team_name` on `self_user`, the
 own team as of the last login, read back by `build_resume_account`;
 `V32__step_130a_send_keys.sql` — `send_keys`, see "Idempotency keys"
 below; V31 the unread flag, below; V30

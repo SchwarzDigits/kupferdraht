@@ -18,7 +18,7 @@
 #![allow(clippy::doc_markdown)]
 
 use crate::error::KupferdrahtError;
-use crate::storage::SelfUserRecord;
+use crate::storage::{SelfUserRecord, Store};
 
 use super::Client;
 
@@ -96,10 +96,26 @@ impl Client {
         let Some(store) = self.store_handle() else {
             return Ok(());
         };
+        let mut row = self.current_self_row(store.as_ref()).await?;
+        if let Some(handle) = handle {
+            row.handle = Some(handle.to_owned());
+        }
+        if let Some(name) = name {
+            row.name = name.to_owned();
+        }
+        store.save_self_user(&row).await
+    }
+
+    /// The `self_user` row, or one from the account snapshot when there is
+    /// none yet: a write of this session is in the row, not in the snapshot.
+    pub(super) async fn current_self_row(
+        &self,
+        store: &dyn Store,
+    ) -> Result<SelfUserRecord, KupferdrahtError> {
         let account = self.account();
         let id = account.user_id().as_str().to_string();
         debug_assert!(!id.is_empty(), "a logged-in client has a user id");
-        let mut row = store
+        Ok(store
             .load_self_user(&id)
             .await?
             .unwrap_or_else(|| SelfUserRecord {
@@ -109,14 +125,10 @@ impl Client {
                 email: account.email().map(str::to_owned),
                 team_id: account.team_id().map(str::to_owned),
                 team_name: account.team_name().map(str::to_owned),
-            });
-        if let Some(handle) = handle {
-            row.handle = Some(handle.to_owned());
-        }
-        if let Some(name) = name {
-            row.name = name.to_owned();
-        }
-        store.save_self_user(&row).await
+                avatar_thumbnail_key: account.login_avatar_keys().thumbnail.clone(),
+                avatar_full_key: account.login_avatar_keys().full.clone(),
+                team_avatar_key: account.team_avatar_key().map(str::to_owned),
+            }))
     }
 
     /// `PUT /v{N}/access/self/email` — request a change of the

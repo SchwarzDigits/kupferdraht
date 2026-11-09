@@ -1,6 +1,6 @@
 # Kupferdraht Threat Model
 
-**Version:** 0.10 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-04 **Status:** working draft, for review by Markus Troßbach
+**Version:** 0.11 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-09 **Status:** working draft, for review by Markus Troßbach
 
 ------
 
@@ -225,6 +225,8 @@ Up to version 0.3 this document foresaw a server-side **Dehydrated Device** (DD)
 
 The construction is cryptographically sound at the protocol level, but it does inherit the MLS layer's properties rather than achieving authenticated encryption locally. A future Wire protocol revision to AES-GCM (or AES-CBC + HMAC-SHA256 in encrypt-then-MAC framing) would strengthen this further; Kupferdraht will adopt such a revision when Wire's clients standardise it. Until then, Kupferdraht emits only `AES_CBC` outbound; inbound `AES_GCM`-flagged assets are decoded but `download()` returns `InvalidInput` (warn-and-skip per ADR-0011 §AES-GCM toleration).
 
+**L7 — Image decoders run in Kupferdraht's process** (Step 144). Avatars are chosen freely by every user in a shared room, and a crafted image attacks the decoder that renders it (libwebp, CVE-2023-4863). So Kupferdraht decodes each one itself, under limits, and hands on an image written from the pixels: JPEG or PNG, no metadata, no trailing data, no structure aimed at a decoder, and neither SVG nor HTML passes. What remains: the decoders are Rust, and the JPEG decoder's and encoder's SIMD paths are compiled out, but `crc32fast`, `simd-adler32` and `flate2` keep a little `unsafe`. A decoder panic is likelier than code execution: natively it costs that one image, in the browser it ends the wasm instance, so a crafted avatar could crash a client, not take it over. The image Kupferdraht wrote is still decoded by the platform, but it comes from a known encoder. **Images sent as files (Step 11) are not covered:** they reach the embedder as the sender's bytes, and the same decoder risk applies where one previews them.
+
 ------
 
 ## Appendix: long-term questions
@@ -255,6 +257,7 @@ Not blocking for the current implementation phase. To be picked up before the af
 | 0.8     | 2026-11-02 | Step 135: G1 without the X.509 exception — a message signed by a non-Basic leaf is dropped instead of attributed through the envelope (ADR-0027 decision 2 amended); every surfaced message is attributed to an authenticated leaf |
 | 0.9     | 2026-11-03 | Step 139: N8 names the service tokens of the token exchange (ADR-0036 revision 1.1) — handed to the page on the embedder's request, they live in the embedder's trust domain like the plaintexts; a bearer token without key binding |
 | 0.10    | 2026-11-04 | Step 141: the Trust Model names the redirect rule of Step 132 and its one exception — an asset download follows the backend's `302` to the asset store once, without credentials; integrity stays with L6 |
+| 0.11    | 2026-11-09 | Step 144: L7 names the image decoders in Kupferdraht's process, what writing every avatar anew removes, and what remains. |
 
 ------
 
