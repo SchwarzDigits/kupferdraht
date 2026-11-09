@@ -2882,3 +2882,48 @@ touched it.
   fetch stays empty until the next login, by decision. ADR-0007,
   `reference/README.md` and comments in `bindings/android`, `bindings/kotlin` and
   `bindings/swift` still name natrium as a consumer.
+
+### 5.87 A scratch build that replaced the plan's crate, "anew" tested by the wrong property, and a fixture that was no phone's photo (Step 144)
+
+- **Two scratch builds replaced the plan's dependency.** The plan named `image` 0.25.
+  The same rewrite built both ways and measured in Firefox gave 23 crates and 277 697
+  lines against 18 and 87 025, and showed what no reading of the feature list had:
+  `image` turns on the JPEG decoder's SIMD natively, with no switch. For a step whose
+  whole point is a smaller attack surface, that decided it, at the price of about 200
+  lines of own code and `IJG` on the allow-list.
+- **The plan read less than the code again (§5.86).** Reading the code before the red
+  tests produced five deviations, all of which reached Volker with the tests: where
+  the own keys live, a default on `Store`, the fallback between sizes, a polyglot JPEG,
+  two keys on the FFI record. One slipped through to implementation: the plan said
+  `Response::chunk` exists on both targets, and the browser's response has none. So
+  the browser checks the declared length first and the read length after, and a store
+  that lies about its length costs one buffered body.
+- **"Written anew" was first tested by the wrong property.** The browser test asserted
+  that the output differs from the input. A PNG from the same encoder comes out byte
+  for byte the same, which is no failure: the promise is that nothing foreign comes
+  along, not that bytes change. The five checks were green and only `wasm-test.sh`
+  caught it, since that loop existed only there. The replacement puts a `tEXt` chunk
+  and trailing data on a PNG and looks for them in the output. A security property is
+  worth stating as what must be absent; "different" passes for an encoder that copies
+  a crafted file with one byte flipped.
+- **The smoke's first failure was the fixture, and it left a fact behind.** Rotation
+  failed live while the tests were green: `sips` writes an Exif segment of its own, the
+  fixture added one in front of it, and the decoder keeps the last. The fixture was
+  wrong and the code was right. It still showed that with two segments Kupferdraht
+  reads the last while some viewers read the first, which at worst shows a crafted
+  image skewed. The phone's photo announced for the smoke was in the end a built one:
+  it proves the path and the corner pixels, not a real camera's Exif. A fixture is a
+  claim about what the world sends, and this one was checked only once it failed.
+- **A lint's first fix moved it.** `type_complexity` on a test table was answered by
+  reshaping the tuple, the green test run did not re-check clippy, and the full gate
+  went red on it. Naming the types was the fix. Running clippy after a lint fix is
+  cheaper than one gate cycle.
+- **What was left.** The browser's download has not run against a backend: the browser
+  suite has no logged-in client, so `fetch` following the `302` to the asset store with
+  CORS is first exercised by the embedder. CI builds no Kotlin or Swift binding, and
+  this Mac has no JDK, so the grown records were compiled in Rust only. A decoder panic
+  ends the wasm instance in the browser (THREAT_MODEL L7). HEIC, an iPhone camera's
+  default format, is refused with `InvalidInput`; the docs name the four accepted
+  formats but not this case. An avatar changed on another device of
+  the account shows at the next login, a member's with the next room refresh. Replaced
+  avatars stay on the server, as with Wire's clients.

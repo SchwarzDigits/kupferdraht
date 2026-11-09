@@ -1,7 +1,19 @@
 # Step 144 — Avatars: show every user's and the team's, set the own
 
-**Status: in progress** on `step/144-avatars`; phase 1 taken and red tests
-approved by Volker on 2026-11-09. Commissioned 2026-11-05 (from the browser embedder's
+**Status: MERGED 2026-11-09** — `5e89a61` on `step/144-avatars`, merged to
+`main` as PR #58 (`d593271`); gate green on 1.98 (fmt, 0 build warnings, clippy,
+1538 tests, deny; wasm32 check, clippy `--lib` and CI's wasm clippy line); the
+browser suite green locally (18 suites, 80 tests, headless Firefox) and in CI.
+Smoked 2026-11-09 on the wire-server-rs stack with the CLI built from this tree:
+`kupferdraht-smoke.sh --throwaway` 24/24, and a photo with an EXIF rotation and a
+GPS marker uploaded by an owner and fetched by a plain member in both sizes,
+upright by its corner pixels, without EXIF or marker; a team icon set in
+`galley.team` and fetched by the member; `room-members` printing the key; `avatar
+remove`. The photo was built for the test (a `sips` JPEG with a written Exif
+segment), not taken by a phone. The browser's download was not run against a
+backend, and the Kotlin and Swift bindings were not built: no JDK here, and CI
+builds neither. Phase 1 taken and red tests approved by Volker on 2026-11-09.
+Commissioned 2026-11-05 (from the browser embedder's
 requirements for a work-queue client, R2 and R3, measured there against
 `4f30f02` and re-checked against `main` `9e1a11c`). Taken with Volker on
 commissioning:
