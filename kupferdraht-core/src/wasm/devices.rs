@@ -60,7 +60,7 @@ impl RoomDevicesListener for JsDevicesListener {
             added: change.added.iter().map(DeviceView::from).collect(),
             removed: change.removed.iter().map(DeviceView::from).collect(),
         };
-        if let Ok(val) = serde_wasm_bindgen::to_value(&view) {
+        if let Ok(val) = super::js_view::to_js(&view) {
             let _ = self.on_devices_changed.call1(&JsValue::NULL, &val);
         }
     }

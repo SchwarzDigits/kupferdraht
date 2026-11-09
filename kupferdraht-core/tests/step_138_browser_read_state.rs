@@ -13,7 +13,8 @@
 #![cfg(target_arch = "wasm32")]
 
 use kupferdraht::storage::ReadStateRecord;
-use kupferdraht::wasm::read_state::{read_state_change, room_view, to_js};
+use kupferdraht::wasm::js_view::to_js;
+use kupferdraht::wasm::read_state::{read_state_change, room_view};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 

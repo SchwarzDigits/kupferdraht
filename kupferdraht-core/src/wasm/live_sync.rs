@@ -17,6 +17,7 @@ use wasm_bindgen_futures::spawn_local;
 use crate::client::Client;
 use crate::error::KupferdrahtError;
 use crate::sync::{EventHandler, Message, MessageBody, SyncSettings, SyncSummary, TypingEvent};
+use crate::wasm::js_view;
 use crate::wasm::push_socket::{self, BrowserPushSocket, Doorbell, Wake, wait_for_bell_or};
 use crate::wasm::{push_state, sync_pace};
 
@@ -80,7 +81,7 @@ struct JsEventHandler {
 
 impl EventHandler for JsEventHandler {
     fn on_message(&self, message: Message) {
-        if let Ok(val) = serde_wasm_bindgen::to_value(&MessageView::from(&message)) {
+        if let Ok(val) = js_view::to_js(&MessageView::from(&message)) {
             let _ = self.on_message.call1(&JsValue::NULL, &val);
         }
     }
@@ -95,7 +96,7 @@ impl EventHandler for JsEventHandler {
 
     fn on_typing(&self, event: TypingEvent) {
         if let Some(cb) = &self.on_typing
-            && let Ok(val) = serde_wasm_bindgen::to_value(&TypingView::from(&event))
+            && let Ok(val) = js_view::to_js(&TypingView::from(&event))
         {
             let _ = cb.call1(&JsValue::NULL, &val);
         }
@@ -413,7 +414,7 @@ async fn open_doorbell_socket(client: &Client, doorbell: &Doorbell) -> Option<Br
 /// Hand one pass's summary to the optional `onSync` callback.
 fn report_pass(on_sync: Option<&js_sys::Function>, summary: SyncSummary) {
     if let Some(cb) = on_sync
-        && let Ok(val) = serde_wasm_bindgen::to_value(&SyncSummaryView::from(summary))
+        && let Ok(val) = js_view::to_js(&SyncSummaryView::from(summary))
     {
         let _ = cb.call1(&JsValue::NULL, &val);
     }

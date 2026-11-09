@@ -101,7 +101,7 @@ The real layout, by responsibility:
 | `manager/` | `Kupferdraht`, the device-level manager (multi-account / device lifecycle) |
 | `wire/` + `wire/http/` | Wire HTTP API: `HttpClient`, DTOs, version negotiation |
 | `ffi/` | UniFFI wrappers for the stateful objects (`Client`, `Room`, `Timeline`, …) — native targets only |
-| `wasm/` | hand-written wasm-bindgen binding layer (`Kupferdraht`/`PendingLogin`/`Client` classes, `live_sync` polling loop) — parallel to `ffi/`, wasm32 only (Steps 44–59); driven from a **dedicated Web Worker** since Step 91 (OPFS) |
+| `wasm/` | hand-written wasm-bindgen binding layer (`Kupferdraht`/`PendingLogin`/`Client` classes, `live_sync` polling loop) — parallel to `ffi/`, wasm32 only (Steps 44–59); driven from a **dedicated Web Worker** since Step 91 (OPFS); every view crosses through `js_view::to_js`, a missing value as `null` (Step 130c) |
 | `time.rs` | wall-clock shim (`now_ms`): `SystemTime` on native, `js_sys::Date` on wasm (W8, Step 48) |
 | `logging.rs` | Step 117: `init_logging` installs Kupferdraht's `tracing` subscriber that hands Kupferdraht's own events (`kupferdraht::…`) to the app's `LogListener` — Kupferdraht writes nowhere itself; UniFFI-annotated in place, `wasm/logging.rs` adapts the browser's `onLog` |
 

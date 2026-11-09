@@ -37,7 +37,7 @@ impl LogListener for JsLogListener {
             target: &record.target,
             message: &record.message,
         };
-        let Ok(value) = serde_wasm_bindgen::to_value(&view) else {
+        let Ok(value) = super::js_view::to_js(&view) else {
             return;
         };
         // The app's logger must not break Kupferdraht: what it throws is dropped.

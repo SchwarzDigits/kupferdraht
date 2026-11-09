@@ -28,6 +28,7 @@ use wasm_bindgen::prelude::*;
 
 use zeroize::Zeroizing;
 
+use super::js_view;
 use super::read_state;
 use super::resend;
 use crate::client::ServerConfig;
@@ -574,7 +575,7 @@ impl Kupferdraht {
     pub async fn accounts(&self) -> Result<JsValue, JsValue> {
         let entries = self.inner.accounts().await.map_err(|e| to_js(&e))?;
         let view: Vec<AccountView> = entries.into_iter().map(AccountView::from).collect();
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 }
 
@@ -609,7 +610,7 @@ impl From<crate::client::DeviceInfo> for DeviceInfoView {
 /// Shared by `Client.devices` and `PendingLogin.devices`.
 fn devices_to_js(devices: Vec<crate::client::DeviceInfo>) -> Result<JsValue, JsValue> {
     let view: Vec<DeviceInfoView> = devices.into_iter().map(DeviceInfoView::from).collect();
-    serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+    js_view::to_js(&view)
 }
 
 /// Plain, JS-serializable view of `StorageEngineInfo`.
@@ -892,8 +893,8 @@ impl Client {
 
     /// What the app-data store's whole-DB encryption engine reports about
     /// itself, read off the live connection (Step 90 / 91): `{ engine,
-    /// version, cipher, plaintextHeaderSize, location }`, or `undefined` for
-    /// a backend without such an engine. `location` (Step 122) is
+    /// version, cipher, plaintextHeaderSize, location }`, or `null` for a
+    /// backend without such an engine. `location` (Step 122) is
     /// `"server"` for databases on the storage server, else `"local"`. The
     /// browser flavor of the native `Client::storage_engine` (FFI-mirrored
     /// on the `Client` object).
@@ -911,7 +912,7 @@ impl Client {
             plaintext_header_size: i.plaintext_header_size,
             location: if on_server { "server" } else { "local" },
         });
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 
     /// Start a background sync loop (W4) that pushes each incoming message to
@@ -975,7 +976,7 @@ impl Client {
             .iter()
             .map(super::devices::DeviceView::from)
             .collect();
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 
     /// This device's MLS thumbprint (Step 95d) — compare it with the
@@ -1018,7 +1019,7 @@ impl Client {
             rooms_updated: summary.rooms_updated,
             events_dispatched: summary.events_dispatched,
         };
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 
     /// The rooms known to this client, read from the store, as
@@ -1044,7 +1045,7 @@ impl Client {
                 )
             })
             .collect();
-        read_state::to_js(&view)
+        js_view::to_js(&view)
     }
 
     /// Send a text message to `roomId`, joining the room's MLS group first if
@@ -1104,7 +1105,7 @@ impl Client {
             .iter()
             .map(|it| TimelineItemView::project(it, me.as_deref()))
             .collect();
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 
     /// The failed sends of `roomId`, oldest first, as the items `messages`
@@ -1120,7 +1121,7 @@ impl Client {
             .iter()
             .map(|it| TimelineItemView::project(it, me.as_deref()))
             .collect();
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 
     /// Re-drive the failed send `messageId` of `roomId` under its id
@@ -1148,7 +1149,7 @@ impl Client {
             .await
             .map_err(|e| to_js(&e))?;
         let stop_name = stop_error.as_ref().map(js_error_name);
-        resend::to_js(&resend::summary_view(&summary, stop_name))
+        js_view::to_js(&resend::summary_view(&summary, stop_name))
     }
 
     /// Send a knock ("ping") to `roomId` (Step 98c). `hotKnock` marks a
@@ -1338,7 +1339,7 @@ impl Client {
             .iter()
             .map(MemberView::from)
             .collect();
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 
     /// Add `userIds` (qualified ids) to `roomId`'s MLS group. Returns the
@@ -1398,7 +1399,7 @@ impl Client {
             modes: access.modes,
             roles: access.roles,
         };
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 
     /// Set `roomId`'s access modes and roles (Step 98b).
@@ -1455,7 +1456,7 @@ impl Client {
             url: link.url,
             password_protected: link.password_protected,
         };
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 
     /// Revoke `roomId`'s guest link (Step 98b).
@@ -1547,7 +1548,7 @@ impl Client {
                 last_synced_at_ms: e.last_synced_at_ms,
             })
             .collect();
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 
     /// The team's file-sharing policy (Step 98d). `policy` is
@@ -1559,7 +1560,7 @@ impl Client {
             P::Disabled => FileSharingView { policy: "disabled" },
             P::Enabled => FileSharingView { policy: "enabled" },
         };
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 
     /// The account's recovery data (ADR-0035): its state, the first data,
@@ -1706,7 +1707,7 @@ impl Client {
             return;
         };
         let payload = match read_state_of(&room).await {
-            Ok((unread, state)) => read_state::to_js(&read_state::read_state_change(
+            Ok((unread, state)) => js_view::to_js(&read_state::read_state_change(
                 room_id,
                 unread,
                 Some(&state),
@@ -1756,7 +1757,7 @@ fn message_handle_to_js(handle: &crate::timeline::MessageHandle) -> Result<JsVal
         message_id: handle.message_id.clone(),
         sent_at_ms: handle.sent_at_ms,
     };
-    serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+    js_view::to_js(&view)
 }
 
 /// Marshal a keyed send's `MessageHandle` to `{ messageId, sentAtMs,
@@ -1771,14 +1772,14 @@ fn keyed_handle_to_js(
         sent_at_ms: handle.sent_at_ms,
         idempotency_key: idempotency_key.to_owned(),
     };
-    serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+    js_view::to_js(&view)
 }
 
 /// Marshal a `Room` to `{ roomId, name, unreadCount, lastReadAtMs,
 /// markedUnread }` — the same row `rooms()` lists it with (Step 138).
 async fn room_to_js(room: &crate::rooms::Room) -> Result<JsValue, JsValue> {
     let (unread, state) = read_state_of(room).await?;
-    read_state::to_js(&read_state::room_view(
+    js_view::to_js(&read_state::room_view(
         &room.id(),
         &room.name(),
         unread,
@@ -2074,7 +2075,7 @@ impl Recovery {
                 exported_at: Some(exported_at_ms),
             },
         };
-        serde_wasm_bindgen::to_value(&view).map_err(|e| named_error("Encoding", &e.to_string()))
+        js_view::to_js(&view)
     }
 
     /// The first recovery data (a `Uint8Array`), sealed with `pin` — only

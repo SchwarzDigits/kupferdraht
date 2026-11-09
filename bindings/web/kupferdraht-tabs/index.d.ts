@@ -253,7 +253,7 @@ export class ClientProxy {
   readonly deviceReplaced: boolean;
   /** Snapshot when the handle was returned; `startSync`'s `onStorage` reports each change (Step 113). */
   readonly storageState: 'online' | 'reconnecting';
-  storageEngine(): Promise<StorageEngineInfo | undefined>;
+  storageEngine(): Promise<StorageEngineInfo | null>;
   /** Whether sync runs on push: an open socket, polling without one, or no sync loop running. */
   pushState(): Promise<'connected' | 'polling' | 'stopped'>;
   setDisplayName(name: string): Promise<void>;

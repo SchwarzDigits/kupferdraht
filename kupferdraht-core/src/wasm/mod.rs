@@ -16,6 +16,8 @@
 #![allow(clippy::unused_unit)]
 
 mod devices;
+// Step 130c: the one serializer of the browser's views.
+pub mod js_view;
 mod live_sync;
 // Step 117: Kupferdraht's logs to the app's `onLog`.
 mod logging;
