@@ -5,6 +5,7 @@ This file is the **open backlog** — the steps still in progress, pending, or b
 ## Status overview
 
 Last update: **2026-11-09** — 
+v0.3.0 released with Step 130c alone (a missing value in a browser view is `null`, BREAKING), so the browser embedder integrates it before the new features. Order: 143, 144, 145, 146, 147, 129a, 129b. Before (the same day): 
 Step 130 merged + archived with 130c (a missing value in a browser view is `null`, BREAKING; PR #52, no smoke, the browser suite green locally and in CI); open.md §85 resolved. Order: the v0.3.0 release with 130c alone, then 143, 144, 145, 146, 147, 129a, 129b. Before (the same day): 
 Step 130c in progress (a missing value in a browser view is `null`, BREAKING, alone in v0.3.0). Before (the same day): 
 v0.2.1 released: the security fixes (openmls 0.9.2, inout 0.2.6, Step 149's crates) without a breaking change. A second Dependabot lockfile update landed as a maintainer's commit (#50, regex 1.13.1), and Step 150's check named what it moved. Order: 130c, the v0.3.0 release with 130c alone, then 143, 144, 145, 146, 147, 129a, 129b. Before (2026-11-08): 

@@ -3,7 +3,7 @@ resolver = "3"
 members = ["kupferdraht-core", "kupferdraht-cli", "kupferdraht-uniffi-bindgen"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 # Kupferdraht's own code is GPL-3.0-only (ADR-0016) — a free strategic
 # choice, not one forced by the dependency tree: the graph must stay

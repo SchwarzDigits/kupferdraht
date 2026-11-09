@@ -38,6 +38,18 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.3.0] - 2026-11-09
+
+### Changed
+
 - **BREAKING: a missing value in a browser view is `null`, not `undefined`**
   (Step 130c): every object the browser surface and `kupferdraht-tabs` hand
   over carries a missing value as `null`, as `index.d.ts` has always declared
@@ -52,14 +64,6 @@ is no skill for it — it is this short procedure:
   `email` and `handle`, the tabs' `homeId` and `cookieLabel` and the error
   details stay `undefined`, as their types declare, and `Recovery.state()`
   keeps `{ state: 'disabled' }` without an `exportedAt`.
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
 
 ## [0.2.1] - 2026-11-09
 
