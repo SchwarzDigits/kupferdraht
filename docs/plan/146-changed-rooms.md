@@ -1,6 +1,7 @@
-# Step 146 — `roomsUpdated` counts the rooms that changed
+# Step 146 — a sync pass names the rooms that changed
 
-**Status: commissioned 2026-11-05, rewritten 2026-11-09** (from the browser
+**Status: in progress** on `step/146-changed-rooms`; phase 1 taken and red tests
+approved by Volker on 2026-11-09. **Commissioned 2026-11-05, rewritten 2026-11-09** (from the browser
 embedder's requirements for a work-queue client, R8; the embedder agreed to
 this shape). Taken with Volker on the rewrite:
 
@@ -19,6 +20,44 @@ this shape). Taken with Volker on the rewrite:
   accepted that: the count comes with the pass the own event rings in;
 - the changed meaning of a field is `BREAKING`; it joins Step 145 in 0.5.0;
 - after Step 145, before Step 152.
+
+## Phase 1, taken 2026-11-09
+
+**A list, not a count (Volker).** `SyncSummary::changed_rooms: Vec<String>`, browser
+`changedRooms: string[]`, replaces `rooms_updated` / `roomsUpdated`: the embedder then
+re-reads only those rooms, and whether anything changed and how much follow from it.
+matrix-rust-sdk's `sliding_sync::UpdateSummary { rooms: Vec<OwnedRoomId> }` ("the rooms
+that have seen updates") is the analog. A new name because the type and the meaning both
+change; `SyncSummary` drops `Copy`.
+
+**Name check, 2026-11-09:** `changedRooms`, `changed_rooms`, `roomsChanged`,
+`roomsUpdated`, `SyncSummary` and `eventsDispatched` in GitHub's code search over
+`wireapp` and in Natrium (`v2`): no hit. The nearest Wire names say "conversation":
+`updatedConversations` in Kalium, `conversationsChanged` in wire-ios.
+
+**`deleteRoom`, measured on the wire-server-rs stack:** the deleting device gets its own
+`conversation.delete`, as a frame on its socket and on `/notifications`, and so does a
+member. Not measured on the dev backend: deviation 2 makes it unnecessary.
+
+**Deviations from the rewrite, all from phase 1:**
+
+1. The list above.
+2. **Every list replacement compares, not only `refresh_rooms_if_stale`.** `sync_metadata`
+   compares the list it replaces, so an own call (`create_room`, `rename_room`,
+   `delete_room`, `leave_room`, which end in it) is named at the next pass whether or not
+   the backend echoes it, and another tab learns of it through `onSync`. The echo, where
+   it comes, names the room again; the set keeps it once.
+3. **A resumed device compares with what it stored.** Before its first refresh the cache
+   is cold; the comparison then reads the stored rooms instead. So a resumed device names
+   what changed while it was away, and a new device's first summary names every room,
+   on the push path too.
+4. **What counts, named:** the name, everything `members()` shows of a member (display
+   name, handle, role, avatar keys, Step 144), the counterpart, a room that is new or gone;
+   a room event's room even where the list does not differ (a rename to the same name is a
+   new item to pull, Step 145); a `conversation.delete`'s room. Not: epoch, group id,
+   access, messages (`onMessage`), read state (`onRoomsChanged`).
+5. ADR-0026 names `roomsUpdated` in its examples; an accepted ADR is not edited, its rule
+   file does not name the field.
 
 ## Problem
 
@@ -97,9 +136,6 @@ this shape). Taken with Volker on the rewrite:
   which.
 
 ## Out of scope
-
-- Which rooms changed. A list of ids would drop `Copy` from `SyncSummary`, and
-  nobody asked; an embedder that wants to know compares `rooms()`.
 - A native room-change listener; `setRoomAccess`, whose fields no `rooms()` row
   shows.
 

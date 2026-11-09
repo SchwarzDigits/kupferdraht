@@ -143,14 +143,14 @@ impl SyncHandle {
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SyncSummaryView {
-    rooms_updated: u32,
+    changed_rooms: Vec<String>,
     events_dispatched: u32,
 }
 
 impl From<SyncSummary> for SyncSummaryView {
     fn from(s: SyncSummary) -> Self {
         Self {
-            rooms_updated: s.rooms_updated,
+            changed_rooms: s.changed_rooms,
             events_dispatched: s.events_dispatched,
         }
     }
@@ -172,8 +172,8 @@ pub(crate) struct Callbacks {
 /// Register the handlers and start the background sync loop for `client`.
 /// `on_typing` fires per inbound typing event; `on_expired` fires once if the
 /// loop stops because the refresh token died (the UI should prompt a re-login);
-/// `on_sync` fires after every successful pass with `{ roomsUpdated,
-/// eventsDispatched }` (Step 94 — what the leader tab broadcasts as `sync`);
+/// `on_sync` fires after every successful pass with `{ changedRooms,
+/// eventsDispatched }` (Steps 94, 146 — what the leader tab broadcasts as `sync`);
 /// `on_devices_changed` fires per room whose device set changed, with
 /// `{ roomId, added, removed }` (Step 95d — broadcast as `devices`);
 /// `on_storage` fires with the account's storage state on each change

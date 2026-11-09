@@ -207,6 +207,11 @@ impl Room {
         self.counterpart.clone()
     }
 
+    /// The cached members, without a copy (Step 146's comparison).
+    pub(crate) fn members_slice(&self) -> &[RoomMember] {
+        &self.members
+    }
+
     /// Snapshot of current members. Cycle 2b returns a cached copy
     /// synchronously (wrapped in `async` to match the public
     /// signature from PLAN.md — cycle 2d re-fetches from storage and

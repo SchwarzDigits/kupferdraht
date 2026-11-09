@@ -122,3 +122,12 @@ limitations".
   gobley's cinterop gave; UniFFI's Swift binding cannot be called from
   Kotlin/Native. A KMP consumer brings the module back from git (v0.3.0 has it)
   with a CI job, or does its own wrapping.
+
+*Decided with the browser embedder (2026-11-09, Volker):*
+
+- **NG-28** No signal at the moment of the client's own room call. When
+  `createRoom`, `renameRoom`, `deleteRoom`, `invite`, `kick`, `leave` or
+  `joinViaLink` resolves, `rooms()` already shows the result, so the caller
+  holds what it needs; the next pass names the room in `changedRooms` for
+  everyone else, every tab included (Step 146). The embedder's R8 asked for
+  it "before the next sync pass" and accepted this instead.

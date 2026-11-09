@@ -144,6 +144,13 @@ fn typing_event_frame(delivery_tag: u64, notif_id: &str) -> String {
     )
 }
 
+/// §11.2 `event` frame carrying one `conversation.rename` of room-a.
+fn rename_event_frame(delivery_tag: u64, notif_id: &str) -> String {
+    format!(
+        r#"{{"type":"event","data":{{"delivery_tag":{delivery_tag},"event":{{"id":"{notif_id}","payload":[{{"type":"conversation.rename","time":"2026-09-28T10:00:05.000Z","via":"user","qualified_conversation":{{"id":"room-a","domain":"example.test"}},"qualified_from":{{"id":"bob-uuid","domain":"example.test"}},"data":{{"name":"Renamed"}}}}]}}}}}}"#
+    )
+}
+
 /// §11.2 `synchronization` marker frame.
 fn synchronization_frame(marker_id: &str) -> String {
     format!(r#"{{"type":"synchronization","data":{{"marker_id":"{marker_id}"}}}}"#)
@@ -262,14 +269,73 @@ async fn websocket_sync_dispatches_live_event_frames_through_handlers() {
     assert_eq!(ticks.len(), 1, "one event frame → one callback tick");
     assert_eq!(ticks[0].events_dispatched, 1);
     assert_eq!(
-        ticks[0].rooms_updated, 0,
-        "frame ticks carry event counts only — the metadata refresh is not a tick"
+        ticks[0].changed_rooms,
+        vec!["room-a@example.test".to_string()],
+        "the first summary of a new device names the room its refresh found"
     );
 
     let typing = handler.typing.lock().expect("typing lock");
     assert_eq!(typing.len(), 1, "the typing event must reach on_typing");
     assert_eq!(typing[0].room_id, "room-a@example.test");
     assert_eq!(typing[0].typing_users, vec!["bob-uuid@example.test"]);
+}
+
+/// Step 146: a push tick names the rooms that changed, as a pass does.
+#[tokio::test]
+async fn a_room_event_frame_names_its_room_and_a_typing_frame_nothing() {
+    let server = MockServer::start();
+    mount_consumable_enabled(&server);
+    common::mount_full_login_flow(&server);
+    mount_rooms(&server);
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let ws_base = format!("ws://{}", listener.local_addr().expect("addr"));
+    let ws_server = tokio::spawn(async move {
+        let (mut ws, _uri) = accept_with_uri(&listener).await;
+        for frame in [
+            typing_event_frame(1, "push-notif-1"),
+            typing_event_frame(2, "push-notif-2"),
+            rename_event_frame(3, "push-notif-3"),
+        ] {
+            ws.send(WsMessage::text(frame)).await.expect("send frame");
+        }
+        drain_until_closed(ws).await;
+    });
+    let (client, _store) = run_login_with_ws(&server, &ws_base).await;
+    let ticks: Arc<Mutex<Vec<SyncSummary>>> = Arc::new(Mutex::new(Vec::new()));
+    let ticks_in_cb = Arc::clone(&ticks);
+
+    timeout(
+        TEST_TIMEOUT,
+        client.sync_with_callback(websocket_settings(), move |summary| {
+            let mut ticks = ticks_in_cb.lock().expect("ticks lock");
+            ticks.push(summary);
+            if ticks.len() == 3 {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        }),
+    )
+    .await
+    .expect("push loop must finish within the timeout")
+    .expect("Break must exit the push loop with Ok");
+    timeout(TEST_TIMEOUT, ws_server)
+        .await
+        .expect("ws server must finish")
+        .expect("ws server task");
+
+    let ticks = ticks.lock().expect("ticks lock");
+    let room_a = vec!["room-a@example.test".to_string()];
+    assert_eq!(
+        ticks[0].changed_rooms, room_a,
+        "a new device's first summary"
+    );
+    assert_eq!(
+        ticks[1].changed_rooms,
+        Vec::<String>::new(),
+        "typing changes nothing"
+    );
+    assert_eq!(ticks[2].changed_rooms, room_a, "the rename");
 }
 
 #[tokio::test]

@@ -510,9 +510,9 @@ async fn an_item_stands_where_it_arrived_whatever_the_servers_clock_says() {
     );
 }
 
-/// The browser has no timeline diffs: its signal is `onSync`'s `roomsUpdated`.
+/// The browser has no timeline diffs: its signal is `onSync`'s `changedRooms`.
 #[tokio::test]
-async fn a_pass_with_a_room_event_reports_the_room_list_refreshed() {
+async fn a_pass_with_a_room_event_names_its_room() {
     let server = MockServer::start();
     let fx = joined_client(&server).await;
     next_page(&server, "n1", "n2", vec![rename_event("Renamed")]);
@@ -523,8 +523,17 @@ async fn a_pass_with_a_room_event_reports_the_room_list_refreshed() {
         .await
         .expect("sync_once");
 
-    assert!(summary.rooms_updated > 0, "{summary:?}");
+    assert_eq!(summary.changed_rooms, vec![room_id()], "{summary:?}");
     assert_eq!(items(&fx).await.len(), 1);
+    assert_eq!(
+        fx.client
+            .sync_once(SyncSettings::default())
+            .await
+            .expect("sync_once")
+            .changed_rooms,
+        Vec::<String>::new(),
+        "the next pass names nothing"
+    );
 }
 
 #[tokio::test]

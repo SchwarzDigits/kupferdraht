@@ -263,6 +263,13 @@ baselines are still checked every pass — a local read), and every
 dispatch cycle refreshes one it marked — a new room shows up in the same
 pass. An idle pass is one request.
 
+Every replacement of the list compares it with what this device knew
+(Step 146, `client/room_changes.rs`): the cache, or before a resumed
+client's first refresh the stored rooms. The rooms that differ in name or
+in what `members()` shows, and the rooms of new room events and deletions,
+go into a set that each summary takes as `SyncSummary::changed_rooms`,
+the push ticks included.
+
 The browser has a doorbell of its own since Step 115
 (`wasm/push_socket.rs`): a `web_sys::WebSocket` on the same `/await`
 route, ringing the `spawn_local` live-sync loop so it drains on a frame

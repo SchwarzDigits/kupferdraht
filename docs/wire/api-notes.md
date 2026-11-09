@@ -1413,7 +1413,8 @@ Every one carries `qualified_conversation`, `qualified_from`, `time` (ISO 8601, 
 names that user as the actor, and no event of these has no actor.
 
 **The acting device gets its own events,** on `/notifications` and as frames on its own
-`/await` socket. `PUT /conversations/{domain}/{id}/name` also answers with the event (`200`,
+`/await` socket. So does the device that deletes a room: its own `conversation.delete`
+(`data: null`), and a member's (measured on Step 146, 2026-11-09). `PUT /conversations/{domain}/{id}/name` also answers with the event (`200`,
 the same JSON), which Kupferdraht does not need.
 
 **Kupferdraht usage:** `wire/room_event.rs`, `sync/dispatch/room_event.rs`; the items are in

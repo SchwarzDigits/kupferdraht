@@ -122,13 +122,13 @@ export class StubClient {
     this._onRoomsChanged = onRoomsChanged;
     const timer = setTimeout(() => {
       onMessage({ roomId: 'room-1', senderUserId: 'peer@example.test', messageId: 'live-1', body: 'live', replyToId: null, receivedAtMs: 1, expiresAtMs: null });
-      if (onSync) onSync({ roomsUpdated: 1, eventsDispatched: 1 });
+      if (onSync) onSync({ changedRooms: ['stub-room@example.test'], eventsDispatched: 1 });
       // Step 113: the storage state, as the Rust loop reports an outage.
       if (onStorage) onStorage('reconnecting');
     }, 50);
     return { stop() { clearTimeout(timer); } };
   }
-  async syncOnce() { return { roomsUpdated: 0, eventsDispatched: 0 }; }
+  async syncOnce() { return { changedRooms: [], eventsDispatched: 0 }; }
   /** Step 139: a service token for the embedder's own service; a reserved audience fails as the wasm one does. */
   async serviceToken(audience) {
     if (audience === 'storage' || audience === 'pin' || audience === '') {

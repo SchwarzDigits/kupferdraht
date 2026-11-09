@@ -1647,7 +1647,11 @@ device's clock, and such a reply fails their check.
 backend that omits them leaves those items out, and the fields it must
 send are the ones in `docs/wire/api-notes.md`, "Step 145 discovery". The
 acting device must receive its own event as well: it has no other way to
-the item.
+the item. These events and `conversation.delete` also name their room in a
+summary's `changed_rooms` (Step 146); the deleting device receives its own
+`conversation.delete` on the wire-server-rs stack (measured 2026-11-09),
+though Kupferdraht does not rely on it, since its own list refresh finds the
+room gone.
 
 ---
 

@@ -176,7 +176,7 @@ async fn rpc_round_trip_through_the_leader() {
 #[serde(rename_all = "camelCase")]
 struct FanOutOutcome {
     message_id: String,
-    rooms_updated: u32,
+    changed_rooms: Vec<String>,
     host_event_message_id: String,
     other_tab_message_id: String,
 }
@@ -186,7 +186,8 @@ async fn events_fan_out_to_every_tab() {
     let o: FanOutOutcome = outcome(event_fan_out()).await;
     assert_eq!(o.message_id, "live-1", "the subscriber's onMessage fires");
     assert_eq!(
-        o.rooms_updated, 1,
+        o.changed_rooms,
+        vec!["stub-room@example.test".to_string()],
         "the per-pass sync summary reaches the subscriber"
     );
     assert_eq!(
