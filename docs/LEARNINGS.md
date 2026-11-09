@@ -2841,3 +2841,44 @@ touched it.
 - **What was left.** The browser surface has two forms now by decision: `null`
   in views, `undefined` in the getters, the tabs' `homeId` and `cookieLabel`
   and a thrown error's details, each as its type declares.
+
+### 5.86 A documented consumer nobody had checked, a plan that read less than the code, and guards proved by injected defects (Step 143)
+
+- **A module the docs called consumed had no consumer.** A question about
+  something else, whether Kupferdraht uses gobley at all, led to looking.
+  `docs/bindings.md` and the README said natrium-core consumes `bindings/kmp`
+  through a composite build. natrium's `main` and `v2` wrap Kalium and name
+  Kupferdraht in no build file, and a search over the two owners finds the
+  module's coordinates only here. CI built no Gradle, ORT excluded it, Dependabot
+  watches cargo and the actions. Step 150's check held its plugin versions exact
+  in the notices, so a check kept a module's attribution honest without anyone
+  asking whether the module was used. The claim was true when written and nothing
+  re-read it. A consumer named in a doc is a claim like a version, and the only
+  check of it is reading the consumer. Volker removed the module (NG-27), as in
+  §5.83: a person's question settled what the tooling kept going.
+- **The plan read less than the code.** It placed the team fetch in `authenticate`
+  and `finalize_sso` alike, and said `proxy.js` would not change. `finalize_into_client`
+  is the one path both login kinds end in, so one call does it and an abandoned
+  login makes no request; `ClientProxy` defines each getter by hand, as Step 125's
+  own pin says. Reading the code before the red tests made both corrections free,
+  and the second reached Volker with the tests rather than after them.
+- **The phase-1 probe was the cheapest part.** One script against the local stack
+  answered what the Swagger leaves open: a plain member reads the own team, another
+  team is indistinguishable from an unknown one. It took less than the plan's
+  branch for the other answer would have.
+- **Guards were proved by injected defects, and one had to be rewritten first.**
+  Three tests could only be green before there was a fetch to guard, so §5.85's
+  lesson applied at once. Removing `path_segment`, the empty check and the
+  lowercase each failed exactly the matching test. Before that, reading the first
+  draft found a guard that could not fail: `../../self` is folded by the URL
+  parser to `/v14/self`, past the mock counting `/teams/`. `a/b` keeps its path.
+- **A live check of the CLI lines was the end-to-end test.** No test sees the value
+  on a real backend, and the browser suite has no logged-in client. The smoke
+  compared the `team:` lines of an owner and a plain member with the team settings.
+- **What was left.** CI builds no Kotlin or Swift binding, and this Mac has no JDK,
+  so the FFI record's growth was compiled in Rust and not through a generated
+  binding; their tests do not construct `Account`. The personal account's answer
+  was not observed: the stack's brig answers `500` to creating one. A failed name
+  fetch stays empty until the next login, by decision. ADR-0007,
+  `reference/README.md` and comments in `bindings/android`, `bindings/kotlin` and
+  `bindings/swift` still name natrium as a consumer.
