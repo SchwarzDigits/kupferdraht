@@ -24,6 +24,7 @@ use crate::storage::{KupferdrahtHome, Store};
 use crate::wire::HttpClient;
 
 mod account;
+mod avatars;
 mod builder;
 mod commit_flow;
 mod device;
@@ -55,6 +56,7 @@ mod token_refresh;
 mod typing;
 
 pub use account::Account;
+pub(crate) use account::OwnTeam;
 pub use builder::{ClientBuilder, ServerConfig};
 pub use device::DeviceInfo;
 pub use pending::PendingClient;
@@ -151,6 +153,8 @@ pub struct Client {
     /// is sufficient — registration is rare, every dispatch holds
     /// the lock just long enough to clone the `Vec`.
     event_handlers: Arc<StdMutex<Vec<Arc<dyn crate::sync::EventHandler>>>>,
+    /// Written avatar images by asset key and size (Step 144).
+    avatar_cache: StdMutex<crate::avatar::cache::AvatarCache>,
     /// Registered timeline listeners (Step 6-II-a). Distinct from
     /// `event_handlers`: listeners observe `TimelineDiff`s after a
     /// row has been persisted (both inbound and outbound — outbound
@@ -336,6 +340,7 @@ impl Client {
                 rooms: RwLock::new(Vec::new()),
                 store,
                 mls_client,
+                avatar_cache: StdMutex::default(),
                 event_handlers: Arc::new(StdMutex::new(Vec::new())),
                 timeline_listeners: Arc::new(StdMutex::new(std::collections::HashMap::new())),
                 timeline_listener_next_id: std::sync::atomic::AtomicU64::new(0),

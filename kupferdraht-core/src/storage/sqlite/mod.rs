@@ -280,6 +280,13 @@ impl Store for SqliteStore {
         wipe::clear_messaging_state(self)
     }
 
+    async fn member_avatar_keys(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<crate::avatar::AvatarKeys>, KupferdrahtError> {
+        rooms::member_avatar_keys(self, user_id)
+    }
+
     async fn replace_room_members(
         &self,
         room_id: &str,

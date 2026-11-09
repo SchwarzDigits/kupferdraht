@@ -9,15 +9,18 @@
 
 use std::sync::Arc;
 
+use crate::avatar::AvatarKeys;
 use crate::identity::UserId;
 
 /// The user's own team as a login found it (Step 143): `id` from `GET /self`,
 /// lowercase, `None` for a personal account; `name` from `GET /teams/{tid}`,
-/// `None` too when that fetch failed.
+/// `None` too when that fetch failed; `icon_key` the same request's `icon`
+/// (Step 144), `None` as well for the default icon.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct OwnTeam {
     pub(crate) id: Option<String>,
     pub(crate) name: Option<String>,
+    pub(crate) icon_key: Option<String>,
 }
 
 /// User-profile snapshot loaded at login time from `GET /v14/self`.
@@ -32,8 +35,8 @@ pub struct Account {
     display_name: String,
     handle: Option<String>,
     email: Option<String>,
-    team_id: Option<String>,
-    team_name: Option<String>,
+    team: OwnTeam,
+    avatar_keys: AvatarKeys,
 }
 
 impl Account {
@@ -42,16 +45,16 @@ impl Account {
         display_name: String,
         handle: Option<String>,
         email: Option<String>,
-        team_id: Option<String>,
-        team_name: Option<String>,
+        team: OwnTeam,
+        avatar_keys: AvatarKeys,
     ) -> Arc<Self> {
         Arc::new(Self {
             user_id,
             display_name,
             handle,
             email,
-            team_id,
-            team_name,
+            team,
+            avatar_keys,
         })
     }
 
@@ -87,7 +90,7 @@ impl Account {
     /// personal account. Lowercase.
     #[must_use]
     pub fn team_id(&self) -> Option<&str> {
-        self.team_id.as_deref()
+        self.team.id.as_deref()
     }
 
     /// The team's name, as of the last login (Step 143). `None` for a
@@ -95,6 +98,21 @@ impl Account {
     /// fetch: a resume is offline, so it stays `None` until the next login.
     #[must_use]
     pub fn team_name(&self) -> Option<&str> {
-        self.team_name.as_deref()
+        self.team.name.as_deref()
+    }
+
+    /// The asset key of the team's icon, as of the last login (Step 144);
+    /// [`Client::team_avatar`](super::Client::team_avatar) fetches the image.
+    #[must_use]
+    pub fn team_avatar_key(&self) -> Option<&str> {
+        self.team.icon_key.as_deref()
+    }
+
+    /// The own avatar's keys as of the last login (Step 144), for persisting
+    /// them. [`Client::avatar_key`](super::Client::avatar_key) answers the
+    /// current state, which an upload changes.
+    #[must_use]
+    pub fn login_avatar_keys(&self) -> &AvatarKeys {
+        &self.avatar_keys
     }
 }

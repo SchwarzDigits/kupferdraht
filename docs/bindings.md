@@ -100,8 +100,10 @@ object identity)
   `find_message_room`, `find_message_by_id`, `resync_room`,
   `resync_existing_rooms`, …); admin (`logout`,
   `set_display_name`, `set_handle`, `update_email`, `change_password`, `devices`,
-  `feature_configs`, `file_sharing`, `receipt_mode`, …); sync +
-  observers (below).
+  `feature_configs`, `file_sharing`, `receipt_mode`, …); avatars (Step 144:
+  `avatar(user_id, size) -> Avatar?`, `avatar_key(user_id)`, `team_avatar()`,
+  `upload_avatar(image)`, `remove_avatar()`; the rules are in
+  [library.md](library.md)); sync + observers (below).
 - `Room` — getters (`id`, `name`, `room_type`, `counterpart`, `members`,
   …), membership (`join`, `leave`, `delete` — team-admin, `invite`, `kick`,
   `set_name`), access /
@@ -138,7 +140,9 @@ object identity)
   field — **do not log `AssetMeta` as a whole** (Step 132; the threat
   model's N3 puts a leaked token on the consumer).
 
-**Records / enums** — `QualifiedUserId`, `Account`, `RoomMember`,
+**Records / enums** — `QualifiedUserId`, `Account`, `Avatar`, `AvatarSize`,
+`RoomMember` (its `avatar_thumbnail_key` and `avatar_full_key`, Step 144; the
+version marker is the first of them, else the second),
 `RoomDevice`, `DeviceCredential`, `RoomDevicesChange` (Step 95d; the
 foreign-implemented `RoomDevicesListener` sits with the other observers),
 `RoomType`, `RoomAccess`, `JoinLink`, `TimelineItem`, `TimelineItemKind`,
@@ -799,6 +803,13 @@ Since Step 110 (ADR-0035):
 - Typing: `startTyping(roomId)` / `stopTyping(roomId)` — outbound only;
   the browser prototype manages start/stop explicitly (the core 11-s
   auto-stop timer is native-only, `tokio::spawn` is cfg'd out on wasm).
+- Avatars (Step 144): `avatar(userId, "thumbnail" | "full") -> { bytes: Uint8Array,
+  mimeType } | null`, `avatarKey(userId) -> string | null`, `teamAvatar()`,
+  `uploadAvatar(image)`, `removeAvatar()`, and `avatarKey` on each `members()` entry.
+  Every image is one Kupferdraht wrote, JPEG or PNG. **Show it as `<img>` or on a
+  canvas, never as a document, `iframe` or `object`.** Under tabs, `avatar`,
+  `avatarKey` and `teamAvatar` are re-issued at a leader change, `uploadAvatar` and
+  `removeAvatar` reject `LeaderChangedError`.
 - Assets (W7): `sendFile(roomId, bytes, filename, mimeType)` (in-memory
   encrypted send), `downloadAsset(roomId, itemId) -> bytes` (download +
   decrypt + SHA-256 verify).

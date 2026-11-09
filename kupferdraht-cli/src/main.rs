@@ -211,6 +211,33 @@ enum TaskCommand {
 }
 
 #[derive(Subcommand)]
+enum AvatarCommand {
+    /// Download an avatar, written anew by Kupferdraht: a user's with `--user`,
+    /// the team's icon with `--team`.
+    Get {
+        /// Qualified user id (`<uuid>@<domain>`).
+        #[arg(long, conflicts_with = "team", required_unless_present = "team")]
+        user: Option<String>,
+        /// The icon of the account's team, as of the last login.
+        #[arg(long)]
+        team: bool,
+        /// `thumbnail` or `full`. A team icon has one size.
+        #[arg(long, default_value = "thumbnail")]
+        size: String,
+        /// File to write the image to.
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Set the own avatar from one image file: JPEG, PNG, GIF or WebP.
+    Upload {
+        /// The image file.
+        path: PathBuf,
+    },
+    /// Remove the own avatar.
+    Remove,
+}
+
+#[derive(Subcommand)]
 enum SsoCommand {
     /// Build the interactive SSO initiate URL for a known SSO code.
     ///
@@ -1027,6 +1054,11 @@ enum Command {
         #[arg(long)]
         mime: String,
     },
+    /// Show or set avatars (Step 144).
+    Avatar {
+        #[command(subcommand)]
+        action: AvatarCommand,
+    },
     /// Send a `Knock` (nudge) to a room (Step 26). Wire-side emits a
     /// `GenericMessage { knock { hot_knock } }`; receivers surface it
     /// as a poke with no body.
@@ -1379,6 +1411,17 @@ async fn async_main() -> ExitCode {
         Command::Features { name } => cli::config::features(name).await,
         Command::Properties { key } => cli::config::properties(key).await,
         Command::SendFile { id, path, mime } => cli::assets::send_file(id, path, mime).await,
+        Command::Avatar { action } => match action {
+            AvatarCommand::Get {
+                user: Some(user),
+                size,
+                out,
+                ..
+            } => cli::avatar::get_user(user, size, out).await,
+            AvatarCommand::Get { out, .. } => cli::avatar::get_team(out).await,
+            AvatarCommand::Upload { path } => cli::avatar::upload(path).await,
+            AvatarCommand::Remove => cli::avatar::remove().await,
+        },
         Command::Knock { id, hot } => cli::timeline::knock(id, hot).await,
         Command::CaseSet {
             id,

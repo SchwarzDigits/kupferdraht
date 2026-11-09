@@ -379,6 +379,11 @@ export class ClientProxy extends HandleProxy {
   createRoom(name) { return this.#call('createRoom', [name]); }
   createDm(peer) { return this.#call('createDm', [peer]); }
   members(roomId) { return this.#call('members', [roomId]); }
+  avatar(userId, size) { return this.#call('avatar', [userId, size]); }
+  avatarKey(userId) { return this.#call('avatarKey', [userId]); }
+  teamAvatar() { return this.#call('teamAvatar', []); }
+  uploadAvatar(image) { return this.#call('uploadAvatar', [image]); }
+  removeAvatar() { return this.#call('removeAvatar', []); }
   roomDevices(roomId) { return this.#call('roomDevices', [roomId]); }
   ownDeviceThumbprint() { return this.#call('ownDeviceThumbprint', []); }
   invite(roomId, userIds) { return this.#call('invite', [roomId, userIds]); }

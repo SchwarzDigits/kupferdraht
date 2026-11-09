@@ -14,6 +14,7 @@ use kupferdraht::{Kupferdraht, KupferdrahtError, Room, SyncSettings};
 pub(crate) mod access;
 pub(crate) mod assets;
 pub(crate) mod auth;
+pub(crate) mod avatar;
 pub(crate) mod case;
 pub(crate) mod config;
 pub(crate) mod devices;

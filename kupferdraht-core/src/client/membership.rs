@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 // links in the moved docs below (the code reaches it via fully-qualified
 // path), so the import is doc-only — kept to preserve link resolution,
 // matching the in-scope state these docs had in `runtime.rs`.
+use crate::avatar::AvatarKeys;
 #[allow(unused_imports)]
 use crate::encryption::MlsClient;
 use crate::error::KupferdrahtError;
@@ -760,10 +761,18 @@ impl Client {
         };
         let self_name = self.account.display_name().to_string();
         let self_handle = self.account.handle().map(str::to_string);
+        let self_avatar = self.own_avatar_keys().await?;
         Ok(leaves
             .iter()
             .map(|leaf| {
                 let is_self = leaf.user_id == self_user_id;
+                let avatar = if is_self {
+                    self_avatar.clone()
+                } else {
+                    lookup
+                        .get(&leaf.user_id)
+                        .map_or_else(AvatarKeys::default, |p| AvatarKeys::from_assets(&p.assets))
+                };
                 let (display_name, handle): (Option<String>, Option<String>) = if is_self {
                     (Some(self_name.clone()), self_handle.clone())
                 } else if let Some(p) = lookup.get(&leaf.user_id) {
@@ -783,6 +792,8 @@ impl Client {
                         .get(&leaf.user_id)
                         .copied()
                         .unwrap_or(crate::rooms::RoomMemberRole::Member),
+                    avatar_thumbnail_key: avatar.thumbnail,
+                    avatar_full_key: avatar.full,
                 }
             })
             .collect())
@@ -819,6 +830,8 @@ impl Client {
                 display_name: m.display_name.clone(),
                 handle: m.handle.clone(),
                 role: m.role.as_db_str().to_string(),
+                avatar_thumbnail_key: m.avatar_thumbnail_key.clone(),
+                avatar_full_key: m.avatar_full_key.clone(),
             })
             .collect();
         store.replace_room_members(room_id, &records).await

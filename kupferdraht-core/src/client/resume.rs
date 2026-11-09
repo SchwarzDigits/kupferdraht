@@ -18,8 +18,10 @@ use std::sync::{Arc, Mutex as StdMutex};
 
 use base64::Engine as _;
 
+use crate::avatar::AvatarKeys;
 use crate::client::Account;
 use crate::client::Client;
+use crate::client::OwnTeam;
 use crate::client::builder::ServerConfig;
 use crate::client::login_pipeline::{
     DeviceReuse, LoginPipeline, MlsIdentityArtifacts, RegistrationOutcome,
@@ -270,8 +272,15 @@ fn build_resume_account(
         self_user.name.clone(),
         self_user.handle.clone(),
         self_user.email.clone(),
-        self_user.team_id.clone(),
-        self_user.team_name.clone(),
+        OwnTeam {
+            id: self_user.team_id.clone(),
+            name: self_user.team_name.clone(),
+            icon_key: self_user.team_avatar_key.clone(),
+        },
+        AvatarKeys {
+            thumbnail: self_user.avatar_thumbnail_key.clone(),
+            full: self_user.avatar_full_key.clone(),
+        },
     ))
 }
 

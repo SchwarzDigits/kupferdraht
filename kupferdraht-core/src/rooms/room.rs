@@ -8,6 +8,7 @@ use std::sync::{Arc, Weak};
 
 use base64::Engine as _;
 
+use crate::avatar::AvatarKeys;
 use crate::client::Client;
 use crate::error::KupferdrahtError;
 use crate::storage::{RoomMemberRecord, RoomRecord};
@@ -107,6 +108,21 @@ pub struct RoomMember {
     pub display_name: Option<String>,
     pub handle: Option<String>,
     pub role: RoomMemberRole,
+    /// The asset keys of this member's avatar from the last `list-users`
+    /// (Step 144): Wire's `preview` and `complete`.
+    pub avatar_thumbnail_key: Option<String>,
+    pub avatar_full_key: Option<String>,
+}
+
+impl RoomMember {
+    /// The version marker of this member's avatar (Step 144): the thumbnail's
+    /// key, the full image's when the profile has only that.
+    #[must_use]
+    pub fn avatar_key(&self) -> Option<&str> {
+        self.avatar_thumbnail_key
+            .as_deref()
+            .or(self.avatar_full_key.as_deref())
+    }
 }
 
 /// A single conversation. A snapshot from the last `Client::sync_metadata`
@@ -937,6 +953,8 @@ fn build_room_members(
         display_name: None,
         handle: None,
         role: role_from_wire(conv.members.self_member.conversation_role.as_deref()),
+        avatar_thumbnail_key: None,
+        avatar_full_key: None,
     };
     let others: Vec<RoomMember> = conv
         .members
@@ -948,6 +966,8 @@ fn build_room_members(
             display_name: None,
             handle: None,
             role: role_from_wire(o.conversation_role.as_deref()),
+            avatar_thumbnail_key: None,
+            avatar_full_key: None,
         })
         .collect();
     let counterpart = if room_type == RoomType::DirectMessage && others.len() == 1 {
@@ -1040,6 +1060,8 @@ pub(crate) fn room_to_records(
             display_name: m.display_name.clone(),
             handle: m.handle.clone(),
             role: m.role.as_db_str().to_string(),
+            avatar_thumbnail_key: m.avatar_thumbnail_key.clone(),
+            avatar_full_key: m.avatar_full_key.clone(),
         })
         .collect();
     (record, members)
@@ -1069,6 +1091,8 @@ pub(crate) fn rooms_from_records(
                     display_name: m.display_name,
                     handle: m.handle,
                     role: RoomMemberRole::from_db_str(&m.role),
+                    avatar_thumbnail_key: m.avatar_thumbnail_key,
+                    avatar_full_key: m.avatar_full_key,
                 })
                 .collect();
             let counterpart = r
@@ -1099,11 +1123,18 @@ pub(crate) fn rooms_from_records(
 /// doesn't render own membership as an unnamed row. `list-users`
 /// deliberately excludes self (the self-resolve path lives in
 /// `GET /v14/self` and is already owned by `Account`).
-pub(crate) fn apply_self_profile(mut room: Room, display_name: &str, handle: Option<&str>) -> Room {
+pub(crate) fn apply_self_profile(
+    mut room: Room,
+    display_name: &str,
+    handle: Option<&str>,
+    avatar: &AvatarKeys,
+) -> Room {
     for m in &mut room.members {
         if m.is_self {
             m.display_name = Some(display_name.to_string());
             m.handle = handle.map(str::to_string);
+            m.avatar_thumbnail_key.clone_from(&avatar.thumbnail);
+            m.avatar_full_key.clone_from(&avatar.full);
         }
     }
     room
@@ -1116,17 +1147,23 @@ pub(crate) fn apply_self_profile(mut room: Room, display_name: &str, handle: Opt
 pub(crate) fn apply_user_profiles(mut room: Room, lookup: &HashMap<String, UserProfile>) -> Room {
     for m in &mut room.members {
         if let Some(p) = lookup.get(&m.user_id) {
-            m.display_name = Some(p.name.clone());
-            m.handle.clone_from(&p.handle);
+            apply_user_profile(m, p);
         }
     }
     if let Some(cp) = room.counterpart.as_mut()
         && let Some(p) = lookup.get(&cp.user_id)
     {
-        cp.display_name = Some(p.name.clone());
-        cp.handle.clone_from(&p.handle);
+        apply_user_profile(cp, p);
     }
     room
+}
+
+fn apply_user_profile(member: &mut RoomMember, profile: &UserProfile) {
+    let avatar = AvatarKeys::from_assets(&profile.assets);
+    member.display_name = Some(profile.name.clone());
+    member.handle.clone_from(&profile.handle);
+    member.avatar_thumbnail_key = avatar.thumbnail;
+    member.avatar_full_key = avatar.full;
 }
 
 #[cfg(test)]

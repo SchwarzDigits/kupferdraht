@@ -528,10 +528,11 @@ impl Client {
         // self, so we apply the account profile here.
         let self_name = self.account.display_name().to_string();
         let self_handle = self.account.handle().map(str::to_string);
+        let self_avatar = self.own_avatar_keys().await?;
         Ok(rooms
             .into_iter()
             .map(|r| apply_user_profiles(r, &lookup))
-            .map(|r| apply_self_profile(r, &self_name, self_handle.as_deref()))
+            .map(|r| apply_self_profile(r, &self_name, self_handle.as_deref(), &self_avatar))
             .collect())
     }
 

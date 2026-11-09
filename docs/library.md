@@ -1033,6 +1033,41 @@ browser — without sending twice. matrix-rust-sdk analog:
   custom store compiles unchanged and every keyed call then sends.
   Override all three, each as one transaction, to get the dedup.
 
+### Avatars (Step 144)
+
+```rust
+client.avatar(&user, AvatarSize::Thumbnail).await?; // Option<Avatar>: bytes, mime_type
+client.avatar_key(&user).await?;                    // Option<String>: the version marker
+client.team_avatar().await?;                        // Option<Avatar>: the team's icon
+client.upload_avatar(image_bytes).await?;           // JPEG, PNG, GIF or WebP
+client.remove_avatar().await?;
+```
+
+**No byte of a foreign image reaches the caller.** A crafted file attacks the
+decoder that renders it, and avatars are chosen freely by every user in a shared
+room. Kupferdraht decodes each one with Rust decoders and writes a new JPEG, or a
+PNG where the image is transparent; `mime_type` comes from what it wrote. A JPEG's
+EXIF orientation is applied first, and the metadata is gone by construction. Show
+an avatar as `<img>` or on a canvas, never as a document, `iframe` or `object`.
+
+- **Limits:** 4 MiB per file, 4096 × 4096 pixels. An answer over the size fails
+  `BackendRejected`; a stored file that is no image is `Ok(None)` with a warning,
+  and `upload_avatar` refuses it with `InvalidInput` before any request.
+- **Sizes:** `Thumbnail` is at most 280 pixels on its longer side, `Full` at most
+  1448, as Wire's clients upload them; a smaller image keeps its size. A profile
+  with one size serves both. `upload_avatar` keeps the aspect ratio: cropping is
+  the embedder's.
+- **Whose keys:** the own from the `self_user` row, a stored member's from
+  `Store::member_avatar_keys`, anyone else's by one `list-users`.
+  `RoomMember::avatar_key()` is the same marker; it refreshes with the room list,
+  and an avatar changed on another device of the account shows at the next login.
+- **Cache:** in memory per `Client`, 4 MiB in total, least recently used out first;
+  an image over 1 MiB is served but not held. A changed avatar has a new key. There
+  is no disk cache: an embedder that wants one keys it by `avatar_key`.
+- **The team's icon** is as of the last login, like its name, and `None` without a
+  team, for the default icon and when the team request failed at login. A replaced
+  own avatar's assets stay on the server, as with Wire's clients.
+
 ### Assets (Step 11)
 
 File-attachment send + receive per ADR-0011. AES-256-CBC over
@@ -1834,6 +1869,8 @@ account.handle();         // Option<&str>
 account.email();          // Option<&str>
 account.team_id();        // Option<&str>  — lowercase; None for a personal account
 account.team_name();      // Option<&str>
+account.team_avatar_key(); // Option<&str>  — the team icon's asset key
+account.login_avatar_keys(); // &AvatarKeys — as of the login; `Client::avatar_key` is current
 ```
 
 `team_id` and `team_name` (Step 143) are a snapshot of the last login, like
@@ -2333,6 +2370,10 @@ best-effort, a failed re-send warns and self-heals on the next
 change). CLI: `case-set` / `case-show`. Both FFI-mirrored.
 
 ### `Room` / `RoomMember` / `RoomType`
+
+`RoomMember` carries `avatar_thumbnail_key` and `avatar_full_key` (Step 144);
+`RoomMember::avatar_key()` is the version marker, the first of them or else the
+second.
 
 ```rust
 pub struct Room { /* fields private */ }

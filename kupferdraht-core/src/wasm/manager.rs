@@ -33,6 +33,7 @@ use super::read_state;
 use super::resend;
 use crate::client::ServerConfig;
 use crate::error::KupferdrahtError;
+use crate::identity::UserId;
 use crate::keystore::IndexedDbKeyStore;
 use crate::manager::{KeysState, RegisterOptions};
 use crate::recovery::account::{RecoveryContext, RecoveryState};
@@ -1341,6 +1342,49 @@ impl Client {
         room_to_js(&room).await
     }
 
+    /// A user's avatar (Step 144): `{ bytes: Uint8Array, mimeType }`, an image
+    /// Kupferdraht wrote, or `null` without one. `size` is `"thumbnail"` or
+    /// `"full"`. Show it as `<img>` or on a canvas, never as a document.
+    #[wasm_bindgen(js_name = avatar)]
+    pub async fn avatar(&self, user_id: String, size: String) -> Result<JsValue, JsValue> {
+        let size = super::avatar::avatar_size(&size)?;
+        let user = UserId::parse(&user_id).map_err(|e| to_js(&e))?;
+        let avatar = self
+            .inner
+            .avatar(&user, size)
+            .await
+            .map_err(|e| to_js(&e))?;
+        super::avatar::avatar_to_js(avatar)
+    }
+
+    /// The version marker of a user's avatar, or `null` (Step 144). A changed
+    /// avatar has a new key; a method because the own key changes in a session.
+    #[wasm_bindgen(js_name = avatarKey)]
+    pub async fn avatar_key(&self, user_id: String) -> Result<JsValue, JsValue> {
+        let user = UserId::parse(&user_id).map_err(|e| to_js(&e))?;
+        let key = self.inner.avatar_key(&user).await.map_err(|e| to_js(&e))?;
+        Ok(key.map_or(JsValue::NULL, |key| JsValue::from_str(&key)))
+    }
+
+    /// The icon of the account's team as of the last login, or `null` (Step 144).
+    #[wasm_bindgen(js_name = teamAvatar)]
+    pub async fn team_avatar(&self) -> Result<JsValue, JsValue> {
+        let avatar = self.inner.team_avatar().await.map_err(|e| to_js(&e))?;
+        super::avatar::avatar_to_js(avatar)
+    }
+
+    /// Set the own avatar from one image: JPEG, PNG, GIF or WebP (Step 144).
+    #[wasm_bindgen(js_name = uploadAvatar)]
+    pub async fn upload_avatar(&self, image: Vec<u8>) -> Result<(), JsValue> {
+        self.inner.upload_avatar(image).await.map_err(|e| to_js(&e))
+    }
+
+    /// Remove the own avatar (Step 144).
+    #[wasm_bindgen(js_name = removeAvatar)]
+    pub async fn remove_avatar(&self) -> Result<(), JsValue> {
+        self.inner.remove_avatar().await.map_err(|e| to_js(&e))
+    }
+
     /// The members of `roomId` as `{ userId, isSelf, displayName, handle }[]`.
     #[wasm_bindgen(js_name = members)]
     pub async fn members(&self, room_id: String) -> Result<JsValue, JsValue> {
@@ -1853,6 +1897,8 @@ struct MemberView {
     /// `"administrator"` | `"member"` (Step 72a — same neutral
     /// vocabulary the native FFI mirrors via `RoomMemberRole`).
     role: String,
+    /// The version marker of the member's avatar (Step 144).
+    avatar_key: Option<String>,
 }
 
 impl From<&crate::rooms::RoomMember> for MemberView {
@@ -1863,6 +1909,7 @@ impl From<&crate::rooms::RoomMember> for MemberView {
             display_name: m.display_name.clone(),
             handle: m.handle.clone(),
             role: m.role.as_db_str().to_string(),
+            avatar_key: m.avatar_key().map(str::to_owned),
         }
     }
 }

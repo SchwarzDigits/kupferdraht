@@ -143,6 +143,8 @@ fn assemble_room_members(
             display_name,
             handle: r.handle,
             role: r.role,
+            avatar_thumbnail_key: r.avatar_thumbnail_key,
+            avatar_full_key: r.avatar_full_key,
         });
     }
     Ok(out)
@@ -173,8 +175,9 @@ fn insert_room_row(tx: &Connection, room: &RoomRecord) -> Result<(), Kupferdraht
 fn insert_room_member_row(tx: &Connection, m: &RoomMemberRecord) -> Result<(), KupferdrahtError> {
     tx.execute(
         "INSERT INTO room_members (
-            room_id, user_id, is_self, display_name, handle, role
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            room_id, user_id, is_self, display_name, handle, role,
+            avatar_thumbnail_key, avatar_full_key
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             m.room_id,
             m.user_id,
@@ -182,6 +185,8 @@ fn insert_room_member_row(tx: &Connection, m: &RoomMemberRecord) -> Result<(), K
             m.display_name.as_deref().map(str::as_bytes),
             m.handle,
             m.role,
+            m.avatar_thumbnail_key,
+            m.avatar_full_key,
         ],
     )
     .map_err(|e| {
@@ -221,7 +226,8 @@ fn read_raw_room_members(
 ) -> Result<Vec<RawRoomMemberRow>, KupferdrahtError> {
     let mut stmt = conn
         .prepare(
-            "SELECT user_id, is_self, display_name, handle, role
+            "SELECT user_id, is_self, display_name, handle, role,
+                    avatar_thumbnail_key, avatar_full_key
              FROM room_members WHERE room_id = ?1
              ORDER BY is_self DESC, user_id ASC",
         )
@@ -239,6 +245,8 @@ fn read_raw_room_members(
                 display_name,
                 handle,
                 role,
+                avatar_thumbnail_key: row.get(5)?,
+                avatar_full_key: row.get(6)?,
             })
         })
         .map_err(|e| KupferdrahtError::Storage(format!("load_room_members query: {e}")))?
@@ -253,6 +261,30 @@ struct RawRoomMemberRow {
     display_name: Option<Vec<u8>>,
     handle: Option<String>,
     role: String,
+    avatar_thumbnail_key: Option<String>,
+    avatar_full_key: Option<String>,
+}
+
+/// The avatar keys of a stored member (Step 144). A user in several rooms has
+/// one profile, so any of their rows answers.
+pub(super) fn member_avatar_keys(
+    store: &SqliteStore,
+    user_id: &str,
+) -> Result<Option<crate::avatar::AvatarKeys>, KupferdrahtError> {
+    debug_assert!(!user_id.is_empty(), "user_id must be non-empty");
+    let conn = store.lock()?;
+    rusqlite::OptionalExtension::optional(conn.query_row(
+        "SELECT avatar_thumbnail_key, avatar_full_key
+         FROM room_members WHERE user_id = ?1 LIMIT 1",
+        params![user_id],
+        |row| {
+            Ok(crate::avatar::AvatarKeys {
+                thumbnail: row.get(0)?,
+                full: row.get(1)?,
+            })
+        },
+    ))
+    .map_err(|e| KupferdrahtError::Storage(format!("member_avatar_keys: {e}")))
 }
 
 #[cfg(test)]
@@ -286,6 +318,8 @@ mod tests {
                 display_name: Some(format!("Name for {uid}")),
                 handle: Some(format!("h_{uid}")),
                 role: "member".to_string(),
+                avatar_thumbnail_key: None,
+                avatar_full_key: None,
             })
             .collect();
         (room, member_records)
