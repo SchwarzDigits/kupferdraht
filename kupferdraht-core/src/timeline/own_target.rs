@@ -15,10 +15,12 @@ use crate::error::KupferdrahtError;
 
 impl Client {
     /// `Ok(())` when `target_id` in `room_id` is the self user's message
-    /// or unknown locally; `InvalidInput` when another user sent it.
+    /// or unknown locally; `InvalidInput` when another user sent it, or it
+    /// is a room event's item (Step 145).
     ///
     /// # Errors
-    /// `KupferdrahtError::InvalidInput` for another user's message;
+    /// `KupferdrahtError::InvalidInput` for another user's message or a
+    /// room event's item;
     /// `KupferdrahtError::Storage` / `Encoding` from the target lookup.
     pub(crate) async fn ensure_own_target(
         &self,
@@ -35,6 +37,11 @@ impl Client {
         else {
             return Ok(());
         };
+        if crate::timeline::room_event::is_room_event_kind(&target.kind) {
+            return Err(KupferdrahtError::InvalidInput(format!(
+                "{op}: {target_id} is a room event, not a message"
+            )));
+        }
         let own = self
             .user_id()
             .is_some_and(|me| me.as_str() == target.sender_user_id);

@@ -363,6 +363,20 @@ pub enum TimelineItemKind {
     TaskListMarker {
         marked: bool,
     },
+    /// Users joined, were added, left or were removed: one item per
+    /// backend event, not a message (Step 145).
+    MembershipChange {
+        change: crate::timeline::RoomMembershipChange,
+    },
+    /// The room got a new name (Step 145).
+    RoomNameChange {
+        name: String,
+    },
+    /// The room was created; reaches only the members at that moment
+    /// (Step 145).
+    RoomCreated {
+        name: Option<String>,
+    },
 }
 
 impl From<&CoreKind> for TimelineItemKind {
@@ -402,6 +416,11 @@ impl From<&CoreKind> for TimelineItemKind {
                 case: snapshot.as_ref().clone(),
             },
             CoreKind::TaskListMarker { marked } => Self::TaskListMarker { marked: *marked },
+            CoreKind::MembershipChange(change) => Self::MembershipChange {
+                change: change.clone(),
+            },
+            CoreKind::RoomNameChange { name } => Self::RoomNameChange { name: name.clone() },
+            CoreKind::RoomCreated { name } => Self::RoomCreated { name: name.clone() },
         }
     }
 }

@@ -36,7 +36,26 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **Room events as timeline items** (Step 145): a room's creation, renames, joins
+  and leaves show in `messages()` and reach `Timeline::subscribe`, as
+  `TimelineItemKind::{MembershipChange, RoomNameChange, RoomCreated}` with
+  `RoomMembershipChange { change, actor, users }` and `MembershipChange::{Joined,
+  Added, Left, Kicked}`; on the FFI alike, in the browser as the kinds
+  `membership_change`, `room_name_change` and `room_created` with `change`,
+  `actor`, `users` and `name`, and in the CLI's `timeline` as a system line. They
+  are no messages: not unread, no `on_message` or `onMessage`, and a reaction,
+  reply, edit or delete on one is refused. `mark_as_read` on one moves the local
+  marker and tells the room nothing. The history starts with the device, and
+  `sent_at_ms` is when it processed the event, as for a message. In the browser,
+  `onSync`'s `roomsUpdated` says to pull `messages()` again.
+
 ### Changed
+
+- **BREAKING: `TimelineItemKind` has three new kinds** (Step 145): an exhaustive
+  `match`, `when` or `switch` over a timeline item's kind has `MembershipChange`,
+  `RoomNameChange` and `RoomCreated` to add, on the FFI as well, and code that
+  showed every item as a message shows them too until it does. In the browser,
+  `kind` was a string and an unknown one falls to the embedder's default branch.
 
 ### Deprecated
 

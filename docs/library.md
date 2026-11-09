@@ -1033,6 +1033,55 @@ browser — without sending twice. matrix-rust-sdk analog:
   custom store compiles unchanged and every keyed call then sends.
   Override all three, each as one transaction, to get the dedup.
 
+### Room events (Step 145)
+
+Who joined, left, renamed or created a room stands in the timeline as data, one item
+per backend event. Kupferdraht words nothing: whether the embedder says "Alice added
+you" or "you were added" is its choice.
+
+```rust
+TimelineItemKind::MembershipChange(RoomMembershipChange { change, actor, users })
+TimelineItemKind::RoomNameChange { name }
+TimelineItemKind::RoomCreated { name }   // `name` may be `None`
+```
+
+| Backend event | Kind | `change` |
+|---|---|---|
+| `conversation.create` | `RoomCreated` | |
+| `conversation.rename` | `RoomNameChange` | |
+| `conversation.member-join`, its only user being the actor (by a join link) | `MembershipChange` | `Joined` |
+| `conversation.member-join`, otherwise | `MembershipChange` | `Added` |
+| `conversation.member-leave`, reason `left` or `user-deleted` | `MembershipChange` | `Left` |
+| `conversation.member-leave`, reason `removed` | `MembershipChange` | `Kicked` |
+
+`users` holds everyone the event names, the own user among them where it is one.
+`sender_user_id` is the actor, `sender_device_id` is empty.
+
+- **They are no messages.** Not unread in `Room::unread_count` or the room list, no
+  `EventHandler::on_message`; they reach `Timeline::subscribe` as `Append`. A reaction,
+  reply, edit or delete on one is `InvalidInput`, and one arriving from another member
+  is dropped: an item's id can be computed by anyone who saw the event.
+- **`mark_as_read` on one moves the local marker and sends no `Confirmation`,** whatever
+  the `ReceiptType`: its id names no message of the room. An embedder that reads up to
+  the newest item and wants the room told names the newest message.
+- **The history starts with the device.** Wire has no API to fetch these events later,
+  so a new device shows none from before its registration. `conversation.create`
+  reaches only the members at that moment: someone added later has their add as the
+  first item.
+- **`sent_at_ms` is when this device processed the event,** as for an inbound message,
+  not the server's `time`: one clock per timeline keeps the order and the read marker
+  honest. On a device that was offline, an item shows when it was synced.
+- **Own actions arrive the same way,** at the next drain: the backend sends the acting
+  device its own events, and a socket rings at once. So `messages()` right after
+  `Client::rename_room` does not show it yet.
+- **A direct room** starts with an `Added` naming both users, by the one who opened it,
+  and no `RoomCreated`. An embedder that does not want it hides it by the room's type.
+- **The actor is the backend's statement,** not authenticated by MLS
+  (`docs/THREAT_MODEL.md`). The membership that counts is the MLS group's; these items
+  are display only.
+- A malformed event is logged and skipped, never a failed sync. An event for a room not
+  stored yet is kept and shows once the room does.
+
 ### Avatars (Step 144)
 
 ```rust
@@ -1371,6 +1420,9 @@ pub enum TimelineItemKind {
     Knock { hot_knock: bool },                                           // Step 26
     Location { latitude: f32, longitude: f32, name: Option<String>, zoom: Option<i32> }, // Step 26
     Task(Box<TaskItem>),                                                 // Step 60a (ADR-0014)
+    MembershipChange(RoomMembershipChange),                              // Step 145
+    RoomNameChange { name: String },                                     // Step 145
+    RoomCreated { name: Option<String> },                                // Step 145
 }
 
 // Step 60a (ADR-0014) — tasks are event-sourced: every task message

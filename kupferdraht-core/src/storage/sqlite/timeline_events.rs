@@ -290,7 +290,7 @@ fn read_raw_timeline_rows(
                     edited_at_ms, redacted_at_ms, expires_at_ms, ephemeral_ttl_ms
              FROM timeline_events
              WHERE room_id = ?1
-             ORDER BY sent_at_ms ASC",
+             ORDER BY sent_at_ms ASC, rowid ASC",
         )
         .map_err(|e| KupferdrahtError::Storage(format!("load_timeline_events prepare: {e}")))?;
     stmt.query_map(params![room_id], read_raw_timeline_row)

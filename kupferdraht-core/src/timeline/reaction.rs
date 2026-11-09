@@ -69,6 +69,8 @@ impl Client {
         emoji: &str,
         key: Option<SendKey<'_>>,
     ) -> Result<MessageHandle, KupferdrahtError> {
+        self.ensure_not_room_event(room_id, item_id, "toggle_reaction")
+            .await?;
         let group_id = self
             .resolve_room_group_id(room_id, "toggle_reaction")
             .await?;

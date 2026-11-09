@@ -863,7 +863,7 @@ Request (Kupferdraht's shape):
 - The MLS group itself is created client-side; at creation time the
   backend knows the group only administratively. The group becomes
   cryptographically real when the first commit bundle arrives (§10.2).
-- Emits `conversation.create` to the creator's other devices (§12.3).
+- Emits `conversation.create` to the creator's devices, the acting one too (§12.3).
 
 ### 9.3 List
 
@@ -1632,8 +1632,16 @@ MUST derive cryptographic membership from MLS group state, never from
 these advisory events (a `member-join` may arrive before the recipient
 has processed the commit that actually adds the leaf). Kupferdraht derives
 membership from openmls state + `sync_metadata`; since Step 118 these
-events only tell it to run `sync_metadata` — which is the correct
-handling, not a gap.
+events tell it to run `sync_metadata` — which is the correct handling,
+not a gap.
+
+**Since Step 145 Kupferdraht also shows `conversation.create`,
+`conversation.rename`, `conversation.member-join` and
+`conversation.member-leave` as timeline items,** display only. So a
+backend that omits them leaves those items out, and the fields it must
+send are the ones in `docs/wire/api-notes.md`, "Step 145 discovery". The
+acting device must receive its own event as well: it has no other way to
+the item.
 
 ---
 
@@ -2054,8 +2062,8 @@ before or during the implementation step.
   but **advisory only** (§12.3). The authoritative MLS membership change
   is the commit (`conversation.mls-message-add`); clients derive
   cryptographic membership from MLS state, never from these events.
-  Kupferdraht ignores them and derives from openmls + `sync_metadata` —
-  correct, not a gap.
+  Kupferdraht derives from openmls + `sync_metadata` and, since Step 145,
+  shows them as timeline items only — correct, not a gap.
 
 **Open:**
 

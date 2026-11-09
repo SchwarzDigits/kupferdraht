@@ -134,6 +134,7 @@ pub(super) fn unread_count_for_room(
          WHERE e.room_id = ?1
            AND e.sender_user_id != ?2
            AND e.redacted_at_ms IS NULL
+           AND e.kind NOT IN ('membership_change', 'room_name_change', 'room_created')
            AND e.sent_at_ms > COALESCE(
                (SELECT m.last_read_at_ms FROM room_read_markers m
                  WHERE m.room_id = ?1), ?3)",
@@ -154,6 +155,7 @@ pub(super) fn unread_counts(
              LEFT JOIN room_read_markers m ON m.room_id = e.room_id
              WHERE e.sender_user_id != ?1
                AND e.redacted_at_ms IS NULL
+           AND e.kind NOT IN ('membership_change', 'room_name_change', 'room_created')
                AND e.sent_at_ms > COALESCE(m.last_read_at_ms, ?2)
              GROUP BY e.room_id",
         )

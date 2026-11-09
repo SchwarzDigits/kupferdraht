@@ -29,10 +29,12 @@ mod knock;
 mod location;
 mod marker;
 mod reaction;
+mod room_event;
 pub(super) mod task;
 mod text;
 
 pub(super) use config::{refetch_feature_configs, refetch_user_property};
+pub(super) use room_event::dispatch_room_event;
 
 use std::sync::Arc;
 

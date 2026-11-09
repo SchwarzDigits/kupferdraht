@@ -183,6 +183,14 @@ pub enum TimelineItemKind {
     /// summing timeline items. The rows stay visible as the audit
     /// trail of the deliberately forgeable any-member flag.
     TaskListMarker { marked: bool },
+    /// Users joined, were added, left or were removed: one item per
+    /// backend event, not a message (Step 145).
+    MembershipChange(crate::timeline::RoomMembershipChange),
+    /// The room got a new name (Step 145).
+    RoomNameChange { name: String },
+    /// The room was created; reaches only the members at that moment
+    /// (Step 145).
+    RoomCreated { name: Option<String> },
 }
 
 /// Swap a `kind = "asset"` item's degraded Text placeholder for the
@@ -411,6 +419,15 @@ impl TimelineItem {
                     mentions: Vec::new(),
                 }
             })
+        } else if crate::timeline::room_event::is_room_event_kind(&record.kind) {
+            // Step 145: the packed body is the room event's JSON; a
+            // malformed payload degrades to the Text fallback below.
+            crate::timeline::room_event::room_event_kind_from_row(&record.kind, &record.body)
+                .unwrap_or_else(|| TimelineItemKind::Text {
+                    body: record.body.clone(),
+                    reply_to: record.reply_to_id.clone(),
+                    mentions: Vec::new(),
+                })
         } else if record.kind == "text" {
             TimelineItemKind::Text {
                 body: record.body,

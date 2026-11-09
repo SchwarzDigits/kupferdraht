@@ -15,7 +15,8 @@
 //!   of another member's ordinary message is rejected, as the official
 //!   webapp does (§91).
 //!
-//! No admin override. A rejected edit or delete is dropped with a `warn!`.
+//! No admin override. A rejected edit or delete is dropped with a `warn!`,
+//! as is any on a room event's item (Step 145).
 
 use std::sync::Arc;
 
@@ -75,6 +76,17 @@ pub(super) async fn target_op_is_authorized(
         );
         return Ok(false);
     };
+    // Step 145: anyone who saw the event can compute the id of its item, and
+    // its row names the event's actor as sender — no message of that user's.
+    if crate::timeline::room_event::is_room_event_kind(&target.kind) {
+        warn!(
+            room_id,
+            target_id,
+            sender = sender_user_id,
+            "edit/delete of a room event rejected"
+        );
+        return Ok(false);
+    }
     let self_user = client.user_id().map(crate::identity::UserId::as_str);
     let allowed = match op {
         TargetOp::Edit => may_edit(&target, sender_user_id),

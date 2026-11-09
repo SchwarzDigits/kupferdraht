@@ -1,6 +1,7 @@
 # Step 145 — Room events as timeline items
 
-**Status: commissioned 2026-11-05** (from the browser embedder's
+**Status: in progress** on `step/145-room-events-in-the-timeline`; phase 1 taken
+and red tests approved by Volker on 2026-11-09. Commissioned 2026-11-05 (from the browser embedder's
 requirements for a work-queue client, R6, measured there against
 `4f30f02` and re-checked against `main` `9e1a11c`). Taken with Volker on
 commissioning:
@@ -31,6 +32,65 @@ commissioning:
 
 After Step 144 (no dependency, order of the embedder's list).
 
+## Phase 1, measured 2026-11-09
+
+**Live, on the wire-server-rs stack** with throwaway accounts, as each member's
+client sees it on `GET /notifications`:
+
+| Action | Event, and who gets it | `from` | `data` |
+|---|---|---|---|
+| A creates a room | `conversation.create`: A alone | A | the whole conversation; `name` |
+| A adds B, C, D | `member-join`: all four | A | `add_type: internal_add`, `user_ids`, `users[].qualified_id`; no `qualified_user_ids` |
+| E joins by link | `member-join`: all, E too | E | as above, `users` = E, and `add_type` also `internal_add` |
+| A opens a DM with B | `member-join`: both; no `create` | A | `users` = A and B |
+| A renames | `conversation.rename`: all | A | `name` |
+| A renames to the same name | another `conversation.rename`, its own `time` | A | `name` |
+| A kicks C | `member-leave`: all, C too | A | `qualified_user_ids`, `reason: removed` |
+| B leaves | `member-leave`: all, B too | B | `reason: left` |
+| D's account is deleted | `member-leave`: all | **D** | `reason: user-deleted` |
+
+The Swagger requires `qualified_from`, `qualified_conversation`, `time`, `via` and
+`data` on an `Event`, and `reason` is `left`, `removed` or `user-deleted`.
+
+**The acting device gets its own events,** on `/notifications` and as frames on its
+own `/await` socket: all five kinds of action above rang A's socket at once.
+
+**Inbound rows carry this device's clock.** `sent_at_ms` of an inbound message is
+`received_at_ms`, `now_ms()` at dispatch (`sync/dispatch/text.rs`), and an outgoing
+row's its send time. The server's `time` is on no row today.
+
+**The browser has no timeline diffs** (`docs/bindings.md`): `onSync`'s `roomsUpdated`
+is its signal to pull `messages()` again, and every one of these events marks the room
+list stale, so a pass carrying one reports `roomsUpdated > 0` where the account has a
+room.
+
+**Deviations from the commissioning, all from this:**
+
+1. **No path for own actions.** Scope item 3 falls away: the sync delivers them.
+2. **`sent_at_ms` is this device's clock, not the event's `time`.** With the server's
+   time, a catch-up drain would put every item before the messages it arrived between,
+   and `mark_as_read` on an item with a server clock ahead would set the marker past
+   the next message, so that message would never count as unread. The `time` goes into
+   the id only. The price: on a device that was offline, an item shows when it was
+   synced, as a message does.
+3. **`user-deleted` is `Left`, not `Kicked`.** The event names the deleted user as
+   `from`, so `Kicked` would read as the user removing themself.
+4. **`actor` is not optional.** Phase-1 question 2: no event without `from` exists on
+   the stack or in the Swagger; one without is malformed and skipped.
+5. **`RoomCreated`'s name is optional:** a conversation's `name` may be null.
+6. **The refusal also holds on receive.** An item's id can be computed by anyone who
+   saw the event, and ADR-0028 lets a row's sender edit or delete it, so the actor
+   could rewrite "Bob removed Carol". An inbound edit, delete or reaction on an item is
+   dropped with a `warn!`. A `Confirmation` naming one stays harmless: `read_by` on an
+   item nobody shows.
+7. **The ids are UUID-shaped,** as every other item id: version 8, the first 16 bytes
+   of SHA-256 over the JSON array of a version tag, the type, the room, the actor, the
+   `time` and the row's body.
+8. **BREAKING (Volker, 2026-11-09):** a new kind breaks an exhaustive `match`, `when`
+   or `switch`, so the entry is `BREAKING` under Changed and the release 0.5.0.
+   `TimelineItemKind` stays without `non_exhaustive`: the generated Kotlin and Swift
+   enums stay exhaustive anyway.
+
 ## Problem
 
 1. **The events arrive and are dropped.** Apart from the MLS events,
@@ -54,7 +114,7 @@ After Step 144 (no dependency, order of the embedder's list).
 1. **Dispatch.** `dispatch_other_event` handles the four types: each
    becomes one timeline item, and the room list is still marked stale
    (Step 118). From the event: `qualified_conversation`, `qualified_from`
-   (the actor), `time` (the server's, → `sent_at_ms`) and `data` —
+   (the actor), `time` (the server's, into the id only; deviation 2) and `data` —
    `member-join`'s users, `member-leave`'s users and `reason` (`left`,
    `removed`, `user-deleted`), `rename`'s and `create`'s `name`. The
    exact v14 shapes are phase 1's. `change`: a join by its only user is
@@ -72,18 +132,19 @@ After Step 144 (no dependency, order of the embedder's list).
      (Step 26); no migration. An event for a room not stored yet is
      written all the same (`timeline_events` has no foreign key since
      V9) and shows once the room does.
-3. **Own actions.** Phase 1 probes whether the acting device receives
-   its own events through sync. If not, `create_room`, `invite_members`,
-   `kick_members`, `leave_room` and `rename_room` / `Room::set_name`
-   write the item from the event in Wire's answer, under the same id
-   rule.
+3. **Own actions.** Measured: the acting device receives its own events
+   through sync, so they take the same path, at the next drain. Nothing to
+   add to `create_room`, `invite_members`, `kick_members`, `leave_room` or
+   `rename_room`.
 4. **What the items are not.** The unread queries filter the three
    kinds. `mark_as_read` on one moves the local marker to its position
    and sends no `Confirmation`, as `ReceiptType::ReadPrivate` does
    (Step 138). Reactions, replies, edits and deletes that target one are
    `InvalidInput`; every other path that treats an item as a message
-   (ephemeral timers, delivery confirmations, the room list's last
-   item where it reads one) is checked on the step and skips them.
+   was checked on the step: ephemeral timers read `expires_at_ms`, which an
+   item has not; a delivery confirmation and `on_message` come from
+   `surface_inbound_message`, which an item does not pass; the room list
+   reads no last item.
 5. **Public surface, in the same commit.** `TimelineItemKind::
    {MembershipChange, RoomNameChange, RoomCreated}`, the first carrying
    `RoomMembershipChange` with the enum `MembershipChange::{Joined,
@@ -91,7 +152,8 @@ After Step 144 (no dependency, order of the embedder's list).
    (`ffi/timeline.rs`); the wasm projection in `messages()` (`kind`,
    `change`, `actor`, `users`, `name`); the item types in
    `kupferdraht-tabs/index.d.ts`. Live diffs carry the new items through
-   the same Append path as messages.
+   the same Append path as messages, natively; the browser has no diffs and
+   pulls `messages()` on `onSync` (phase 1).
 6. **CLI.** `messages` prints a system line per item (`* alice@d added
    bob@d`, `* alice@d renamed the room to "…"`).
 7. **Docs:** `docs/wire/api-notes.md` and `docs/backend-spec.md` (the
@@ -107,7 +169,8 @@ After Step 144 (no dependency, order of the embedder's list).
    `RoomCreate`), `docs/THREAT_MODEL.md` (one line under the backend's
    trust: the actor is `qualified_from`, not authenticated by MLS — a
    hostile backend can forge "Alice removed Bob" as it can any room
-   metadata), `README.md`, `CHANGELOG.md` `[Unreleased]` under Added.
+   metadata), `README.md`, `CHANGELOG.md` `[Unreleased]`: Added, and `BREAKING`
+   under Changed for the new kinds.
 
 ## Out of scope
 
@@ -133,7 +196,8 @@ After Step 144 (no dependency, order of the embedder's list).
 ## TDD sketch
 
 - httpmock / injected events: each of the four types → one item with
-  actor, users or name and the server time; the four `change` values; a
+  actor, users or name; the four `change` values; an item standing where it
+  arrived whatever the server's clock says; a
   malformed event → no item, the sync goes on; the same event twice →
   one row; an event for a room not stored yet → stored and listed once
   the room is.

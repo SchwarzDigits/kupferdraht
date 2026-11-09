@@ -69,6 +69,7 @@ end-to-end encrypted with MLS (RFC 9420):
   - read receipts and delivery status; a device-local read position with a
     private read (no receipt) and a hand-set unread flag
   - knock and location messages
+  - room events in the timeline: a room's creation, renames, joins and leaves, as data for the embedder to word
   - self-deleting (ephemeral) text with a sender-chosen timer — Wire's official clients show the countdown; inbound ones self-redact locally when the timer elapses
   - failed-send recovery: a send that failed offline stays a listable `Failed` row and is re-driven explicitly under the same message id (text, replies, mentions, ephemeral, knock, location, files) — no background scheduler; the reconnect contract is the consumer's loop
   - keyed sends: a send under a caller-chosen idempotency key answers a retry of that key from the store instead of sending twice (text, replies, knock, location, files, reactions; keys kept 28 days)

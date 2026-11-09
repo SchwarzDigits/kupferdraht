@@ -1281,6 +1281,16 @@ mark-read skipped
   read_marker:       <rfc3339, local offset>
 ```
 
+Output (a room event's item, Step 145 — the marker moves, the room is told nothing):
+
+```
+mark-read skipped
+  room_id:           <room>@<domain>
+  target:            <item_id>
+  reason:            a room event, not a message
+  read_marker:       <rfc3339, local offset>
+```
+
 `read_marker` is the room's device-local read position afterwards —
 `none` when the message is not in the local timeline (the position
 does not move then; the flag still clears).
@@ -1575,7 +1585,10 @@ reading so users get the expected "show me what's new" behaviour
 in one shot. Non-text rows render as previews: `<asset …>`,
 `<knock>`, `<location …>`, `<task …>` and — since Step 72b —
 `<case <case_ref> rev <n> <title>>` (the folded room state comes
-from `case-show`, landing in 72c). Since Step 89 a live ephemeral
+from `case-show`, landing in 72c). A room event (Step 145) prints as
+a system line: `* alice@d added bob@d, carol@d`, `* bob@d joined`,
+`* bob@d left`, `* alice@d removed bob@d`, `* alice@d renamed the room
+to "…"`, `* alice@d created the room "…"`. Since Step 89 a live ephemeral
 row carries a `⏱ until <ts>` suffix and an elapsed one prints
 `(expired)` in place of `(deleted)` — the pre-read drain also runs
 the expiry sweep, so a row whose timer passed while the CLI was not
