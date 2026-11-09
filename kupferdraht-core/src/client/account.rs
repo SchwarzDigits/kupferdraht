@@ -23,7 +23,8 @@ pub(crate) struct OwnTeam {
     pub(crate) icon_key: Option<String>,
 }
 
-/// User-profile snapshot loaded at login time from `GET /v14/self`.
+/// The user's own profile from `GET /v14/self`, as of the last login,
+/// `Client::refresh_account` or own profile call (Step 152).
 ///
 /// This is the matrix-rust-sdk-shaped public-API replacement for the
 /// internal `wire::dto::SelfUser` type. Field names follow
@@ -86,31 +87,43 @@ impl Account {
         self.email.as_deref()
     }
 
-    /// The user's team, as of the last login (Step 143); `None` for a
-    /// personal account. Lowercase.
+    /// The user's team, as of the last login or `Client::refresh_account`
+    /// (Steps 143, 152); `None` for a personal account. Lowercase.
     #[must_use]
     pub fn team_id(&self) -> Option<&str> {
         self.team.id.as_deref()
     }
 
-    /// The team's name, as of the last login (Step 143). `None` for a
-    /// personal account, and for a team whose name the login could not
-    /// fetch: a resume is offline, so it stays `None` until the next login.
+    /// The team's name (Step 143), as of the last login or
+    /// `Client::refresh_account` (Step 152). `None` for a personal account,
+    /// and for a team whose name the login could not fetch until a refresh
+    /// does.
     #[must_use]
     pub fn team_name(&self) -> Option<&str> {
         self.team.name.as_deref()
     }
 
-    /// The asset key of the team's icon, as of the last login (Step 144);
+    /// The asset key of the team's icon, as of the last login or refresh
+    /// (Steps 144, 152);
     /// [`Client::team_avatar`](super::Client::team_avatar) fetches the image.
     #[must_use]
     pub fn team_avatar_key(&self) -> Option<&str> {
         self.team.icon_key.as_deref()
     }
 
-    /// The own avatar's keys as of the last login (Step 144), for persisting
-    /// them. [`Client::avatar_key`](super::Client::avatar_key) answers the
-    /// current state, which an upload changes.
+    /// The own avatar's keys (Step 144). Since Step 152 the account follows
+    /// `refresh_account` and the client's own calls, so this is the name.
+    #[must_use]
+    pub fn avatar_keys(&self) -> &AvatarKeys {
+        &self.avatar_keys
+    }
+
+    /// The former name of [`Self::avatar_keys`], from when the account was a
+    /// snapshot of the login.
+    #[deprecated(
+        since = "0.5.1",
+        note = "use `avatar_keys`: the account is no longer a login snapshot"
+    )]
     #[must_use]
     pub fn login_avatar_keys(&self) -> &AvatarKeys {
         &self.avatar_keys

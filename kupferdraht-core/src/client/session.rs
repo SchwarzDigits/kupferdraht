@@ -266,10 +266,17 @@ impl Client {
         self.tokens.read().map_or(0, |t| t.issued_at_ms)
     }
 
-    /// User-profile accessor. Mirrors `matrix_sdk::Client::account`.
+    /// User-profile accessor: the account as it is now, which
+    /// `refresh_account` and the profile calls change (Step 152). Mirrors
+    /// `matrix_sdk::Client::account`.
     #[must_use]
     pub fn account(&self) -> Arc<Account> {
-        self.account.clone()
+        // Step 152: the current one; a poisoned lock still holds a whole
+        // account, since a swap is one assignment.
+        self.account
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// MLS signature public key for this device (P-256 / ECDSA).

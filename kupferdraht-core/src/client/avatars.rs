@@ -81,6 +81,7 @@ impl Client {
             UserAsset::image(&thumbnail_key, UserAsset::PREVIEW),
             UserAsset::image(&full_key, UserAsset::COMPLETE),
         ];
+        let _gate = self.account_gate.lock().await;
         self.http
             .update_self_assets(self.api_version, &self.current_access_token(), &assets)
             .await?;
@@ -96,6 +97,7 @@ impl Client {
     /// # Errors
     /// `BackendRejected` and `Network` for a failed profile update.
     pub async fn remove_avatar(&self) -> Result<(), KupferdrahtError> {
+        let _gate = self.account_gate.lock().await;
         self.http
             .update_self_assets(self.api_version, &self.current_access_token(), &[])
             .await?;
@@ -105,7 +107,7 @@ impl Client {
     /// The own keys as they are now: a write of this session is in the row.
     pub(super) async fn own_avatar_keys(&self) -> Result<AvatarKeys, KupferdrahtError> {
         let Some(store) = self.store_handle() else {
-            return Ok(self.account().login_avatar_keys().clone());
+            return Ok(self.account().avatar_keys().clone());
         };
         let row = self.current_self_row(store.as_ref()).await?;
         Ok(AvatarKeys {
@@ -201,16 +203,14 @@ impl Client {
         Ok(uploaded.key)
     }
 
-    /// Remember keys the backend accepted, in the row `resume` reads. A session
-    /// without a store has nothing to remember.
+    /// Remember keys the backend accepted, in the row `resume` reads and the
+    /// live account (Step 152).
     async fn remember_own_avatar(&self, keys: AvatarKeys) -> Result<(), KupferdrahtError> {
-        let Some(store) = self.store_handle() else {
-            return Ok(());
-        };
-        let mut row = self.current_self_row(store.as_ref()).await?;
-        row.avatar_thumbnail_key = keys.thumbnail;
-        row.avatar_full_key = keys.full;
-        store.save_self_user(&row).await
+        self.apply_own_profile(|row| {
+            row.avatar_thumbnail_key = keys.thumbnail;
+            row.avatar_full_key = keys.full;
+        })
+        .await
     }
 }
 

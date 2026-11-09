@@ -154,7 +154,8 @@ impl Client {
         self.inner.device_id().map(str::to_owned)
     }
 
-    /// The signed-in user's profile snapshot.
+    /// The signed-in user's profile as it is now (Step 152: `refresh_account`
+    /// and the own profile calls change it).
     #[must_use]
     pub fn account(&self) -> Account {
         Account::from(self.inner.account().as_ref())
@@ -196,6 +197,15 @@ impl Client {
     /// `KupferdrahtError::Storage` if the store cannot answer.
     pub async fn storage_engine(&self) -> Result<Option<StorageEngineInfo>, KupferdrahtError> {
         self.inner.storage_engine().await
+    }
+
+    /// Read the own account and team again (Step 152): `account()` answers
+    /// the new values once this resolves; on any failure nothing changes.
+    ///
+    /// # Errors
+    /// The requests' errors, and `Storage` from the row write.
+    pub async fn refresh_account(&self) -> Result<(), KupferdrahtError> {
+        self.inner.refresh_account().await
     }
 }
 

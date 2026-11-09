@@ -278,6 +278,8 @@ export class ClientProxy {
   storageEngine(): Promise<StorageEngineInfo | null>;
   /** Whether sync runs on push: an open socket, polling without one, or no sync loop running. */
   pushState(): Promise<'connected' | 'polling' | 'stopped'>;
+  /** Step 152: read the own account and team again; the getters answer the new values when this resolves — in the calling tab, another tab calls it for itself. Rejects and changes nothing on any failure. */
+  refreshAccount(): Promise<void>;
   setDisplayName(name: string): Promise<void>;
   setHandle(handle: string): Promise<void>;
   /** Wire mails a verification link; the address changes once confirmed. */

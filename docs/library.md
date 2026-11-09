@@ -1945,15 +1945,22 @@ account.email();          // Option<&str>
 account.team_id();        // Option<&str>  — lowercase; None for a personal account
 account.team_name();      // Option<&str>
 account.team_avatar_key(); // Option<&str>  — the team icon's asset key
-account.login_avatar_keys(); // &AvatarKeys — as of the login; `Client::avatar_key` is current
+account.avatar_keys();    // &AvatarKeys — the own avatar (Step 152; `login_avatar_keys` is deprecated)
+
+client.refresh_account().await?; // Step 152: GET /self, GET /teams/{tid}, all or nothing
 ```
 
-`team_id` and `team_name` (Step 143) are a snapshot of the last login, like
-`display_name` and `handle`: Wire's `team.update` does not refresh them. A
-login fetches the name once with `GET /teams/{tid}`, and any failure is a
-warning: the login stands, with `team_id` set and `team_name` `None`. A resume
-is offline and reads the stored row, so the name stays `None` until the next
-full login, and a browser session resumes for weeks.
+`client.account()` answers the account as it is now (Step 152): the values of
+the last login or resume, then of every `refresh_account` and of the client's
+own `set_display_name`, `set_handle`, `upload_avatar` and `remove_avatar`. An
+`Arc<Account>` a caller holds stays a snapshot. Wire's `team.update` reaches
+only a team's admins and is not stored (`docs/observations.md` §99), so nothing
+follows a change made elsewhere by itself: `refresh_account` reads `GET /self`
+and, for a team member, `GET /teams/{tid}`, both before anything is written,
+and any failure leaves every value. A changed name, handle or avatar marks the
+room list stale, so the own `members()` row follows at the next pass. A login
+fetches the team name once, and any failure is a warning: the login stands,
+with `team_id` set and `team_name` `None` until a refresh fills it.
 
 Field-name mapping Wire ↔ matrix-rust-sdk:
 

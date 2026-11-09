@@ -1108,6 +1108,20 @@ device-rename ok
   label:     <new label>
 ```
 
+### `account-refresh`
+
+Read the own account and team again (Step 152): `GET /self`, then
+`GET /teams/{tid}` for a team member. It prints what the account says now; on
+a failure nothing changes and the command exits with the error.
+
+```
+account-refresh ok
+  display_name:  Alice
+  handle:        alice
+  email:         alice@example.com
+  team:          Acme (<team id>)
+```
+
 ### `profile-set`
 
 Update the authenticated user's profile (Step 2g). At least

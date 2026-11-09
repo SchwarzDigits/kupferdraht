@@ -531,3 +531,32 @@ export async function serviceTokenThroughATab() {
     b.close();
   }
 }
+
+/** Step 152: a tab's `refreshAccount` resolves with that tab's getters current. */
+export async function ownRenameThroughATab() {
+  const { a, b } = await twoTabs();
+  try {
+    const client = await b.kupferdraht.resume(FIXTURE_ACCOUNT);
+    const before = { displayName: client.displayName, teamName: client.teamName };
+    const resolved = await client.setDisplayName('Tab Renamed');
+    const after = { displayName: client.displayName, teamName: client.teamName };
+    return { before, after, resolvedUndefined: resolved === undefined };
+  } finally {
+    a.close();
+    b.close();
+  }
+}
+
+export async function accountRefreshThroughATab() {
+  const { a, b } = await twoTabs();
+  try {
+    const client = await b.kupferdraht.resume(FIXTURE_ACCOUNT);
+    const before = { displayName: client.displayName, teamName: client.teamName };
+    const resolved = await client.refreshAccount();
+    const after = { displayName: client.displayName, teamName: client.teamName };
+    return { before, after, resolvedUndefined: resolved === undefined };
+  } finally {
+    a.close();
+    b.close();
+  }
+}

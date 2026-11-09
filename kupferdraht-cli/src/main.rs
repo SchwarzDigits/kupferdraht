@@ -693,6 +693,9 @@ enum Command {
         #[arg(short = 'l', long)]
         label: String,
     },
+    /// Read the own account and team again (Step 152) and print them:
+    /// `GET /self`, then `GET /teams/{tid}`. On a failure nothing changes.
+    AccountRefresh,
     /// Update the authenticated user's profile (Step 2g). At least
     /// one of `--display-name` or `--handle` must be supplied.
     /// `--display-name` patches Wire's `PUT /v{N}/self`;
@@ -1349,6 +1352,7 @@ async fn async_main() -> ExitCode {
             cli::devices::device_delete(id, password_stdin).await
         }
         Command::DeviceRename { id, label } => cli::devices::device_rename(id, label).await,
+        Command::AccountRefresh => cli::auth::account_refresh().await,
         Command::ProfileSet {
             display_name,
             handle,

@@ -461,7 +461,9 @@ Returns `200`.
 
 Profile changes SHOULD emit a `user.update` event to the devices of
 the user and of users sharing a conversation (Kupferdraht currently ignores it
-gracefully; see §12.3).
+gracefully; see §12.3). Kupferdraht reads the own profile and team on request
+instead (`refresh_account`, Step 152): `GET /self` and `GET /teams/{tid}` MUST
+answer a plain member, and a client needs no `team.update`.
 
 ### 5.6 Email change (verification flow)
 

@@ -10,10 +10,9 @@
 //! matrix-rust-sdk analogs live on `Account`.
 //!
 //! The two that change a field this SDK also stores — the handle and the
-//! display name — are transport **plus** a write to the persisted
-//! `self_user` row (Step 126). Without that the change would be invisible to
-//! this SDK until the next login: `Account` is immutable and `resume`
-//! rebuilds it from that row.
+//! display name — are transport **plus** the persisted `self_user` row
+//! (Step 126) and, since Step 152, the live `Account` the getters read
+//! (`own_account.rs`).
 
 #![allow(clippy::doc_markdown)]
 
@@ -30,9 +29,8 @@ impl Client {
     /// `Client::invite_members` pattern (transport calls live on
     /// `Client`, `Account` and `Room` are thin handles).
     ///
-    /// The local `Account` snapshot returned by `Client::account()`
-    /// reflects the value at login time; call `sync_metadata` to
-    /// refresh it after a successful `set_display_name`.
+    /// `Client::account()` follows at once (Step 152), and the row
+    /// `resume` reads.
     ///
     /// # Errors
     /// * `InvalidInput` if `name` is empty.
@@ -44,10 +42,12 @@ impl Client {
                 "set_display_name: name must be non-empty".into(),
             ));
         }
+        let _gate = self.account_gate.lock().await;
         self.http
             .update_self_profile_name(self.api_version, &self.current_access_token(), name)
             .await?;
-        self.remember_self_profile(None, Some(name)).await
+        self.apply_own_profile(|row| name.clone_into(&mut row.name))
+            .await
     }
 
     /// `PUT /v{N}/self/handle` — change the authenticated user's
@@ -68,42 +68,12 @@ impl Client {
                 "set_handle: handle must be non-empty".into(),
             ));
         }
+        let _gate = self.account_gate.lock().await;
         self.http
             .update_self_handle(self.api_version, &self.current_access_token(), handle)
             .await?;
-        self.remember_self_profile(Some(handle), None).await
-    }
-
-    /// Step 126: keep the persisted `self_user` row in step with a profile
-    /// change the backend has accepted, so the next `resume` rebuilds the
-    /// right [`Account`](super::Account) — it is immutable and
-    /// `build_resume_account` reads this row.
-    ///
-    /// The row is written whole (`save_self_user` upserts on `id`): the
-    /// fields this call did not change come from the row itself — an earlier
-    /// write of this session is there, not in the account snapshot, which
-    /// keeps the login's values — and from the snapshot only when there is
-    /// no row yet. The live snapshot itself is deliberately untouched: it is
-    /// an `Arc` the whole `Client` reads, and a consumer can cover its own
-    /// writes for the session's lifetime.
-    ///
-    /// A session without a store (metadata-only) has nothing to remember.
-    async fn remember_self_profile(
-        &self,
-        handle: Option<&str>,
-        name: Option<&str>,
-    ) -> Result<(), KupferdrahtError> {
-        let Some(store) = self.store_handle() else {
-            return Ok(());
-        };
-        let mut row = self.current_self_row(store.as_ref()).await?;
-        if let Some(handle) = handle {
-            row.handle = Some(handle.to_owned());
-        }
-        if let Some(name) = name {
-            row.name = name.to_owned();
-        }
-        store.save_self_user(&row).await
+        self.apply_own_profile(|row| row.handle = Some(handle.to_owned()))
+            .await
     }
 
     /// The `self_user` row, or one from the account snapshot when there is
@@ -118,26 +88,16 @@ impl Client {
         Ok(store
             .load_self_user(&id)
             .await?
-            .unwrap_or_else(|| SelfUserRecord {
-                id: id.clone(),
-                handle: account.handle().map(str::to_owned),
-                name: account.display_name().to_owned(),
-                email: account.email().map(str::to_owned),
-                team_id: account.team_id().map(str::to_owned),
-                team_name: account.team_name().map(str::to_owned),
-                avatar_thumbnail_key: account.login_avatar_keys().thumbnail.clone(),
-                avatar_full_key: account.login_avatar_keys().full.clone(),
-                team_avatar_key: account.team_avatar_key().map(str::to_owned),
-            }))
+            .unwrap_or_else(|| super::own_account::row_of(&account)))
     }
 
     /// `PUT /v{N}/access/self/email` — request a change of the
     /// authenticated user's email. Wire sends a verification mail to the
     /// new address; the change takes effect only once the user confirms
     /// it. This therefore returns `Ok(())` on the `202`/`204`
-    /// acknowledgement **without** touching the local `Account`
-    /// snapshot — call `sync_metadata` after the user has verified to
-    /// pick up the new address. matrix-rust-sdk's closest analog is
+    /// acknowledgement **without** touching the local `Account` — call
+    /// `refresh_account` after the user has verified to pick up the new
+    /// address (Step 152). matrix-rust-sdk's closest analog is
     /// `Account` 3PID management.
     ///
     /// # Errors

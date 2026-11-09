@@ -235,8 +235,8 @@ pub(crate) async fn persist_session_state(
             email: account.email().map(str::to_string),
             team_id: account.team_id().map(str::to_string),
             team_name: account.team_name().map(str::to_string),
-            avatar_thumbnail_key: account.login_avatar_keys().thumbnail.clone(),
-            avatar_full_key: account.login_avatar_keys().full.clone(),
+            avatar_thumbnail_key: account.avatar_keys().thumbnail.clone(),
+            avatar_full_key: account.avatar_keys().full.clone(),
             team_avatar_key: account.team_avatar_key().map(str::to_string),
         })
         .await?;
@@ -476,6 +476,22 @@ pub(crate) async fn status() -> Result<(), KupferdrahtError> {
 /// The `team:` value of the login commands and `status` (Step 143): the name
 /// and the id, `—` for what the account does not have. Pure, so the format is
 /// unit-tested.
+/// Step 152: read the own account and team again and print what it says.
+pub(crate) async fn account_refresh() -> Result<(), KupferdrahtError> {
+    let client = resume_client().await?;
+    client.refresh_account().await?;
+    let account = client.account();
+    println!("account-refresh ok");
+    println!("  display_name:  {}", account.display_name());
+    println!("  handle:        {}", account.handle().unwrap_or("—"));
+    println!("  email:         {}", account.email().unwrap_or("—"));
+    println!(
+        "  team:          {}",
+        team_line(account.team_name(), account.team_id())
+    );
+    Ok(())
+}
+
 fn team_line(name: Option<&str>, id: Option<&str>) -> String {
     match (name, id) {
         (Some(name), Some(id)) => format!("{name} ({id})"),

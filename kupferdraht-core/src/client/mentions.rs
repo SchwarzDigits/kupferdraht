@@ -81,7 +81,8 @@ impl Client {
         // to know which Wire backend domain to qualify against.
         // Use the caller's own domain — on a single-backend
         // deployment every handle lives on the user's home backend.
-        let home_domain = self.account.domain();
+        let account = self.account();
+        let home_domain = account.domain();
         let qualified_handles: Vec<crate::wire::dto::QualifiedHandle> = handles
             .iter()
             .map(|h| crate::wire::dto::QualifiedHandle {

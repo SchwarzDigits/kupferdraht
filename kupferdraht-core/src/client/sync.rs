@@ -528,8 +528,9 @@ impl Client {
         // Self's name / handle come from `/v14/self` (already in
         // the account snapshot). `list-users` deliberately excludes
         // self, so we apply the account profile here.
-        let self_name = self.account.display_name().to_string();
-        let self_handle = self.account.handle().map(str::to_string);
+        let account = self.account();
+        let self_name = account.display_name().to_string();
+        let self_handle = account.handle().map(str::to_string);
         let self_avatar = self.own_avatar_keys().await?;
         Ok(rooms
             .into_iter()
