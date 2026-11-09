@@ -2018,7 +2018,7 @@ dependencies = [
 
 [[package]]
 name = "kupferdraht-cli"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -2033,7 +2033,7 @@ dependencies = [
 
 [[package]]
 name = "kupferdraht-core"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "aes 0.8.4",
  "aes-gcm 0.10.3",
@@ -2105,7 +2105,7 @@ dependencies = [
 
 [[package]]
 name = "kupferdraht-uniffi-bindgen"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "uniffi",
 ]

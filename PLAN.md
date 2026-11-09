@@ -5,6 +5,7 @@ This file is the **open backlog** — the steps still in progress, pending, or b
 ## Status overview
 
 Last update: **2026-11-09** — 
+v0.5.0 released with Steps 145, 151 and 146: room events in the timeline, the backend's time of a message (a reply's quote verifies at a Kalium client), and a sync pass that names the rooms that changed; all BREAKING. Order: the archives of 151 and 146, then 152, 147, 129a, 129b. Before (the same day): 
 Step 146 in progress: a sync pass names the rooms that changed (`changedRooms`, BREAKING, with 145 and 151 in 0.5.0). Before (the same day): 
 Step 146 rewritten and Step 152 commissioned, both agreed with the browser embedder: Kupferdraht offers the reading and the embedder decides when (Volker). 146 is no new signal any more: `roomsUpdated` counts the rooms that changed, as it always promised (BREAKING, 0.5.0). 152 is `refresh_account` (R10): `team.update` reaches only admins and is not stored (observations §99), so events cannot do it. Order: 146, 152, 147, 129a, 129b. Before (the same day): 
 Step 151 in progress (the time of sending; before 146, Volker): `sent_at_ms` becomes the backend's time, which also fixes the quote hash. Before (the same day): 
