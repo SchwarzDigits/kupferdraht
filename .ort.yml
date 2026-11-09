@@ -63,13 +63,6 @@ excludes:
         third-party dependencies are the same Maven artifacts as the JVM
         build's (bindings/kotlin, analyzed) and are listed in
         THIRD-PARTY-NOTICES.
-    - pattern: "bindings/kmp/**"
-      reason: "OTHER"
-      comment: |
-        The Kotlin Multiplatform build drives cargo through the gobley
-        plugins at configuration time and needs the Android SDK; the ORT
-        container offers neither (its rustup directory is read-only). Its
-        third-party dependencies are listed in THIRD-PARTY-NOTICES.
     - pattern: "bindings/kotlin/**"
       reason: "OTHER"
       comment: |

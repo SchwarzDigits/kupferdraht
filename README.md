@@ -160,7 +160,6 @@ the scripts under [`bindings/`](bindings/):
 | Kotlin / JVM (desktop) | JAR — `bindings/kotlin/build-jvm.sh` | implemented, binding-level tests (`./gradlew test`) |
 | Android | AAR (arm64-v8a) — `bindings/android/build-android.sh` (NDK + cargo-ndk) | implemented, builds + packages |
 | Swift (iOS + macOS) | `kupferdrahtFFI.xcframework` + SwiftPM — `bindings/swift/build-xcframework.sh` | implemented, binding-level tests (`swift test`) |
-| Kotlin Multiplatform | `io.github.schwarzdigits:kupferdraht-bindings` (`jvm`, `androidTarget`, `iosArm64`, `iosSimulatorArm64`) | implemented, consumed downstream via Gradle composite build |
 | Browser (WASM) | `wasm-pack build --target web` (from `kupferdraht-core/`, needs a wasm-capable clang) + `bindings/web/kupferdraht-tabs/` (plain ES modules, no build) | usable subset — login incl. SSO, sync, send / receive, assets over the OPFS-backed SQLite3MC store (run in a dedicated Web Worker); many tabs served by one leader tab (`kupferdraht-tabs`, ADR-0026); storage pins and the tabs scenarios run in headless Firefox (`scripts/wasm-test.sh`), live-browser verification of the login vertical pending |
 
 Per-target surface, packaging details, and the gaps on the wasm

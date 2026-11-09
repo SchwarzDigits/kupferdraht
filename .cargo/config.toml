@@ -7,9 +7,8 @@
 # not vary per caller.
 #
 # Living here (cargo config, not a Gradle file) makes it the one place that
-# governs *every* cargo invocation — gobley's build, natrium's
-# `buildKupferdrahtNatives`/`captureKupferdrahtNatives` tasks, and plain `cargo build` —
-# so no shell env or CI step can build against an untested version. `force`
+# governs *every* cargo invocation — the build scripts under `bindings/` and
+# plain `cargo build` — so no shell env or CI step can build against an untested version. `force`
 # makes it win even over an already-set ambient value.
 [env]
 IPHONEOS_DEPLOYMENT_TARGET = { value = "15.0", force = true }

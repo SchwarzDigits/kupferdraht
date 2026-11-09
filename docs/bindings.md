@@ -1047,26 +1047,6 @@ cd bindings/android && ./gradlew assembleRelease
 AGP `com.android.library` module packages it + the generated Kotlin + JNA
 (`@aar`) into an AAR.
 
-### Kotlin Multiplatform — bindings/kmp
-```
-cd bindings/kmp && ./gradlew buildKupferdrahtNatives   # after a Rust change
-./gradlew captureKupferdrahtNatives                    # first setup / native-dep bumps
-```
-A standalone Gradle module (`io.github.schwarzdigits:kupferdraht-bindings`) that generates
-the KMP `uniffi.kupferdraht` binding itself — commonMain `expect` + JVM /
-Android / iOS `actual`s (targets `jvm`, `androidTarget`, `iosArm64`,
-`iosSimulatorArm64`) — via gobley's cargo + uniffi plugins, from Kupferdraht's
-**prebuilt** native libraries. gobley's own Cargo build is disabled on an
-ordinary run; `buildKupferdrahtNatives` cross-builds every target's native lib
-then regenerates the binding, `captureKupferdrahtNatives` re-snapshots the
-link metadata into `native/` — only those two invoke Rust, so a
-day-to-day build needs no Rust toolchain. natrium-core consumes this
-module through a Gradle composite build (`includeBuild`, per the module's
-file headers; the consumer-side wiring lives in natrium's repo) instead of
-carrying the gobley/cargo wiring itself — extracted out of natrium-core
-into this repo (Step 42) so the binding is produced next to the Rust code
-it binds.
-
 ### Web — wasm-pack
 ```
 export CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang     # only if `clang --print-targets` lacks wasm32
@@ -1104,11 +1084,8 @@ two-tab check.
 
 ## Scope
 
-- **Kotlin Multiplatform**: Kupferdraht's `bindings/kmp` module generates the
-  KMP `expect` / `actual` UniFFI wrapping itself (see "Kotlin Multiplatform
-  — bindings/kmp" above) — not natrium. Natrium-core consumes the result
-  as a Gradle composite-build dependency instead of owning that
-  generation step.
+- **Kotlin Multiplatform**: no module here (`docs/non-goals.md` NG-27).
+  Kotlin and Swift ship separately; a KMP consumer does its own wrapping.
 - **WASM / web** is a separate hand-written `wasm-bindgen` track — shipped
   since PR #44 (Steps 44–59), documented above. The browser architecture
   is recorded in ADR-0015 (WASM-only delivery, hand-written bindings —

@@ -404,7 +404,7 @@ fn maven_bullet(notices: &str, coordinate: &str) -> String {
 }
 
 fn kotlin_differences(notices: &str, gradle_files: &[String]) -> Vec<String> {
-    const IN_A_BULLET: [(&str, &str); 5] = [
+    const IN_A_BULLET: [(&str, &str); 4] = [
         ("net.java.dev.jna:jna", "net.java.dev.jna:jna:"),
         (
             "org.jetbrains.kotlinx:kotlinx-coroutines-core",
@@ -418,18 +418,6 @@ fn kotlin_differences(notices: &str, gradle_files: &[String]) -> Vec<String> {
             "org.jetbrains.kotlin:kotlin-stdlib",
             "kotlin(\"android\") version \"",
         ),
-        (
-            "org.jetbrains.kotlin:kotlin-stdlib",
-            "kotlin(\"multiplatform\") version \"",
-        ),
-    ];
-    const IN_THE_TEXT: [(&str, &str); 3] = [
-        ("Gradle plugins", "id(\"dev.gobley.cargo\") version \""),
-        ("Gradle plugins", "id(\"dev.gobley.uniffi\") version \""),
-        (
-            "Gradle plugin",
-            "id(\"org.jetbrains.kotlin.plugin.atomicfu\") version \"",
-        ),
     ];
     let mut differences = Vec::new();
     for (coordinate, prefix) in IN_A_BULLET {
@@ -438,16 +426,6 @@ fn kotlin_differences(notices: &str, gradle_files: &[String]) -> Vec<String> {
             if !bullet.contains(&version) {
                 differences.push(format!(
                     "{coordinate} {version}: in a Gradle file, not in the notices"
-                ));
-            }
-        }
-    }
-    let text = flat(notices);
-    for (name, prefix) in IN_THE_TEXT {
-        for version in gradle_versions(gradle_files, prefix) {
-            if !text.contains(&format!("{name} {version}")) {
-                differences.push(format!(
-                    "{name} {version}: in a Gradle file, not in the notices"
                 ));
             }
         }
@@ -565,7 +543,7 @@ fn graph_keys() -> BTreeSet<CrateVersion> {
 }
 
 fn gradle_files() -> Vec<String> {
-    ["android", "kmp", "kotlin"]
+    ["android", "kotlin"]
         .map(|binding| workspace_file(&format!("bindings/{binding}/build.gradle.kts")))
         .to_vec()
 }
@@ -676,7 +654,7 @@ fn only_the_crate_sections_are_read() {
             "- sqlite-remote-vfs 0.6.0 and sqlite-remote-protocol 0.6.0 — Schwarz Digits",
         ),
         section(
-            "Kotlin, Android and Kotlin Multiplatform bindings",
+            "Kotlin and Android bindings",
             "- net.java.dev.jna:jna 5.15.0 — Timothy Wall",
         ),
         section("Trademarks", "\"Wire\" is a trademark of Wire Swiss GmbH."),
@@ -893,21 +871,20 @@ fn the_components_outside_the_graph_are_checked_in_both_files() {
 
 #[test]
 fn a_changed_gradle_version_is_named() {
-    let notices = "- net.java.dev.jna:jna 5.15.0 — x\n- org.jetbrains.kotlinx:kotlinx-coroutines-core 1.8.1 (JVM, Android) and\n  1.10.2 (Multiplatform) — y\n- org.jetbrains.kotlin:kotlin-stdlib 2.0.21 (JVM, Android) and 2.3.10\n  (Multiplatform) — z\nthe gobley cargo and uniffi\nGradle plugins 0.3.7\n";
+    let notices = "- net.java.dev.jna:jna 5.15.0 — x\n- org.jetbrains.kotlinx:kotlinx-coroutines-core 1.8.1 — y\n- org.jetbrains.kotlin:kotlin-stdlib 2.0.21, with kotlin-test — z\n";
     let gradle = [
         "api(\"net.java.dev.jna:jna:5.15.0\")\nimplementation(\"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1\")\nkotlin(\"jvm\") version \"2.0.21\"".to_owned(),
-        "api(\"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2\")\nkotlin(\"multiplatform\") version \"2.3.10\"\nid(\"dev.gobley.cargo\") version \"0.3.7\"".to_owned(),
     ];
     assert_none(&kotlin_differences(notices, &gradle));
-    let mut moved = gradle.clone();
-    moved[0] = moved[0].replace(
+    let mut coroutines = gradle.clone();
+    coroutines[0] = coroutines[0].replace(
         "kotlinx-coroutines-core:1.8.1",
         "kotlinx-coroutines-core:1.9.0",
     );
-    assert!(!kotlin_differences(notices, &moved).is_empty());
-    let mut plugin = gradle;
-    plugin[1] = plugin[1].replace("0.3.7", "0.3.8");
-    assert!(!kotlin_differences(notices, &plugin).is_empty());
+    assert!(!kotlin_differences(notices, &coroutines).is_empty());
+    let mut stdlib = gradle;
+    stdlib[0] = stdlib[0].replace("2.0.21", "2.1.0");
+    assert!(!kotlin_differences(notices, &stdlib).is_empty());
 }
 
 #[test]

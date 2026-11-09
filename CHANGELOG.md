@@ -59,6 +59,13 @@ is no skill for it — it is this short procedure:
 
 ### Removed
 
+- **BREAKING: the Kotlin Multiplatform bindings module** (`bindings/kmp`,
+  `io.github.schwarzdigits:kupferdraht-bindings`): it was never published, and
+  a build that included it from a checkout stays on v0.3.0 or earlier. gobley's
+  plugins leave with it. The Kotlin/JVM JAR, the Android AAR, the Swift
+  XCFramework and the browser module do not change. See `docs/non-goals.md`
+  NG-27.
+
 ### Fixed
 
 ### Security
