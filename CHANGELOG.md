@@ -36,6 +36,20 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.4.0] - 2026-11-09
+
+### Added
+
 - **The own team on the account** (Step 143): `Account::team_id()` and
   `Account::team_name()`, the same two fields on the FFI record `Account`, and
   the getters `teamId` and `teamName` on the browser `Client` and
@@ -71,8 +85,6 @@ is no skill for it — it is this short procedure:
   from a struct literal has them to add. A custom `Store` can answer
   `member_avatar_keys`; its default makes `Client::avatar` ask `list-users`.
 
-### Deprecated
-
 ### Removed
 
 - **BREAKING: the Kotlin Multiplatform bindings module** (`bindings/kmp`,
@@ -81,10 +93,6 @@ is no skill for it — it is this short procedure:
   plugins leave with it. The Kotlin/JVM JAR, the Android AAR, the Swift
   XCFramework and the browser module do not change. See `docs/non-goals.md`
   NG-27.
-
-### Fixed
-
-### Security
 
 ## [0.3.0] - 2026-11-09
 

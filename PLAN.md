@@ -5,6 +5,7 @@ This file is the **open backlog** — the steps still in progress, pending, or b
 ## Status overview
 
 Last update: **2026-11-09** — 
+v0.4.0 released with Steps 143 and 144 (the own team, avatars) and without `bindings/kmp`; BREAKING for code building the grown records, the browser surface only grows. Order: 145, 146, 147, 129a, 129b. Before (the same day): 
 Step 144 (avatars, every image written anew; PR #58) merged + archived; smoked 24/24 and avatars end to end. Order: the v0.4.0 release, 145, 146, 147, 129a, 129b. Before (the same day): 
 Step 144 in progress (avatars). Before (the same day): 
 Step 143 (the own team on the account: id and name; PR #55) merged + archived; smoked 24/24. Order: 144, 145, 146, 147, 129a, 129b. Before (the same day): 
