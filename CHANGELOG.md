@@ -50,6 +50,13 @@ is no skill for it — it is this short procedure:
   row from before v0.4.0, are filled by the first call.
 - **`Account::avatar_keys`** (Step 152), the name for the own avatar's keys now
   that the account is no login snapshot.
+- **Check recovery data without a PIN** (Step 147): browser
+  `PendingLogin.checkRecoveryData(data)` answers `"ok"` or the reason `recover`
+  would refuse the file with (`"notRecoveryData"`, `"unsupported"`,
+  `"otherAccount"`, `"oldDevice"`), before the user types a PIN. It never asks
+  the PIN service, so it costs no attempt; `"oldDevice"` needs the storage
+  slot (a PIN token and `GET /v1/slot`). `recover` now decides what the bytes
+  alone say before any request.
 
 ### Changed
 

@@ -19,4 +19,5 @@ pub(crate) mod pin;
 pub(crate) mod pin_service;
 pub(crate) mod receipt;
 pub(crate) mod seal;
+pub(crate) mod verdict;
 pub(crate) mod verifier;

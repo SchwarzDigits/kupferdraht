@@ -19,6 +19,7 @@
 //! ```
 
 use super::receipt::REFUND_KEY_LEN;
+use super::verdict::RecoveryDataVerdict;
 use crate::error::KupferdrahtError;
 
 /// The first bytes of recovery data.
@@ -106,14 +107,20 @@ impl RecoveryData {
     /// recovery data (another magic, another length), `unsupported` for
     /// another format version.
     pub(crate) fn decode(bytes: &[u8]) -> Result<Self, KupferdrahtError> {
+        Self::read(bytes).map_err(RecoveryDataVerdict::refusal)
+    }
+
+    /// Read recovery data, or the verdict on bytes this build cannot read
+    /// (Step 147): `NotRecoveryData`, `Unsupported`.
+    pub(crate) fn read(bytes: &[u8]) -> Result<Self, RecoveryDataVerdict> {
         if bytes.len() < MAGIC.len() + 1 || bytes[..MAGIC.len()] != MAGIC {
-            return Err(invalid("notRecoveryData"));
+            return Err(RecoveryDataVerdict::NotRecoveryData);
         }
         if bytes[MAGIC.len()] != FORMAT_VERSION {
-            return Err(invalid("unsupported"));
+            return Err(RecoveryDataVerdict::Unsupported);
         }
         if bytes.len() != HEADER_LEN + SEALED_LEN {
-            return Err(invalid("notRecoveryData"));
+            return Err(RecoveryDataVerdict::NotRecoveryData);
         }
         let mut reader = Reader {
             bytes,

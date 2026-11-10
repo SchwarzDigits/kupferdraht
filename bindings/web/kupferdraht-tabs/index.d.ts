@@ -253,6 +253,13 @@ export class PendingLoginProxy {
    * `registerDevice({ takeOver: true })`, no second PIN attempt.
    */
   recover(data: Uint8Array, pin: string, options?: { takeOver?: boolean }): Promise<ClientProxy>;
+  /**
+   * Step 147, with `keys` `"missing"`: the verdict on recovery data before any PIN — `'ok'`, or the `reason`
+   * `recover` would throw `InvalidRecoveryData` with. What the bytes alone decide needs no request; otherwise a
+   * PIN token and the storage slot are asked, never the PIN service: no attempt is counted. `InvalidInput` with
+   * `keys` `"present"` or without a `pinServiceUrl`; a failed slot query throws instead of answering.
+   */
+  checkRecoveryData(data: Uint8Array): Promise<RecoveryDataVerdict>;
   /** Device-limit recovery: list, free a slot, then `registerDevice` again. */
   devices(): Promise<DeviceInfo[]>;
   deleteDevice(deviceId: string): Promise<void>;
@@ -375,6 +382,8 @@ export class ClientProxy {
 export interface ServiceToken { token: string; expiresIn: number }
 
 /** `exportedAt`: when the current recovery data was made (milliseconds since the epoch). */
+/** Step 147: `PendingLogin.checkRecoveryData`'s verdict — `'ok'`, or `InvalidRecoveryData`'s `reason`. */
+export type RecoveryDataVerdict = 'ok' | 'notRecoveryData' | 'unsupported' | 'otherAccount' | 'oldDevice';
 export type RecoveryState = { state: 'disabled' } | { state: 'enabled'; exportedAt: number };
 
 /** The account's recovery data (Step 112, ADR-0035); the local mode, or no `pinServiceUrl`, has none. */

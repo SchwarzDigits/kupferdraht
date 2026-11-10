@@ -766,6 +766,24 @@ impl PendingLogin {
         })
     }
 
+    /// With `keys` `"missing"`: what recovery `data` is for this login before
+    /// any PIN (Step 147) — `"ok"`, or the `reason` `recover` would throw
+    /// `InvalidRecoveryData` with: `"notRecoveryData"`, `"unsupported"`,
+    /// `"otherAccount"`, `"oldDevice"`. What the bytes alone decide needs no
+    /// request; otherwise it buys a PIN token and reads the storage slot. It
+    /// never asks the PIN service, so no attempt is counted, and it leaves
+    /// this login as it was. With `keys` `"present"` or without a
+    /// `pinServiceUrl` it throws `InvalidInput`; a failed slot query throws
+    /// (`ServiceUnavailable`, `StorageAccessDenied`) instead of answering.
+    #[wasm_bindgen(js_name = checkRecoveryData)]
+    pub async fn check_recovery_data(&self, data: Vec<u8>) -> Result<String, JsValue> {
+        self.inner
+            .check_recovery_data(&data)
+            .await
+            .map(|verdict| verdict.as_str().to_owned())
+            .map_err(|e| to_js(&e))
+    }
+
     /// Abandon the login: what a first setup of it created — the account's
     /// keys and databases in this browser — is removed again; keys it
     /// recovered are forgotten here (the databases are the account's).

@@ -19,6 +19,7 @@ use super::pin::normalize_pin;
 use super::pin_service::{self, Evaluation};
 use super::receipt::{REFUND_KEY_LEN, ReceiptKey};
 use super::seal::{ARGON2_PARAMS, open_seed, recovery_key, seal_seed};
+use super::verdict::RecoveryDataVerdict;
 use crate::error::KupferdrahtError;
 use crate::storage::remote::wire_session::{TokenExchange, WireSession, buy_pin_token};
 
@@ -146,20 +147,74 @@ pub(crate) async fn open_for_account(
     Ok(seed)
 }
 
-/// What the header says, checked before any request: the account, the
-/// device, an Argon2id cost a browser can give.
+/// What the checks before the PIN found (Step 147).
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum BeforePin {
+    /// The account's data for the device its storage slot names: that
+    /// device's Wire client id.
+    SlotDevice(String),
+    /// Why the data cannot bring the account back here.
+    Refused(RecoveryDataVerdict),
+}
+
+/// Step 147: the checks before any PIN, shared by `checkRecoveryData` and
+/// `recover` — the bytes alone first, with no request (format, account,
+/// Argon2id cost), then the account's storage slot (a PIN token and
+/// `GET /v1/slot`): no device, one being set up, or another one is
+/// `OldDevice` (ADR-0040). Never the PIN service.
 ///
 /// # Errors
-/// `InvalidRecoveryData`: `otherAccount`, `oldDevice`, `unsupported`.
-fn check_header(data: &RecoveryData, device: RecoveryDevice<'_>) -> Result<(), KupferdrahtError> {
-    if data.account_hash != account_hash(device.account_id) {
-        return Err(invalid("otherAccount"));
+/// The token exchange's errors; `StorageAccessDenied` /
+/// `ServiceUnavailable` from the slot query.
+pub(crate) async fn check_before_pin(
+    services: &RecoveryServices,
+    session: &WireSession,
+    account_id: &str,
+    data: &[u8],
+) -> Result<BeforePin, KupferdrahtError> {
+    debug_assert!(!account_id.is_empty(), "an account to check against");
+    let data = match RecoveryData::read(data) {
+        Ok(data) => data,
+        Err(verdict) => return Ok(BeforePin::Refused(verdict)),
+    };
+    if let Some(verdict) = local_verdict(&data, account_id) {
+        return Ok(BeforePin::Refused(verdict));
     }
-    if data.client_id != client_id_field(device.client_id)? {
-        return Err(invalid("oldDevice"));
+    Ok(match account_slot(services, session).await? {
+        Some(slot) if is_device_of(&data, &slot.label) => BeforePin::SlotDevice(slot.label),
+        _ => BeforePin::Refused(RecoveryDataVerdict::OldDevice),
+    })
+}
+
+/// The header's verdict without the slot: another account's data, or an
+/// Argon2id cost a browser cannot give.
+fn local_verdict(data: &RecoveryData, account_id: &str) -> Option<RecoveryDataVerdict> {
+    if data.account_hash != account_hash(account_id) {
+        return Some(RecoveryDataVerdict::OtherAccount);
     }
     if data.argon2.m_kib > MAX_ARGON2_M_KIB {
-        return Err(invalid("unsupported"));
+        return Some(RecoveryDataVerdict::Unsupported);
+    }
+    None
+}
+
+/// Whether `data` belongs to the Wire client `client_id`; an empty label
+/// (a device being set up) names none.
+fn is_device_of(data: &RecoveryData, client_id: &str) -> bool {
+    client_id_field(client_id).is_ok_and(|field| field == data.client_id)
+}
+
+/// What the header says, checked before any request: the account, an
+/// Argon2id cost a browser can give, the device.
+///
+/// # Errors
+/// `InvalidRecoveryData`: `otherAccount`, `unsupported`, `oldDevice`.
+fn check_header(data: &RecoveryData, device: RecoveryDevice<'_>) -> Result<(), KupferdrahtError> {
+    if let Some(verdict) = local_verdict(data, device.account_id) {
+        return Err(verdict.refusal());
+    }
+    if data.client_id != client_id_field(device.client_id)? {
+        return Err(RecoveryDataVerdict::OldDevice.refusal());
     }
     Ok(())
 }

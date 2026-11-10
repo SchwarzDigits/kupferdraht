@@ -502,8 +502,10 @@ and only when needed:
    the way back in. Report it rather than the raw error: before Step 121 the
    keys stayed and every further login met the same refusal, with no call an
    embedder could make to clear the browser.
-5. Restoring (Step 112): the user picks the recovery data file and enters
-   the PIN → `recover(data, pin, { takeOver })` → the client (with
+5. Restoring (Step 112): the user picks the recovery data file —
+   `checkRecoveryData(data)` (Step 147) says right away whether it is the
+   one, before the PIN field — and enters the PIN →
+   `recover(data, pin, { takeOver })` → the client (with
    `deviceReplaced` when the recorded device was gone). `WrongPin` → ask
    again, showing `attemptsRemaining`; `TooManyAttempts` → try again after
    `retryAfter` seconds; `InvalidRecoveryData` → another file (`reason`
@@ -692,6 +694,18 @@ Since Step 110 (ADR-0035):
   stays (`keys` becomes `"present"`): `HeldElsewhere` → `registerDevice({
   takeOver: true })`, no second PIN attempt. With `keys` `"present"` or
   without a `pinServiceUrl`: `InvalidInput`.
+- `checkRecoveryData(data) -> "ok" | "notRecoveryData" | "unsupported" |
+  "otherAccount" | "oldDevice"` (Step 147) — with `keys` `"missing"`: the
+  verdict on a picked file before the user types a PIN; anything but
+  `"ok"` is the `reason` `recover` would throw `InvalidRecoveryData` with.
+  What the bytes alone decide (format, account, Argon2id cost) needs no
+  request; `"oldDevice"` needs the storage slot, so a file that passes the
+  bytes costs a PIN token and `GET /v1/slot`. It never asks the PIN service:
+  no attempt is counted, nothing is installed, the login stays as it was.
+  `recover` runs the same checks first, in the same order, and asks the slot
+  again (it can change in between). With `keys` `"present"` or without a
+  `pinServiceUrl`: `InvalidInput`; a failed slot query throws
+  (`ServiceUnavailable`, `StorageAccessDenied`) instead of answering.
 - `cancel()` — abandon the login; what a first setup of it created (seed,
   keys, databases) is removed again. A seed it recovered is forgotten in
   this browser; the databases are the account's and stay. Synchronous.

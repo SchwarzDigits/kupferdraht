@@ -15,7 +15,10 @@ use super::PendingLogin;
 use crate::client::Client;
 use crate::error::KupferdrahtError;
 use crate::manager::ManagerConfig;
+use crate::recovery::flow::{BeforePin, RecoveryServices, check_before_pin};
+use crate::recovery::verdict::RecoveryDataVerdict;
 use crate::storage::account_keys::{SEED_LEN, forget_account_secrets, generate_seed, has_seed};
+use crate::storage::remote::wire_session::WireSession;
 use crate::storage::{
     delete_account_databases, delete_leftover_account_databases, store_seed_durably,
 };
@@ -195,29 +198,20 @@ impl PendingLogin {
     /// `InvalidInput` with the seed present or without a PIN service;
     /// `InvalidRecoveryData`, `WrongPin`, `TooManyAttempts`,
     /// `ServiceUnavailable` from opening; the registration's errors.
-    #[cfg(any(target_arch = "wasm32", test))]
     pub(crate) async fn recover(
         &self,
         data: &[u8],
         pin: &str,
         options: RegisterOptions,
     ) -> Result<Arc<Client>, KupferdrahtError> {
-        let setup = self.setup()?;
-        if setup.seed_present.load(Ordering::Acquire) {
-            return Err(KupferdrahtError::InvalidInput(
-                "the account's seed is here: register the device instead".into(),
-            ));
-        }
-        let services = setup.config.recovery_services.as_ref().ok_or_else(|| {
-            KupferdrahtError::InvalidInput(
-                "recovery needs a PIN service (storage.pinServiceUrl)".into(),
-            )
-        })?;
-        let session = crate::storage::remote::wire_session::WireSession::Login(
-            zeroize::Zeroizing::new(self.inner.login_access_token().to_owned()),
-        );
-        // Step 120 (ADR-0040): the data must be the slot's device's.
-        let client_id = self.slot_label_for_recovery(&session).await?;
+        let services = self.recovery_services()?;
+        let session = self.login_session();
+        // Step 120 (ADR-0040): the data must be the slot's device's; Step 147:
+        // what the bytes alone decide is decided before any request.
+        let client_id = match check_before_pin(services, &session, self.user_id(), data).await? {
+            BeforePin::SlotDevice(client_id) => client_id,
+            BeforePin::Refused(verdict) => return Err(verdict.refusal()),
+        };
         let device = crate::recovery::flow::RecoveryDevice {
             account_id: self.user_id(),
             client_id: &client_id,
@@ -232,34 +226,58 @@ impl PendingLogin {
         )
         .await?;
         self.install_account_seed(&seed).await?;
-        setup.recovered_seed.store(true, Ordering::Release);
+        self.setup()?.recovered_seed.store(true, Ordering::Release);
         self.register_device_with(options).await
     }
 
-    /// Step 120 (ADR-0040): the label of the account's storage slot — the
-    /// device recovery data must belong to; `oldDevice` without a device
-    /// or while one is being set up.
+    /// Step 147: what `data` is for this login before any PIN — `Ok`, or the
+    /// reason `recover` would refuse it with. What the bytes alone decide
+    /// needs no request; otherwise a PIN token and the storage slot are
+    /// asked, never the PIN service: no attempt is counted, nothing is
+    /// installed, and the login stays as it was.
     ///
     /// # Errors
-    /// `InvalidRecoveryData` (`oldDevice`); the slot query's errors.
-    async fn slot_label_for_recovery(
+    /// `InvalidInput` with the seed present or without a PIN service; the
+    /// token exchange's and the slot query's errors.
+    pub(crate) async fn check_recovery_data(
         &self,
-        session: &crate::storage::remote::wire_session::WireSession,
-    ) -> Result<String, KupferdrahtError> {
-        let services = self
-            .setup()?
-            .config
-            .recovery_services
-            .as_ref()
-            .ok_or_else(|| {
-                KupferdrahtError::InvalidInput(
-                    "recovery needs a PIN service (storage.pinServiceUrl)".into(),
-                )
-            })?;
-        match crate::recovery::flow::account_slot(services, session).await? {
-            Some(slot) if !slot.label.is_empty() => Ok(slot.label),
-            _ => Err(crate::recovery::data::invalid("oldDevice")),
+        data: &[u8],
+    ) -> Result<RecoveryDataVerdict, KupferdrahtError> {
+        let services = self.recovery_services()?;
+        let session = self.login_session();
+        Ok(
+            match check_before_pin(services, &session, self.user_id(), data).await? {
+                BeforePin::SlotDevice(_) => RecoveryDataVerdict::Ok,
+                BeforePin::Refused(verdict) => verdict,
+            },
+        )
+    }
+
+    /// The PIN service a recovery uses — with the account's seed missing in
+    /// this browser (ADR-0035): the preconditions of `recover` and of the
+    /// check.
+    ///
+    /// # Errors
+    /// `InvalidInput` with the seed present or without a PIN service.
+    fn recovery_services(&self) -> Result<&RecoveryServices, KupferdrahtError> {
+        let setup = self.setup()?;
+        if setup.seed_present.load(Ordering::Acquire) {
+            return Err(KupferdrahtError::InvalidInput(
+                "the account's seed is here: register the device instead".into(),
+            ));
         }
+        setup.config.recovery_services.as_ref().ok_or_else(|| {
+            KupferdrahtError::InvalidInput(
+                "recovery needs a PIN service (storage.pinServiceUrl)".into(),
+            )
+        })
+    }
+
+    /// The login's session, which buys the PIN token.
+    fn login_session(&self) -> WireSession {
+        WireSession::Login(zeroize::Zeroizing::new(
+            self.inner.login_access_token().to_owned(),
+        ))
     }
 
     /// A first setup: create the account's seed and install it.

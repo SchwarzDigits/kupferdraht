@@ -275,6 +275,10 @@ login opens the account's databases, where those databases live, and the recover
     exists somewhere and brings that device back, while a first setup would add another device — a hint, not a
     guarantee; filled whenever `keys` is `"missing"`), `recover(data, pin, { takeOver })` and `cancel()`;
     `registerDevice()` keeps its native shape and gains the options `{ newSetup, takeOver }`.
+  - `PendingLogin.checkRecoveryData(data)` (Step 147) gives the verdict on recovery data before any PIN — `"ok"` or
+    `InvalidRecoveryData`'s `reason` — with the checks `recover` runs first: the bytes alone (format, account,
+    Argon2id cost) with no request, then the storage slot (ADR-0040). It never asks the PIN service, so it costs no
+    attempt.
   - `registerDevice` with `keys` `"present"` is the native call: it opens the account's databases and applies the
     native device reuse — the recorded device while the backend still has it, else a new device that replaces it
     (the superseded MLS state and history wiped), else, with no databases, a plain first registration. With
@@ -409,3 +413,5 @@ login opens the account's databases, where those databases live, and the recover
   labels now read `kupferdraht/v1/…`, the databases `kupferdraht.db` and
   `mls.db`. The freeze resumes from here; the body above keeps the names
   it was decided with.
+- 2026-11-10: Implementation notes extended (Step 147): `checkRecoveryData`, the verdict before any PIN, and that
+  `recover` makes no request before the checks the bytes alone decide.

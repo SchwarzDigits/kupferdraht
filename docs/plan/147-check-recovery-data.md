@@ -1,6 +1,14 @@
 # Step 147 — Check recovery data without a PIN
 
-**Status: commissioned 2026-11-05** (from the browser embedder's
+**Status: in progress** on `step/147-check-recovery-data`; red tests approved by
+Volker on 2026-11-10, with these deviations: the browser types name the verdict
+`RecoveryDataVerdict`; `recover` already reported a file with several faults by
+its local one, so what changes is only that no request precedes the local
+verdicts; the recovery tests' token exchange, slot query and PIN service share
+one mock server, since parallel tests that each took three servers one by one
+emptied httpmock's pool of 25 and waited for each other for good.
+
+**Commissioned 2026-11-05** (from the browser embedder's
 requirements for a work-queue client, R9, measured there against
 `4f30f02` and re-checked against `main` `9e1a11c`). Taken with Volker on
 commissioning:
