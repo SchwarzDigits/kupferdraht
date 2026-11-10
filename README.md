@@ -235,28 +235,31 @@ wasm-pack build --target web
 scripts/wasm-test.sh            # the browser tests, headless Firefox
 ```
 
-### Mandatory pre-commit gate
+### Gates
 
-Every commit that lands on `main` must pass all five gates:
+Every change passes two gates, and no check runs in both. Before a commit
+of code, locally:
 
 ```sh
 cargo fmt --all -- --check                         # format drift = 0
 cargo build --workspace 2>&1 | grep -c "warning"   # must print 0
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --no-fail-fast
-cargo deny check
+cargo test -p kupferdraht-core --test <the change's test targets>
 ```
 
-The `cargo deny check` step enforces Kupferdraht's license allow-list and
-RustSec advisory policy (see [`deny.toml`](deny.toml)). Install
-cargo-deny once per machine:
+Before a merge, CI ([`.github/workflows/`](.github/workflows/)): the full
+`cargo test --workspace` (all targets and doctests), `cargo deny check`
+(Kupferdraht's license allow-list and RustSec advisory policy, see
+[`deny.toml`](deny.toml)), the wasm32 check, clippy and browser tests, and
+the license and secret scans. A change without Rust code needs only
+`cargo fmt --check` locally. To run a CI check by hand, install cargo-deny
+once per machine:
 
 ```sh
 cargo install --locked cargo-deny
 ```
 
-`CLAUDE.md` lists the same five commands as the non-negotiable
-pre-commit contract.
+`CLAUDE.md` (Step Procedure, phase 8) is the binding form.
 
 ### Dependency updates
 
@@ -328,7 +331,7 @@ public-API changes:
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 ```
 
-This is **not** part of the five mandatory pre-commit gates above
+This is **not** part of the gates above
 — it is an opt-in check for API-surface changes.
 
 ## Running the CLI
@@ -365,8 +368,8 @@ Agreement is signed on the first pull request.
   schema under `kupferdraht-core/proto/` is a modified subset of Wire's
   GPL-3.0-or-later `GenericMessage` schema and keeps Wire's notice (see
   "License").
-- Every commit must pass the five pre-commit gates listed under
-  "Building".
+- Every commit of code passes the local gate and every merge the CI gate,
+  both listed under "Building".
 - Branch per step (`step/NN-slug`), Conventional-Commits messages
   (`type(scope): subject`), library + CLI land in one commit.
 

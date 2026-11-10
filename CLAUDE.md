@@ -78,9 +78,9 @@ Every implementation step runs these 12 phases in order — do not reorder or sk
 5. **Implement (green)** — until `cargo test` is green.
 6. **CLI command** — add the `kupferdraht-cli` command exercising the feature, same change; the CLI is the API's first consumer, before bindings (ADR-0007).
 7. **Parity + docs** — in this commit: FFI-mirror every changed `pub` consumer-facing symbol; update every doc home the change touched (freshness map below); a new `pub` symbol → an `api-mapping-matrix-rust-sdk.md` entry; a surfaced decision → run `new-adr`.
-8. **Gate — HARD STOP** — all five green, no subset: `cargo fmt --check`, 0 build warnings, `clippy -D warnings`, `cargo test --no-fail-fast`, `cargo deny check`. fmt → `cargo fmt --all` + re-stage; a build/clippy warning is a defect (fix in code, never `#[allow]`); a failing test or a `deny` hit (GPL pull / open CVE) is a ship-stopper. Never commit on red. A step touching `kupferdraht-core/src/wasm/`, `bindings/web/` or any other wasm-only module adds the wasm32 commands — the five never compile that code, so they cannot go red on it (Conventions → "Warnings are Errors").
+8. **Gate — HARD STOP, two halves, no check runs twice** (Conventions → "Warnings are Errors"). *Local, before the commit:* `cargo fmt --check`, 0 build warnings, `clippy -D warnings`, and the tests the step adds or touches green; a step touching `kupferdraht-core/src/wasm/`, `bindings/web/` or any other wasm-only module adds the wasm32 check and CI's wasm clippy line, and the browser suite when the change is reachable only in the browser. *CI, before the merge:* the full `cargo test` (all targets, doctests, `--no-fail-fast`), `cargo deny check`, the wasm32 job with the browser tests, the compliance checks. fmt → `cargo fmt --all` + re-stage; a build/clippy warning is a defect (fix in code, never `#[allow]`); a failing test or a `deny` hit (GPL pull / open CVE) is a ship-stopper. Never commit on a red local gate, never merge on a red CI; a red CI is fixed by a further commit on the branch, never by a force-push. A change without Rust code (docs, plans, changelog, a release stamp) needs only `cargo fmt --check` locally (a release also `cargo metadata --locked`); CI is its gate.
 9. **Smoke** — live against a self-hosted wire-server where the step has backend surface; a pure refactor/CLI/docs step skips it, noting "no smoke (refactor)".
-10. **Land** — one commit bundling library + CLI. Stage only the coherent change (no blind `git add -A`); Conventional-Commits message `type(scope): subject`, step in scope. Merge to `main` only on green gate + smoke. Offer the commit; **push only when the user explicitly asks, never force-push** (the force variants stay denied in `.claude/settings.json`). `CHANGELOG.md` stays SHA-free.
+10. **Land** — one commit bundling library + CLI (a fix-up commit for a red CI may follow it on the branch). Stage only the coherent change (no blind `git add -A`); Conventional-Commits message `type(scope): subject`, step in scope. Merge to `main` only on a green CI + smoke. Offer the commit; **push only when the user explicitly asks, never force-push** (the force variants stay denied in `.claude/settings.json`). `CHANGELOG.md` stays SHA-free.
 11. **Retrospective — don't skip** — self-critical, scaled to the step: what was hacked/simplified/left `TODO`, what surprised us, what to do better. Learnings → `docs/LEARNINGS.md`, open questions → `open.md`, debt → the matching `docs/v1-*-audit.md`, proposed steps → `PLAN.md` (only with the user's OK). A "not done" verdict → back to the phase; don't archive yet.
 12. **Cleanup / archive — don't skip** — remove the merged step's `PLAN.md` row (fold its SHA + smoke date + scope into the `docs/plan/NN-*.md` header first); add the change to `CHANGELOG.md` `[Unreleased]`, consumer-facing (`BREAKING:` when it breaks); move any resolved `open.md` item into the changelog; `git mv` the prose to `docs/plan/archive/`; strip scaffolding + dead code; clean the branch.
 
@@ -110,19 +110,18 @@ In `lib.rs`, before imports:
 #![allow(clippy::module_name_repetitions)]
 ```
 
-Mandatory pre-commit gate — all five, no subset (Step Procedure phase 8 — full commands here):
+The gate has two halves and no check runs in both (Step Procedure phase 8). The local half, before every commit of code — the checks a commit needs before it exists:
 
 ```bash
 cargo fmt --all -- --check                            # format drift = 0
 cargo build --workspace 2>&1 | grep -c "warning"      # must be 0
 cargo clippy --workspace --all-targets -- -D warnings # clippy as gate
-cargo test --workspace --no-fail-fast                 # tests green
-cargo deny check                                      # licenses + advisories + sources
+cargo test -p kupferdraht-core --test <the step's targets> [--lib <module>]  # the step's tests green
 ```
 
-`cargo deny` enforces `deny.toml` + the RustSec feed — a GPL pull or open CVE is a ship-stopper. Install: `cargo install --locked cargo-deny`.
+The CI half, before every merge (`.github/workflows/ci.yml`, `compliance.yml`, `licenses.yml`): `cargo test --workspace --all-targets --no-fail-fast` and `cargo test --workspace --doc`, `cargo deny check` (`deny.toml` + the RustSec feed — a GPL pull or open CVE is a ship-stopper), the wasm32 check, clippy and browser tests, the license and secret scans. The full suite runs there only: on this Mac its 160 test binaries wait on the first-launch scan for most of the local run (`docs/observations.md` §101), while the tests themselves take about 80 s.
 
-**A step that touches `kupferdraht-core/src/wasm/`, `bindings/web/` or any other wasm-only module adds these, because the five above never compile that code.** `pub mod wasm` is `#[cfg(target_arch = "wasm32")]`, so `build`, `clippy --all-targets` and `test --workspace` walk past the browser surface entirely — all five go green on a module that does not type-check. Measured twice: gap-B.28 (a non-exhaustive match, "red for weeks because nothing here built wasm32", as the CI job's own comment records) and Step 125, where the five were green, the parity test was green and the generated `.d.ts` was green while the `kupferdraht-tabs` module was dead on arrival. The same holds for every module declared behind `#[cfg(target_arch = "wasm32")]` outside `src/wasm/` — `storage/browser.rs`, `storage/remote/server.rs`, `keystore/indexeddb_keystore.rs`, `manager/remote_resume.rs` today; `grep -rn -A1 'cfg(target_arch = "wasm32")' kupferdraht-core/src | grep ' mod '` lists them. Step 140 measured it: a `doc_markdown` hit in `storage/browser.rs` passed the five and failed the wasm32 clippy.
+**A step that touches `kupferdraht-core/src/wasm/`, `bindings/web/` or any other wasm-only module adds these to the local half, because the native checks never compile that code.** `pub mod wasm` is `#[cfg(target_arch = "wasm32")]`, so `build`, `clippy --all-targets` and `test --workspace` walk past the browser surface entirely — the native checks go green on a module that does not type-check. Measured twice: gap-B.28 (a non-exhaustive match, "red for weeks because nothing here built wasm32", as the CI job's own comment records) and Step 125, where the five were green, the parity test was green and the generated `.d.ts` was green while the `kupferdraht-tabs` module was dead on arrival. The same holds for every module declared behind `#[cfg(target_arch = "wasm32")]` outside `src/wasm/` — `storage/browser.rs`, `storage/remote/server.rs`, `keystore/indexeddb_keystore.rs`, `manager/remote_resume.rs` today; `grep -rn -A1 'cfg(target_arch = "wasm32")' kupferdraht-core/src | grep ' mod '` lists them. Step 140 measured it: a `doc_markdown` hit in `storage/browser.rs` passed the native checks and failed the wasm32 clippy.
 
 ```bash
 cargo check  -p kupferdraht-core --target wasm32-unknown-unknown              # it compiles at all
@@ -130,7 +129,7 @@ cargo clippy -p kupferdraht-core --target wasm32-unknown-unknown --lib -- -D war
 ./scripts/wasm-test.sh                       # the browser tests; needs Firefox + geckodriver
 ```
 
-The first two are cheap and belong in the gate. CI's wasm clippy also
+The first two are cheap and belong in the local half. CI's wasm clippy also
 compiles the browser test targets (`--test step_115_browser_push_doorbell`
 and the others `.github/workflows/ci.yml` lists): a changed signature of a
 wasm-only `pub fn` passes `--lib` and fails there — run the `ci.yml` line
@@ -205,7 +204,7 @@ A change to a `pub` consumer-facing symbol in `kupferdraht-core` is mirrored in 
 
 ### Branches and Commits
 
-One branch per Step/sub-step: `step/{N}-{slug}`, sub-steps `step/{N}{letter}-{slug}`. Never multiple sub-steps per branch; no work on `main`. One commit per Step/sub-step, bundling library + the CLI command that validates it (small fix-ups inside a branch are fine). Merge to `main` only on a green gate + smoke.
+One branch per Step/sub-step: `step/{N}-{slug}`, sub-steps `step/{N}{letter}-{slug}`. Never multiple sub-steps per branch; no work on `main`. One commit per Step/sub-step, bundling library + the CLI command that validates it (small fix-ups inside a branch are fine, a fix for a red CI among them). Merge to `main` only on a green CI + smoke.
 
 Exception: a Dependabot pull request (a weekly one of `.github/dependabot.yml` — lockfile updates within the manifests' requirements, workflow-action updates of any size — or a security update) is no step — it merges once CI is green and, when it changes `Cargo.lock`, `THIRD-PARTY-NOTICES` and `docs/THIRD_PARTY_LICENSES.html` are updated on its branch; no smoke.
 
@@ -221,7 +220,7 @@ Exception: a Dependabot pull request (a weekly one of `.github/dependabot.yml` �
 
 ## What NOT to do
 
-- Don't copy Kalium's API names, scope nesting, or module structure — protocol observation only (ADR-0009).
+- Don't copy Kalium's API names, scope nesting, tests or module structure — protocol observation only (ADR-0009).
 - Don't target Wire API < v14 — v5 event stream retired (ADR-0008).
 - Whole-DB encryption is SQLite3MC with ChaCha20-Poly1305 (ADR-0021, supersedes ADR-0013; landed with Step 90) — don't reintroduce SQLCipher/vendored OpenSSL, libsqlite3-sys's `SQLITE3_LIB_DIR` route, a root `[patch]` for the engine (ADR-0042: the SchwarzDigits forks by tag, one rusqlite in the graph), or per-field DEK (ADR-0003 superseded).
 - Don't write a JavaScript port — WASM only (ADR-0015). Don't add a JVM CLI path — CLI is Rust (ADR-0007).

@@ -25,8 +25,9 @@ is no skill for it — it is this short procedure:
    subsections, and insert a fresh empty `## [Unreleased]` (with the six
    category headings) above it.
 3. **Bump the version** — set `version = "x.y.z"` in `Cargo.toml`
-   `[workspace.package]`; the five-check gate (CLAUDE.md "Warnings are
-   Errors") must stay green afterwards (`Cargo.lock` updates too).
+   `[workspace.package]` (`Cargo.lock` updates too). Locally
+   `cargo fmt --check` and `cargo metadata --locked`; CI is the release's
+   gate (CLAUDE.md, Step Procedure phase 8).
 4. **Commit + tag — offer, don't push.** On confirmation:
    `git add CHANGELOG.md Cargo.toml Cargo.lock`,
    `git commit -m "chore(release): vX.Y.Z"`, `git tag vX.Y.Z`. Leave the
