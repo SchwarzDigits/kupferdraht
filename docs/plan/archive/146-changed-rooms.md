@@ -1,7 +1,18 @@
 # Step 146 — a sync pass names the rooms that changed
 
-**Status: in progress** on `step/146-changed-rooms`; phase 1 taken and red tests
-approved by Volker on 2026-11-09. **Commissioned 2026-11-05, rewritten 2026-11-09** (from the browser
+**Status: MERGED 2026-11-09** — `827572e` on `step/146-changed-rooms`, merged to `main`
+as PR #65 (`808bb9d`), released in v0.5.0; gate green on 1.98 (fmt, 0 build warnings,
+clippy, 1607 tests, deny; wasm32 check, clippy `--lib` and CI's wasm clippy line); the
+browser suite green locally (18 suites, 80 tests, headless Firefox) and in CI; the
+Kotlin bindings built and tested. Smoked 2026-11-09 on the wire-server-rs stack with
+the CLI built from this tree: `kupferdraht-smoke.sh --throwaway` 24/24, then two
+devices: an idle sync names nothing; an own rename is named at both, the next sync
+nothing; a kick is named at the kicked member; an own delete is named and the room is
+gone. Scope: `SyncSummary::changed_rooms` / `changedRooms: string[]` replaces the
+count `rooms_updated` (BREAKING): the rooms whose name, `members()` view or
+counterpart changed, new and gone rooms, rooms with a room event, deleted rooms; every
+replacement of the room list compares with what the device knew. Phase 1 taken and red
+tests approved by Volker on 2026-11-09. **Commissioned 2026-11-05, rewritten 2026-11-09** (from the browser
 embedder's requirements for a work-queue client, R8; the embedder agreed to
 this shape). Taken with Volker on the rewrite:
 

@@ -1,6 +1,9 @@
 # Step 126 — A profile write is remembered locally, not only sent
 
-**Status: commissioned 2026-10-06** — proposed by an embedder of the browser
+**Status: LANDED before the public snapshot `4f30f02`**, released in v0.1.0
+(`CHANGELOG.md`: "A profile change is remembered, not only sent"); its commit, gate and
+smoke are in the private history. Archived 2026-11-10, when the file was found still in
+`docs/plan/` with its commissioning status. Commissioned 2026-10-06 — proposed by an embedder of the browser
 surface after Step 125. Scope: `set_handle` and `set_display_name` update the
 persisted `self_user` row after the backend accepts the change. No surface
 change, no ADR, no CLI command (the CLI's `profile-set` is the same call and

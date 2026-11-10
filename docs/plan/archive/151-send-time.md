@@ -1,7 +1,18 @@
 # Step 151 — The time of sending: `sent_at_ms` is Wire's, not this device's
 
-**Status: in progress** on `step/151-send-time`; phase 1 taken and red tests approved by
-Volker on 2026-11-09. Commissioned 2026-11-09 by Volker ("das ist wichtig"), ahead of
+**Status: MERGED 2026-11-09** — `540c786` on `step/151-send-time`, merged to `main` as
+PR #63 (`ef1b1fb`), released in v0.5.0; gate green on 1.98 (fmt, 0 build warnings,
+clippy, 1586 tests, deny; wasm32 check, clippy `--lib` and CI's wasm clippy line); the
+browser suite green locally (18 suites, 80 tests, headless Firefox) and in CI. The
+Kotlin bindings built and tested for the first time (5 of 5, after two stale lines in
+the test file); the same lines in the Swift test corrected unverified, without Xcode.
+Smoked 2026-11-09 on the wire-server-rs stack with the CLI built from this tree:
+`kupferdraht-smoke.sh --throwaway` 24/24 and Step 145's room's life; against a real
+Kalium client (Natrium) on the dev backend 17 of 17, where before the fix a reply's
+quote lost its preview. Scope: `sent_at_ms` is the backend's time of a message (the
+event's `time`, the send answer's `time`), `arrived_at_ms` this device's, the timeline
+ordered by arrival (V35); a reply's quote hashes the backend's time. Phase 1 taken and
+red tests approved by Volker on 2026-11-09. Commissioned 2026-11-09 by Volker ("das ist wichtig"), ahead of
 Step 146, from what Step 145 found.
 
 ## Problem

@@ -1,6 +1,9 @@
 # Step 20c — full FFI surface via a dedicated wrapper layer (approach B)
 
-> **Status:** planned (2026-06-10), pending review.
+> **Status:** MERGED with 20a–20c (`f88dd06`, #6 in the private history), before the
+> public snapshot `4f30f02`; Step 20 itself stays open in `PLAN.md` for 20d/20e.
+> Archived 2026-11-10, when the file was found still in `docs/plan/` with its planning
+> status. Planned 2026-06-10.
 > **Depends on:** 20a (proc-macro scaffolding + thin slice), 20b (Swift XCFramework/SwiftPM,
 > Kotlin/JVM JAR, Android AAR) — all shipped on `feature/uniffi-bindings`.
 > **Branch / commit prefix:** `step/20c-*`, `feat(ffi): …`.

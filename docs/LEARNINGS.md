@@ -2973,3 +2973,95 @@ touched it.
   starts with an `Added` naming both. Inbound messages show their receive time, so a device
   back from offline shows everything at the sync's time: not this step's, and the reason
   an item cannot do better.
+
+### 5.89 A counterpart that checks, a script that matched return types, and bindings built for the first time (Step 151)
+
+- **The client that checks found what the one that shows hid.** Wire's webapp keeps a
+  reply's `quotedMessageSha256` and only reports it; Kalium sets `isVerified` from it and
+  a mismatch costs the quote its preview. Against a real Kalium client (Natrium) on the
+  dev backend, before the fix: the preview `null`, the hashed times 67 s apart; after it:
+  17 of 17. The webapp alone would have passed. An interop test belongs against the
+  client that verifies.
+- **A mechanical edit across files matched return types.** The script that added a field
+  to every struct literal also hit `-> TimelineEventRecord {` in signatures and broke the
+  files; `git checkout -- .` and a stricter match fixed it. A pattern for expressions
+  must not be able to match a type, and a compile after each pass shows it at once.
+- **A stored copy kept the old meaning.** The idempotency key's row kept the device's send
+  time after `sent_at_ms` became the backend's; `mark_send_outcome` now updates
+  `send_keys` too. Tests that assumed `expires_at = sent_at + ttl` moved to the arrival
+  time, which a TTL counts from. Changing what a field means needs every place it is
+  copied to, not only where it is set.
+- **Bindings no CI builds had rotted.** With a JDK on this Mac the Kotlin bindings built
+  for the first time: green after two stale lines from earlier steps. The same lines in
+  the Swift test are corrected unverified, without Xcode.
+- **The harness, not the protocol, cost the time.** Natrium's CLI never exits on its own,
+  its socket URL needs `wss://`, the dev backend rate-limits logins (`429`, so tokens are
+  reused), and a conversation is found only after a sync. Each is now in the harness.
+- **What was left.** Old rows keep their receive time: the backend's was never stored.
+  The browser's path has not run against a backend.
+
+### 5.90 A count of every room, a test of mine that held for any room, and the comparison where the list is replaced (Step 146)
+
+- **My own test of Step 145 proved nothing.** `rooms_updated` was the number of all rooms
+  on every pass and `0` on a push tick. I had pinned `rooms_updated > 0` for a pass with a
+  room event and told the embedder that no new signal was needed; both held for any pass.
+  The `sven2` session found it from the embedder's side. §5.88 had just written down that
+  a test of an effect needs a control without it; this one had none.
+- **The plan compared at the wrong place.** It compared the room list only at a stale
+  refresh. Comparing wherever the list is replaced names the client's own calls at the
+  next pass whether or not the backend echoes them, so other tabs learn of them, and a
+  resumed device compares with its stored rooms. The deviation was found by reading where
+  the list changes, not where the plan said it does.
+- **A name checked for its owner.** Before `changedRooms` replaced the count, Volker asked
+  whether it collides with a Wire name; Wire's public repositories and Natrium had no hit.
+- **wasm-only code once more.** The push helper was dead in the wasm build; only the wasm
+  check said so (§5.87, §5.88).
+- **A commit script listed a path that a `git mv` had removed.** The commit failed and
+  Volker ran it twice. A script's file list comes from `git status` at writing time.
+- **What was left.** The flaky `sync::sender` log test (tracing's interest cache) and a
+  CI-only timeout in `step_94_leader_tab`, both met again at the 0.5.0 release.
+
+### 5.91 A promise no test drove, pins of the old shape, and a smoke the stack could not do as asked (Step 152)
+
+- **The docs promised what only one path did.** After the gate was green I saw that under
+  `kupferdraht-tabs` a proxy's getters would not follow `setDisplayName`, `setHandle`,
+  `uploadAvatar` and `removeAvatar`, while the text I had just written said they do. The
+  tab test drove `refreshAccount` only. The four now answer the getters too, and a test
+  renames through a tab. A sentence that claims behaviour needs the path it names driven.
+- **Pins of the old shape were red only in the full gate.** Step 130a's README table and
+  Step 144's `METHODS` rows asserted the old entries; each failed one full gate run. Before
+  changing a table, grep the tests for its rows.
+- **My red test asked for words I then did not write.** The CHANGELOG pin wanted
+  `` `Client::refresh_account` ``; I wrote it with `()`. A pin of prose is cheapest when
+  the prose is written from it.
+- **The stack could not rename a team.** wire-server-rs answers `PUT /teams/{tid}` with
+  `405`; the smoke renamed the throwaway team in galley's table and read it over
+  `GET /teams/{tid}` as a plain member, which is the path under test. The dev backend and
+  its password were not needed.
+- **What was left.** Other tabs, and a proxy reopened after a leader change, keep their
+  snapshot until they call `refreshAccount` themselves (approved). A changed team icon was
+  not smoked. No test races a refresh against a profile call (approved: `account_gate`
+  serialises request, row and swap).
+
+### 5.92 A pool the tests emptied, a filter that made it certain, and a cold build I waited on (Step 147)
+
+- **The tests waited for each other for good.** httpmock lends servers from a pool of 25
+  per test binary (`HTTPMOCK_MAX_SERVERS`). The recovery tests took three each, one by one,
+  and mine up to six; a run filtered to `recovery` put fourteen of them on the threads at
+  once, each holding two and waiting for a third. The first such run sat at 0 % CPU for
+  hours before I looked; alone, a test passed in 0.6 s. The token exchange, the slot query
+  and the PIN service now share one mock server (their paths differ), and the new tests
+  hold at most two. `recovery_tests.rs` had warned of exactly this in a comment. A test
+  run that prints nothing for minutes is read at once, not waited on.
+- **A cold worktree cost more than it saved.** I put the red tests in a fresh worktree so
+  the 152 gate could run undisturbed; its first build had no cache and was still going
+  when 152 was committed. Moving the change into the main checkout, on the new commit,
+  was quicker. A worktree is cheap for docs, not for a first `cargo test`.
+- **The several-faults case was right already.** The plan said `recover` would report a
+  file with several faults by its first local one after the change; it already did, since
+  the slot only supplied the device id and the header's checks ran in order. What changed
+  was only that no request comes before the local verdicts. The red test showed it: it
+  failed on its request count, not its reason.
+- **What was left.** The check has not run against a real PIN service and storage server,
+  and no browser test calls it: the native tests drive it through mocks, and the wasm32
+  check, clippy and the tab parity pins hold its binding.
