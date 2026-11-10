@@ -4,7 +4,8 @@
 (`docs/observations.md` §100): an identity provider is to be activated on the team's
 backend, and a team that switches e2ei on makes Kupferdraht drop its enrolled
 colleagues' messages. Kupferdraht's own devices stay on Basic credentials; their
-enrollment is Step 155.
+enrollment is Step 155. After Step 156 (Volker): the ACME server and the CRL proxy of
+a company deployment sit behind the same certificate authority as its backend.
 
 ## Problem
 
