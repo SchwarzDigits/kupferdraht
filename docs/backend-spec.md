@@ -1910,9 +1910,8 @@ corner; they are NOT part of the initial backend scope:
   the §11.2 surface.
 - Guest links: `POST/DELETE /v14/conversations/{id}/code`,
   `POST /v14/conversations/join` (Kupferdraht Step 8 redeem pending).
-- Key backup (Kupferdraht Step 12 — no v14 endpoints exist; if Kupferdraht
-  adopts it, this backend defines new endpoints at that time). The
-  Dehydrated Device (Step 13) was dropped 2026-09-25.
+- Key backup (Kupferdraht's Step 12 was dropped 2026-11-10, NG-30: no v14
+  endpoints exist). The Dehydrated Device (Step 13) was dropped 2026-09-25.
 - SAML/SSO (Kupferdraht Step 17).
 - MLS subconversations (`subconv` is delivered as `null` in §12.2;
   no subconversation endpoints).

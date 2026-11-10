@@ -2993,7 +2993,8 @@ touched it.
   copied to, not only where it is set.
 - **Bindings no CI builds had rotted.** With a JDK on this Mac the Kotlin bindings built
   for the first time: green after two stale lines from earlier steps. The same lines in
-  the Swift test are corrected unverified, without Xcode.
+  the Swift test were corrected without Xcode, and passed `swift test` (5 of 5, macOS
+  slice) once Xcode was on the Mac, on 2026-11-10.
 - **The harness, not the protocol, cost the time.** Natrium's CLI never exits on its own,
   its socket URL needs `wss://`, the dev backend rate-limits logins (`429`, so tokens are
   reused), and a conversation is found only after a sync. Each is now in the harness.

@@ -8,7 +8,7 @@
 > Kotlin/JVM JAR, Android AAR) — all shipped on `feature/uniffi-bindings`.
 > **Branch / commit prefix:** `step/20c-*`, `feat(ffi): …`.
 > **Reference:** matrix-rust-sdk-ffi (a dedicated FFI crate wrapping matrix-sdk; ADR-0009).
-> **Supersedes:** the brief "20c — full API surface" sketch in `docs/plan/20-uniffi-bindings.md`,
+> **Supersedes:** the brief "20c — full API surface" sketch in `docs/plan/archive/20-uniffi-bindings.md`,
 > which assumed approach A (annotate core types in place).
 
 ---
