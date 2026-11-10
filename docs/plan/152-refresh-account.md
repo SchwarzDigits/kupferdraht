@@ -1,6 +1,21 @@
 # Step 152 — `refresh_account`: the own account and team, read on request
 
-**Status: commissioned 2026-11-09** (from the browser embedder's requirements
+**Status: in progress** on `step/152-refresh-account`; red tests approved by Volker
+on 2026-11-09, with three deviations:
+
+1. **`login_avatar_keys` stays, deprecated, beside the new `avatar_keys`**, so nothing
+   breaks and Steps 152 and 147 can ship as 0.5.1 right after 0.5.0.
+2. **Under `kupferdraht-tabs` the calling tab updates itself.** The leader answers
+   the target's getters after the call (`returns: "$getters"` in `METHODS`), and the
+   proxy takes them before it resolves. The own profile calls (`setDisplayName`,
+   `setHandle`, `uploadAvatar`, `removeAvatar`) return them too, so the calling tab's
+   getters follow its own changes. Left for later: the `account` message to the
+   other tabs and the getters of `reopen` after a leader change. Each tab calls
+   `refreshAccount()` for itself, at its start and focus.
+3. **No test of a refresh racing a `set_display_name`:** with fixed mocks it cannot
+   show; `account_gate` serialises request, row and swap, which reading proves.
+
+**Commissioned 2026-11-09** (from the browser embedder's requirements
 for a work-queue client, part 3, R10, measured there against `4bf2317`; the
 embedder agreed to this shape). Taken with Volker on commissioning:
 

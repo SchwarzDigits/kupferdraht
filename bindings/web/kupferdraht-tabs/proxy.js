@@ -323,8 +323,14 @@ export class ClientProxy extends HandleProxy {
   storageEngine() { return this.#call('storageEngine', []); }
   /** Asked of the leader each time — it changes, so it is no snapshot (Step 122). */
   pushState() { return this.#call('pushState', []); }
-  setDisplayName(name) { return this.#call('setDisplayName', [name]); }
-  setHandle(handle) { return this.#call('setHandle', [handle]); }
+  /** Step 152: a call the leader answers with this client's getters, which this tab takes before it resolves. */
+  #callTakingGetters(method, args) {
+    return this.#call(method, args).then((getters) => { Object.assign(this.getters, getters); });
+  }
+  /** Step 152: resolves once this tab's getters answer the new values; another tab calls it for itself. */
+  refreshAccount() { return this.#callTakingGetters('refreshAccount', []); }
+  setDisplayName(name) { return this.#callTakingGetters('setDisplayName', [name]); }
+  setHandle(handle) { return this.#callTakingGetters('setHandle', [handle]); }
   updateEmail(email) { return this.#call('updateEmail', [email]); }
   devices() { return this.#call('devices', []); }
   deleteDevice(deviceId, password) { return this.#call('deleteDevice', [deviceId, password]); }
@@ -382,8 +388,8 @@ export class ClientProxy extends HandleProxy {
   avatar(userId, size) { return this.#call('avatar', [userId, size]); }
   avatarKey(userId) { return this.#call('avatarKey', [userId]); }
   teamAvatar() { return this.#call('teamAvatar', []); }
-  uploadAvatar(image) { return this.#call('uploadAvatar', [image]); }
-  removeAvatar() { return this.#call('removeAvatar', []); }
+  uploadAvatar(image) { return this.#callTakingGetters('uploadAvatar', [image]); }
+  removeAvatar() { return this.#callTakingGetters('removeAvatar', []); }
   roomDevices(roomId) { return this.#call('roomDevices', [roomId]); }
   ownDeviceThumbprint() { return this.#call('ownDeviceThumbprint', []); }
   invite(roomId, userIds) { return this.#call('invite', [roomId, userIds]); }

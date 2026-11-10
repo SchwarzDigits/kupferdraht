@@ -134,7 +134,7 @@ section). matrix-rust-sdk equivalent: `ruma::OwnedUserId` /
 | `Client::avatar_key(&UserId) async -> Result<Option<String>>`, `RoomMember::avatar_key()` | `avatar_url` / `Room::member_avatar_url` | Drift | Step 144: a Wire asset key, no URL; a changed avatar has a new key. |
 | `Client::upload_avatar(Vec<u8>)`, `Client::remove_avatar()` | matrix-sdk-ffi `Client::upload_avatar(mime_type, data)`, `remove_avatar()` | Aligned | Step 144: no MIME type, Kupferdraht reads the magic bytes. |
 | `Client::team_avatar() async -> Result<Option<Avatar>>`, `Account::team_avatar_key()` | (none; the nearest is a space's avatar) | Wire extension | Step 144: matrix-rust-sdk has no team. |
-| `Account::login_avatar_keys() -> &AvatarKeys`, `Store::member_avatar_keys` | (none) | Kupferdraht-specific | Step 144: for persisting the login's keys and for a custom store. |
+| `Account::avatar_keys() -> &AvatarKeys` (Step 152; `login_avatar_keys` deprecated), `Store::member_avatar_keys` | (none) | Kupferdraht-specific | Step 144: for persisting the login's keys and for a custom store. |
 | `Client::access_token() -> Option<String>` | `Client::access_token() -> Option<String>` | 1:1 | Owned `String`, optional. In Kupferdraht today always `Some`; the `Option` shape mirrors matrix-rust-sdk. |
 | `Client::refresh_token() -> Option<String>` | (none)                              | Wire extension | Wire's `zuid` refresh-cookie value. The CLI persists this in `SessionRecord.refresh_token` so a later `kupferdraht-cli sync` can drive `ClientBuilder::resume` without the password. matrix-rust-sdk has no equivalent public getter (its refresh-token handling is internal to `Client::restore_session`). `Option` shape for symmetry with `access_token`. |
 | `Client::account() -> Arc<Account>` | `Client::account() -> Account`     | Aligned | matrix-rust-sdk returns `Account` by value (cheap to clone). Kupferdraht returns `Arc<Account>` per PLAN.md Step 1 signature so the binding layer doesn't pay a deep-clone cost. Semantically equivalent. |
@@ -445,6 +445,7 @@ administered). No row below claims a real matrix-rust-sdk analog.
 | `Account::handle() -> Option<&str>` | (none)                            | Wire extension | Wire users have a unique `@handle`; Matrix has nothing comparable. |
 | `Account::email() -> Option<&str>`  | (3PID infrastructure)             | Wire extension | Wire embeds email in `/self`; Matrix exposes it via the 3PID flow. Kupferdraht ships a snapshot today; a 3PID-shaped API would come if/when Kupferdraht adds Matrix support. |
 | `Account::team_id() -> Option<&str>` | (none)                          | Wire extension | Step 143: the user's team as of the last login, lowercase; `None` for a personal account. matrix-rust-sdk has no team; the precedent is `handle`. |
+| `Client::refresh_account() async -> Result<()>`, browser `refreshAccount()` | `Account::fetch_user_profile` | Drift | Step 152: reads `GET /self` and `GET /teams/{tid}` into the live account and the row, all or nothing; matrix's fetches the profile without changing state. |
 | `Account::team_name() -> Option<&str>` | (none)                        | Wire extension | Step 143: the team's name as of the last login, `None` too when the login could not fetch it. |
 
 ---
@@ -775,3 +776,4 @@ not accidents.
 | 2026-11-09 | Step 145 (room events as timeline items): `TimelineItemKind::{MembershipChange, RoomNameChange, RoomCreated}`, `RoomMembershipChange`, `MembershipChange`, and their FFI and wasm rows. |
 | 2026-11-09 | Step 151 (the time of sending): `sent_at_ms` is the backend's time; `TimelineItem::arrived_at_ms`, `Message::sent_at_ms`, `ResentTimes`, and their FFI and wasm rows. |
 | 2026-11-09 | Step 146 (a sync pass names the rooms that changed): `SyncSummary::changed_rooms` replaces `rooms_updated`, Aligned with `UpdateSummary::rooms`; FFI and wasm alike. |
+| 2026-11-09 | Step 152 (the own account and team, read on request): `Client::refresh_account`, `Account::avatar_keys` (`login_avatar_keys` deprecated), and their FFI and wasm rows. |

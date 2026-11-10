@@ -36,9 +36,32 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **The own account and team, read on request** (Step 152):
+  `Client::refresh_account` (FFI too, browser `refreshAccount(): Promise<void>`,
+  CLI `account-refresh`) asks `GET /self` and, for a team member,
+  `GET /teams/{tid}`, and writes what they say into the stored row and the live
+  account: display name, handle, email, team id, team name, team icon and own
+  avatar. All or nothing: any failure, also a short one of the team request,
+  leaves every value as it was. Nothing calls it by itself (`team.update`
+  reaches only a team's admins and is not stored): the embedder decides when,
+  for instance at the start and on window focus. Under `kupferdraht-tabs` the
+  calling tab's getters answer the new values when the promise resolves;
+  another tab calls it for itself. A team name a login could not fetch, and a
+  row from before v0.4.0, are filled by the first call.
+- **`Account::avatar_keys`** (Step 152), the name for the own avatar's keys now
+  that the account is no login snapshot.
+
 ### Changed
 
+- **The account follows the client's own calls** (Step 152): `Client::account()`
+  and the browser's getters answer the new value right after `set_display_name`,
+  `set_handle`, `upload_avatar` and `remove_avatar`, not only after the next
+  login; under `kupferdraht-tabs` in the calling tab. An `Arc<Account>` a caller
+  holds stays a snapshot.
+
 ### Deprecated
+
+- **`Account::login_avatar_keys`** (Step 152): use `Account::avatar_keys`.
 
 ### Removed
 

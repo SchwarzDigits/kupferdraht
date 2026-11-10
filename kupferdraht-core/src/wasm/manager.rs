@@ -835,9 +835,8 @@ impl Client {
     }
 
     /// The account's handle, or `undefined` when the account has none on
-    /// record (Step 125) — as the session knows it from its login, like
-    /// `displayName`: a `setHandle` in this session does not change it. A
-    /// consumer needs no `GET /self` of its own for it.
+    /// record (Step 125) — as of the login, `refreshAccount` or this
+    /// session's `setHandle` (Step 152).
     #[wasm_bindgen(getter)]
     #[must_use]
     pub fn handle(&self) -> Option<String> {
@@ -845,7 +844,7 @@ impl Client {
     }
 
     /// The user's team, or `undefined` for a personal account (Step 143) — as
-    /// of the last login, like `displayName`; lowercase.
+    /// of the last login or `refreshAccount` (Step 152); lowercase.
     #[wasm_bindgen(getter, js_name = teamId)]
     #[must_use]
     pub fn team_id(&self) -> Option<String> {
@@ -853,8 +852,8 @@ impl Client {
     }
 
     /// The team's name, or `undefined` for a personal account and for a team
-    /// whose name the login could not fetch (Step 143). A resume does not
-    /// fetch it: it stays `undefined` until the next login.
+    /// whose name the login could not fetch (Step 143), until `refreshAccount`
+    /// reads it (Step 152).
     #[wasm_bindgen(getter, js_name = teamName)]
     #[must_use]
     pub fn team_name(&self) -> Option<String> {
@@ -1555,6 +1554,16 @@ impl Client {
     #[wasm_bindgen(js_name = leave)]
     pub async fn leave(&self, room_id: String) -> Result<(), JsValue> {
         self.inner.leave_room(&room_id).await.map_err(|e| to_js(&e))
+    }
+
+    /// Read the own account and team again (Step 152): when the promise
+    /// resolves, `displayName`, `handle`, `email`, `teamId`, `teamName` and
+    /// `teamAvatar()` answer the new values; on any failure it rejects and
+    /// nothing changes. Nothing calls it by itself: the embedder decides
+    /// when, for instance at the start and on window focus.
+    #[wasm_bindgen(js_name = refreshAccount)]
+    pub async fn refresh_account(&self) -> Result<(), JsValue> {
+        self.inner.refresh_account().await.map_err(|e| to_js(&e))
     }
 
     /// Set the user's display name (Step 98a).

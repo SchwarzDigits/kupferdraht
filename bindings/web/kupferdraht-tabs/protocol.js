@@ -44,7 +44,10 @@ export const DEFAULT_RETRY_MS = 5000;
  * backend twice; `mutation` calls in flight reject with `LeaderChanged`
  * and are never retried; `subscription` calls are re-established.
  * `returns` names the wrapper class a call hands back (the leader returns
- * a handle; the proxy wraps it).
+ * a handle; the proxy wraps it), or `$getters`: the leader answers the
+ * target's getters as they are after the call, and the proxy takes them
+ * (Step 152: `refreshAccount` and the own profile calls, so the calling
+ * tab's `displayName` / `handle` / team getters follow them).
  */
 export const METHODS = Object.freeze([
   ["Kupferdraht", "login", "mutation", "PendingLogin"],
@@ -85,8 +88,8 @@ export const METHODS = Object.freeze([
   ["Client", "avatar", "idempotent", null],
   ["Client", "avatarKey", "idempotent", null],
   ["Client", "teamAvatar", "idempotent", null],
-  ["Client", "uploadAvatar", "mutation", null],
-  ["Client", "removeAvatar", "mutation", null],
+  ["Client", "uploadAvatar", "mutation", "$getters"],
+  ["Client", "removeAvatar", "mutation", "$getters"],
   ["Client", "roomDevices", "idempotent", null],
   ["Client", "ownDeviceThumbprint", "idempotent", null],
   ["Client", "invite", "mutation", null],
@@ -100,8 +103,9 @@ export const METHODS = Object.freeze([
   ["Client", "revokeJoinLink", "mutation", null],
   ["Client", "joinViaLink", "mutation", null],
   ["Client", "leave", "mutation", null],
-  ["Client", "setDisplayName", "idempotent", null],
-  ["Client", "setHandle", "mutation", null],
+  ["Client", "refreshAccount", "idempotent", "$getters"],
+  ["Client", "setDisplayName", "idempotent", "$getters"],
+  ["Client", "setHandle", "mutation", "$getters"],
   ["Client", "updateEmail", "mutation", null],
   ["Client", "devices", "idempotent", null],
   ["Client", "deleteDevice", "mutation", null],

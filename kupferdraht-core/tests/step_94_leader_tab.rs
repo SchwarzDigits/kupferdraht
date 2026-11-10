@@ -69,6 +69,10 @@ fn fixture_account() -> String {
 extern "C" {
     #[wasm_bindgen(js_name = rpcRoundTrip)]
     fn rpc_round_trip() -> js_sys::Promise;
+    #[wasm_bindgen(js_name = accountRefreshThroughATab)]
+    fn account_refresh_through_a_tab() -> js_sys::Promise;
+    #[wasm_bindgen(js_name = ownRenameThroughATab)]
+    fn own_rename_through_a_tab() -> js_sys::Promise;
     #[wasm_bindgen(js_name = eventFanOut)]
     fn event_fan_out() -> js_sys::Promise;
     #[wasm_bindgen(js_name = electionAndFailover)]
@@ -562,4 +566,50 @@ async fn service_token_calls_reach_the_leader() {
     assert_eq!(o.token, "stub.cases");
     assert_eq!(o.expires_in, 600);
     assert_eq!(o.error_name.as_deref(), Some("InvalidInput"));
+}
+
+#[derive(serde::Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct AccountGetters {
+    display_name: String,
+    team_name: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AccountRefreshOutcome {
+    before: AccountGetters,
+    after: AccountGetters,
+    resolved_undefined: bool,
+}
+
+/// Step 152: the calling tab's getters are current when the promise resolves.
+#[wasm_bindgen_test]
+async fn a_refresh_through_a_tab_updates_its_getters() {
+    let o: AccountRefreshOutcome = outcome(account_refresh_through_a_tab()).await;
+    assert_eq!(o.before.team_name, "Stub Team");
+    assert_eq!(
+        o.after,
+        AccountGetters {
+            display_name: "Stub Renamed".into(),
+            team_name: "Stub Team Renamed".into(),
+        }
+    );
+    assert!(o.resolved_undefined, "the promise resolves with nothing");
+}
+
+/// Step 152: an own rename through a tab is in that tab's getters when it
+/// resolves.
+#[wasm_bindgen_test]
+async fn an_own_rename_through_a_tab_updates_its_getters() {
+    let o: AccountRefreshOutcome = outcome(own_rename_through_a_tab()).await;
+    assert_eq!(o.before.display_name, "Stub");
+    assert_eq!(
+        o.after,
+        AccountGetters {
+            display_name: "Tab Renamed".into(),
+            team_name: "Stub Team".into(),
+        }
+    );
+    assert!(o.resolved_undefined, "the promise resolves with nothing");
 }

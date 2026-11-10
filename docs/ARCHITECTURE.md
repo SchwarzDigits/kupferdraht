@@ -90,7 +90,7 @@ The real layout, by responsibility:
 | Module | Responsibility |
 |---|---|
 | `lib.rs`, `error.rs` | crate root + re-exports; `KupferdrahtError` |
-| `client/` | authentication, session lifecycle, **login pipeline**, `Client`, `ClientBuilder`, `Account`; `token_refresh.rs` is the in-session access-token refresh and its cross-process critical section (Steps 39 + 85); `input.rs` checks the app's arguments at the public entry points (Step 95c) |
+| `client/` | authentication, session lifecycle, **login pipeline**, `Client`, `ClientBuilder`, `Account` (live since Step 152: `own_account.rs` writes the `self_user` row, then swaps it); `token_refresh.rs` is the in-session access-token refresh and its cross-process critical section (Steps 39 + 85); `input.rs` checks the app's arguments at the public entry points (Step 95c) |
 | `rooms/` | room state and membership (`Room`); `rooms/devices.rs` the device verification surface (`RoomDevice`, `RoomDevicesChange`, the diff — Step 95d) |
 | `timeline/` | message send/receive, the `Timeline` read/send surface, per-interaction send files (text, reaction, confirmation, delete, knock, location, asset, ephemeral — the latter also owns the local expiry sweep + timers, Step 89; `keyed.rs` — `send_keyed`, the one entry for retryable sends, Step 130a); `timeline/task/` is the task vertical slice split by responsibility (`types` / `fold` / `order` / `views` / `cache` / `encode` / `send`) |
 | `sync/` + `sync/dispatch/` | the event-stream loop and the inbound dispatcher (one handler per interaction; `room_event` turns four backend events into timeline items, Step 145, through `wire/room_event.rs` and `timeline/room_event.rs`) |

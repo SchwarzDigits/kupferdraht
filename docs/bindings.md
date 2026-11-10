@@ -700,15 +700,21 @@ Since Step 110 (ADR-0035):
 - Getters: `userId`, `displayName`, `email` (Step 122: the account's
   email address, `undefined` when it has none on record), `handle`
   (Step 125: the account's handle, `undefined` when it has none on
-  record — as the session knows it from its login, like `displayName`:
-  a `setHandle` in this session does not change it, though since Step 126
-  the **next** session sees it),
+  record), each as of the login, `refreshAccount()` or this session's
+  own `setDisplayName` / `setHandle` / avatar calls (Step 152),
   `deviceReplaced` (Step 110: this login's device replaced the recorded
   one, which the backend no longer had — older messages are gone).
-- Getters `teamId`, `teamName` (Step 143): the user's team as of the last
-  login, `undefined` for a personal account; `teamName` is `undefined` too when
-  the login could not fetch it, and a resume does not fetch it, so it stays
-  `undefined` until the next full login. A browser session resumes for weeks.
+- Getters `teamId`, `teamName` (Step 143): the user's team, `undefined` for a
+  personal account; `teamName` is `undefined` too when the login could not
+  fetch it, until `refreshAccount()` does.
+- `refreshAccount(): Promise<void>` (Step 152): reads `GET /self` and, for a
+  team member, `GET /teams/{tid}` again, and resolves when `displayName`,
+  `handle`, `email`, `teamId`, `teamName` and `teamAvatar()` answer the new
+  values. All or nothing: on any failure it rejects and nothing changes, a
+  stored team name included. Nothing calls it by itself — `team.update`
+  reaches only a team's admins and is not stored, so no event could do it —
+  so call it when it suits the app, for instance at the start and on window
+  focus. A browser session resumes for weeks without it.
 - `storageEngine() -> {engine, version, cipher, plaintextHeaderSize,
   location} | null` (async) — what the app-data store's encryption
   engine reports about itself, read off the live connection (the browser
@@ -840,8 +846,9 @@ Since Step 110 (ADR-0035):
 - Session admin (Step 98a): `setDisplayName(name)`, `setHandle(handle)`,
   `updateEmail(email)` — the last one means "verification mail sent", not
   "address changed". Since Step 126 the first two also write the persisted
-  `self_user` row, so the next `resume` reports the new value; the live
-  `displayName` / `handle` getters are the login's snapshot either way.
+  `self_user` row, so the next `resume` reports the new value; since
+  Step 152 the `displayName` / `handle` getters answer it right after the
+  call, under tabs in the calling tab.
 - Devices (Step 98a): `devices() -> DeviceInfo[]`, `deleteDevice(deviceId,
   password)`. `DeviceInfo` is the core record field for field —
   `{deviceId, class, label, model, registeredAt, lastActive, isSelf}`.
@@ -934,7 +941,11 @@ instance" into "served to every tab". Two halves:
   classes**
   (everything but the leader-only `Kupferdraht.open`; wrapper objects come
   back as proxies whose getters `userId` / `displayName` / `email` /
-  `handle` / `teamId` / `teamName` are snapshots, so they stay synchronous; the `Kupferdraht` getters `homeId` /
+  `handle` / `teamId` / `teamName` are snapshots, so they stay synchronous;
+  `refreshAccount()`, `setDisplayName`, `setHandle`, `uploadAvatar` and
+  `removeAvatar` bring the calling tab's snapshot up to date before they
+  resolve (Step 152: the leader answers the getters after the call), and
+  another tab calls `refreshAccount()` for itself; the `Kupferdraht` getters `homeId` /
   `cookieLabel` ride on the leader's announcement and are `undefined`
   until one arrived). `host.state` is `electing` |
   `leader` | `thin`; `host.takeOver()` is the ADR-0023 override for a

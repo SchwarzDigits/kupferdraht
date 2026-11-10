@@ -88,11 +88,24 @@ export function createLeaderDispatcher(kupferdraht, { tabId, epoch, heartbeatMs 
       if (!spec) throw named('UnknownMethod', `kupferdraht-tabs: ${entry.cls}.${method} is not on the wasm surface`);
       const value = spec.kind === 'subscription'
         ? subscribe(target, entry.object)
-        : wrap(await entry.object[method](...(Array.isArray(args) ? args : [])), spec.returns);
+        : await call(entry, method, args, spec.returns);
       return { kind: 'response', v: PROTOCOL_VERSION, requestId, ok: true, value };
     } catch (err) {
       return { kind: 'response', v: PROTOCOL_VERSION, requestId, ok: false, error: describeError(err) };
     }
+  }
+
+  /** Run `method` on a handle's object; `$getters` answers its getters after it (Step 152). */
+  async function call(entry, method, args, returns) {
+    const value = await entry.object[method](...(Array.isArray(args) ? args : []));
+    return returns === '$getters' ? snapshotOf(entry.object, entry.cls) : wrap(value, returns);
+  }
+
+  /** The getters of `object` as they are now. */
+  function snapshotOf(object, cls) {
+    const snapshot = {};
+    for (const getter of getters.get(cls) ?? []) snapshot[getter] = object[getter];
+    return snapshot;
   }
 
   /** A wrapper object becomes a handle descriptor with its getters snapshotted. */
@@ -100,9 +113,7 @@ export function createLeaderDispatcher(kupferdraht, { tabId, epoch, heartbeatMs 
     if (!cls) return value;
     const id = `${cls.toLowerCase()}-${++handleCounter}`;
     handles.set(id, { object: value, cls });
-    const snapshot = {};
-    for (const getter of getters.get(cls) ?? []) snapshot[getter] = value[getter];
-    return { $handle: id, $class: cls, getters: snapshot };
+    return { $handle: id, $class: cls, getters: snapshotOf(value, cls) };
   }
 
   /** One live sync loop per client; every tab's `startSync` is a subscription to it. */

@@ -96,7 +96,19 @@ export class StubRecovery {
 export class StubClient {
   constructor(userId) { this._userId = userId; }
   get userId() { return this._userId; }
-  get displayName() { return 'Stub'; }
+  get displayName() { return this._displayName ?? 'Stub'; }
+  get teamName() { return this._teamName ?? 'Stub Team'; }
+  /** Step 152: a refresh changes what the getters say. */
+  async refreshAccount() {
+    await delay(SLOW_MS);
+    this._displayName = 'Stub Renamed';
+    this._teamName = 'Stub Team Renamed';
+  }
+  /** Step 152: an own rename changes what the getters say. */
+  async setDisplayName(name) {
+    await delay(SLOW_MS);
+    this._displayName = name;
+  }
   async storageEngine() { return { engine: 'stub', version: '0', cipher: 'none', plaintextHeaderSize: 0 }; }
   async rooms() { await delay(SLOW_MS); return FIXTURE_ROOMS.map((r) => ({ ...r })); }
   async messages(roomId, limit) {

@@ -176,7 +176,7 @@ fn every_method_is_classified_and_typed() {
         assert!(
             matches!(
                 row[3].as_str(),
-                "null" | "PendingLogin" | "Client" | "Recovery" | "SyncHandle"
+                "null" | "PendingLogin" | "Client" | "Recovery" | "SyncHandle" | "$getters"
             ),
             "{}.{} returns {:?}",
             row[0],

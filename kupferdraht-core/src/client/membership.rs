@@ -345,7 +345,8 @@ impl Client {
         user_ids: &[String],
     ) -> Result<Vec<Vec<u8>>, KupferdrahtError> {
         let ciphersuite_decimal = u16::from(crate::encryption::MLS_CIPHERSUITE_FOR_CLAIM);
-        let self_domain = self.account.domain();
+        let account = self.account();
+        let self_domain = account.domain();
         let mut out: Vec<Vec<u8>> = Vec::new();
         // Self-bootstrap: every Wire user-record may list further
         // clients (older Kupferdraht logins, iOS / desktop). Wire rejects
@@ -759,8 +760,9 @@ impl Client {
                 .map(|u| (u.qualified_id.to_string(), u))
                 .collect()
         };
-        let self_name = self.account.display_name().to_string();
-        let self_handle = self.account.handle().map(str::to_string);
+        let account = self.account();
+        let self_name = account.display_name().to_string();
+        let self_handle = account.handle().map(str::to_string);
         let self_avatar = self.own_avatar_keys().await?;
         Ok(leaves
             .iter()

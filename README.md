@@ -39,7 +39,7 @@ end-to-end encrypted with MLS (RFC 9420):
   - interactive SSO login
   - device-limit recovery during login (list / free a slot, then continue on the same handle)
   - multi-account device registry with offline resume
-  - the user's own team on the account: its id and name, as of the last login
+  - the user's own team on the account: its id and name, read again on request with the rest of the account
   - avatars: show every user's and the team's, set the own, each image decoded and written anew so no foreign bytes reach the embedder
   - two processes on one home coexist (per-account cross-process lock around token refresh and key creation, fail-fast; databases wait for each other's writes)
   - sign-out through the device manager (`Kupferdraht::logout`, optionally purging the device at the backend and the account on this device) and `forget_account` for an account without a session

@@ -691,12 +691,7 @@ impl LoginPipeline {
     /// on without the name. A personal account makes no request, and an empty
     /// `team` is no team.
     pub(super) async fn fetch_own_team(&self, self_user: &SelfUser, access_token: &str) -> OwnTeam {
-        let Some(id) = self_user
-            .team
-            .as_deref()
-            .filter(|team| !team.is_empty())
-            .map(str::to_ascii_lowercase)
-        else {
+        let Some(id) = super::own_account::own_team_id(self_user) else {
             return OwnTeam::default();
         };
         match self
@@ -706,10 +701,8 @@ impl LoginPipeline {
         {
             Ok(team) => OwnTeam {
                 id: Some(id),
+                icon_key: super::own_account::team_icon_key(&team),
                 name: Some(team.name),
-                icon_key: team
-                    .icon
-                    .filter(|icon| !icon.is_empty() && icon != "default"),
             },
             Err(e) => {
                 warn!(

@@ -972,20 +972,21 @@ fn the_browser_surface_carries_the_five_calls() {
     let protocol = workspace_file(&format!("{tabs}/protocol.js"));
     let proxy = workspace_file(&format!("{tabs}/proxy.js"));
     let types = workspace_file(&format!("{tabs}/index.d.ts"));
+    // Step 152: the two writes answer the calling tab's getters.
     let calls = [
-        ("avatar", "idempotent"),
-        ("avatarKey", "idempotent"),
-        ("teamAvatar", "idempotent"),
-        ("uploadAvatar", "mutation"),
-        ("removeAvatar", "mutation"),
+        ("avatar", "idempotent", "null"),
+        ("avatarKey", "idempotent", "null"),
+        ("teamAvatar", "idempotent", "null"),
+        ("uploadAvatar", "mutation", r#""$getters""#),
+        ("removeAvatar", "mutation", r#""$getters""#),
     ];
-    for (call, class) in calls {
+    for (call, class, returns) in calls {
         assert!(
             wasm.contains(&format!("js_name = {call})")),
             "wasm has {call}"
         );
         assert!(
-            protocol.contains(&format!(r#"["Client", "{call}", "{class}", null]"#)),
+            protocol.contains(&format!(r#"["Client", "{call}", "{class}", {returns}]"#)),
             "protocol.js has {call} as {class}"
         );
         assert!(proxy.contains(&format!("{call}(")), "proxy.js has {call}");

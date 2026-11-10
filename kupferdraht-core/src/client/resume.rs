@@ -241,7 +241,7 @@ pub(super) fn assemble_resumed_client(
     mls_public_key: Vec<u8>,
     kupferdraht_home: Option<KupferdrahtHome>,
 ) -> Result<Arc<Client>, KupferdrahtError> {
-    let account = build_resume_account(&parts.self_user)?;
+    let account = account_from_row(&parts.self_user)?;
     let user_id = account.user_id().clone();
     Ok(Client::new(
         user_id,
@@ -263,7 +263,7 @@ pub(super) fn assemble_resumed_client(
 
 /// Build the [`Account`] view used by `resume` from the persisted
 /// `SelfUserRecord` (whose `id` is the qualified user id since Step 19).
-fn build_resume_account(
+pub(super) fn account_from_row(
     self_user: &crate::storage::SelfUserRecord,
 ) -> Result<Arc<Account>, KupferdrahtError> {
     let user_id = UserId::parse(&self_user.id)?;

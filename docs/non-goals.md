@@ -131,3 +131,9 @@ limitations".
   holds what it needs; the next pass names the room in `changedRooms` for
   everyone else, every tab included (Step 146). The embedder's R8 asked for
   it "before the next sync pass" and accepted this instead.
+- **NG-29** No following of account changes by itself. A renamed team, a
+  new icon, or a name, handle or avatar changed on another device stays as it
+  was until the embedder calls `refreshAccount()` (Step 152): `team.update`
+  reaches only a team's admins and is not stored, and a timer would be a
+  request the embedder did not ask for. The embedder knows its own moments,
+  such as the start and window focus.

@@ -39,6 +39,7 @@ mod membership;
 mod mentions;
 mod message_lookup;
 mod mls_gate;
+mod own_account;
 mod pending;
 mod pending_login;
 mod profile;
@@ -132,7 +133,12 @@ pub struct Client {
     /// because it is held across the `/access` `.await` (like
     /// `sync_lock`).
     refresh_lock: tokio::sync::Mutex<()>,
-    account: Arc<Account>,
+    /// The own account, live (Step 152): `refresh_account` and the profile
+    /// calls replace it; a caller's `Arc` stays a snapshot.
+    account: RwLock<Arc<Account>>,
+    /// Serialises the own profile's request, row write and account swap
+    /// (Step 152), so two writers cannot lose an update.
+    account_gate: tokio::sync::Mutex<()>,
     backend_removal_key_ecdsa_p256: Vec<u8>,
     mls_signature_public_key: Vec<u8>,
     /// Wire transport kept alive for post-login calls (rooms sync,
@@ -336,7 +342,8 @@ impl Client {
                     issued_at_ms: crate::time::now_ms(),
                 }),
                 refresh_lock: tokio::sync::Mutex::new(()),
-                account,
+                account: RwLock::new(account),
+                account_gate: tokio::sync::Mutex::new(()),
                 backend_removal_key_ecdsa_p256,
                 mls_signature_public_key,
                 http,

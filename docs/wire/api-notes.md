@@ -1167,7 +1167,8 @@ Called once at login time to populate the `self_users` row in
 
 #### `GET /v14/teams/{tid}`
 
-The name of the user's own team, for the account snapshot (Step 143).
+The name and icon of the user's own team: at login (Step 143) and on
+`Client::refresh_account` (Step 152).
 
 **Response 200:**
 
