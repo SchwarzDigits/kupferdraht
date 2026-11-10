@@ -36,6 +36,20 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.5.1] - 2026-11-10
+
+### Added
+
 - **The own account and team, read on request** (Step 152):
   `Client::refresh_account` (FFI too, browser `refreshAccount(): Promise<void>`,
   CLI `account-refresh`) asks `GET /self` and, for a team member,
@@ -69,12 +83,6 @@ is no skill for it — it is this short procedure:
 ### Deprecated
 
 - **`Account::login_avatar_keys`** (Step 152): use `Account::avatar_keys`.
-
-### Removed
-
-### Fixed
-
-### Security
 
 ## [0.5.0] - 2026-11-09
 
