@@ -1058,8 +1058,9 @@ instance" into "served to every tab". Two halves:
   handle across a leader change (Step 112b) — with a stub `Kupferdraht`; `bindings/web/opfs-smoke/tabs.html`
   is the consumer smoke with the real wasm (`?scenario=tabs` plays two
   tabs on one page: `TABS-OK`).
-- **Not there:** `SharedWorker` hosting (ADR-0023 Option C), cross-origin
-  or private-window sharing, and the Step-79 resend path on wasm.
+- **Not there:** `SharedWorker` hosting (ADR-0023 Option C), and cross-origin
+  or private-window sharing. The resend path reaches the leader like any call
+  (`failedSends`, `resend`, `resendFailed`, Step 130b).
 
 Timeline items carry `deliveryStatus` (`"sending" | "submitted" | "received"
 | "failed"`) and each reaction carries `isSelf` since Step 98c.
@@ -1068,8 +1069,8 @@ Timeline items carry `deliveryStatus` (`"sending" | "submitted" | "received"
 (`PendingClient`),
 `TimelineListener`/`subscribe`, `SyncListener`-driven `start_sync`,
 `Asset.save_to` (no filesystem), mentions/ephemeral
-sends, failed-send recovery (`resend` / `resend_failed` /
-`failed_sends`, Step 79). The core `sync_stream` is a stub on wasm (single `Err`) — use
+sends. Failed-send recovery is there since Step 130b (`failedSends`,
+`resend`, `resendFailed`). The core `sync_stream` is a stub on wasm (single `Err`) — use
 `startSync`. Ephemeral expiry on wasm is **sweep-only** (no task
 spawner): inbound ephemeral rows self-redact at the end of the next
 `syncOnce` / `startSync` cycle or on resume, not on a live timer. The

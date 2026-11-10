@@ -5,6 +5,7 @@ This file is the **open backlog** — the steps still in progress, pending, or b
 ## Status overview
 
 Last update: **2026-11-10** — 
+v0.5.1 released with Steps 152 and 147: the own account and team read on request (`refreshAccount`), and recovery data checked before the PIN (`checkRecoveryData`); `login_avatar_keys` deprecated. Before (the same day): 
 Steps 151, 146, 152 and 147 archived, and two plans that had landed long ago (126 in v0.1.0, 20c with 20a–20c) moved to the archive. Step 12 (key backup) dropped: Wire v14 has no endpoint for it, and it stood pending since April (NG-30). Step 20 (native bindings) closed at what is built, its publishing and support tiers dropped (NG-31); Step 153 commissioned: the Kotlin/JVM binding built and tested in CI. Before: 
 Step 152 merged (PR #67, `refresh_account`); Step 147 in progress, then 0.5.1. Before (the same day): 
 v0.5.0 released with Steps 145, 151 and 146: room events in the timeline, the backend's time of a message (a reply's quote verifies at a Kalium client), and a sync pass that names the rooms that changed; all BREAKING. Order: the archives of 151 and 146, then 152, 147, 129a, 129b. Before (the same day): 

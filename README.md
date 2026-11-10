@@ -63,7 +63,8 @@ end-to-end encrypted with MLS (RFC 9420):
   - show / set a room's access modes and roles
 - **Text messaging**
   - plain text, with MLS auto-join on send
-  - replies / quotes and @-mentions
+  - each message shows the backend's time of sending; the timeline keeps the order it arrived in on this device
+  - replies / quotes and @-mentions; a quote carries the hash Wire's clients verify
   - edits and delete-for-everyone (tombstoned, reply chains stay renderable)
   - emoji reactions
   - read receipts and delivery status; a device-local read position with a
@@ -88,6 +89,7 @@ end-to-end encrypted with MLS (RFC 9420):
   - event-sourced over MLS — the server never sees task content; Wire's official clients render a plain-text fallback
 - **Sync**
   - full and metadata-only sync
+  - each pass names the rooms that changed (`changedRooms`), so an app re-reads only those
   - continuous polling loop with per-event acknowledgement
   - live push receive over WebSocket — the default on native targets (ADR-0033; `SyncTransport::Polling` / `sync-stream --transport polling` opt out), and the browser's live sync — the socket auto-negotiates per connection between `/v14/events` and Wire's legacy `/await` route (ADR-0019), so push works on wire-server deployments where ConsumableNotifications is disabled; without a socket the loop keeps draining
   - in-order commit processing, stale-epoch retry, and auto-commit of external proposals
@@ -96,15 +98,17 @@ end-to-end encrypted with MLS (RFC 9420):
   - refreshed at login and via events
 - **Security**
   - MLS (RFC 9420) only, with no security-disabling options
+  - MLS Basic credentials only, no e2ei (Wire's end-to-end identity, a team feature that gives each device an X.509 certificate): Kupferdraht cannot check the identity in such a certificate, so a message from a device that has one is dropped, not shown under an unchecked sender — in a team with e2ei on, Kupferdraht users do not see those colleagues' messages, while the colleagues see theirs (NG-7)
   - whole-DB encryption via SQLite3MC (ChaCha20-Poly1305, raw 32-byte key per database; vendored amalgamation, no OpenSSL) — an accepted deviation from BSI TR-02102-1's AES-only lists, see ADR-0021
   - OS-keyring, file, in-memory, and IndexedDB keystores
   - zeroization of key material and credentials when their holders drop (best effort, `docs/THREAT_MODEL.md` G4 names what is not covered)
   - Proteus prekeys generated and uploaded at registration, never used to encrypt
+  - the browser stores no database in the clear: its storage refuses a page that is not encrypted
 - **Platforms**
   - matrix-rust-sdk-shaped Rust library
-  - Rust CLI (~50 commands, the API's first consumer)
+  - Rust CLI (~60 commands, the API's first consumer)
   - UniFFI bindings for Kotlin (Android / JVM) and Swift (iOS / macOS), built by the scripts in `bindings/`, not published as packages (`docs/non-goals.md` NG-31)
-  - browser target: the same crate compiles to `wasm32` with the same SQLite3MC-encrypted storage on sqlite-remote-vfs — in IndexedDB, or an account's databases on a sqlite-remote-server with storage tokens from a token exchange (dedicated Web Worker, cross-origin isolated page; ADR-0022, ADR-0035), service tokens for the embedder's own services from the same token exchange (ADR-0036), recovery data — the account's keys sealed with a PIN through a PIN service that limits the guesses, restored in a new browser — and leaving a browser for good with `logout({ purgeDevice, purgeLocal })` and a hand-written TypeScript-facing binding layer (login incl. SSO, sync, send/receive, assets) — see [`docs/bindings.md`](docs/bindings.md)
+  - browser target: the same crate compiles to `wasm32` with the same SQLite3MC-encrypted storage on sqlite-remote-vfs — in IndexedDB, or an account's databases on a sqlite-remote-server with storage tokens from a token exchange (dedicated Web Worker, cross-origin isolated page; ADR-0022, ADR-0035), service tokens for the embedder's own services from the same token exchange (ADR-0036), recovery data — the account's keys sealed with a PIN through a PIN service that limits the guesses, restored in a new browser, a picked file checked before the PIN — and leaving a browser for good with `logout({ purgeDevice, purgeLocal })` and a hand-written TypeScript-facing binding layer (login incl. SSO, sync, send/receive, assets) — see [`docs/bindings.md`](docs/bindings.md)
   - many tabs, one instance in the browser: the tab holding the origin's lease is the leader, every other tab is a thin client over `BroadcastChannel` — `bindings/web/kupferdraht-tabs/` (opt-in reference module, ADR-0026); closing the leader promotes the next tab; an in-flight send is re-issued with its idempotency key and arrives once, other in-flight mutations fail typed instead of being sent twice
   - a self-hosted deployment of wire-server, Wire's open-source backend (API v14), named by its base URL (`--api-url`, required; no default)
   - Kupferdraht's logs reach the app through a listener on every surface (Rust, Kotlin, Swift, browser `onLog`) — Kupferdraht writes nowhere itself
@@ -153,8 +157,9 @@ How it all fits together is described in
 The public Rust API is FFI-mirrored by convention (a `pub` change
 lands with its binding mirror in the same commit), so the features
 above are reachable from every UniFFI target. Nothing is published
-to a package registry yet — each artifact is built from source via
-the scripts under [`bindings/`](bindings/):
+to a package registry ([`docs/non-goals.md`](docs/non-goals.md) NG-31)
+— each artifact is built from source via the scripts under
+[`bindings/`](bindings/):
 
 | Target | Artifact / build | Status |
 |---|---|---|
@@ -162,7 +167,7 @@ the scripts under [`bindings/`](bindings/):
 | Kotlin / JVM (desktop) | JAR — `bindings/kotlin/build-jvm.sh` | implemented, binding-level tests (`./gradlew test`) |
 | Android | AAR (arm64-v8a) — `bindings/android/build-android.sh` (NDK + cargo-ndk) | implemented, builds + packages |
 | Swift (iOS + macOS) | `kupferdrahtFFI.xcframework` + SwiftPM — `bindings/swift/build-xcframework.sh` | implemented, binding-level tests (`swift test`) |
-| Browser (WASM) | `wasm-pack build --target web` (from `kupferdraht-core/`, needs a wasm-capable clang) + `bindings/web/kupferdraht-tabs/` (plain ES modules, no build) | usable subset — login incl. SSO, sync, send / receive, assets over the OPFS-backed SQLite3MC store (run in a dedicated Web Worker); many tabs served by one leader tab (`kupferdraht-tabs`, ADR-0026); storage pins and the tabs scenarios run in headless Firefox (`scripts/wasm-test.sh`), live-browser verification of the login vertical pending |
+| Browser (WASM) | `wasm-pack build --target web` (from `kupferdraht-core/`, needs a wasm-capable clang) + `bindings/web/kupferdraht-tabs/` (plain ES modules, no build) | usable subset — login incl. SSO, sync, send / receive, assets, read state, avatars and recovery data over the SQLite3MC store in IndexedDB or on a storage server (run in a dedicated Web Worker); many tabs served by one leader tab (`kupferdraht-tabs`, ADR-0026); storage pins and the tabs scenarios run in headless Firefox (`scripts/wasm-test.sh`), live-browser verification of the login vertical pending |
 
 Per-target surface, packaging details, and the gaps on the wasm
 surface: [`docs/bindings.md`](docs/bindings.md).
