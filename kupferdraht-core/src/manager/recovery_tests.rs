@@ -30,6 +30,7 @@ use crate::recovery::account::{
 use crate::recovery::data::{RecoveryData, account_hash};
 use crate::recovery::flow::RecoveryServices;
 use crate::recovery::oprf::evaluate_as_service;
+use crate::recovery::verdict::RecoveryDataVerdict;
 use crate::storage::account_keys::AccountKeySource;
 use crate::storage::remote::wire_session::TokenExchange;
 
@@ -50,13 +51,15 @@ const NATIVE_PATH: RegisterOptions = RegisterOptions { new_setup: false };
 const CLIENT: &str = "new-client-id";
 
 /// The token exchange, the PIN service and the storage server's slot query
-/// of the tests. The slot query shares the exchange's mock server: httpmock
-/// serves from a bounded pool, and parallel tests that hold more servers
-/// than it has wait for each other for good.
+/// of the tests, on one mock server (their paths differ): httpmock serves
+/// from a pool of 25 per test binary, and parallel tests that take servers
+/// one by one until it is empty wait for each other for good.
 struct Services {
-    exchange: MockServer,
-    pin_service: MockServer,
+    server: MockServer,
     evaluations: Arc<AtomicU32>,
+    /// Step 147: the PIN tokens bought and the slot queries asked.
+    tokens: Arc<AtomicU32>,
+    slot_queries: Arc<AtomicU32>,
 }
 
 impl Services {
@@ -70,28 +73,51 @@ impl Services {
 
     /// The services with the slot query answering `slot_body`.
     fn with_slot(slot_body: &str) -> Self {
-        let exchange = MockServer::start();
-        let body = slot_body.to_owned();
-        exchange.mock(move |when, then| {
+        Self::with_slot_answers(&[(200, slot_body)])
+    }
+
+    /// The services with the slot query answering `answers` in turn, the
+    /// last one from then on.
+    fn with_slot_answers(answers: &[(u16, &str)]) -> Self {
+        let server = MockServer::start();
+        let answers: Vec<(u16, String)> = answers
+            .iter()
+            .map(|(status, body)| (*status, (*body).to_owned()))
+            .collect();
+        let slot_queries = Arc::new(AtomicU32::new(0));
+        let asked = slot_queries.clone();
+        server.mock(move |when, then| {
             when.method(GET)
                 .path("/v1/slot")
                 .header("authorization", "Bearer pin.jwt");
-            then.status(200)
-                .header("content-type", "application/json")
-                .body(body);
+            then.respond_with(move |_: &HttpMockRequest| {
+                let n = asked.fetch_add(1, Ordering::SeqCst) as usize;
+                let (status, body) = &answers[n.min(answers.len() - 1)];
+                HttpMockResponse::builder()
+                    .status(*status)
+                    .header("content-type", "application/json")
+                    .body(body.clone())
+                    .build()
+            });
         });
-        exchange.mock(|when, then| {
+        let tokens = Arc::new(AtomicU32::new(0));
+        let bought = tokens.clone();
+        server.mock(move |when, then| {
             when.method(POST)
                 .path("/v1/token")
                 .json_body(json!({"audience": "pin"}));
-            then.status(200)
-                .header("content-type", "application/json")
-                .body(r#"{"token":"pin.jwt","expiresIn":600}"#);
+            then.respond_with(move |_: &HttpMockRequest| {
+                bought.fetch_add(1, Ordering::SeqCst);
+                HttpMockResponse::builder()
+                    .status(200)
+                    .header("content-type", "application/json")
+                    .body(r#"{"token":"pin.jwt","expiresIn":600}"#)
+                    .build()
+            });
         });
-        let pin_service = MockServer::start();
         let evaluations = Arc::new(AtomicU32::new(0));
         let counter = evaluations.clone();
-        pin_service.mock(|when, then| {
+        server.mock(|when, then| {
             when.method(POST)
                 .path("/v1/evaluate")
                 .header("authorization", "Bearer pin.jwt");
@@ -120,32 +146,41 @@ impl Services {
         });
         // Step 124: receipts are accepted (their signatures are checked in
         // `recovery::flow`'s tests).
-        pin_service.mock(|when, then| {
+        server.mock(|when, then| {
             when.method(POST).path("/v1/refund");
             then.status(200)
                 .header("content-type", "application/json")
                 .body(r#"{"attemptsRemaining":12}"#);
         });
         Self {
-            exchange,
-            pin_service,
+            server,
             evaluations,
+            tokens,
+            slot_queries,
         }
     }
 
     fn recovery_services(&self) -> RecoveryServices {
         RecoveryServices {
             exchange: TokenExchange {
-                url: self.exchange.base_url(),
+                url: self.server.base_url(),
                 permit_http: true,
             },
-            pin_service_url: self.pin_service.base_url(),
-            slot_url: format!("{}/v1/slot", self.exchange.base_url()),
+            pin_service_url: self.server.base_url(),
+            slot_url: format!("{}/v1/slot", self.server.base_url()),
         }
     }
 
     fn evaluations(&self) -> u32 {
         self.evaluations.load(Ordering::SeqCst)
+    }
+
+    /// Step 147: the PIN tokens bought and the slot queries asked so far.
+    fn requests(&self) -> (u32, u32) {
+        (
+            self.tokens.load(Ordering::SeqCst),
+            self.slot_queries.load(Ordering::SeqCst),
+        )
     }
 }
 
@@ -526,4 +561,170 @@ async fn cancel_after_a_recovery_keeps_the_accounts_databases() {
         browser_b.account_dir().exists(),
         "the account's databases stay"
     );
+}
+
+// ---- Step 147: the check before the PIN ----
+//
+// Each test holds at most two mock servers at a time (see `Services`).
+
+/// The account's recovery data, made in a browser that is gone again: its
+/// mock servers are back in the pool before the test takes its own.
+async fn recovery_data() -> Vec<u8> {
+    let services = Services::start();
+    enabled(&services).await.2
+}
+
+/// The data of `bytes` with another first byte after the magic: another
+/// format version.
+fn with_version(bytes: &[u8], version: u8) -> Vec<u8> {
+    let mut bytes = bytes.to_vec();
+    bytes[crate::recovery::data::MAGIC.len()] = version;
+    bytes
+}
+
+/// The account's current data, for the slot's device, checks "ok" — with one
+/// PIN token and one slot query, no PIN attempt, and the login as it was.
+#[tokio::test]
+async fn the_accounts_current_data_checks_ok() {
+    let data = recovery_data().await;
+    let services = Services::start();
+    let browser = Browser::new(Some(&services));
+    let pending = browser.login().await;
+    let (tokens, slots) = services.requests();
+
+    let verdict = pending.check_recovery_data(&data).await.expect("verdict");
+
+    assert_eq!(verdict, RecoveryDataVerdict::Ok);
+    assert_eq!(services.requests(), (tokens + 1, slots + 1));
+    assert_eq!(services.evaluations(), 0, "no attempt spent");
+    assert_eq!(pending.keys(), KeysState::Missing, "nothing installed");
+    assert!(browser.seed().is_none());
+    pending
+        .recover(&data, PIN, NATIVE_PATH)
+        .await
+        .expect("the login is as it was");
+}
+
+/// What the bytes alone decide needs no request at all.
+#[tokio::test]
+async fn local_verdicts_need_no_request() {
+    let data = recovery_data().await;
+    let decoded = RecoveryData::decode(&data).expect("recovery data");
+    let mut other_account = decoded.clone();
+    other_account.account_hash = account_hash("other-uuid@example.test");
+    let mut costly = decoded;
+    costly.argon2.m_kib = 4 * 1024 * 1024;
+    let cases = [
+        (
+            b"%PDF-1.7 a file".to_vec(),
+            RecoveryDataVerdict::NotRecoveryData,
+        ),
+        (
+            data[..data.len() - 1].to_vec(),
+            RecoveryDataVerdict::NotRecoveryData,
+        ),
+        (with_version(&data, 2), RecoveryDataVerdict::Unsupported),
+        (costly.encode(), RecoveryDataVerdict::Unsupported),
+        (other_account.encode(), RecoveryDataVerdict::OtherAccount),
+    ];
+    let services = Services::start();
+    let browser = Browser::new(Some(&services));
+    let pending = browser.login().await;
+    let before = services.requests();
+
+    for (bytes, expected) in cases {
+        let verdict = pending.check_recovery_data(&bytes).await.expect("verdict");
+        assert_eq!(verdict, expected);
+    }
+
+    assert_eq!(services.requests(), before, "no token, no slot query");
+    assert_eq!(services.evaluations(), 0, "no attempt spent");
+}
+
+/// Another device's data, no device, and one being set up are
+/// "oldDevice" — known only from the slot, so after one token and one slot
+/// query.
+#[tokio::test]
+async fn the_slot_decides_old_device() {
+    let data = recovery_data().await;
+    for slot in [
+        r#"{"slot":{"label":"fc100a0123ef263d","claimedAtMs":2}}"#,
+        r#"{"slot":null}"#,
+        r#"{"slot":{"label":"","claimedAtMs":2}}"#,
+    ] {
+        let services = Services::with_slot(slot);
+        let browser = Browser::new(Some(&services));
+        let pending = browser.login().await;
+        let (tokens, slots) = services.requests();
+
+        let verdict = pending.check_recovery_data(&data).await.expect("verdict");
+
+        assert_eq!(verdict, RecoveryDataVerdict::OldDevice, "{slot}");
+        assert_eq!(services.requests(), (tokens + 1, slots + 1), "{slot}");
+        assert_eq!(services.evaluations(), 0, "{slot}");
+    }
+}
+
+/// The check has `recover`'s preconditions: the seed missing, and a PIN
+/// service.
+#[tokio::test]
+async fn the_check_refuses_with_the_seed_present_or_without_a_pin_service() {
+    let services = Services::start();
+    let (browser, client, data) = enabled(&services).await;
+    let with_seed = browser.login().await.check_recovery_data(&data).await;
+    assert!(
+        matches!(with_seed, Err(KupferdrahtError::InvalidInput(_))),
+        "{with_seed:?}"
+    );
+    drop((browser, client, services));
+
+    let local = Browser::new(None);
+    let without_service = local.login().await.check_recovery_data(&data).await;
+
+    assert!(
+        matches!(without_service, Err(KupferdrahtError::InvalidInput(_))),
+        "{without_service:?}"
+    );
+}
+
+/// A slot query that fails is an error, not a verdict.
+#[tokio::test]
+async fn a_failed_slot_query_is_an_error() {
+    let data = recovery_data().await;
+    let slot = format!(r#"{{"slot":{{"label":"{CLIENT}","claimedAtMs":1}}}}"#);
+    let services = Services::with_slot_answers(&[(200, &slot), (503, "")]);
+    let browser = Browser::new(Some(&services));
+    let pending = browser.login().await;
+
+    let result = pending.check_recovery_data(&data).await;
+
+    assert!(
+        matches!(result, Err(KupferdrahtError::ServiceUnavailable(_))),
+        "{result:?}"
+    );
+}
+
+/// `recover` runs the same check: a file that is not recovery data fails
+/// before any request, and a file with several faults reports the local one.
+#[tokio::test]
+async fn recover_decides_locally_first() {
+    let data = recovery_data().await;
+    let mut foreign = RecoveryData::decode(&data).expect("recovery data");
+    foreign.account_hash = account_hash("other-uuid@example.test");
+    let services = Services::with_slot(r#"{"slot":{"label":"fc100a0123ef263d","claimedAtMs":2}}"#);
+    let browser = Browser::new(Some(&services));
+    let pending = browser.login().await;
+    let before = services.requests();
+
+    for (bytes, expected) in [
+        (b"%PDF-1.7 a file".to_vec(), "notRecoveryData"),
+        (foreign.encode(), "otherAccount"),
+    ] {
+        match pending.recover(&bytes, PIN, NATIVE_PATH).await {
+            Err(KupferdrahtError::InvalidRecoveryData { reason }) => assert_eq!(reason, expected),
+            other => panic!("{:?}", other.err()),
+        }
+    }
+
+    assert_eq!(services.requests(), before, "no token, no slot query");
 }

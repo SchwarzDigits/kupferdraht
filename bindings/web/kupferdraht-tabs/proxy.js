@@ -301,6 +301,8 @@ export class PendingLoginProxy extends HandleProxy {
   recover(data, pin, options) {
     return this.transport.call(this, 'PendingLogin', 'recover', [data, pin, options]).then((v) => wrapValue(this.transport, v, 'Client'));
   }
+  /** Step 147: the verdict on recovery data before any PIN; no PIN attempt. */
+  checkRecoveryData(data) { return this.transport.call(this, 'PendingLogin', 'checkRecoveryData', [data]); }
   devices() { return this.transport.call(this, 'PendingLogin', 'devices', []); }
   deleteDevice(deviceId) { return this.transport.call(this, 'PendingLogin', 'deleteDevice', [deviceId]); }
   cancel() { return this.transport.call(this, 'PendingLogin', 'cancel', []); }

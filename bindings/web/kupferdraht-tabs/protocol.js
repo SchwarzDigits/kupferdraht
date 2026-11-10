@@ -59,6 +59,7 @@ export const METHODS = Object.freeze([
   ["Kupferdraht", "validateNewPin", "idempotent", null],
   ["PendingLogin", "registerDevice", "mutation", "Client"],
   ["PendingLogin", "recover", "mutation", "Client"],
+  ["PendingLogin", "checkRecoveryData", "idempotent", null],
   ["PendingLogin", "devices", "idempotent", null],
   ["PendingLogin", "deleteDevice", "mutation", null],
   ["PendingLogin", "cancel", "mutation", null],
