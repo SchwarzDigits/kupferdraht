@@ -17,9 +17,11 @@ Worker script (yours — the only file that knows where `pkg/` lives):
 
 ```js
 // tabs-worker.js
-import init, { Kupferdraht } from './pkg/kupferdraht.js';
+import init, { Kupferdraht, kupferdraht_version } from './pkg/kupferdraht.js';
 import { serveTab } from '../kupferdraht-tabs/worker.js';
-serveTab({ load: async () => { await init(); return Kupferdraht; }, permitHttp: false });
+// `version` (Step 157) is read after `load`: only the tab about to lead loads the wasm, and it never leads
+// when the wasm package and this module come from different releases.
+serveTab({ load: async () => { await init(); return Kupferdraht; }, version: () => kupferdraht_version(), permitHttp: false });
 ```
 
 Page:
@@ -61,6 +63,41 @@ true })` or `registerDevice({ takeOver: true })` after a `HeldElsewhere`.
   serves again; the proxy's re-resume of a client then meets
   `HeldElsewhere` / `StorageAccessDenied` — show it, and offer "use here"
   (`resume(accountId, { takeOver: true })`) for `"device"`.
+
+**Releases (Step 157).** Tabs of different Kupferdraht releases do not mix.
+The module knows its own release (`KUPFERDRAHT_VERSION`, `host.version`), the
+leader announces its own (`host.leaderVersion`, `null` for a release before
+Step 157), and `leader-changed` carries `relation`: this tab against the
+leader — `"same"`, `"newer"`, `"older"` or `"unknown"` (the leader names no
+version). A call to a leader of another release is not sent: it rejects with
+`VersionMismatch`, and a leader answers a tab of another release the same
+way. A candidate whose open finds data newer than its build
+(`IncompatibleStore`, with `database` and `reason`), or a wasm package of
+another release than the module (`VersionMismatch`), reports it once through
+`error` and stops trying. Who leads and when a tab reloads is the app's
+decision; a recipe:
+
+```js
+host.addEventListener('leader-changed', ({ detail }) => {
+  if (detail.relation === 'newer' || detail.relation === 'unknown') host.takeOver();
+  else if (detail.relation === 'older') reloadWhenIdle();
+});
+host.addEventListener('evicted', ({ detail }) => { if (detail.reason === 'tab') reloadWhenIdle(); });
+host.addEventListener('error', ({ detail }) => {
+  if (detail.name === 'IncompatibleStore' || detail.name === 'VersionMismatch') reloadWhenIdle();
+});
+// Reload now if the tab is in the background; otherwise ask, so unsent input is not lost.
+function reloadWhenIdle() {
+  host.close();
+  if (document.hidden) location.reload();
+  else showUpdateBanner(() => location.reload());
+}
+```
+
+Which takeover after an update is right is for the app to say: the recipe
+lets the newest tab lead, and reloads a deposed one. A tab of a release
+before Step 157 does not know these events; it is deposed by the newer one,
+follows it as a thin tab, and its calls then fail with `VersionMismatch`.
 
 A fifth optional `startSync` callback, `onDevicesChanged({ roomId, added,
 removed })`, reports a room's MLS device set changing (Step 95d; the

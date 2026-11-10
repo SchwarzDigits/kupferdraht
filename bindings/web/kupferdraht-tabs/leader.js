@@ -6,7 +6,7 @@
 // hands out as handles, broadcast the sync loop's events, and announce
 // leadership on a heartbeat. Runs inside the elected worker (`worker.js`).
 import {
-  DEFAULT_HEARTBEAT_MS, LEADER_EVENTS, PROTOCOL_VERSION, REQUEST_CHANNEL, KUPFERDRAHT_TARGET,
+  DEFAULT_HEARTBEAT_MS, KUPFERDRAHT_VERSION, LEADER_EVENTS, PROTOCOL_VERSION, REQUEST_CHANNEL, KUPFERDRAHT_TARGET,
   describeError, getterTable, methodTable, responseChannelName,
 } from './protocol.js';
 
@@ -43,7 +43,9 @@ export function createLeaderDispatcher(kupferdraht, { tabId, epoch, heartbeatMs 
     for (const getter of getters.get('Kupferdraht') ?? []) snapshot[getter] = kupferdraht[getter];
     return snapshot;
   };
-  const announce = () => requests.postMessage({ kind: 'leader', v: PROTOCOL_VERSION, leaderTabId: tabId, epoch, getters: kupferdrahtGetters() });
+  const announce = () => requests.postMessage({
+    kind: 'leader', v: PROTOCOL_VERSION, version: KUPFERDRAHT_VERSION, leaderTabId: tabId, epoch, getters: kupferdrahtGetters(),
+  });
   const beat = setInterval(announce, heartbeatMs);
   announce();
 
@@ -52,8 +54,16 @@ export function createLeaderDispatcher(kupferdraht, { tabId, epoch, heartbeatMs 
     if (!m || stopped) return;
     if (m.kind === 'hello') { announce(); return; }
     if (m.kind !== 'request' || m.v !== PROTOCOL_VERSION || duplicate(m)) return;
+    // Step 157: a tab of another release, or of one before the version, is not served.
+    if (m.version !== KUPFERDRAHT_VERSION) { respond(m.tabId, refuseRelease(m)); return; }
     dispatch(m).then((response) => respond(m.tabId, response));
   };
+
+  function refuseRelease({ requestId, version }) {
+    const message = `kupferdraht-tabs: the leader is Kupferdraht ${KUPFERDRAHT_VERSION}, `
+      + `the asking tab ${version ?? 'names no version'}; reload that tab (Step 157)`;
+    return { kind: 'response', v: PROTOCOL_VERSION, requestId, ok: false, error: { name: 'VersionMismatch', message } };
+  }
 
   function duplicate({ tabId: from, requestId }) {
     let memo = seen.get(from);
@@ -149,7 +159,7 @@ export function createLeaderDispatcher(kupferdraht, { tabId, epoch, heartbeatMs 
 
   function broadcast(event, userId, payload) {
     if (stopped || !LEADER_EVENTS.includes(event)) return;
-    requests.postMessage({ kind: 'event', v: PROTOCOL_VERSION, leaderTabId: tabId, epoch, event, userId, payload });
+    requests.postMessage({ kind: 'event', v: PROTOCOL_VERSION, version: KUPFERDRAHT_VERSION, leaderTabId: tabId, epoch, event, userId, payload });
   }
 
   return {

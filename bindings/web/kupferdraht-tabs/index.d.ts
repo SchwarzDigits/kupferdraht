@@ -21,6 +21,18 @@ export const GETTERS: ReadonlyArray<readonly [string, string]>;
 /** Events the leader broadcasts: the wasm `startSync` callbacks plus the per-pass summary. */
 export const LEADER_EVENTS: ReadonlyArray<'message' | 'typing' | 'expired' | 'sync' | 'devices' | 'storage' | 'rooms'>;
 export const PROTOCOL_VERSION: number;
+/**
+ * Step 157: the Kupferdraht release this module belongs to (the crate's version). The leader announces it and
+ * every request carries it; tabs of different releases do not mix.
+ */
+export const KUPFERDRAHT_VERSION: string;
+/**
+ * Step 157: this tab's release against the leader's. `'newer'`: this tab should lead (`host.takeOver()`);
+ * `'older'`: this tab should reload; `'unknown'`: the leader names no version (a release before Step 157) —
+ * treat it as older than this tab.
+ */
+export type VersionRelation = 'same' | 'newer' | 'older' | 'unknown';
+export function versionRelation(own: string, leader: string | null | undefined): VersionRelation;
 export const REQUEST_CHANNEL: string;
 export const LEASE_NAME: string;
 export function responseChannelName(tabId: string): string;
@@ -35,6 +47,16 @@ export class NoLeaderError extends Error {
   readonly name: 'NoLeader';
   readonly method: string;
 }
+/**
+ * Step 157: this tab and the leader belong to different Kupferdraht releases; the call was not sent. A leader
+ * answers a tab of another release with an error of the same name.
+ */
+export class VersionMismatchError extends Error {
+  readonly name: 'VersionMismatch';
+  readonly method: string;
+  readonly version: string;
+  readonly leaderVersion: string | null;
+}
 
 export interface TabHostOptions {
   /** Constructs this tab's dedicated module worker — a script that calls `serveTab`. */
@@ -47,7 +69,15 @@ export interface TabHostOptions {
   leaderWaitMs?: number;
 }
 
-export interface LeaderChangedDetail { leaderTabId: string; epoch: number; isSelf: boolean }
+export interface LeaderChangedDetail {
+  leaderTabId: string;
+  epoch: number;
+  isSelf: boolean;
+  /** Step 157: the leader's release; `null` when it names none. */
+  leaderVersion: string | null;
+  /** Step 157: this tab against the leader. */
+  relation: VersionRelation;
+}
 export interface ErrorDetail { name: string; message: string }
 
 /**
@@ -55,8 +85,13 @@ export interface ErrorDetail { name: string; message: string }
  * The recovery errors carry their detail (ADR-0035), each only when known.
  */
 export interface KupferdrahtError extends Error {
-  /** `InvalidRecoveryData`: not recovery data, an unsupported version, another account's data, or a replaced device's (Step 120). */
-  readonly reason?: 'notRecoveryData' | 'unsupported' | 'otherAccount' | 'oldDevice';
+  /**
+   * `InvalidRecoveryData`: not recovery data, an unsupported version, another account's data, or a replaced device's
+   * (Step 120). `IncompatibleStore` (Step 157): the database is newer than this build, or its migrations differ.
+   */
+  readonly reason?: 'notRecoveryData' | 'unsupported' | 'otherAccount' | 'oldDevice' | 'newer' | 'divergent';
+  /** `IncompatibleStore` (Step 157): the database that does not fit this build. */
+  readonly database?: 'kupferdraht.db' | 'mls.db' | 'global.db';
   /** `WrongPin`: the attempts the PIN service has left; absent for a PIN checked locally (`changePin`). */
   readonly attemptsRemaining?: number;
   /** `TooManyAttempts`: seconds until the PIN service takes attempts again; `RateLimited`: seconds the backend asks to wait (Step 122). */
@@ -92,6 +127,10 @@ export class TabHost extends EventTarget {
   readonly state: TabState;
   readonly leaderTabId: string | null;
   readonly epoch: number;
+  /** Step 157: the Kupferdraht release of this tab's module (`KUPFERDRAHT_VERSION`). */
+  readonly version: string;
+  /** Step 157: the leader's release; `null` before a leader is known or when it names none. */
+  readonly leaderVersion: string | null;
   /** The thin-client face of the leader's `Kupferdraht`. */
   readonly kupferdraht: KupferdrahtProxy;
   /** The ADR-0023 override for a hung leader: this tab steals the lease now. */
@@ -117,8 +156,14 @@ export interface ServeTabOptions {
   /** Passed to `Kupferdraht.open` (Step 117): Kupferdraht's log events, in the leader's worker. Kupferdraht logs nowhere else. */
   onLog?: (record: LogRecord) => void;
   heartbeatMs?: number;
-  /** Pause before a failed bootstrap re-enters the queue; default 5000 ms. */
+  /** Pause before a failed bootstrap re-enters the queue; default 5000 ms. `IncompatibleStore` and `VersionMismatch` never re-enter. */
   retryMs?: number;
+  /**
+   * Step 157: the wasm package's `kupferdraht_version()`, or a function returning it — called after `load`, so only
+   * a tab about to lead loads the wasm. When it is not this module's `KUPFERDRAHT_VERSION`, the candidate reports
+   * `VersionMismatch` once and never leads: the two must come from one release.
+   */
+  version?: string | (() => string);
 }
 /** One log event of Kupferdraht (Step 117). */
 export interface LogRecord { level: 'error' | 'warn' | 'info' | 'debug' | 'trace'; target: string; message: string }

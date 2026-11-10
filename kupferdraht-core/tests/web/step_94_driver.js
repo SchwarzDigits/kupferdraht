@@ -10,6 +10,8 @@
 // (`snippets/<crate>/tests/web/` → `snippets/bindings/web/kupferdraht-tabs/`).
 import { createTabHost, NoLeaderError } from '../../../bindings/web/kupferdraht-tabs/index.js';
 import { PROTOCOL_VERSION, REQUEST_CHANNEL, responseChannelName } from '../../../bindings/web/kupferdraht-tabs/protocol.js';
+// Step 157: a namespace import, so the scenarios load before the constant exists.
+import * as protocol from '../../../bindings/web/kupferdraht-tabs/protocol.js';
 import { FIXTURE_ACCOUNT } from './step_94_stub_kupferdraht.js';
 
 const workerModuleUrl = new URL('../../../bindings/web/kupferdraht-tabs/worker.js', import.meta.url).href;
@@ -560,3 +562,131 @@ export async function accountRefreshThroughATab() {
     b.close();
   }
 }
+
+// ---- Step 157: tabs of different versions do not mix ----
+
+/** `promise`, or a rejection named `Timeout` after `ms`: a call to a silent fake leader must not hang a red run. */
+function within(promise, ms) {
+  return Promise.race([promise, wait(ms).then(() => { const err = new Error('timeout'); err.name = 'Timeout'; throw err; })]);
+}
+
+export async function theLeaderNamesItsVersion() {
+  const a = createTabHost({ worker: candidateWorker() });
+  try {
+    await leaderOf(a, a.tabId);
+    const b = createTabHost({ worker: candidateWorker() });
+    try {
+      const detail = (await once(b, 'leader-changed', (e) => e.detail.leaderTabId === a.tabId)).detail;
+      return {
+        moduleVersion: protocol.KUPFERDRAHT_VERSION ?? null,
+        own: b.version ?? null,
+        leader: b.leaderVersion ?? null,
+        detailLeaderVersion: detail.leaderVersion ?? null,
+        relation: detail.relation ?? null,
+      };
+    } finally {
+      b.close();
+    }
+  } finally {
+    a.close();
+  }
+}
+
+/**
+ * No real leader (the page holds the lease); the page announces leaders of
+ * other versions. The tab names the relation, and does not call a leader of
+ * another version.
+ */
+export async function aThinTabDoesNotCallALeaderOfAnotherVersion() {
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await new Promise((granted) => navigator.locks.request('kupferdraht:instance', () => { granted(); return held; }));
+  const idle = URL.createObjectURL(new Blob(['// a candidate that never serves\n'], { type: 'text/javascript' }));
+  const host = createTabHost({ worker: () => new Worker(idle, { type: 'module' }), leaderWaitMs: 500 });
+  const channel = new BroadcastChannel(REQUEST_CHANNEL);
+  const requests = [];
+  channel.onmessage = (e) => { if (e.data && e.data.kind === 'request' && e.data.tabId === host.tabId) requests.push(e.data); };
+  const relationAfter = async (epoch, version) => {
+    const seen = once(host, 'leader-changed', (e) => e.detail.epoch === epoch);
+    const announcement = { kind: 'leader', v: PROTOCOL_VERSION, leaderTabId: `old-${epoch}`, epoch, getters: {} };
+    if (version !== undefined) announcement.version = version;
+    channel.postMessage(announcement);
+    return (await seen).detail.relation ?? null;
+  };
+  try {
+    const whenLeaderOlder = await relationAfter(1, '0.0.1');
+    let callName = 'resolved';
+    try { await within(host.kupferdraht.accounts(), 1000); } catch (err) { callName = err.name; }
+    const whenLeaderUnknown = await relationAfter(2, undefined);
+    const whenLeaderNewer = await relationAfter(3, '999.0.0');
+    await wait(100);
+    return { whenLeaderOlder, whenLeaderUnknown, whenLeaderNewer, callName, requestsSent: requests.length };
+  } finally {
+    channel.close();
+    host.close();
+    release();
+  }
+}
+
+/** The leader answers a request of another version, or of none, with `VersionMismatch`. */
+export async function theLeaderRefusesARequestOfAnotherVersion() {
+  const a = createTabHost({ worker: candidateWorker() });
+  try {
+    await leaderOf(a, a.tabId);
+    const fakeTab = `fake-${crypto.randomUUID()}`;
+    const answers = [];
+    const mine = new BroadcastChannel(responseChannelName(fakeTab));
+    mine.onmessage = (e) => answers.push(e.data);
+    const requests = new BroadcastChannel(REQUEST_CHANNEL);
+    const ask = (requestId, version) => {
+      const m = { kind: 'request', v: PROTOCOL_VERSION, tabId: fakeTab, requestId, target: 'kupferdraht', method: 'accounts', args: [] };
+      if (version !== undefined) m.version = version;
+      requests.postMessage(m);
+    };
+    ask('r-other', '0.0.1');
+    ask('r-none', undefined);
+    ask('r-same', protocol.KUPFERDRAHT_VERSION);
+    await wait(600);
+    mine.close();
+    requests.close();
+    const answer = (id) => {
+      const m = answers.find((r) => r.requestId === id);
+      if (!m) return 'none';
+      return m.ok ? 'ok' : (m.error && m.error.name) || 'error';
+    };
+    return { other: answer('r-other'), none: answer('r-none'), same: answer('r-same') };
+  } finally {
+    a.close();
+  }
+}
+
+/** A candidate whose open finds newer data reports it once and stops queuing. */
+export async function aCandidateRefusedByNewerDataStops() {
+  const reports = stubReports();
+  const host = createTabHost({ worker: candidateWorker({ storage: { stubFail: 'IncompatibleStore' }, retryMs: 100 }) });
+  const errors = [];
+  host.addEventListener('error', (e) => errors.push(e.detail.name));
+  try {
+    await wait(1500);
+    return { opens: reports.seen.filter((r) => r.call === 'open').length, errors };
+  } finally {
+    reports.close();
+    host.close();
+  }
+}
+
+/** A worker handed a wasm package of another version than the module's does not lead. */
+export async function aWorkerOfAnotherWasmVersionDoesNotLead() {
+  const reports = stubReports();
+  const host = createTabHost({ worker: candidateWorker({ version: '0.0.1', retryMs: 100 }) });
+  const errors = [];
+  host.addEventListener('error', (e) => errors.push(e.detail.name));
+  try {
+    await wait(1500);
+    return { opens: reports.seen.filter((r) => r.call === 'open').length, errors, state: host.state };
+  } finally {
+    reports.close();
+    host.close();
+  }
+}
+

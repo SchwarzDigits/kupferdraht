@@ -25,7 +25,7 @@ mod home_id;
 mod lock;
 pub(crate) mod page;
 mod records;
-mod schema;
+pub(crate) mod schema;
 mod sqlite;
 
 #[cfg(target_arch = "wasm32")]

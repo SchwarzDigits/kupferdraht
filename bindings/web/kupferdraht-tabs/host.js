@@ -9,7 +9,7 @@
 //   const host = createTabHost({ worker: () => new Worker('./tabs-worker.js', { type: 'module' }) });
 //   host.addEventListener('leader-changed', (e) => render(e.detail));
 //   const accounts = await host.kupferdraht.accounts();
-import { DEFAULT_HEARTBEAT_MS, DEFAULT_LEADER_WAIT_MS, MISSED_HEARTBEATS } from './protocol.js';
+import { DEFAULT_HEARTBEAT_MS, DEFAULT_LEADER_WAIT_MS, KUPFERDRAHT_VERSION, MISSED_HEARTBEATS, versionRelation } from './protocol.js';
 import { KupferdrahtProxy, TabTransport } from './proxy.js';
 
 /**
@@ -24,7 +24,9 @@ export function createTabHost(options = {}) {
 }
 
 /**
- * Events: `leader-changed` `{ leaderTabId, epoch, isSelf }`, `evicted`
+ * Events: `leader-changed` `{ leaderTabId, epoch, isSelf, leaderVersion, relation }`
+ * — `relation` is this tab's release against the leader's (Step 157:
+ * `"newer"`, `"older"`, `"same"`, `"unknown"`), `evicted`
  * `{ epoch, reason }` — `"tab"`: this tab led and another tab took over
  * (the host re-queued a fresh candidate); `"device"` / `"access"` (Step
  * 111c): the leader's instance stopped for every tab — another browser took
@@ -41,6 +43,7 @@ export class TabHost extends EventTarget {
   #state = 'electing';
   #leaderTabId = null;
   #epoch = 0;
+  #leaderVersion = null;
   #heartbeatMs;
   #watchdog = null;
   #unresponsive = false;
@@ -54,7 +57,7 @@ export class TabHost extends EventTarget {
     this.#transport = new TabTransport({
       tabId,
       leaderWaitMs,
-      onLeader: (leaderTabId, epoch, changed) => this.#onLeader(leaderTabId, epoch, changed),
+      onLeader: (leaderTabId, epoch, changed, leaderVersion) => this.#onLeader(leaderTabId, epoch, changed, leaderVersion),
       onEvent: (event, payload) => this.dispatchEvent(new CustomEvent(event, { detail: payload })),
       onEvicted: (notice) => this.#onLeaderEvicted(notice),
     });
@@ -67,6 +70,10 @@ export class TabHost extends EventTarget {
   get state() { return this.#state; }
   get leaderTabId() { return this.#leaderTabId; }
   get epoch() { return this.#epoch; }
+  /** Step 157: the Kupferdraht release of this tab's module. */
+  get version() { return KUPFERDRAHT_VERSION; }
+  /** Step 157: the leader's release; `null` before a leader is known or when it names none. */
+  get leaderVersion() { return this.#leaderVersion; }
 
   /** The ADR-0023 override for a hung leader: this tab's candidate steals the lease now. */
   takeOver() {
@@ -94,7 +101,7 @@ export class TabHost extends EventTarget {
 
   #fromWorker(m) {
     if (!m || typeof m !== 'object' || this.#closed) return;
-    if (m.type === 'leader') this.#onLeader(this.tabId, m.epoch, true);
+    if (m.type === 'leader') this.#onLeader(this.tabId, m.epoch, true, KUPFERDRAHT_VERSION);
     else if (m.type === 'evicted') this.#onEvicted(m);
     else if (m.type === 'error') this.#emit('error', { name: m.name, message: m.message });
   }
@@ -123,17 +130,19 @@ export class TabHost extends EventTarget {
     this.#emit('evicted', { epoch, reason });
   }
 
-  #onLeader(leaderTabId, epoch, changed) {
+  #onLeader(leaderTabId, epoch, changed, leaderVersion) {
     this.#armWatchdog();
     const isSelf = leaderTabId === this.tabId;
     // The worker's own `leader` post and the channel announcement both arrive; one event.
     if (!changed || (leaderTabId === this.#leaderTabId && epoch === this.#epoch)) return;
     this.#leaderTabId = leaderTabId;
     this.#epoch = epoch;
+    this.#leaderVersion = leaderVersion ?? null;
     this.#state = isSelf ? 'leader' : 'thin';
     // The candidate must announce a higher epoch than any leader this tab saw.
     if (!isSelf) this.#worker?.postMessage({ type: 'epoch', epoch });
-    this.#emit('leader-changed', { leaderTabId, epoch, isSelf });
+    const relation = versionRelation(KUPFERDRAHT_VERSION, this.#leaderVersion);
+    this.#emit('leader-changed', { leaderTabId, epoch, isSelf, leaderVersion: this.#leaderVersion, relation });
   }
 
   #armWatchdog() {

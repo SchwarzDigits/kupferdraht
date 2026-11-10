@@ -1,6 +1,16 @@
 # Step 157 — Code and data match: a database newer than the code is refused by name, and tabs of different versions do not mix
 
-**Status: commissioned 2026-11-10** (Volker), from a report of the browser embedder:
+**Status: in progress** on `step/157-code-and-data-match`; phase 1 decisions and red
+tests approved by Volker on 2026-11-10: one BREAKING variant
+`IncompatibleStore { database, reason }` (`"newer"`, `"divergent"`); `global.db`
+gets its schema version here (`PRAGMA user_version` 1, Step 134 keeps the first real
+migration); the tabs module carries `KUPFERDRAHT_VERSION` pinned to `Cargo.toml`,
+while Rust, Kotlin, Swift and the wasm package already read the crate version; both
+sides of the tab protocol refuse another release; `relation` is this tab against the
+leader; `serveTab({ version })` checks the wasm package after `load`, so thin tabs
+still load no wasm; `PROTOCOL_VERSION` stays 1.
+
+**Commissioned 2026-11-10** (Volker), from a report of the browser embedder:
 after an update, a tab still open on the old version stays the leader, the new tab
 sends it requests it does not understand, and the user sees a login that fails or
 features that do nothing, with no hint that a background tab is the cause. Before

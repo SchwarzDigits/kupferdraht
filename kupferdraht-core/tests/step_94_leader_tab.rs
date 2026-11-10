@@ -71,6 +71,16 @@ extern "C" {
     fn rpc_round_trip() -> js_sys::Promise;
     #[wasm_bindgen(js_name = accountRefreshThroughATab)]
     fn account_refresh_through_a_tab() -> js_sys::Promise;
+    #[wasm_bindgen(js_name = theLeaderNamesItsVersion)]
+    fn the_leader_names_its_version_scenario() -> js_sys::Promise;
+    #[wasm_bindgen(js_name = aThinTabDoesNotCallALeaderOfAnotherVersion)]
+    fn a_thin_tab_does_not_call_a_leader_of_another_version_scenario() -> js_sys::Promise;
+    #[wasm_bindgen(js_name = theLeaderRefusesARequestOfAnotherVersion)]
+    fn the_leader_refuses_a_request_of_another_version_scenario() -> js_sys::Promise;
+    #[wasm_bindgen(js_name = aCandidateRefusedByNewerDataStops)]
+    fn a_candidate_refused_by_newer_data_stops_scenario() -> js_sys::Promise;
+    #[wasm_bindgen(js_name = aWorkerOfAnotherWasmVersionDoesNotLead)]
+    fn a_worker_of_another_wasm_version_does_not_lead_scenario() -> js_sys::Promise;
     #[wasm_bindgen(js_name = ownRenameThroughATab)]
     fn own_rename_through_a_tab() -> js_sys::Promise;
     #[wasm_bindgen(js_name = eventFanOut)]
@@ -612,4 +622,104 @@ async fn an_own_rename_through_a_tab_updates_its_getters() {
         }
     );
     assert!(o.resolved_undefined, "the promise resolves with nothing");
+}
+
+// ---- Step 157: tabs of different versions do not mix ----
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VersionOutcome {
+    module_version: Option<String>,
+    own: Option<String>,
+    leader: Option<String>,
+    detail_leader_version: Option<String>,
+    relation: Option<String>,
+}
+
+/// The module carries the crate's version, and the leader announces it.
+#[wasm_bindgen_test]
+async fn the_leader_names_its_version() {
+    let o: VersionOutcome = outcome(the_leader_names_its_version_scenario()).await;
+    let crate_version = Some(env!("CARGO_PKG_VERSION").to_owned());
+    assert_eq!(o.module_version, crate_version);
+    assert_eq!(o.own, crate_version);
+    assert_eq!(o.leader, crate_version);
+    assert_eq!(o.detail_leader_version, crate_version);
+    assert_eq!(o.relation.as_deref(), Some("same"));
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ThinMismatchOutcome {
+    when_leader_older: Option<String>,
+    when_leader_unknown: Option<String>,
+    when_leader_newer: Option<String>,
+    call_name: String,
+    requests_sent: u32,
+}
+
+/// `relation` is this tab against the leader; a call to a leader of another
+/// version fails typed and is never sent.
+#[wasm_bindgen_test]
+async fn a_thin_tab_does_not_call_a_leader_of_another_version() {
+    let o: ThinMismatchOutcome =
+        outcome(a_thin_tab_does_not_call_a_leader_of_another_version_scenario()).await;
+    assert_eq!(o.when_leader_older.as_deref(), Some("newer"));
+    assert_eq!(o.when_leader_unknown.as_deref(), Some("unknown"));
+    assert_eq!(o.when_leader_newer.as_deref(), Some("older"));
+    assert_eq!(o.call_name, "VersionMismatch");
+    assert_eq!(
+        o.requests_sent, 0,
+        "nothing reaches a leader of another version"
+    );
+}
+
+#[derive(serde::Deserialize)]
+struct LeaderRefusalOutcome {
+    other: String,
+    none: String,
+    same: String,
+}
+
+/// A tab of another version, or of a build before the version (none), is
+/// refused; one of the same version is served.
+#[wasm_bindgen_test]
+async fn the_leader_refuses_a_request_of_another_version() {
+    let o: LeaderRefusalOutcome =
+        outcome(the_leader_refuses_a_request_of_another_version_scenario()).await;
+    assert_eq!(o.other, "VersionMismatch");
+    assert_eq!(o.none, "VersionMismatch");
+    assert_eq!(o.same, "ok");
+}
+
+#[derive(serde::Deserialize)]
+struct StoppedCandidateOutcome {
+    opens: u32,
+    errors: Vec<String>,
+}
+
+/// Newer data refuse the open: the candidate says so once and stops trying.
+#[wasm_bindgen_test]
+async fn a_candidate_refused_by_newer_data_stops() {
+    let o: StoppedCandidateOutcome =
+        outcome(a_candidate_refused_by_newer_data_stops_scenario()).await;
+    assert_eq!(o.opens, 1, "no retry against data this build cannot open");
+    assert_eq!(o.errors, vec!["IncompatibleStore".to_owned()]);
+}
+
+#[derive(serde::Deserialize)]
+struct MismatchedWorkerOutcome {
+    opens: u32,
+    errors: Vec<String>,
+    state: String,
+}
+
+/// A wasm package of another version than the module's never opens.
+#[wasm_bindgen_test]
+async fn a_worker_of_another_wasm_version_does_not_lead() {
+    let o: MismatchedWorkerOutcome =
+        outcome(a_worker_of_another_wasm_version_does_not_lead_scenario()).await;
+    assert_eq!(o.opens, 0);
+    assert_eq!(o.errors, vec!["VersionMismatch".to_owned()]);
+    assert_eq!(o.state, "electing");
 }

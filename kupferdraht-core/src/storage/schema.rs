@@ -24,15 +24,40 @@ mod embedded {
 /// Idempotent: calling this a second time on the same database performs
 /// no work and returns `Ok(())`.
 ///
+/// Step 157: a schema this build does not know is refused before anything
+/// is applied — refinery's defaults (`abort_missing`, `abort_divergent`)
+/// check every applied migration against the code first.
+///
 /// # Errors
-/// Returns `KupferdrahtError::Storage` if refinery fails to apply a migration;
-/// no migration is then applied or recorded (the whole run rolls back).
+/// `KupferdrahtError::IncompatibleStore` for a database newer than the code
+/// or divergent from it; `KupferdrahtError::Storage` if refinery fails to
+/// apply a migration — no migration is then applied or recorded (the whole
+/// run rolls back).
 pub(crate) fn run_migrations(conn: &mut Connection) -> Result<(), KupferdrahtError> {
     embedded::migrations::runner()
         .set_grouped(true)
         .run(conn)
         .map(|_report| ())
-        .map_err(|e| KupferdrahtError::Storage(format!("migration failed: {e}")))
+        .map_err(|e| {
+            migration_refusal("kupferdraht.db", &e)
+                .unwrap_or_else(|| KupferdrahtError::Storage(format!("migration failed: {e}")))
+        })
+}
+
+/// Step 157: refinery's refusal of data this build does not fit, by name —
+/// an applied migration the code lacks is a database `"newer"` than the
+/// code, one whose content differs is `"divergent"`. `None` for every other
+/// failure.
+pub(crate) fn migration_refusal(database: &str, e: &refinery::Error) -> Option<KupferdrahtError> {
+    let reason = match e.kind() {
+        refinery::error::Kind::MissingVersion(_) => "newer",
+        refinery::error::Kind::DivergentVersion(..) => "divergent",
+        _ => return None,
+    };
+    Some(KupferdrahtError::IncompatibleStore {
+        database: database.to_owned(),
+        reason: reason.to_owned(),
+    })
 }
 
 #[cfg(test)]
@@ -159,6 +184,92 @@ mod tests {
         assert!(
             !table_exists(&conn, "ok"),
             "the batch rolled back V1's table"
+        );
+    }
+
+    // ---- Step 157: the database and the code agree ----
+
+    /// A connection with every migration of this build applied.
+    fn migrated() -> Connection {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        run_migrations(&mut conn).expect("migrated");
+        conn
+    }
+
+    /// The error a refused open gave, as `(database, reason)`.
+    fn refusal(result: Result<(), KupferdrahtError>) -> (String, String) {
+        match result {
+            Err(KupferdrahtError::IncompatibleStore { database, reason }) => (database, reason),
+            other => panic!("expected IncompatibleStore, got {other:?}"),
+        }
+    }
+
+    /// A migration a newer build applied is unknown here: refused by name.
+    #[test]
+    fn a_database_newer_than_the_code_is_refused_by_name() {
+        let mut conn = migrated();
+        conn.execute(
+            "INSERT INTO refinery_schema_history (version, name, applied_on, checksum) \
+             VALUES (9999, 'from_a_newer_build', '2026-11-10T00:00:00Z', '0')",
+            [],
+        )
+        .expect("a newer build's history row");
+
+        let (database, reason) = refusal(run_migrations(&mut conn));
+
+        assert_eq!(
+            (database.as_str(), reason.as_str()),
+            ("kupferdraht.db", "newer")
+        );
+    }
+
+    /// An applied migration whose content differs from this build's: refused.
+    #[test]
+    fn a_database_whose_migration_differs_is_refused_by_name() {
+        let mut conn = migrated();
+        conn.execute(
+            "UPDATE refinery_schema_history SET checksum = '1' \
+             WHERE version = (SELECT MIN(version) FROM refinery_schema_history)",
+            [],
+        )
+        .expect("a changed checksum");
+
+        let (database, reason) = refusal(run_migrations(&mut conn));
+
+        assert_eq!(
+            (database.as_str(), reason.as_str()),
+            ("kupferdraht.db", "divergent")
+        );
+    }
+
+    /// The one exception: an older schema is migrated, and then matches —
+    /// a second open finds nothing to do.
+    #[test]
+    fn an_older_database_is_migrated_and_then_matches() {
+        let mut versions: Vec<i32> = embedded::migrations::runner()
+            .get_migrations()
+            .iter()
+            .map(Migration::version)
+            .collect();
+        versions.sort_unstable();
+        let before_last = versions[versions.len() - 2];
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        embedded::migrations::runner()
+            .set_grouped(true)
+            .set_target(refinery::Target::Version(before_last))
+            .run(&mut conn)
+            .expect("an older build's schema");
+        assert_eq!(
+            history_row_count(&conn),
+            i64::try_from(versions.len() - 1).expect("count")
+        );
+
+        run_migrations(&mut conn).expect("migrated forward");
+        run_migrations(&mut conn).expect("equal: nothing to do");
+
+        assert_eq!(
+            history_row_count(&conn),
+            i64::try_from(versions.len()).expect("count")
         );
     }
 }

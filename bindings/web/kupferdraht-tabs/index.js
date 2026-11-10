@@ -12,6 +12,6 @@ export { serveTab } from './worker.js';
 export { KupferdrahtProxy, PendingLoginProxy, ClientProxy, RecoveryProxy, SyncHandleProxy } from './proxy.js';
 export { createLeaderDispatcher } from './leader.js';
 export {
-  LeaderChangedError, NoLeaderError, METHODS, GETTERS, LEADER_EVENTS, PROTOCOL_VERSION,
-  REQUEST_CHANNEL, LEASE_NAME, responseChannelName,
+  LeaderChangedError, NoLeaderError, VersionMismatchError, METHODS, GETTERS, LEADER_EVENTS, PROTOCOL_VERSION,
+  KUPFERDRAHT_VERSION, REQUEST_CHANNEL, LEASE_NAME, responseChannelName, versionRelation,
 } from './protocol.js';

@@ -45,6 +45,12 @@ export class StubKupferdraht {
       throw new Error('stub: the leader bootstrap must open with takeOver (the lease hand-off)');
     }
     report({ call: 'open', options: { permitHttp: options.permitHttp, takeOver: options.takeOver, storage: options.storage } });
+    // Step 157: a scenario asks the open to fail as Kupferdraht's would (`err.name`).
+    if (options.storage && options.storage.stubFail) {
+      const err = new Error(`stub: ${options.storage.stubFail}`);
+      err.name = options.storage.stubFail;
+      throw err;
+    }
     let grant;
     const granted = new Promise((resolve) => { grant = resolve; });
     let stopped = false;
