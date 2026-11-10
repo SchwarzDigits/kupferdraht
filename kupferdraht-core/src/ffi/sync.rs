@@ -11,7 +11,7 @@
 //! is exposed as `Client::start_sync` returning a `TaskHandle` (abort on
 //! `cancel()` / drop), rather than the non-FFI-able core `sync` /
 //! `sync_with_callback` / `sync_stream`. See
-//! `docs/plan/20c-full-ffi-surface.md`.
+//! `docs/plan/archive/20c-full-ffi-surface.md`.
 //!
 //! **All foreign callbacks here fire synchronously on the tokio sync
 //! task.** A callback that blocks (disk, network, a held lock) stalls

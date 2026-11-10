@@ -150,8 +150,9 @@ place makes Kupferdraht's part a check and a status.
   (the tabs broadcast; no mutation queued offline).
 - Related: ADR-0034 (a storage error never heals a room), ADR-0036 (storage access with exchanged tokens), ADR-0022
   (browser persistence).
-- `docs/plan/113-storage-self-healing.md`; `open.md` §72.
+- `docs/plan/archive/113-storage-self-healing.md`; `open.md` §72.
 
 ## Revision History
 
 - 2026-09-30: Created (Accepted — Markus)
+- 2026-11-10: The link to the plan `113-storage-self-healing` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

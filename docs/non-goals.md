@@ -53,8 +53,8 @@ limitations".
 - **NG-20** No history for a new device — a systemic MLS boundary (no
   server archive): a device that joins a group sees what arrives after
   its join. The task join snapshot (ADR-0014 decision 6) is the
-  task-side answer; message backup is Step 12 (no endpoint in Wire API
-  v14). Consumers should state the limit to their users.
+  task-side answer; a key backup is a non-goal too (NG-30). Consumers
+  should state the limit to their users.
 - **NG-21** No presence / "online" status — Wire barely has it, and
   privacy argues against it.
 - **NG-22** One account per browser in the server mode — the browser
@@ -137,3 +137,17 @@ limitations".
   reaches only a team's admins and is not stored, and a timer would be a
   request the embedder did not ask for. The embedder knows its own moments,
   such as the start and window focus.
+- **NG-30** No key backup (mnemonic). Step 12 is dropped (Volker,
+  2026-11-10): Wire's API v14 has no endpoint for it (`docs/observations.md`
+  §62), and the plan stood pending from April without a way to build it.
+  Losing a native device means a new MLS identity without history
+  (THREAT_MODEL N6); the browser brings its account back with recovery data
+  (ADR-0035). A key backup returns only as a new step with its own design.
+- **NG-31** No published native packages and no support tiers. The Kotlin
+  (JVM, Android) and Swift (iOS, macOS) bindings are built by the scripts in
+  `bindings/`, and the FFI layer keeps parity with the Rust API, but Kupferdraht
+  publishes no Maven or SwiftPM release, builds no Android ABI but arm64-v8a, and
+  states no support tiers or ABI guarantee (the rest of Step 20, dropped by
+  Volker on 2026-11-10). The KMP consumer Step 20 was planned for wraps Kalium
+  (NG-27), and no native consumer is in reach. A native consumer brings it back
+  as a new step, with the support-tier ADR Step 20e named as its precondition.

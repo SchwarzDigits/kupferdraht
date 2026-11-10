@@ -17,7 +17,7 @@
 //! account entry point is the [`Kupferdraht`](manager) manager (`open` →
 //! `login` / `resume` / `register`).
 //!
-//! See `docs/plan/20c-full-ffi-surface.md`.
+//! See `docs/plan/archive/20c-full-ffi-surface.md`.
 
 use std::sync::Arc;
 

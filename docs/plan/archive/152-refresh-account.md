@@ -1,7 +1,18 @@
 # Step 152 — `refresh_account`: the own account and team, read on request
 
-**Status: in progress** on `step/152-refresh-account`; red tests approved by Volker
-on 2026-11-09, with three deviations:
+**Status: MERGED 2026-11-09** — `033729a` on `step/152-refresh-account`, merged to
+`main` as PR #67 (`a2ff73d`); gate green on 1.98 (fmt, 0 build warnings, clippy, 1619
+tests, deny; wasm32 check, clippy `--lib` and CI's wasm clippy line); the browser suite
+green locally (18 suites, 82 tests, headless Firefox) and in CI; the Kotlin bindings
+built and tested. Smoked 2026-11-09 on the wire-server-rs stack with the CLI built from
+this tree: `kupferdraht-smoke.sh --throwaway` 24/24; two devices of one account, the
+second changing name and handle, the first showing them only after `account-refresh`;
+a plain team member reading a team renamed in galley's table (wire-server-rs has no
+`PUT /teams/{tid}`), kept by a later command. Scope: `Client::refresh_account` (FFI,
+browser `refreshAccount()`, CLI `account-refresh`) reads `GET /self` and
+`GET /teams/{tid}` into the row and the live account, all or nothing; the own profile
+calls update the account; `Account::avatar_keys`, `login_avatar_keys` deprecated. Red
+tests approved by Volker on 2026-11-09, with three deviations:
 
 1. **`login_avatar_keys` stays, deprecated, beside the new `avatar_keys`**, so nothing
    breaks and Steps 152 and 147 can ship as 0.5.1 right after 0.5.0.

@@ -3464,7 +3464,7 @@ gets a full plan doc analogous to Step 16's.
   table 16a–d, public API code block, Wire-API details, TDD
   starter tests, CLI commands, Live-smoke posture section,
   Open Questions, Smoke test, Threat-model note.
-- `docs/plan/17-saml-sso.md` — placeholder plan: the three
+- `docs/plan/archive/17-saml-sso.md` — placeholder plan: the three
   options α / β / γ as decision framework, what we know so far,
   unblocking questions, cross-references.
 - `PLAN.md` §Status overview — new rows for Step 16 (pending)

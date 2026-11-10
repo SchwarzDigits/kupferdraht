@@ -5,7 +5,7 @@
 //! Step 14e — mutation methods return `Arc<Room>`.
 //!
 //! TDD red-phase. The tests below pin the public-API contract from
-//! `docs/plan/14-matrix-sdk-parity.md` §"TDD starter tests — 14e":
+//! `docs/plan/archive/14-matrix-sdk-parity.md` §"TDD starter tests — 14e":
 //!
 //! * `Client::invite_members`, `Client::kick_members`,
 //!   `Client::set_room_access`, `Client::rename_room` change from

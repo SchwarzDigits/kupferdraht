@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 68 — create_dm establishes the MLS 1:1 (TDD red phase).
 //!
-//! Pins `docs/plan/68-dm-establishment.md`: on an epoch-0 one2one the
+//! Pins `docs/plan/archive/68-dm-establishment.md`: on an epoch-0 one2one the
 //! initiator claims the peer's key packages, commits the peer in, and
 //! uploads the bundle (only then does current wire-server list the
 //! conversation — observations §66); on epoch > 0 it joins via

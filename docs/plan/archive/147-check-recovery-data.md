@@ -1,12 +1,19 @@
 # Step 147 — Check recovery data without a PIN
 
-**Status: in progress** on `step/147-check-recovery-data`; red tests approved by
-Volker on 2026-11-10, with these deviations: the browser types name the verdict
-`RecoveryDataVerdict`; `recover` already reported a file with several faults by
-its local one, so what changes is only that no request precedes the local
-verdicts; the recovery tests' token exchange, slot query and PIN service share
-one mock server, since parallel tests that each took three servers one by one
-emptied httpmock's pool of 25 and waited for each other for good.
+**Status: MERGED 2026-11-10** — `63a273b` on `step/147-check-recovery-data`, merged to
+`main` as PR #68 (`876d6a2`); gate green on 1.98 (fmt, 0 build warnings, clippy, 1628
+tests, deny; wasm32 check, clippy `--lib` and CI's wasm clippy line); the browser suite
+green locally (18 suites, 82 tests, headless Firefox) and in CI. No smoke: recovery is
+browser-only and needs a PIN service and a storage server, which the local stack lacks.
+Scope: `PendingLogin.checkRecoveryData(data)` gives the verdict on recovery data before
+any PIN — `"ok"` or `InvalidRecoveryData`'s `reason` — with one check shared with
+`recover` (`check_before_pin`): the bytes alone with no request, then the storage slot;
+never the PIN service. Red tests approved by Volker on 2026-11-10, with these
+deviations: the browser types name the verdict `RecoveryDataVerdict`; `recover` already
+reported a file with several faults by its local one, so what changes is only that no
+request precedes the local verdicts; the recovery tests' token exchange, slot query and
+PIN service share one mock server, since parallel tests that each took three servers one
+by one emptied httpmock's pool of 25 and waited for each other for good.
 
 **Commissioned 2026-11-05** (from the browser embedder's
 requirements for a work-queue client, R9, measured there against

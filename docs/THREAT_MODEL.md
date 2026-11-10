@@ -1,6 +1,6 @@
 # Kupferdraht Threat Model
 
-**Version:** 0.13 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-09 **Status:** working draft, for review by Markus Troßbach
+**Version:** 0.14 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-10 **Status:** working draft, for review by Markus Troßbach
 
 ------
 
@@ -80,7 +80,7 @@ Under the assumptions of the following section, Kupferdraht guarantees:
 
 **G6 — The plaintext lifecycle stays in the Rust heap.** Plaintext messages come into being, are processed and encrypted inside a single Rust runtime (their buffers are not zeroized today, G4). There is no internal FFI boundary plaintext would have to cross. (The consumer boundary lies outside the application logic; as soon as a decrypted message is returned to the consumer, A6 applies.)
 
-**G7 — Recovery is named honestly.** Today Kupferdraht provides **no** recovery path for identity loss: the mnemonic backup (Step 12) waits for an endpoint in Wire's API (observations §62), the server-side Dehydrated Device was dropped (2026-09-25). Until a replacement is decided, N6 applies without restriction: losing the device means a new MLS identity without history (Wire's multi-device property). Once the replacement is settled this goal is reformulated, not silently set back to "two paths".
+**G7 — Recovery is named honestly.** Natively Kupferdraht provides **no** recovery path for identity loss: the mnemonic backup (Step 12) was dropped (2026-11-10, non-goals NG-30: Wire's API has no endpoint for it, observations §62), the server-side Dehydrated Device was dropped (2026-09-25). There N6 applies without restriction: losing the device means a new MLS identity without history (Wire's multi-device property). The browser in server mode has one path (ADR-0035, Step 112): the account's seed, sealed with a PIN into recovery data the embedder keeps, brings back the keys of the account's databases on the storage server — the recorded device while the backend still has it, else a new one that replaces it with the superseded MLS state and history wiped. Every PIN guess needs the PIN service's evaluation, whose attempts are limited, and Argon2id; a leaked service key still leaves Argon2id per guess. Databases nobody used for 180 days are deleted by the storage server (ADR-0035 d.11), and the browser's local mode has no recovery data. A path not named here does not exist; a new one reformulates this goal.
 
 ------
 
@@ -178,32 +178,7 @@ One mode is implemented and it has no name in the API: keys protected by the pla
 
 The type-level contract against API misuse that Kalium structurally lacks lives in separate types for easily confused states, such as `Submitted` vs. `Acknowledged` for MLS delivery and user acknowledgement (G5). There is **no** `LockedSession`/`UnlockedSession` split: the store is opened ready (whole-DB-keyed), a decrypt needs no separate unlock step. An optional passphrase mode is a property of a passphrase-backed keystore, not a client state.
 
-A backup path (Step 12) docks on the keystore, not on a mode type; the sketched modes above add no type to the API before one of them is built.
-
-------
-
-## Key backup (Step 12, architectural preview — blocked)
-
-A mnemonic-based key backup is the intended recovery path. Its implementation is Step 12 and blocked as long as Wire v14 offers no backup endpoints (observations §62); the fundamental decisions below continue to apply so that the API shape stays compatible.
-
-**A separate backup passphrase.** Not the account passphrase: changing the account passphrase must not render the backup worthless. BIP39-style mnemonic (12 words, 128 bits of entropy) plus an encrypted binary container.
-
-**What is restored:** identity keys and the current KeyPackage keys. The user can sign in as the same user and is recognised by others. Group state is *not* restored; groups are rejoined via external commit.
-
-**No way around the passphrase.** No server backup, no social recovery, no admin override. Any way around it would be a back door.
-
-Rough API shape:
-
-```rust
-pub struct BackupPassphrase([String; 12]);
-
-impl Client {
-    pub fn export_key_backup(&self, p: &BackupPassphrase) -> Result<BackupBlob, Error>;
-}
-
-pub fn restore_key_backup(blob: &BackupBlob, p: &BackupPassphrase)
-    -> Result<Arc<Client>, Error>;
-```
+A backup path, should one be decided, docks on the keystore, not on a mode type; the sketched modes above add no type to the API before one of them is built.
 
 ------
 
@@ -264,6 +239,7 @@ Not blocking for the current implementation phase. To be picked up before the af
 | 0.11    | 2026-11-09 | Step 144: L7 names the image decoders in Kupferdraht's process, what writing every avatar anew removes, and what remains. |
 | 0.12    | 2026-11-09 | Step 145: the Trust Model names room events in the timeline as the backend's word. |
 | 0.13    | 2026-11-09 | Step 151: the Trust Model names the time a message shows as the backend's word. |
+| 0.14    | 2026-11-10 | Step 12 dropped (NG-30): G7 names it so, and the key-backup preview is removed. G7 names the browser's recovery data (ADR-0035, Step 112), which it had not since that step. |
 
 ------
 

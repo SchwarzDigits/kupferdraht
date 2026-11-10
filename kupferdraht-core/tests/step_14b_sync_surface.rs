@@ -5,7 +5,7 @@
 //! Step 14b — sync-surface refactor + `sync_members` rename.
 //!
 //! TDD red-phase. Eight integration tests pin the public-API
-//! contract from `docs/plan/14-matrix-sdk-parity.md` §"TDD starter
+//! contract from `docs/plan/archive/14-matrix-sdk-parity.md` §"TDD starter
 //! tests — 14b" and CHANGELOG.md §40, §41:
 //!
 //! * `sync_once(SyncSettings)` composes a conversations-metadata

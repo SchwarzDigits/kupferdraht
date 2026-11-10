@@ -135,9 +135,10 @@ then the cursor. Other writers of `kupferdraht.db` wait for the page.
 
 - Supersedes ADR-0032 item 1 (partial).
 - Builds on ADR-0031 (one cursor-advancing dispatch per account), ADR-0032 items 2–5, ADR-0035 (remote storage).
-- `docs/plan/108-remote-vfs-spike.md` (measurements).
+- `docs/plan/archive/108-remote-vfs-spike.md` (measurements).
 
 ## Revision History
 
 - 2026-09-29: Created (Accepted — Markus): per page for both databases, with a write gate for `kupferdraht.db` and
   notifications after the commit
+- 2026-11-10: The link to the plan `108-remote-vfs-spike` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

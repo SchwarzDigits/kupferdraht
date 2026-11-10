@@ -12,7 +12,7 @@ down. Retrospective: `docs/LEARNINGS.md` §5.47. Archived with this header.
 
 | # | Point | Decision |
 |---|---|---|
-| Q1 | The in-flight set lives on the `Client`, not the process: two Clients on one store read each other's live `Sending` rows as `Failed`; a resend then uploads again (receivers dedupe on the id). | Accept and document (`library.md` "Send lifecycle"); correct D2's "this process" to "this `Client`" in `docs/plan/97-durable-send-and-receive.md`. |
+| Q1 | The in-flight set lives on the `Client`, not the process: two Clients on one store read each other's live `Sending` rows as `Failed`; a resend then uploads again (receivers dedupe on the id). | Accept and document (`library.md` "Send lifecycle"); correct D2's "this process" to "this `Client`" in `docs/plan/archive/97-durable-send-and-receive.md`. |
 | Q2 | A cancelled send emits no settling diff (`Drop` is sync). | Document as the consumer contract: after a cancel, re-read (`messages`, `failed_sends`). |
 | Q3 | `finish_send` ignores `Ok(false)` from `mark_send_outcome`. | `warn!` when the row did not flip and is not `received`. |
 | Q4 | Orphan blobs (cancelled blob upload; a deleted `Failed` file row). | A line in Step 84's scope (`open.md`). |

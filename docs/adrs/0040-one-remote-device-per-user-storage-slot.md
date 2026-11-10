@@ -124,9 +124,10 @@ registered, then `set_slot_label(client id)`.
   list; recovery data naming only the account).
 - Builds on ADR-0036 (storage tokens), ADR-0038 (the VFS's failures),
   Step 119 (the takeover event).
-- `docs/plan/120-device-slot.md`.
+- `docs/plan/archive/120-device-slot.md`.
 
 ## Revision History
 
 - 2026-10-02: Created and accepted (Markus — design approved before the
   implementation, Step 120).
+- 2026-11-10: The link to the plan `120-device-slot` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

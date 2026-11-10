@@ -1,6 +1,14 @@
 # Step 20 — UniFFI bindings + packaging (Kotlin/JVM, Android, Swift iOS/mac)
 
-> **Status:** planned (2026-06-10).
+> **Status:** CLOSED 2026-11-10 (Volker). Built: 20a–20c (`f88dd06`, #6 in the private
+> history: proc-macros, the full FFI surface, Swift XCFramework + SwiftPM, the Kotlin/JVM
+> JAR with round-trip tests) and 20d in part (the Android AAR for arm64-v8a, macOS through
+> the XCFramework). Dropped (non-goals NG-31): the other Android ABIs, an on-device test,
+> and 20e's publishing, CI matrix, support tiers and ABI guard. The KMP consumer this step
+> was planned for (Natrium) wraps Kalium (NG-27), and no native consumer is in reach. The
+> binding tests had rotted unseen (observations §93; both fixed in Step 151, the Swift one
+> verified on 2026-11-10 with Xcode 27.2: `swift test` 5 of 5 on the macOS slice), so
+> building and testing the Kotlin/JVM binding in CI is Step 153. Planned 2026-06-10.
 > **Sub-steps:** 20a (proc-macro scaffolding + thin vertical slice), 20b (package
 > the slice: JVM JAR + iOS XCFramework/SwiftPM), 20c (full API surface), 20d
 > (Android via cargo-ndk + macOS), 20e (CI + distribution + versioning).

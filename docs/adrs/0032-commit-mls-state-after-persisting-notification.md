@@ -135,7 +135,7 @@ advance the cursor.
   time; the window runs inside the drain lock.
 - Related: ADR-0024 (`busy_timeout` makes another process's MLS
   operation wait), ADR-0030 and ADR-0017 (what advances the cursor).
-- Step 97c (`docs/plan/97-durable-send-and-receive.md`): one transaction
+- Step 97c (`docs/plan/archive/97-durable-send-and-receive.md`): one transaction
   per MLS operation, joined by nested operations.
 - open.md §71 B9.
 
@@ -146,3 +146,4 @@ advance the cursor.
 - 2026-09-29: Decision item 1 (one window per notification, not per page)
   superseded by ADR-0037 "Commit a drained page, not each notification";
   the other decisions stand unchanged and now apply per page
+- 2026-11-10: The link to the plan `97-durable-send-and-receive` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

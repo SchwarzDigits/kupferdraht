@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 66 — join consistency (TDD red phase).
 //!
-//! Pins `docs/plan/66-join-consistency.md` (review findings S2, S16 —
+//! Pins `docs/plan/archive/66-join-consistency.md` (review findings S2, S16 —
 //! `open.md` §66):
 //!
 //! * a failed commit-bundle upload discards the just-merged local

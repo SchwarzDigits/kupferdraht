@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 62b — `/v14/events` push loop (TDD red phase).
 //!
-//! Pins the public contract from `docs/plan/62-events-websocket.md`
+//! Pins the public contract from `docs/plan/archive/62-events-websocket.md`
 //! §"Sub-step 62b" against an in-process WebSocket server (frames
 //! verbatim from `docs/backend-spec.md` §11.2/§11.3) plus `httpmock`
 //! for the HTTP side:

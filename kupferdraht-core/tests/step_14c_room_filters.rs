@@ -5,7 +5,7 @@
 //! Step 14c — filtered room-list accessors.
 //!
 //! TDD red-phase. Three integration tests pin the public-API
-//! contract from `docs/plan/14-matrix-sdk-parity.md` §"TDD starter
+//! contract from `docs/plan/archive/14-matrix-sdk-parity.md` §"TDD starter
 //! tests — 14c":
 //!
 //! * `Client::joined_rooms()` returns the rooms the user is a

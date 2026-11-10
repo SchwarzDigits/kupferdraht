@@ -5,7 +5,7 @@
 //! Step 14d — `Room::access()` returns `RoomAccess`.
 //!
 //! TDD red-phase. The tests below pin the public-API contract from
-//! `docs/plan/14-matrix-sdk-parity.md` §"TDD starter tests — 14d":
+//! `docs/plan/archive/14-matrix-sdk-parity.md` §"TDD starter tests — 14d":
 //!
 //! * `Room::access() async -> Result<RoomAccess, KupferdrahtError>` — the
 //!   first method on `Room` that issues a Wire HTTP call. Replaces

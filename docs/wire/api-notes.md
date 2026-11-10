@@ -335,7 +335,7 @@ Returns the team's **default** SSO code — used for email-domain discovery
 **Open questions (live-probe):** endpoint versioning; whether the `zuid` is
 delivered as a `?cookie=…` query on `success_redirect` or a `Set-Cookie` the app
 reads; whether `POST /access` with no `client_id` mints the first token from a
-bare `zuid`. See `docs/plan/17-saml-sso.md`.
+bare `zuid`. See `docs/plan/archive/17-saml-sso.md`.
 
 ---
 

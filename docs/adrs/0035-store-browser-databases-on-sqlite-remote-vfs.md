@@ -378,7 +378,7 @@ login opens the account's databases, where those databases live, and the recover
 - Builds on ADR-0021, ADR-0022 item 6 (the keystore holds the database keys), ADR-0023, ADR-0025, ADR-0026.
 - Constrained by ADR-0029.
 - Related: ADR-0036 (storage access gate), ADR-0037 (commit a drained page).
-- `docs/plan/108-remote-vfs-spike.md`.
+- `docs/plan/archive/108-remote-vfs-spike.md`.
 
 ## Revision History
 
@@ -415,3 +415,4 @@ login opens the account's databases, where those databases live, and the recover
   it was decided with.
 - 2026-11-10: Implementation notes extended (Step 147): `checkRecoveryData`, the verdict before any PIN, and that
   `recover` makes no request before the checks the bytes alone decide.
+- 2026-11-10: The link to the plan `108-remote-vfs-spike` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

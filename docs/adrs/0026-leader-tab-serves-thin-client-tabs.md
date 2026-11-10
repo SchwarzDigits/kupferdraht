@@ -442,7 +442,7 @@ For Step 94 (`docs/plan/archive/94-leader-tab-thin-clients.md`, merged 2026-09-2
   pointing here, `README.md` Platforms bullet, `docs/ARCHITECTURE.md`
   browser data flow, `rules/0026`, CHANGELOG `[Unreleased]`.
 
-For Step 130a (`docs/plan/130-wasm-idempotency-keys.md`):
+For Step 130a (`docs/plan/archive/130-wasm-idempotency-keys.md`):
 
 - Core: `Timeline::send_keyed(idempotency_key, OutgoingContent)`
   (`timeline/keyed.rs`), the V32 table `send_keys`, keys swept after 28
@@ -507,3 +507,4 @@ For Step 130a (`docs/plan/130-wasm-idempotency-keys.md`):
 - 2026-11-03: Step 138 added a seventh optional `startSync` callback, `onRoomsChanged` (a room's read state after a local `markAsRead` / `markAsUnread` — a change the backend never hears of, so no pass announces it); the leader broadcasts it as `rooms` and the proxy delivers it like `sync`. Step 113's `onStorage` (broadcast as `storage`) had taken the same path on 2026-09-30. Same mechanism, current truth — not a new decision.
 - 2026-11-04: Decision 3, decision 4, the Consequences and the Implementation Notes amended (Step 130a; Volker Zöpfel, with both browser embedders): L3-C — idempotency keys, which the 2026-09-25 text deferred to a later step — is taken on top of L3-A. A new failover class `keyed` re-issues the six sends with their key; ten mutations whose repeat converges move to `idempotent`; every other mutation keeps rejecting `LeaderChanged`, `invite` / `kick` / `leave` / `deleteRoom` / `revokeJoinLink` because a repeat after a call that landed rejects, `setHandle` until Wire's answer to the own handle set again is observed. The table is published in the tabs README. Not a supersession: L3-A's rule — nothing reaches the backend twice, a call whose repeat is not safe rejects typed — stands; the keys are the follow-up the original text named.
 - 2026-11-06: Step 130b brought the Step-79 resend path to the browser surface — `failedSends`, `resend`, `resendFailed` — and classed all three `idempotent`: `failedSends` is a read; `resend` re-drives under the same message id, and a repeat after a call that landed answers the row's handle, because the core's `resend` now answers a row this device already sent instead of rejecting it (the same step); `resendFailed` converges on the rows the earlier pass left `Failed`. Decision 3's rule is unchanged, and `rules/0026` names no `idempotent` call, so it stays as it is.
+- 2026-11-10: The link to the plan `130-wasm-idempotency-keys` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

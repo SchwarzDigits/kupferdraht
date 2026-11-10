@@ -7,7 +7,7 @@
 //! validates the SSO code (`HEAD`); the SAML round-trip and
 //! `POST /sso/finalize-login` happen on Wire's server. The consumer opens
 //! the initiate URL in a browser and later hands the returned `zuid` cookie
-//! to the finalize path (17b). See `docs/plan/17-saml-sso.md`.
+//! to the finalize path (17b). See `docs/plan/archive/17-saml-sso.md`.
 //!
 //! **Open question (live-probe):** `/sso/*` is assumed **unversioned** here
 //! (spar service), not `/v14/sso/*` — see plan-doc Open Question #1.

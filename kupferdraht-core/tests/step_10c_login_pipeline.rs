@@ -11,7 +11,7 @@
 //! into the V18 tables. The error-posture is **warn-and-continue**
 //! per ADR-0012 §Login pipeline integration: a 5xx on either surface
 //! must not block login. The four tests below cover the matrix from
-//! `docs/plan/10-server-feature-configs.md` §10c TDD checklist plus
+//! `docs/plan/archive/10-server-feature-configs.md` §10c TDD checklist plus
 //! the per-key partial-failure case the inner loop is built for.
 
 use std::sync::Arc;

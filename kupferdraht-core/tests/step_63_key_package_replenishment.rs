@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 63 — key-package pool replenishment (TDD red phase).
 //!
-//! Pins `docs/plan/63-key-package-replenishment.md` §TDD list: the
+//! Pins `docs/plan/archive/63-key-package-replenishment.md` §TDD list: the
 //! pool self-heals via `GET …/key-packages/self/{client}/count` +
 //! the existing upload path. Thresholds: below `MIN` (50 = half of
 //! `INITIAL_KEY_PACKAGE_COUNT`) the pool is topped back up to 100;

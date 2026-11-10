@@ -250,7 +250,7 @@ No file: hash the canonicalised `base_dir`.
 
 ## Implementation Notes
 
-Step 93 (`docs/plan/93-home-scoped-keystore-ids.md`):
+Step 93 (`docs/plan/archive/93-home-scoped-keystore-ids.md`):
 
 - `storage/home.rs`: `KupferdrahtHome::open(base_dir)` — create the base dir
   (native), read `home.id`, else take the home lock, re-read, generate,
@@ -328,3 +328,4 @@ Step 93 (`docs/plan/93-home-scoped-keystore-ids.md`):
   to `kupferdraht.`, so the dev `FileKeyStore`'s 255-byte file-name
   budget caps the account domain at 153 bytes, not 158. The body above
   keeps the figure it was decided with.
+- 2026-11-10: The link to the plan `93-home-scoped-keystore-ids` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

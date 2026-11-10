@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 86 — self conversation: establish, join, send (TDD red phase).
 //!
-//! Pins `docs/plan/86-self-conversation.md` after the live probe of
+//! Pins `docs/plan/archive/86-self-conversation.md` after the live probe of
 //! 2026-09-24 against the own instance: Wire lists the user's MLS
 //! self conversation (`type: 1`, `epoch: 0`, a `group_id`) in the
 //! rooms snapshot but serves **no `GroupInfo`** for it until a member
