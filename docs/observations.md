@@ -2193,3 +2193,55 @@ indexed as reading 25 in `docs/wire/kalium-readings.md`.
 
 Kupferdraht's answer is Step 152: the embedder reads on request, and neither event
 is dispatched. A rename on a Haskell backend is that step's first live check.
+
+## 100) e2ei is off on the team's dev backend and needs an ACME server and an IdP; its grace period is the clients' (2026-11-10)
+
+Measured live on the team's dev backend (wire-server, API v14) with a plain member's
+login, no device registered, and read in its Swagger (`MlsE2EIdConfig`).
+
+- **Off and not set up.** `GET /v14/feature-configs` and
+  `GET /v14/teams/{tid}/features/mlsE2EId` both answer `status: disabled`,
+  `lockStatus: unlocked`, config `{verificationExpiration: 86400, useProxyOnMobile:
+  false}`: no `acmeDiscoveryUrl`, no `crlProxy`. `mls` is enabled and locked,
+  `mlsMigration` enabled. A team admin may switch e2ei on; it then needs an ACME server
+  (`acmeDiscoveryUrl`, "`https://acme.{backendDomain}/acme/{provisionerName}/discovery`")
+  and the identity provider a client logs in to when it first fetches or renews a
+  certificate.
+- **The grace period is the clients'.** `verificationExpiration` (seconds, a day by
+  default) "is enforced separately by each client": after it, Wire's own apps refuse
+  use until the user has logged in to refresh the certificate. The Swagger names no
+  backend check that refuses a device without a certificate, so a client with Basic
+  credentials, like Kupferdraht, is not locked out by the backend. Not measured with
+  e2ei on.
+- **The backend's part of enrollment** is two endpoints: `GET|HEAD
+  /clients/{client}/nonce` (a nonce for the certificate request) and `POST
+  /clients/{cid}/access-token` (a DPoP access token). Trust anchors and revocation
+  come from the ACME server and the `crlProxy`, not from the backend.
+
+Kupferdraht drops a message signed by an X.509 leaf since Step 135 (NG-7). With e2ei
+off nothing is dropped; a team that switches it on makes Kupferdraht miss its enrolled
+colleagues' messages until Kupferdraht can check such a certificate.
+
+## 101) On the dev Mac the full test run is mostly waiting for the first-launch scan of each new test binary (2026-11-10)
+
+Measured on the developer's Mac (macOS 26, arm64) in the local gate's logs and with a
+probe. Not a Wire or MLS matter; it decides where the full suite runs (CLAUDE.md,
+Step Procedure phase 8).
+
+- **Where the time goes.** In two gate runs of Steps 152 and 147 the test step took
+  18 min 12 s and 19 min 15 s: the `test` build 1 min 59 s and 2 min 48 s, the 159–160
+  test binaries' own run times about 78 s in sum. The rest, about 14 minutes or 5–6 s
+  per binary, is spent before each binary runs. CI's `fmt + clippy + test` job takes
+  6–8 minutes on a hosted runner.
+- **The first launch waits.** A freshly linked hello-world took 11.75 s on its first
+  launch and 0.01 s on its second, while `syspolicyd` ran at about 33 % CPU; on
+  2026-11-07 the same probe took 74 s. cmux, the terminal, is allowed under
+  Privacy & Security → Developer Tools, which exempts the programs it starts from
+  this assessment; the probe still waited. It ran in a session whose process chain
+  passes through a background daemon between cmux and the shell, which may keep the
+  exemption from applying; a probe started directly in a cmux tab would tell.
+- **Debug info makes each binary large.** The library's test binary is 70 MB; CI
+  builds without debug info (`CARGO_PROFILE_DEV_DEBUG: 0`).
+
+Each gate run relinks every test binary, so each pays the wait once per run.
+
