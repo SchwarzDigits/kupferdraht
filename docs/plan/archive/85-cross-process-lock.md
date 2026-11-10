@@ -69,7 +69,7 @@ multi-process homes are supported at all).
   home-scoped keystore ids — is an ADR-level change of the keystore
   contract and Volker's call, not this step's (see the ADR draft).
   **Decided 2026-09-25: commissioned as Step 93**
-  (`docs/plan/93-home-scoped-keystore-ids.md`).
+  (`docs/plan/archive/93-home-scoped-keystore-ids.md`).
 - **D5 — `busy_timeout` 5000 ms on all three native open paths**
   (`kupferdraht.db`, `global.db`, `mls.db`); `synchronous` stays FULL and
   becomes explicit: a rotated `zuid` or an MLS epoch advance that

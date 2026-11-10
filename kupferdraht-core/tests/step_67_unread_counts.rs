@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 67 — unread counts per room (TDD red phase).
 //!
-//! Pins `docs/plan/67-unread-counts.md`: a device-local read marker
+//! Pins `docs/plan/archive/67-unread-counts.md`: a device-local read marker
 //! (`room_read_markers`), inbound-only counting with the honest
 //! no-marker default (everything inbound counts), a marker that
 //! advances even when `ReceiptMode::Off` suppresses the outbound

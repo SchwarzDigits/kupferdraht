@@ -142,8 +142,9 @@ choose.
 - Constrained by ADR-0021 — the key opens the database directly (no
   KEK), so a lost key cannot be recovered and must never be replaced.
 - Related: ADR-0022 / ADR-0023 (browser storage and keystore).
-- `docs/plan/96-no-silent-key-replacement.md`; open.md §71 B5.
+- `docs/plan/archive/96-no-silent-key-replacement.md`; open.md §71 B5.
 
 ## Revision History
 
 - 2026-09-27: Created (Accepted — Markus, decisions D1–D4 of Step 96)
+- 2026-11-10: The link to the plan `96-no-silent-key-replacement` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

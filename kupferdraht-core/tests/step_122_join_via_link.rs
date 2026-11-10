@@ -10,7 +10,7 @@
 //! MLS join; and the caller had to pass the conversation's domain, which
 //! the link does not carry. Now the link names the conversation
 //! (`GET /conversations/join?key&code`), the room is the one with that id,
-//! and there is no domain parameter (`docs/plan/122-web-sdk-gaps.md` D5).
+//! and there is no domain parameter (`docs/plan/archive/122-web-sdk-gaps.md` D5).
 
 use std::sync::Arc;
 

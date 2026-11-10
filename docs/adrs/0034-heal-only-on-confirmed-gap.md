@@ -117,8 +117,9 @@ reference every pending proposal.
 
 - Builds on ADR-0031 (epoch triage) and ADR-0032 (at-least-once window).
 - Related: ADR-0004 (the backend as external sender).
-- `open.md` §71 H4; `docs/plan/106-narrow-healing.md`.
+- `open.md` §71 H4; `docs/plan/archive/106-narrow-healing.md`.
 
 ## Revision History
 
 - 2026-09-29: Created (Accepted — Markus)
+- 2026-11-10: The link to the plan `106-narrow-healing` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

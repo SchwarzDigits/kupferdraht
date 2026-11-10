@@ -260,7 +260,7 @@ Option C, with the five sub-decisions from the design discussion
 - Related: ADR-0004 (external senders / administrative proposals —
   the other "room-level authority" precedent), observations §72
   (the non-admin inviter hole), open.md §67 / §63,
-  `docs/plan/75-task-list-room-marker.md` (Step 75).
+  `docs/plan/archive/75-task-list-room-marker.md` (Step 75).
 
 ## Revision History
 
@@ -285,3 +285,4 @@ Option C, with the five sub-decisions from the design discussion
   `TimelineItemKind::TaskListMarker` (Case precedent, audit
   trail of the deliberately forgeable any-member flag) — never
   silently filtered from `messages()`.
+- 2026-11-10: The link to the plan `75-task-list-room-marker` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

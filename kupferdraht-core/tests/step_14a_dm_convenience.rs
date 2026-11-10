@@ -6,7 +6,7 @@
 //! + `Client::dm_with`.
 //!
 //! TDD red-phase. The eight integration tests below pin the
-//! public-API contract from `docs/plan/14-matrix-sdk-parity.md`
+//! public-API contract from `docs/plan/archive/14-matrix-sdk-parity.md`
 //! §"TDD starter tests — 14a" and CHANGELOG.md §42:
 //!
 //! * All three methods take a single `peer: &str` in qualified

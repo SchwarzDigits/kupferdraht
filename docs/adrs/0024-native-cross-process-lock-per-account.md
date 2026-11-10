@@ -197,7 +197,7 @@ or takes over.
 
 ## Implementation Notes
 
-Step 85 (`docs/plan/85-cross-process-lock.md`), built 2026-09-24:
+Step 85 (`docs/plan/archive/85-cross-process-lock.md`), built 2026-09-24:
 
 - `storage/lock.rs`: `ProcessLock::try_acquire(dir, scope)`; the file
   name `kupferdraht.lock`; `KupferdrahtHome::{home_lock, account_lock}` name the
@@ -249,7 +249,7 @@ Step 85 (`docs/plan/85-cross-process-lock.md`), built 2026-09-24:
   gap-B.33 / gap-B.34 — stays open as a follow-up decision, not part of
   this acceptance.
 - 2026-09-25: The follow-up is commissioned as Step 93
-  (`docs/plan/93-home-scoped-keystore-ids.md`; its ADR-0025 will build
+  (`docs/plan/archive/93-home-scoped-keystore-ids.md`; its ADR-0025 will build
   on this one). No change to this decision.
 - 2026-09-25: The open question in Negative Consequences (home-scoped
   keystore ids for gap-B.33 / gap-B.34) is decided by ADR-0025 "Scope
@@ -257,3 +257,4 @@ Step 85 (`docs/plan/85-cross-process-lock.md`), built 2026-09-24:
   home id": every keystore id carries the home id, so different homes
   never share an entry and this lock covers every first-time creation
   there is. No change to this decision.
+- 2026-11-10: The links to the plans `85-cross-process-lock`, `93-home-scoped-keystore-ids` follow them to `docs/plan/archive/`, where they were archived when their steps merged. No change of decision.

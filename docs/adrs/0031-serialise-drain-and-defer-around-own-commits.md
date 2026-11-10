@@ -24,7 +24,7 @@ Since Step 97c every MLS operation is one SQLite transaction, but a
 drain (fetch → decrypt → persist → cursor) spans many. ADR-0024's
 `kupferdraht.lock` is fail-fast and is held across `POST /access`. The
 browser runs one instance per origin (ADR-0023). Plan D6
-(`docs/plan/97-durable-send-and-receive.md`) proposed a lock around
+(`docs/plan/archive/97-durable-send-and-receive.md`) proposed a lock around
 stage → upload → merge.
 
 Constraints from prior decisions: ADR-0024 (the advisory file-lock
@@ -154,10 +154,11 @@ abandonment bound are constants in code, not part of this decision.
   needs no cross-process lock.
 - Related: ADR-0030 (only the drain advances the cursor on `/await`),
   ADR-0017 (`/v14/events` frames advance the cursor before the ack).
-- Replaces plan D6 of `docs/plan/97-durable-send-and-receive.md`;
+- Replaces plan D6 of `docs/plan/archive/97-durable-send-and-receive.md`;
   open.md §71 B8 (serialisation) and H4 (healing too broad, in part).
 
 ## Revision History
 
 - 2026-09-28: Created (Accepted — Markus; scoped to the gaps that exist
   without a notification extension)
+- 2026-11-10: The link to the plan `97-durable-send-and-receive` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

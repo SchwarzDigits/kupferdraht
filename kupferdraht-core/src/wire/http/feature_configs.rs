@@ -13,7 +13,7 @@
 //!
 //! `PUT` and `DELETE` on `/v{N}/properties/{key}` are intentionally
 //! NOT implemented — see ADR-0012 §Out of scope and
-//! `docs/plan/10-server-feature-configs.md`. The
+//! `docs/plan/archive/10-server-feature-configs.md`. The
 //! `user.properties-delete` event handler in 10d clears only the
 //! local `SQLite` row; calling Wire's DELETE from the handler would
 //! re-trigger the same event (Wire is the source of truth for the

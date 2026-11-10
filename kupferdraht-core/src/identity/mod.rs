@@ -7,7 +7,7 @@
 //! string newtype (the matrix-rust-sdk `OwnedUserId` equivalent). The domain is
 //! guaranteed by construction — there is no domain-less `UserId` — which closes
 //! the bare/qualified seam and the nullable-domain fragility (see
-//! `docs/plan/19-user-id-type.md` and `docs/finding-qualified-user-id.md`).
+//! `docs/plan/archive/19-user-id-type.md` and `docs/finding-qualified-user-id.md`).
 
 use std::fmt;
 

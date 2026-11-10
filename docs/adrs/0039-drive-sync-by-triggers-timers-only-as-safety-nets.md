@@ -165,7 +165,7 @@ the one value for polling and push on every target.
   same step).
 - Related: ADR-0031, ADR-0032 (the drain's guarantees); ADR-0023,
   ADR-0026 (one instance per account, the leader tab runs the loop).
-- `docs/plan/118-sync-on-demand.md`; `docs/backend-spec.md` §12.3.
+- `docs/plan/archive/118-sync-on-demand.md`; `docs/backend-spec.md` §12.3.
 
 ## Revision History
 
@@ -173,3 +173,4 @@ the one value for polling and push on every target.
 - 2026-10-02: Accepted (Markus) — one ADR for the room list and the push
   pace; implemented in Step 118.
 - 2026-11-02: Revision 1.1 (Step 137; Volker Zöpfel) — the fetch after a Welcome moved from the end of the pass to right after the Welcome, inside the drain: a message for the welcomed room in the same page decrypts only once the room is known (`group_id_for_room` reads the cache); before, it was reported as `no local group_id` and queued a needless heal of the room just joined (reproduced in `tests/step_137_security_scan_residuals.rs`). Decision 1 reworded; nothing else changes.
+- 2026-11-10: The link to the plan `118-sync-on-demand` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

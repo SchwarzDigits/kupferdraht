@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 74 — batch external-removal commits (TDD red phase).
 //!
-//! Pins `docs/plan/74-batch-external-removal-commits.md`: the Step-28
+//! Pins `docs/plan/archive/74-batch-external-removal-commits.md`: the Step-28
 //! auto-commit no longer fires per received `ProposalQueued` event
 //! (which guarantees N−1 `mls-commit-missing-references` rejections
 //! per N-deep backlog — observations §69/§70); rooms with queued

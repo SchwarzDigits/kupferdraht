@@ -130,7 +130,7 @@ running drain is never cancelled mid-way.
 - Supersedes ADR-0019 decision items 2 and 3 (partial).
 - Builds on ADR-0017 — `/v14/events` keeps its ack-based queue.
 - Related: ADR-0008 (v14 only; `/await` is its recorded deviation).
-- `docs/plan/97-durable-send-and-receive.md` (D4); open.md §71 B6.
+- `docs/plan/archive/97-durable-send-and-receive.md` (D4); open.md §71 B6.
 
 ## Revision History
 
@@ -140,3 +140,4 @@ running drain is never cancelled mid-way.
   socket without a frame for a minute is renewed and drained once; without
   a socket the loop drains every 10 s). Connect-then-drain, the doorbell
   and the drain-only cursor stand.
+- 2026-11-10: The link to the plan `97-durable-send-and-receive` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

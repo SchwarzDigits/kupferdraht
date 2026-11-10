@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 65 — timeline correctness (TDD red phase, integration part).
 //!
-//! Pins `docs/plan/65-timeline-correctness.md` §Goal 1 and 5 (review
+//! Pins `docs/plan/archive/65-timeline-correctness.md` §Goal 1 and 5 (review
 //! findings S4, S12 — `open.md` §66). The hydration overlays (S5,
 //! S10) are pinned as unit tests on `TimelineItem::hydrated` in
 //! `timeline/items.rs`; the `notify_message` guard (S6) has no cheap

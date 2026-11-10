@@ -5,7 +5,7 @@
 //! Step 14g — auto-hydration convenience.
 //!
 //! TDD red-phase. Tests pin the contract from
-//! `docs/plan/14-matrix-sdk-parity.md` §"TDD starter tests — 14g":
+//! `docs/plan/archive/14-matrix-sdk-parity.md` §"TDD starter tests — 14g":
 //!
 //! * `Client::room_or_load(room_id: String) -> Option<Arc<Room>>` —
 //!   cache-first; on miss, falls back to `load_rooms_from_store` and

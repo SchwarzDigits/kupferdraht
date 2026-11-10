@@ -117,7 +117,7 @@ decision of its own.
 - Related: ADR-0031 and ADR-0032 (the drain's serialisation and
   persistence guarantees push inherits); ADR-0015 (WASM is the browser
   path).
-- `docs/plan/103-polling-load.md` (the 5 s default pause); open.md §71 H8;
+- `docs/plan/archive/103-polling-load.md` (the 5 s default pause); open.md §71 H8;
   open.md NG-14 (browser delivery by polling).
 
 ## Revision History
@@ -130,3 +130,4 @@ decision of its own.
   `WebSocket` under `not(target_arch = "wasm32")`, `sync-stream` defaults
   to `websocket`; the push loop drains without a socket, so the default
   never depends on the socket opening.
+- 2026-11-10: The link to the plan `103-polling-load` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

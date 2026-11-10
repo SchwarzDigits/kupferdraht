@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 64 — sync robustness (TDD red phase).
 //!
-//! Pins `docs/plan/64-sync-robustness.md` §Goal 1–3 (review findings
+//! Pins `docs/plan/archive/64-sync-robustness.md` §Goal 1–3 (review findings
 //! S8, S13, S1 — `open.md` §66):
 //!
 //! * a redelivered notification whose id equals the persisted cursor

@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 69 — absorb `conversation.mls-welcome` (TDD red phase).
 //!
-//! Pins `docs/plan/69-welcome-absorption.md`: the sync drain joins
+//! Pins `docs/plan/archive/69-welcome-absorption.md`: the sync drain joins
 //! the group at the Welcome's epoch instead of logging + skipping
 //! (the Step-6 leftover that costs the receiver the initiator's
 //! first message — observations §67, gap-B.24). The Welcome is a
