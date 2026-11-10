@@ -67,8 +67,14 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # The full suite runs here only (CLAUDE.md phase 8): `--no-fail-fast`
+      # shows every red binary at once, and the doctests, which
+      # `--all-targets` leaves out, run in their own step.
       - name: cargo test
-        run: cargo test --workspace --all-targets
+        run: cargo test --workspace --all-targets --no-fail-fast
+
+      - name: cargo test (doctests)
+        run: cargo test --workspace --doc
 
   wasm:
     # Step 91 (ADR-0022, W2): the browser target compiles and its storage
