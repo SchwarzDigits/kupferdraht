@@ -397,7 +397,7 @@ failover rule wrong.
 
 ## Implementation Notes
 
-For Step 157 (`docs/plan/157-code-and-data-match.md`): tabs of different
+For Step 157 (`docs/plan/archive/157-code-and-data-match.md`): tabs of different
 Kupferdraht releases do not mix. `protocol.js` carries `KUPFERDRAHT_VERSION`
 (the crate's version, pinned equal by a test); the leader's announcements and
 events name it, every request carries the asking tab's, and either side refuses
@@ -523,3 +523,4 @@ For Step 130a (`docs/plan/archive/130-wasm-idempotency-keys.md`):
 - 2026-11-06: Step 130b brought the Step-79 resend path to the browser surface — `failedSends`, `resend`, `resendFailed` — and classed all three `idempotent`: `failedSends` is a read; `resend` re-drives under the same message id, and a repeat after a call that landed answers the row's handle, because the core's `resend` now answers a row this device already sent instead of rejecting it (the same step); `resendFailed` converges on the rows the earlier pass left `Failed`. Decision 3's rule is unchanged, and `rules/0026` names no `idempotent` call, so it stays as it is.
 - 2026-11-10: The link to the plan `130-wasm-idempotency-keys` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.
 - 2026-11-10: Implementation Notes amended (Step 157): tabs of different releases do not mix — the announced and carried `KUPFERDRAHT_VERSION`, the `VersionMismatch` refusal on both sides, `relation`, a candidate that stops on `IncompatibleStore`; takeover and reload stay the embedder's. Not a supersession: the election, the transport and the failover classes stand; the release check sits on top of them.
+- 2026-11-11: The link to the plan `157-code-and-data-match` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.

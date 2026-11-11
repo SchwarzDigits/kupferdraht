@@ -1,7 +1,18 @@
 # Step 157 — Code and data match: a database newer than the code is refused by name, and tabs of different versions do not mix
 
-**Status: in progress** on `step/157-code-and-data-match`; phase 1 decisions and red
-tests approved by Volker on 2026-11-10: one BREAKING variant
+**Status: MERGED 2026-11-11** — `7bbff88` on `step/157-code-and-data-match`, merged to
+`main` as PR #72 (`d3968b8`); the first step under the two-half gate: locally fmt, 0
+build warnings, clippy, the step's tests and the whole library suite (911), the wasm32
+check, `clippy --lib` and CI's wasm clippy line; the browser suite green locally (18
+suites, 87 tests, headless Firefox); the Kotlin bindings and `swift test` (5 of 5)
+green; CI's full suite, doctests and deny green, its browser job green on a rerun after
+the CI-only "timeout waiting for leader-changed" hit the new
+`the_leader_names_its_version`. No smoke and no CLI command of its own (every command
+that opens a home meets the error). Scope: `KupferdrahtError::IncompatibleStore {
+database, reason }` (BREAKING) for a database newer than the code or divergent from
+it, `global.db`'s `PRAGMA user_version` 1, the tabs' `KUPFERDRAHT_VERSION` with
+`relation` and `VersionMismatch` on both sides, a candidate that stops on a final
+failure. Phase 1 decisions and red tests approved by Volker on 2026-11-10: one BREAKING variant
 `IncompatibleStore { database, reason }` (`"newer"`, `"divergent"`); `global.db`
 gets its schema version here (`PRAGMA user_version` 1, Step 134 keeps the first real
 migration); the tabs module carries `KUPFERDRAHT_VERSION` pinned to `Cargo.toml`,
