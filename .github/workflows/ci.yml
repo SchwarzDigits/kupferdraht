@@ -115,21 +115,38 @@ jobs:
           key: wasm32
 
       # `cc` compiles the SQLite3MC C with clang and archives it with
-      # llvm-ar. Ubuntu's `clang`/`lld` packages ship only versioned
-      # binaries (`llvm-ar-NN`); the unversioned `llvm-ar` comes with the
-      # `llvm` package — and if that ever changes, the newest versioned
-      # one is picked instead of failing inside the build script
-      # (the first run failed exactly there: "failed to find tool llvm-ar").
+      # llvm-ar; rustc links wasm32 with its own rust-lld. The runner
+      # image ships a versioned LLVM (`clang-NN`, `llvm-ar-NN`), and the
+      # `clang`/`llvm` packages only add the unversioned names, so the
+      # newest versioned pair that targets wasm32 is taken as it is. apt,
+      # with retries, is the fallback for an image without one: two runs
+      # failed on the runner's DNS fetching those 15 kB of names alone.
+      # An unversioned clang pairs with `llvm-ar`, else the newest
+      # `llvm-ar-NN` (a run once failed on "failed to find tool llvm-ar").
       - name: wasm-capable C toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang lld llvm
-          clang --print-targets | grep -i wasm32
-          ar_bin="$(command -v llvm-ar || ls /usr/bin/llvm-ar-* | sort -V | tail -1)"
-          test -x "$ar_bin"
-          echo "using $ar_bin"
-          echo "CC_wasm32_unknown_unknown=clang" >> "$GITHUB_ENV"
-          echo "AR_wasm32_unknown_unknown=$ar_bin" >> "$GITHUB_ENV"
+          pick_toolchain() {
+            for cc in $(ls /usr/bin/clang-[0-9]* 2>/dev/null | grep -E '/clang-[0-9]+$' | sort -V -r) clang; do
+              command -v "$cc" > /dev/null || continue
+              targets="$("$cc" --print-targets 2> /dev/null)" || continue
+              case "$targets" in *wasm32*) ;; *) continue ;; esac
+              case "$cc" in
+                */clang-*) ar_bin="/usr/bin/llvm-ar-${cc##*-}" ;;
+                *) ar_bin="$(command -v llvm-ar || ls /usr/bin/llvm-ar-* 2> /dev/null | sort -V | tail -1)" ;;
+              esac
+              [ -x "$ar_bin" ] || continue
+              echo "using $cc and $ar_bin"
+              echo "CC_wasm32_unknown_unknown=$cc" >> "$GITHUB_ENV"
+              echo "AR_wasm32_unknown_unknown=$ar_bin" >> "$GITHUB_ENV"
+              return 0
+            done
+            return 1
+          }
+          pick_toolchain || {
+            sudo apt-get -o Acquire::Retries=5 update
+            sudo apt-get -o Acquire::Retries=5 install -y clang llvm
+            pick_toolchain
+          }
 
       - name: cargo check (wasm32)
         run: cargo check -p kupferdraht-core --target wasm32-unknown-unknown
