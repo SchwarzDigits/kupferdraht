@@ -15,8 +15,8 @@
 // re-established. Getters are snapshots the leader took when it handed
 // the wrapper out, so `userId` / `displayName` / `email` stay synchronous.
 import {
-  DEFAULT_LEADER_WAIT_MS, LeaderChangedError, NoLeaderError, PROTOCOL_VERSION, REQUEST_CHANNEL, KUPFERDRAHT_TARGET,
-  methodTable, remoteError, responseChannelName,
+  DEFAULT_LEADER_WAIT_MS, KUPFERDRAHT_VERSION, LeaderChangedError, NoLeaderError, PROTOCOL_VERSION, REQUEST_CHANNEL,
+  KUPFERDRAHT_TARGET, VersionMismatchError, methodTable, remoteError, responseChannelName,
 } from './protocol.js';
 
 const METHOD_SPEC = methodTable();
@@ -25,7 +25,7 @@ const METHOD_SPEC = methodTable();
 export class TabTransport {
   /**
    * @param {{ tabId: string, leaderWaitMs?: number,
-   *           onLeader: (leaderTabId: string, epoch: number, changed: boolean) => void,
+   *           onLeader: (leaderTabId: string, epoch: number, changed: boolean, leaderVersion: string | null) => void,
    *           onEvent: (event: string, payload: unknown) => void,
    *           onEvicted?: (notice: { leaderTabId: string, epoch: number, reason: string }) => void }} options
    */
@@ -40,6 +40,8 @@ export class TabTransport {
     this.leader = null;
     /** The current leader's `Kupferdraht` getters (`homeId`, `cookieLabel`, …), from its announcement. */
     this.leaderGetters = {};
+    /** Step 157: the current leader's release, from its announcement; `null` when it names none. */
+    this.leaderVersion = null;
     /** @type {Map<string, object>} requestId → pending call */
     this.pending = new Map();
     /** @type {Set<object>} calls made before any leader is known */
@@ -73,6 +75,13 @@ export class TabTransport {
     });
   }
 
+  /** Step 157: a call is not sent to a leader of another release. */
+  #refusesLeader(entry) {
+    if (this.leaderVersion === KUPFERDRAHT_VERSION) return false;
+    entry.reject(new VersionMismatchError(entry.method, KUPFERDRAHT_VERSION, this.leaderVersion));
+    return true;
+  }
+
   /** A `startSync` subscription: callbacks stay here, the leader's loop is shared. */
   subscribe(subscription) {
     this.subscriptions.set(subscription.id, subscription);
@@ -84,7 +93,9 @@ export class TabTransport {
     this.call(subscription.clientProxy, 'Client', 'startSync', [])
       .then((handle) => { subscription.remoteHandle = handle; subscription.leaderKey = this.leaderKey; })
       .catch((err) => {
-        if (err && err.name !== 'LeaderChanged') console.error('kupferdraht-tabs: startSync subscription failed', err);
+        if (err && err.name !== 'LeaderChanged' && err.name !== 'VersionMismatch') {
+          console.error('kupferdraht-tabs: startSync subscription failed', err);
+        }
       });
   }
 
@@ -116,6 +127,7 @@ export class TabTransport {
   }
 
   async #send(entry) {
+    if (this.#refusesLeader(entry)) return;
     try {
       const target = await this.#resolveTarget(entry.targetProxy);
       if (this.closed) { entry.reject(closedError(entry.method)); return; }
@@ -141,7 +153,7 @@ export class TabTransport {
 
   /** A fresh request id per attempt: a re-issue after a leader change must not hit the new leader's dedup. */
   #envelope(target, method, args, requestId = crypto.randomUUID()) {
-    return { kind: 'request', v: PROTOCOL_VERSION, tabId: this.tabId, requestId, target, method, args };
+    return { kind: 'request', v: PROTOCOL_VERSION, version: KUPFERDRAHT_VERSION, tabId: this.tabId, requestId, target, method, args };
   }
 
   #post(envelope) {
@@ -153,10 +165,10 @@ export class TabTransport {
     if (m.kind === 'leader') {
       if (this.#stale(m.epoch)) return;
       if (m.getters && typeof m.getters === 'object') this.leaderGetters = m.getters;
-      this.#leaderSeen(m.leaderTabId, m.epoch);
+      this.#leaderSeen(m.leaderTabId, m.epoch, m.version);
     } else if (m.kind === 'event') {
       // A stale event is still delivered — its data was stored — but moves no view.
-      if (!this.#stale(m.epoch)) this.#leaderSeen(m.leaderTabId, m.epoch);
+      if (!this.#stale(m.epoch)) this.#leaderSeen(m.leaderTabId, m.epoch, m.version);
       for (const sub of this.subscriptions.values()) {
         if (sub.clientProxy.getters.userId === m.userId) sub.deliver(m.event, m.payload);
       }
@@ -178,11 +190,13 @@ export class TabTransport {
     return this.leader !== null && epoch < this.leader.epoch;
   }
 
-  #leaderSeen(leaderTabId, epoch) {
+  #leaderSeen(leaderTabId, epoch, version) {
     const key = `${leaderTabId}#${epoch}`;
-    if (this.leader && this.leader.key === key) { this.onLeader(leaderTabId, epoch, false); return; }
+    if (this.leader && this.leader.key === key) { this.onLeader(leaderTabId, epoch, false, this.leaderVersion); return; }
     this.leader = { tabId: leaderTabId, epoch, key };
-    this.onLeader(leaderTabId, epoch, true);
+    // Step 157: a leader before the version names none.
+    this.leaderVersion = typeof version === 'string' ? version : null;
+    this.onLeader(leaderTabId, epoch, true, this.leaderVersion);
     this.#failOver();
     for (const entry of this.waiting) { clearTimeout(entry.timer); this.#send(entry); }
     this.waiting.clear();

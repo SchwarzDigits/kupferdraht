@@ -25,7 +25,9 @@ is no skill for it — it is this short procedure:
    subsections, and insert a fresh empty `## [Unreleased]` (with the six
    category headings) above it.
 3. **Bump the version** — set `version = "x.y.z"` in `Cargo.toml`
-   `[workspace.package]` (`Cargo.lock` updates too). Locally
+   `[workspace.package]` (`Cargo.lock` updates too), and
+   `KUPFERDRAHT_VERSION` in `bindings/web/kupferdraht-tabs/protocol.js` to the
+   same version (a test pins the two equal). Locally
    `cargo fmt --check` and `cargo metadata --locked`; CI is the release's
    gate (CLAUDE.md, Step Procedure phase 8).
 4. **Commit + tag — offer, don't push.** On confirmation:
@@ -37,7 +39,28 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **Tabs of different releases do not mix** (Step 157): `kupferdraht-tabs` knows
+  its own release (`KUPFERDRAHT_VERSION`, `host.version`), the leader announces
+  its own (`host.leaderVersion`), and `leader-changed` carries `relation` — this
+  tab against the leader: `"same"`, `"newer"`, `"older"`, `"unknown"` (a leader
+  before this release). A call to a leader of another release is not sent and
+  rejects with `VersionMismatch`, and a leader answers a tab of another release
+  the same way. A candidate refused by newer data (`IncompatibleStore`) or handed
+  a wasm package of another release (`serveTab({ version })`, `VersionMismatch`)
+  reports it once and stops trying. Who leads after an update and when an old tab
+  reloads stays the app's: the tabs README has a recipe.
+
 ### Changed
+
+- **BREAKING: a database that does not fit this build is refused by name**
+  (Step 157): `KupferdrahtError::IncompatibleStore { database, reason }` (FFI
+  too; in the browser `err.name` with `database` and `reason`). A database opens
+  only when its schema is the code's, after a migration forward if it is older:
+  one newer than the code (`reason` `"newer"`) or whose applied migrations differ
+  (`"divergent"`) was already refused, as `Storage("migration failed: …")`; now
+  it says which and why, and nothing is written. `kupferdraht.db`, `mls.db` and,
+  through a new `PRAGMA user_version` (1), `global.db`. A new enum variant breaks
+  an exhaustive `switch` / `when` in Swift and Kotlin.
 
 ### Deprecated
 

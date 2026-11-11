@@ -185,6 +185,13 @@ pub enum KupferdrahtError {
     /// on the first group add. Step 132.
     #[error("backend default ciphersuite {backend} is not ours ({ours})")]
     CiphersuiteMismatch { backend: u16, ours: u16 },
+    /// The database does not fit this build of Kupferdraht (Step 157): its
+    /// schema is `"newer"` than the code, or its applied migrations are
+    /// `"divergent"` from the code's. `database` names it (`kupferdraht.db`,
+    /// `mls.db`, `global.db`). Nothing is written; a build that matches the
+    /// data — usually the newer one — opens it.
+    #[error("{database} does not fit this build ({reason})")]
+    IncompatibleStore { database: String, reason: String },
     #[error("unexpected error: {0}")]
     Generic(String),
 }
@@ -229,6 +236,7 @@ impl KupferdrahtError {
             Self::DeviceRetired(_) => "DeviceRetired",
             Self::RateLimited { .. } => "RateLimited",
             Self::CiphersuiteMismatch { .. } => "CiphersuiteMismatch",
+            Self::IncompatibleStore { .. } => "IncompatibleStore",
             Self::Generic(_) => "Generic",
         }
     }
@@ -285,6 +293,10 @@ mod variant_name_tests {
             KupferdrahtError::CiphersuiteMismatch {
                 backend: 1,
                 ours: 2,
+            },
+            KupferdrahtError::IncompatibleStore {
+                database: String::new(),
+                reason: String::new(),
             },
             KupferdrahtError::Generic(String::new()),
         ]

@@ -15,6 +15,15 @@
 
 /** Envelope version; a leader ignores requests of another version. */
 export const PROTOCOL_VERSION = 1;
+/**
+ * Step 157: the Kupferdraht release this module belongs to — the crate's
+ * version (`kupferdraht-core/tests/step_157_code_and_data_match.rs` pins it
+ * against `Cargo.toml`; the release procedure bumps both). A thin tab loads no
+ * wasm, so this is how it knows its own release. Tabs of different releases
+ * do not mix: the leader announces its release, every request carries the
+ * asking tab's, and either side refuses another with `VersionMismatch`.
+ */
+export const KUPFERDRAHT_VERSION = '0.5.1';
 /** Requests, events and leader announcements — one channel per origin. */
 export const REQUEST_CHANNEL = 'kupferdraht:tabs';
 /** Responses go to the requesting tab only. */
@@ -177,6 +186,38 @@ export class LeaderChangedError extends Error {
 }
 
 /** Thrown when no leader announced itself within the wait. */
+/**
+ * Step 157: this tab and the leader belong to different Kupferdraht releases;
+ * the call was not sent. `version` is this tab's, `leaderVersion` the
+ * leader's (`null` for a leader that names none, a release before Step 157).
+ */
+export class VersionMismatchError extends Error {
+  constructor(method, version, leaderVersion) {
+    super(`kupferdraht-tabs: ${method} was not sent — this tab is Kupferdraht ${version}, `
+      + `the leader ${leaderVersion ?? 'names no version'}; take the lead or reload (Step 157)`);
+    this.name = 'VersionMismatch';
+    this.method = method;
+    this.version = version;
+    this.leaderVersion = leaderVersion;
+  }
+}
+
+/**
+ * Step 157: this tab's release against the leader's — `'newer'` (this tab
+ * should lead), `'older'` (this tab should reload), `'same'`, or `'unknown'`
+ * when the leader names no version or one that is not `x.y.z`.
+ */
+export function versionRelation(own, leader) {
+  const parse = (v) => (typeof v === 'string' && /^\d+\.\d+\.\d+$/.test(v) ? v.split('.').map(Number) : null);
+  const mine = parse(own);
+  const theirs = parse(leader);
+  if (!mine || !theirs) return 'unknown';
+  for (let i = 0; i < 3; i += 1) {
+    if (mine[i] !== theirs[i]) return mine[i] > theirs[i] ? 'newer' : 'older';
+  }
+  return 'same';
+}
+
 export class NoLeaderError extends Error {
   constructor(method, waitMs) {
     super(`kupferdraht-tabs: no leader tab answered within ${waitMs} ms (${method}) — the origin has no open Kupferdraht instance yet`);
@@ -186,7 +227,7 @@ export class NoLeaderError extends Error {
 }
 
 /** What a recovery error carries beyond its name (ADR-0035), when known. */
-const ERROR_DETAILS = Object.freeze(['reason', 'attemptsRemaining', 'retryAfter']);
+const ERROR_DETAILS = Object.freeze(['reason', 'attemptsRemaining', 'retryAfter', 'database']);
 
 /** Rebuild an error the leader reported, keeping its name, message and detail. */
 export function remoteError({ name, message, ...detail }) {

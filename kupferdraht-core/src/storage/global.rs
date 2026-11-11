@@ -78,12 +78,44 @@ const GLOBAL_SCHEMA: &str = "
         value TEXT NOT NULL
     );";
 
+/// Step 157: the schema version `global.db` records in `PRAGMA user_version`.
+/// A registry from before the version reads 0 and has version 1's tables.
+const GLOBAL_SCHEMA_VERSION: i64 = 1;
+
 /// The shipped SQLite-backed (whole-DB-encrypted) [`GlobalStore`]. The connection stays
 /// open for the device session (no per-account open/close lifecycle). On every
 /// target since Step 91 (ADR-0022): a file under `base_dir` on native, a file
 /// in the OPFS pool in the browser.
 pub struct SqliteGlobalStore {
     connection: Mutex<Connection>,
+}
+
+/// Step 157: refuse a registry newer than this build before writing to it,
+/// then create the tables and record the version.
+///
+/// # Errors
+/// `IncompatibleStore` for a newer `user_version`; `Storage` from SQLite.
+fn ensure_global_schema(conn: &Connection) -> Result<(), KupferdrahtError> {
+    let storage = |e: rusqlite::Error| KupferdrahtError::Storage(format!("global schema: {e}"));
+    let version: i64 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(storage)?;
+    if version > GLOBAL_SCHEMA_VERSION {
+        return Err(KupferdrahtError::IncompatibleStore {
+            database: "global.db".to_owned(),
+            reason: "newer".to_owned(),
+        });
+    }
+    conn.execute_batch(GLOBAL_SCHEMA).map_err(storage)?;
+    if version < GLOBAL_SCHEMA_VERSION {
+        conn.pragma_update(None, "user_version", GLOBAL_SCHEMA_VERSION)
+            .map_err(storage)?;
+    }
+    debug_assert!(
+        version <= GLOBAL_SCHEMA_VERSION,
+        "a newer registry was refused"
+    );
+    Ok(())
 }
 
 impl SqliteGlobalStore {
@@ -97,8 +129,7 @@ impl SqliteGlobalStore {
             .map_err(|e| KupferdrahtError::Storage(format!("global set WAL: {e}")))?;
         #[cfg(not(target_arch = "wasm32"))]
         crate::storage::set_multi_process_pragmas(&conn)?;
-        conn.execute_batch(GLOBAL_SCHEMA)
-            .map_err(|e| KupferdrahtError::Storage(format!("global schema: {e}")))?;
+        ensure_global_schema(&conn)?;
         Ok(Self {
             connection: Mutex::new(conn),
         })
@@ -282,5 +313,71 @@ mod pragma_tests {
             .query_row("PRAGMA synchronous", [], |row| row.get(0))
             .expect("synchronous");
         assert_eq!(synchronous, 2, "synchronous = FULL on global.db");
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod schema_version_tests {
+    //! Step 157: `global.db` carries a schema version (`PRAGMA user_version`)
+    //! like the databases refinery migrates; a newer one is refused.
+    use super::SqliteGlobalStore;
+    use crate::error::KupferdrahtError;
+    use crate::storage::db_key::{DbKey, generate_db_key};
+
+    fn user_version(path: &std::path::Path, key: &DbKey) -> i64 {
+        let conn = crate::storage::open_connection(path).expect("open");
+        crate::storage::apply_whole_db_key(&conn, key).expect("key");
+        conn.query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("user_version")
+    }
+
+    fn set_user_version(path: &std::path::Path, key: &DbKey, version: i64) {
+        let conn = crate::storage::open_connection(path).expect("open");
+        crate::storage::apply_whole_db_key(&conn, key).expect("key");
+        conn.pragma_update(None, "user_version", version)
+            .expect("set user_version");
+    }
+
+    #[test]
+    fn a_new_global_db_records_its_schema_version() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("global.db");
+        let key = generate_db_key();
+
+        drop(SqliteGlobalStore::open(&path, &key).expect("open"));
+
+        assert_eq!(user_version(&path, &key), 1);
+    }
+
+    /// A registry from before Step 157 has the tables and no version: it is
+    /// version 1's schema, and opens.
+    #[test]
+    fn a_global_db_from_before_the_version_opens_and_gets_it() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("global.db");
+        let key = generate_db_key();
+        drop(SqliteGlobalStore::open(&path, &key).expect("open"));
+        set_user_version(&path, &key, 0);
+
+        drop(SqliteGlobalStore::open(&path, &key).expect("reopen"));
+
+        assert_eq!(user_version(&path, &key), 1);
+    }
+
+    #[test]
+    fn a_global_db_newer_than_the_code_is_refused_by_name() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("global.db");
+        let key = generate_db_key();
+        drop(SqliteGlobalStore::open(&path, &key).expect("open"));
+        set_user_version(&path, &key, 2);
+
+        match SqliteGlobalStore::open(&path, &key) {
+            Err(KupferdrahtError::IncompatibleStore { database, reason }) => {
+                assert_eq!((database.as_str(), reason.as_str()), ("global.db", "newer"));
+            }
+            other => panic!("expected IncompatibleStore, got {:?}", other.err()),
+        }
+        assert_eq!(user_version(&path, &key), 2, "nothing written");
     }
 }

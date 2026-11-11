@@ -81,6 +81,20 @@ fn to_js(e: &KupferdrahtError) -> JsValue {
 /// `retryAfter` (seconds) of `TooManyAttempts` and `RateLimited` (Step
 /// 122) — each only when known.
 fn set_error_detail(error: &JsValue, e: &KupferdrahtError) {
+    // Step 157: the database that does not fit this build, and why.
+    if let KupferdrahtError::IncompatibleStore { database, reason } = e {
+        let _ = js_sys::Reflect::set(
+            error,
+            &JsValue::from_str("database"),
+            &JsValue::from_str(database),
+        );
+        let _ = js_sys::Reflect::set(
+            error,
+            &JsValue::from_str("reason"),
+            &JsValue::from_str(reason),
+        );
+        return;
+    }
     let (key, value) = match e {
         KupferdrahtError::InvalidRecoveryData { reason } => ("reason", JsValue::from_str(reason)),
         KupferdrahtError::WrongPin {

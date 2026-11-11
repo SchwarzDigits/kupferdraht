@@ -106,11 +106,17 @@ impl KupferdrahtProvider {
     /// connection that has already been migrated is a no-op.
     ///
     /// # Errors
-    /// Returns `KupferdrahtError::Storage` if migrations fail.
+    /// `KupferdrahtError::IncompatibleStore` for an `mls.db` newer than the
+    /// code or divergent from it (Step 157); `KupferdrahtError::Storage` if
+    /// migrations fail otherwise.
     pub fn open(mut conn: Connection) -> Result<Self, KupferdrahtError> {
         SqliteStorageProvider::<JsonCodec, &mut Connection>::new(&mut conn)
             .run_migrations()
-            .map_err(|e| KupferdrahtError::Storage(format!("openmls migrations: {e}")))?;
+            .map_err(|e| {
+                crate::storage::schema::migration_refusal("mls.db", &e).unwrap_or_else(|| {
+                    KupferdrahtError::Storage(format!("openmls migrations: {e}"))
+                })
+            })?;
         Ok(Self {
             crypto: RustCrypto::default(),
             conn,

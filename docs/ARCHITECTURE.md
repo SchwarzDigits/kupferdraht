@@ -674,7 +674,13 @@ Shipped migrations are immutable and SHA-pinned (Step 18b). A migration
 run is atomic (Step 87): every pending migration plus its
 `refinery_schema_history` row commits in one transaction (`set_grouped`),
 so a crash mid-run leaves the file exactly as it was — never a migration
-applied but unrecorded, which the next open would re-apply. `mls.db` has
+applied but unrecorded, which the next open would re-apply.
+**Code and data match (Step 157):** a database opens only when its schema is
+the code's; the one exception is a migration forward, after which it matches.
+One newer than the code, or whose applied migrations differ, is refused before
+anything is written, as `KupferdrahtError::IncompatibleStore { database,
+reason }` — refinery's `abort_missing` / `abort_divergent` for `kupferdraht.db`
+and `mls.db`, `PRAGMA user_version` (1) for `global.db`. On every platform. `mls.db` has
 the same since Step 142: the openmls fork's `openmls_sqlite_storage` runs
 openmls's migrations grouped (history table
 `openmls_sqlite_storage_migrations`). The current

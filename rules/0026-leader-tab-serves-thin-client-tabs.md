@@ -53,3 +53,10 @@ there stays in force; this file adds the multi-tab layer on top.
 - **The single-tab path stays byte-identical:** `Kupferdraht.open` directly,
   no proxy — the module is opt-in. **Don't** make `kupferdraht-core` depend
   on the module; **don't** host in a `SharedWorker` (ADR-0023 Option C).
+- **Tabs of different releases do not mix** (Step 157): the leader announces
+  `KUPFERDRAHT_VERSION`, every request carries it, and either side refuses
+  another release with `VersionMismatch`; a candidate refused by
+  `IncompatibleStore` stops queuing. **Don't** build automatic takeover or
+  reload into the module (the embedder decides); **don't** raise
+  `PROTOCOL_VERSION` for a release change (new tabs would no longer see an
+  old leader); **don't** let `KUPFERDRAHT_VERSION` drift from `Cargo.toml`.

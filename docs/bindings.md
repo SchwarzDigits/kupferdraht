@@ -464,6 +464,10 @@ options object or an unknown room is `InvalidInput`). The recovery errors
 count; absent for a PIN checked locally), `TooManyAttempts` its
 `retryAfter` (seconds). `RateLimited` carries `retryAfter` too since
 Step 122: the seconds the backend's `Retry-After` asks for.
+`IncompatibleStore` (Step 157) carries `database` and `reason` (`"newer"`,
+`"divergent"`): the data do not fit this build — an older tab after an update,
+say; under `kupferdraht-tabs` such a candidate reports it once and stops
+trying, and tabs of different releases do not mix (the tabs README, "Releases").
 
 **The login flow.** The login screen knows nothing of recovery data — a
 login may be single sign-on; setting up the browser is a step after it,

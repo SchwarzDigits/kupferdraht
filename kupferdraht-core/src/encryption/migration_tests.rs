@@ -99,3 +99,51 @@ fn an_interrupted_migration_run_leaves_mls_db_openable() {
     assert!(table_exists(&conn, V3_TABLE), "V3 applied");
     assert_eq!(recorded_up_to(&conn, 3), 3, "V1 to V3 recorded");
 }
+
+// ---- Step 157: mls.db and the code agree ----
+
+/// `mls.db` migrated by this build, then `change` applied to it raw.
+fn mls_db_changed(change: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("mls.db");
+    drop(
+        KupferdrahtProvider::open(Connection::open(&path).expect("open mls.db")).expect("migrated"),
+    );
+    Connection::open(&path)
+        .expect("reopen mls.db")
+        .execute_batch(change)
+        .expect("the change");
+    (dir, path)
+}
+
+fn mls_refusal(path: &Path) -> (String, String) {
+    match KupferdrahtProvider::open(Connection::open(path).expect("open mls.db")) {
+        Err(KupferdrahtError::IncompatibleStore { database, reason }) => (database, reason),
+        other => panic!("expected IncompatibleStore, got {:?}", other.err()),
+    }
+}
+
+#[test]
+fn an_mls_db_newer_than_the_code_is_refused_by_name() {
+    let (_dir, path) = mls_db_changed(&format!(
+        "INSERT INTO {HISTORY} (version, name, applied_on, checksum) \
+         VALUES (9999, 'from_a_newer_build', '2026-11-10T00:00:00Z', '0');"
+    ));
+
+    assert_eq!(
+        mls_refusal(&path),
+        ("mls.db".to_owned(), "newer".to_owned())
+    );
+}
+
+#[test]
+fn an_mls_db_whose_migration_differs_is_refused_by_name() {
+    let (_dir, path) = mls_db_changed(&format!(
+        "UPDATE {HISTORY} SET checksum = '1' WHERE version = (SELECT MIN(version) FROM {HISTORY});"
+    ));
+
+    assert_eq!(
+        mls_refusal(&path),
+        ("mls.db".to_owned(), "divergent".to_owned())
+    );
+}

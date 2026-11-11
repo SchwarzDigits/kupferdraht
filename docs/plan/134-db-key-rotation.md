@@ -47,8 +47,9 @@ paths).
 - `secure_delete = ON` on every open, native and wasm (measure the cost on
   the browser VFS first). Only a `VACUUM` rewrites old pages under the new
   key: decide whether a rotation vacuums.
-- `global.db` gets `PRAGMA user_version` and a first migration; the
-  column-check pattern retires.
+- `global.db` gets a first migration on the `PRAGMA user_version` Step 157
+  introduced (version 1, a newer one refused); the column-check pattern
+  retires.
 - Browser: the keys derive from the per-account seed with frozen HKDF
   labels (ADR-0035), so rotation there means a versioned label or a new
   seed with a new recovery export — a decision of its own, out of this
