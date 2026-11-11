@@ -35,6 +35,13 @@ consumers use the `ffi` surface below.
 
 **Entry points (free functions / constructors)**
 - `Kupferdraht.open(base_dir, keystore) -> Kupferdraht` — the multi-account manager.
+- `Kupferdraht.openWithRootCertificates(baseDir, keystore, rootCertificatesPem)`
+  (Step 156, ADR-0044) — the same, trusting these certificate authorities (PEM,
+  one or more) beside the built-in list for every TLS connection to the server: a
+  self-hosted backend under a company CA. Pass them at every start, from the app's
+  managed configuration say; nothing is stored. A certificate neither covers is
+  `CertificateRejected`. The browser surface has no such option: the browser
+  checks with its own list.
 - `parse_user_id(id) -> QualifiedUserId`, `kupferdraht_version() -> String`.
 - `initLogging(level, listener)` (Step 117) — Kupferdraht's log events at
   `level` (`LogLevel.ERROR` … `TRACE`) or above go to `listener`, a

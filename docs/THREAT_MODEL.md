@@ -1,6 +1,6 @@
 # Kupferdraht Threat Model
 
-**Version:** 0.14 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-10 **Status:** working draft, for review by Markus Troßbach
+**Version:** 0.15 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-11 **Status:** working draft, for review by Markus Troßbach
 
 ------
 
@@ -114,7 +114,7 @@ The guarantees hold only under these assumptions:
 
 **A3 — Cryptography is implemented correctly.** openmls (MLS) and `curve25519-dalek`/`ed25519-dalek` (prekey generation, ADR-0010) are correct implementations of their primitives. Kupferdraht adds no crypto primitives of its own.
 
-**A4 — Transport security prevents MITM.** TLS with certificate validation (ideally with pinning) is enabled in the HTTP client.
+**A4 — Transport security prevents MITM.** TLS with certificate validation (ideally with pinning) is enabled in the HTTP client. Since Step 156 (ADR-0044) an app may add its own certificate authorities to the built-in Mozilla list, for both HTTP clients and the push WebSocket — never in place of the list, never by the system store, and nothing turns the check off; whoever controls such an authority can stand in for the server, so the app adds only its operator's. Pinning still does not exist.
 
 **A5 — The identity provider is trustworthy.** The IdP in use binds public keys authentically to user identities. Kupferdraht's authentication hangs directly on this assumption.
 
@@ -240,6 +240,7 @@ Not blocking for the current implementation phase. To be picked up before the af
 | 0.12    | 2026-11-09 | Step 145: the Trust Model names room events in the timeline as the backend's word. |
 | 0.13    | 2026-11-09 | Step 151: the Trust Model names the time a message shows as the backend's word. |
 | 0.14    | 2026-11-10 | Step 12 dropped (NG-30): G7 names it so, and the key-backup preview is removed. G7 names the browser's recovery data (ADR-0035, Step 112), which it had not since that step. |
+| 0.15    | 2026-11-11 | Step 156 (ADR-0044): A4 names the app's own certificate authorities beside the built-in list, and that pinning is still missing. |
 
 ------
 

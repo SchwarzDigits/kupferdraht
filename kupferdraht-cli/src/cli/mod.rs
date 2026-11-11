@@ -32,6 +32,42 @@ pub(crate) fn kupferdraht_home() -> Result<PathBuf, KupferdrahtError> {
     Ok(base.join("kupferdraht"))
 }
 
+/// Step 156: where `login --ca-file` keeps the backend's certificate
+/// authorities in the CLI's home.
+const TRUSTED_AUTHORITIES: &str = "trusted-ca.pem";
+
+/// Step 156: the certificate authorities `login --ca-file` kept in the CLI's
+/// home, which every command hands the manager; `None` without.
+///
+/// # Errors
+/// `Storage` when the file exists but cannot be read.
+pub(crate) fn trusted_authorities(
+    home: &std::path::Path,
+) -> Result<Option<String>, KupferdrahtError> {
+    let path = home.join(TRUSTED_AUTHORITIES);
+    match std::fs::read_to_string(&path) {
+        Ok(pem) => Ok(Some(pem)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(KupferdrahtError::Storage(format!(
+            "{}: {e}",
+            path.display()
+        ))),
+    }
+}
+
+/// Step 156: keep `--ca-file`'s certificate authorities in the home.
+///
+/// # Errors
+/// `Storage` when the home or the file cannot be written.
+pub(crate) fn remember_trusted_authorities(
+    home: &std::path::Path,
+    pem: &str,
+) -> Result<(), KupferdrahtError> {
+    let storage = |e: io::Error| KupferdrahtError::Storage(format!("{}: {e}", home.display()));
+    std::fs::create_dir_all(home).map_err(storage)?;
+    std::fs::write(home.join(TRUSTED_AUTHORITIES), pem).map_err(storage)
+}
+
 pub(crate) fn read_password(from_stdin: bool) -> io::Result<String> {
     read_secret(from_stdin, "Account password: ")
 }
@@ -84,7 +120,14 @@ pub(crate) async fn resume_client() -> Result<Arc<kupferdraht::Client>, Kupferdr
 /// the one way every command reaches `Kupferdraht` (Step 93: the manager
 /// resolves the home id and the cookie label the moment it opens).
 pub(crate) fn open_manager() -> Result<Kupferdraht, KupferdrahtError> {
-    Kupferdraht::open(kupferdraht_home()?, cli_keystore())
+    let home = kupferdraht_home()?;
+    let builder = Kupferdraht::builder().keystore(cli_keystore());
+    // Step 156: the authorities `login --ca-file` kept, for every command.
+    let builder = match trusted_authorities(&home)? {
+        Some(pem) => builder.add_root_certificates(pem),
+        None => builder,
+    };
+    builder.base_dir(home).build()
 }
 
 /// Resume the active account through `Kupferdraht` — the device `GlobalStore`
@@ -270,6 +313,21 @@ mod tests {
 
     // LOCAL_OFFSET stays unset in tests, so `local_offset()` falls
     // back to UTC — naive inputs are deterministic here.
+
+    /// Step 156: `--ca-file`'s authorities survive into the next command.
+    #[test]
+    fn trusted_authorities_round_trip_through_the_home() {
+        let home = std::env::temp_dir().join(format!("kd-cli-ca-{}", std::process::id()));
+        std::fs::create_dir_all(&home).expect("home");
+        let pem = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n";
+
+        assert_eq!(trusted_authorities(&home).expect("read"), None);
+        remember_trusted_authorities(&home, pem).expect("write");
+        let read = trusted_authorities(&home).expect("read");
+        std::fs::remove_dir_all(&home).ok();
+
+        assert_eq!(read.as_deref(), Some(pem));
+    }
 
     fn ms(t: time::OffsetDateTime) -> i64 {
         i64::try_from(t.unix_timestamp_nanos() / 1_000_000).expect("in range")

@@ -209,6 +209,7 @@ kupferdraht-cli login --api-url https://nginz-https.example.com -e you@example.c
 | `-e`, `--email`          | yes      | Wire account email.                              |
 | `--password-stdin`       | no       | Read the password from stdin (its first line; no TTY prompt). Useful for password-manager pipes and non-interactive runs. |
 | `--delete-device <id>`   | no       | On `too-many-clients`: delete this device id to free a slot, then retry the login (Step 24). |
+| `--ca-file <path>`       | no       | PEM file with the certificate authorities of a self-hosted backend, trusted beside the built-in list (Step 156, ADR-0044). Kept in the CLI's home as `trusted-ca.pem`, so every later command trusts them too. |
 
 There is **no** `--password` flag by design — secrets in argv leak
 into `ps`, shell history, and process listings. Without

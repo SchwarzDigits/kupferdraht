@@ -97,12 +97,21 @@ pub(crate) async fn login(
     email: String,
     password: String,
     delete_device: Option<String>,
+    ca_file: Option<std::path::PathBuf>,
 ) -> Result<(), KupferdrahtError> {
+    // Step 156: the backend's own certificate authorities, kept in the home
+    // before the login so it and every later command trust them.
+    if let Some(path) = ca_file {
+        let pem = std::fs::read_to_string(&path).map_err(|e| {
+            KupferdrahtError::InvalidInput(format!("--ca-file {}: {e}", path.display()))
+        })?;
+        super::remember_trusted_authorities(&kupferdraht_home()?, &pem)?;
+    }
     // The device manager logs in, registers the account in the device
     // registry (so `accounts` lists it), marks it active, and persists
     // the session — the CLI never constructs the store or keystore beyond
     // handing the manager the device keystore.
-    let app = Kupferdraht::open(kupferdraht_home()?, cli_keystore())?;
+    let app = super::open_manager()?;
     // Phase 1: authenticate. Auth errors (wrong password, missing 2FA)
     // surface here.
     let pending = app.login(server, email, password, None, None).await?;

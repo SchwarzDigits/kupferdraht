@@ -1,6 +1,16 @@
 # Step 156 — Own certificate authorities: extra trust anchors for a self-hosted server
 
-**Status: commissioned 2026-11-10** (Volker), from a note of the wire-server-rs session
+**Status: implemented** on `step/156-own-certificate-authorities`, smoke 2026-11-11
+against the local wire-server-rs stack (refused without `--ca-file`; three users log
+in with it, one room, a message over the `/await` socket opened on the kept CA, no
+fallback to a socketless drain). Phase 1 decisions and red tests approved by Volker
+on 2026-11-11: rustls and webpki-roots directly for
+the WebSocket's TLS configuration (CLAUDE.md's rule made precise), PEM text, ADR-0044
+(accepted); a new BREAKING variant `CertificateRejected`, mapped where a connection to
+a host is first made; FFI `openWithRootCertificates`; CLI `login --ca-file` kept in
+the home.
+
+**Commissioned 2026-11-10** (Volker), from a note of the wire-server-rs session
 the same day. Before Step 154, whose ACME and CRL fetches meet the same certificate
 authority in a company deployment. Decided on commissioning: the extra anchors are
 set on the builder (matrix-rust-sdk's `ClientBuilder::add_root_certificates`), not in

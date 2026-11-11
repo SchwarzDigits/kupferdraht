@@ -99,6 +99,7 @@ end-to-end encrypted with MLS (RFC 9420):
 - **Security**
   - MLS (RFC 9420) only, with no security-disabling options
   - MLS Basic credentials only, no e2ei (Wire's end-to-end identity, a team feature that gives each device an X.509 certificate): Kupferdraht cannot check the identity in such a certificate, so a message from a device that has one is dropped, not shown under an unchecked sender — in a team with e2ei on, Kupferdraht users do not see those colleagues' messages, while the colleagues see theirs (NG-7)
+  - TLS against the built-in Mozilla list; a self-hosted backend under its own certificate authority is trusted by adding it (`add_root_certificates`, CLI `login --ca-file`), never by reading the system store or switching the check off (ADR-0044)
   - whole-DB encryption via SQLite3MC (ChaCha20-Poly1305, raw 32-byte key per database; vendored amalgamation, no OpenSSL) — an accepted deviation from BSI TR-02102-1's AES-only lists, see ADR-0021
   - OS-keyring, file, in-memory, and IndexedDB keystores
   - zeroization of key material and credentials when their holders drop (best effort, `docs/THREAT_MODEL.md` G4 names what is not covered)

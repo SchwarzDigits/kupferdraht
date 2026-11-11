@@ -108,7 +108,7 @@ impl HttpClient {
         let resp = browser_credentials(self.client.post(url).json(&body))
             .send()
             .await
-            .map_err(|e| KupferdrahtError::Network(format!("POST /v{api_version}/login: {e}")))?;
+            .map_err(|e| super::transport_error(&format!("POST /v{api_version}/login"), &e))?;
         decode_login_response(resp).await
     }
 
@@ -238,7 +238,7 @@ impl HttpClient {
         let resp = browser_credentials(with_zuid_cookie(self.client.post(url), refresh_token))
             .send()
             .await
-            .map_err(|e| KupferdrahtError::Network(format!("POST /v{api_version}/access: {e}")))?;
+            .map_err(|e| super::transport_error(&format!("POST /v{api_version}/access"), &e))?;
         if !resp.status().is_success() {
             return Err(rebind_rejection(resp).await);
         }

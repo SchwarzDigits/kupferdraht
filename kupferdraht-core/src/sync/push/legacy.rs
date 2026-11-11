@@ -98,6 +98,7 @@ where
         url,
         &access_token,
         super::SOCKET_CONNECT_TIMEOUT,
+        client.trust_anchors(),
     )
     .await
     {

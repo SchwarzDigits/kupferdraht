@@ -218,11 +218,12 @@ impl LoginPipeline {
         server: ServerConfig,
         home: Option<KupferdrahtHome>,
         permit_http: bool,
+        trust: &crate::wire::tls::TrustAnchors,
         store: Option<Arc<dyn Store>>,
         cookie_label: String,
         device_label: Option<String>,
     ) -> Result<Self, KupferdrahtError> {
-        let http = HttpClient::new(&server.api_base_url, permit_http)?;
+        let http = HttpClient::with_trust(&server.api_base_url, permit_http, trust)?;
         let api_info = http.api_version().await?;
         let api_version = select_api_version(&api_info.supported)?;
         Ok(Self {
@@ -819,6 +820,7 @@ mod tests {
             server_config(&server.base_url()),
             None,
             true,
+            &crate::wire::tls::TrustAnchors::default(),
             None,
             "kupferdraht-test".to_string(),
             None,
@@ -844,6 +846,7 @@ mod tests {
             server_config(&server.base_url()),
             None,
             true,
+            &crate::wire::tls::TrustAnchors::default(),
             None,
             "kupferdraht-test".to_string(),
             None,
@@ -867,6 +870,7 @@ mod tests {
             },
             None,
             true,
+            &crate::wire::tls::TrustAnchors::default(),
             None,
             "kupferdraht-test".to_string(),
             None,
