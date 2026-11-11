@@ -3066,3 +3066,32 @@ touched it.
 - **What was left.** The check has not run against a real PIN service and storage server,
   and no browser test calls it: the native tests drive it through mocks, and the wasm32
   check, clippy and the tab parity pins hold its binding.
+
+### 5.93 A recipe that loaded what it meant to spare, names that collided, an order I assumed, and the CI-only timeout again (Step 157)
+
+- **My own recipe undid the design it documented.** The first README snippet for the
+  wasm version called `await init()` at the top of the worker script, so every tab
+  would have loaded the wasm — the thin tabs the module exists to keep light. Found
+  while writing the docs, after the tests were green: the option now also takes a
+  function the worker calls after `load`, and only a tab about to lead reads it. A
+  snippet in the docs is code; read it against the design like code.
+- **Two names collided in the red phase.** The browser test's `extern` scenario
+  functions had the test functions' names; the wasm build refused them, which no
+  native check sees. They carry `_scenario` now, as the older ones differ by name.
+- **I assumed an order the runner does not give.** refinery's `get_migrations()` is not
+  sorted by version, so "the second to last" was some other migration and the
+  migrate-forward test failed for the wrong reason. Sorting fixed it; a red test that
+  should be green is read before it is believed.
+- **A namespace import kept the red run honest.** Importing the not-yet-existing
+  `KUPFERDRAHT_VERSION` by name would have failed the whole driver module and turned
+  every tab scenario red; `import * as protocol` let only the new ones fail. And every
+  call to a silent fake leader got a timeout, so a red run could not hang.
+- **The refusal already existed, unnamed.** refinery refused a newer or divergent
+  database since the first migration; the gap was that nobody could tell it from any
+  other storage error, and an old tab retried it every few seconds (15 times in 1.5 s
+  in the suite). Reading the runner before designing saved a migration guard of our own.
+- **The CI-only "timeout waiting for leader-changed" came back** in a new scenario,
+  green on a rerun, as on PR #66. Twice is a pattern, not luck: a suspected cause is a
+  closed leader's late announcement with a higher epoch holding a fresh tab, unmeasured.
+  It wants a step of its own, not a third rerun.
+
