@@ -190,14 +190,17 @@ where
         &sync_marker,
         &access_token,
     )?;
-    let mut socket = match EventSocket::connect_with_timeout(url, SOCKET_CONNECT_TIMEOUT).await {
-        Ok(socket) => socket,
-        Err(e) => {
-            service.notify_error(&format!("push connect: {e}"));
-            warn!(error = %e, "push: connect failed; draining without a socket");
-            return Ok(ControlFlow::Continue(Ended::NoSocket));
-        }
-    };
+    let mut socket =
+        match EventSocket::connect_trusting(url, SOCKET_CONNECT_TIMEOUT, client.trust_anchors())
+            .await
+        {
+            Ok(socket) => socket,
+            Err(e) => {
+                service.notify_error(&format!("push connect: {e}"));
+                warn!(error = %e, "push: connect failed; draining without a socket");
+                return Ok(ControlFlow::Continue(Ended::NoSocket));
+            }
+        };
     stamp_last_connected(client).await?;
     debug!(sync_marker = %sync_marker, "push: connected to /events");
     drive_connection(client, service, &mut socket, &sync_marker, on_frame).await

@@ -62,6 +62,9 @@ pub struct Kupferdraht {
     provider: Arc<dyn StorageProvider>,
     global: Arc<dyn GlobalStore>,
     permit_http: bool,
+    /// The app's own certificate authorities, PEM (Step 156), handed to every
+    /// client this manager logs in or resumes; checked at `build`.
+    root_certificates: Vec<String>,
     /// The single live `Client` per `account_id` (Step 39). The `zuid`
     /// refresh cookie, `mls.db`, and notification cursor are account-level
     /// singletons, but per-`Client` state (tokens, `refresh_lock`, sync loop)
@@ -87,6 +90,7 @@ pub(crate) struct ManagerConfig {
     pub(crate) keystore: Arc<dyn SecureKeyStore>,
     pub(crate) provider: Arc<dyn StorageProvider>,
     pub(crate) permit_http: bool,
+    pub(crate) root_certificates: Vec<String>,
     #[cfg(any(target_arch = "wasm32", test))]
     pub(crate) recovery_services: Option<crate::recovery::flow::RecoveryServices>,
 }
@@ -104,7 +108,12 @@ fn build_client_builder(config: &ManagerConfig, server: Option<ServerConfig>) ->
     if config.permit_http {
         builder = builder.permit_http();
     }
-    builder
+    config
+        .root_certificates
+        .iter()
+        .fold(builder, |builder, pem| {
+            builder.add_root_certificates(pem.clone())
+        })
 }
 
 impl Kupferdraht {
@@ -381,6 +390,7 @@ impl Kupferdraht {
             keystore: self.keystore.clone(),
             provider: self.provider.clone(),
             permit_http: self.permit_http,
+            root_certificates: self.root_certificates.clone(),
             #[cfg(any(target_arch = "wasm32", test))]
             recovery_services: self.recovery_services.clone(),
         }
@@ -432,6 +442,8 @@ pub struct KupferdrahtBuilder {
     storage_provider: Option<Arc<dyn StorageProvider>>,
     permit_http: bool,
     account_keys: AccountKeySource,
+    /// Step 156: the app's own certificate authorities, PEM.
+    root_certificates: Vec<String>,
     #[cfg(any(target_arch = "wasm32", test))]
     recovery_services: Option<crate::recovery::flow::RecoveryServices>,
 }
@@ -472,6 +484,16 @@ impl KupferdrahtBuilder {
         self
     }
 
+    /// Trust these certificate authorities beside the built-in Mozilla list
+    /// for every client this manager logs in or resumes (Step 156): PEM text
+    /// with one or more certificates. Pass them at every start; nothing is
+    /// stored. No effect in the browser.
+    #[must_use]
+    pub fn add_root_certificates(mut self, pem: impl Into<String>) -> Self {
+        self.root_certificates.push(pem.into());
+        self
+    }
+
     /// Permit plain-HTTP server URLs (local dev / tests).
     #[must_use]
     pub fn permit_http(mut self) -> Self {
@@ -492,9 +514,12 @@ impl KupferdrahtBuilder {
     /// the (default or custom) provider.
     ///
     /// # Errors
-    /// `KupferdrahtError::InvalidInput` if `base_dir` / `keystore` are missing;
+    /// `KupferdrahtError::InvalidInput` if `base_dir` / `keystore` are missing
+    /// or a PEM text given to `add_root_certificates` holds no certificate;
     /// `KupferdrahtError::Storage` if the registry cannot be opened.
     pub fn build(self) -> Result<Kupferdraht, KupferdrahtError> {
+        // Step 156: PEM without a certificate fails here, not at a login.
+        crate::wire::tls::TrustAnchors::from_pems(&self.root_certificates)?;
         let base_dir = self.base_dir.ok_or_else(|| {
             KupferdrahtError::InvalidInput("Kupferdraht::builder requires base_dir".into())
         })?;
@@ -515,6 +540,7 @@ impl KupferdrahtBuilder {
             provider,
             global,
             permit_http: self.permit_http,
+            root_certificates: self.root_certificates,
             clients: tokio::sync::Mutex::new(HashMap::new()),
             #[cfg(any(target_arch = "wasm32", test))]
             recovery_services: self.recovery_services,

@@ -3095,3 +3095,34 @@ touched it.
   closed leader's late announcement with a higher epoch holding a fresh tab, unmeasured.
   It wants a step of its own, not a third rerun.
 
+### 5.94 An error behind two wrappers, a fallback that hid the socket, and a smoke script that lost lines (Step 156)
+
+- **The refusal sat two `io::Error`s deep.** `io::Error::source()` skips the error an
+  `io::Error` carries, and hyper wraps one `io::Error` in another before rustls'
+  `InvalidCertificate`. My first walk looked one level in, and the red test kept
+  saying `Network`. Printing the chain level by level showed the nesting; the walk now
+  descends into every carried error. A test that stays red after the implementation
+  is evidence, not noise.
+- **A message that arrived proved nothing about the socket.** When the push connect
+  fails, the sync drains without a socket and still delivers; "the message arrived"
+  would have been green with the WebSocket refused. The smoke now demands the debug
+  line `push: connected to` and fails on `connect failed`. A path with a silent
+  fallback needs a positive signal in its smoke.
+- **My smoke script lost lines, not the code.** Polling a pipe with `select` and then
+  `readline` misses lines already in Python's buffer, so the first run reported the
+  socket as not open while it was. A reader thread into a queue fixed it. A red smoke
+  check is read against the script before the code.
+- **Moving the builder's server out first broke four paths.** `self.server.ok_or_else`
+  moves before `self.trust()` borrows; reading the anchors first in each entry point
+  fixed it. And the native `HttpClient::new` became browser- and test-only, since
+  every native client is now built `with_trust`.
+- **The wasm clippy found what no native check compiles.** The browser's `from_pem`
+  always returned `Ok`, and pedantic clippy refused the needless `Result` only on
+  wasm32. It now checks, as natively, that the text holds a certificate, so `build`
+  refuses the same input on every platform. The gate's wasm lines earned their keep
+  again (CLAUDE.md, "Warnings are Errors").
+- **Left as decided:** the anchors hold for every connection of the app, not one
+  server; no pinning (THREAT_MODEL A4); the Kotlin and Swift constructor is generated
+  and built, not called by a test of its own. The wire-server-rs side drops its CLI
+  build trick in its own session.
+

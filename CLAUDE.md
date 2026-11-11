@@ -23,7 +23,7 @@ Client layer only — a Wire-compatible client, not a Wire replacement. Kalium (
 
 ## Stack
 
-Rust 2024 · UniFFI 0.29 (tokio feature) · openmls 0.9 (crates.io; its P-256 providers `openmls_rust_crypto` / `openmls_basic_credential` from the SchwarzDigits openmls fork on the p256 0.14 line, Step 128; no proteus — ADR-0010) · SQLite3MC (vendored amalgamation, compiled by the SchwarzDigits rusqlite fork — ADR-0021/0022/0042) · reqwest 0.12 (rustls, no native-tls) · tokio 1, serde 1, thiserror 2, tracing 0.1 · cargo-ndk (Android) · wasm-pack (WASM).
+Rust 2024 · UniFFI 0.29 (tokio feature) · openmls 0.9 (crates.io; its P-256 providers `openmls_rust_crypto` / `openmls_basic_credential` from the SchwarzDigits openmls fork on the p256 0.14 line, Step 128; no proteus — ADR-0010) · SQLite3MC (vendored amalgamation, compiled by the SchwarzDigits rusqlite fork — ADR-0021/0022/0042) · reqwest 0.12 (rustls, no native-tls; an app's own certificate authorities join the built-in list — ADR-0044) · tokio 1, serde 1, thiserror 2, tracing 0.1 · cargo-ndk (Android) · wasm-pack (WASM).
 
 ## Architecture (ADR-0009)
 
@@ -47,7 +47,7 @@ All Wire content is serialized as `GenericMessage` Protobuf (`kupferdraht-core/p
 
 MLS (RFC 9420) exclusively — a hard architectural boundary.
 
-Forbidden: Olm / Megolm; Signal Protocol (Double Ratchet, X3DH); custom crypto primitives; direct `ring` / `rustls` / `openssl` outside what openmls/proteus pull in transitively.
+Forbidden: Olm / Megolm; Signal Protocol (Double Ratchet, X3DH); custom crypto primitives; direct `ring` / `rustls` / `openssl` outside what openmls/proteus pull in transitively — the one exception: `rustls` and `webpki-roots` configure the transports' TLS trust (the WebSocket's root store with an app's own authorities, Step 156, ADR-0044), on reqwest's rustls version with the `ring` provider, never for cryptography of Kupferdraht's own.
 
 No partial protocol, no security-disabling flags: PFS and PCS are not optional; Welcome / Commit / Proposal are fully processed; no `#[cfg(feature = "insecure")]` or similar.
 

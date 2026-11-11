@@ -305,6 +305,13 @@ impl Client {
         self.http.permit_http()
     }
 
+    /// The app's own certificate authorities the client was built with
+    /// (Step 156: the push sockets trust them as the API calls do).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn trust_anchors(&self) -> &crate::wire::tls::TrustAnchors {
+        self.http.trust()
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         user_id: UserId,

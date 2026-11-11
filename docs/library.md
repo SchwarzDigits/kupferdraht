@@ -378,6 +378,18 @@ scheme is not `https://` with `KupferdrahtError::InvalidInput`. Only the
 `httpmock`-backed integration tests call `permit_http` — production
 callers (including `kupferdraht-cli`) must not.
 
+### `ClientBuilder::add_root_certificates(self, pem: impl Into<String>) -> ClientBuilder`
+
+Trust these certificate authorities beside the built-in Mozilla list, for every
+TLS connection to the server — both HTTP clients (the asset store's redirect
+included) and the push WebSocket (Step 156, ADR-0044). `pem` holds one or more
+certificates; call it again for more. Without it nothing changes; the built-in
+list always stays, and nothing turns the check off. PEM without a certificate is
+`InvalidInput` when the client is built. A server certificate neither covers is
+`KupferdrahtError::CertificateRejected`. No effect in the browser, which checks
+with its own list. matrix-rust-sdk's `ClientBuilder::add_root_certificates`
+(which takes DER).
+
 ### `ClientBuilder::account(self, account_id: impl Into<String>) -> ClientBuilder`
 
 Select which account `ClientBuilder::resume` (see
@@ -571,6 +583,14 @@ Permit plain-HTTP server URLs for every account this manager builds
 (local dev / tests); production deployments use HTTPS only. Mirrors
 `ClientBuilder::permit_http`, threaded through every internal
 `ClientBuilder` the manager constructs.
+
+### `KupferdrahtBuilder::add_root_certificates(self, pem: impl Into<String>) -> Self`
+
+The manager's [`ClientBuilder::add_root_certificates`](#clientbuilderadd_root_certificatesself-pem-impl-intostring---clientbuilder)
+(Step 156, ADR-0044): every client it logs in or resumes trusts these
+certificate authorities beside the built-in list. Nothing is stored — pass them
+at every start, for instance from the app's managed configuration. `build`
+refuses PEM without a certificate with `InvalidInput`.
 
 ### `Kupferdraht::accounts(&self) -> Result<Vec<AccountEntry>, KupferdrahtError>`
 
@@ -2019,6 +2039,7 @@ current variants:
 | `RateLimited { retry_after_secs }` | The backend answered `429`; `retry_after_secs` is its `Retry-After` in seconds when it sent one (an HTTP-date or no header → `None`). The loop variants (`sync`, `sync_with_callback`, `sync_stream`, FFI `start_sync`, the push loop) wait it out — `Retry-After`, else `poll_interval`, bounded to 1–60 s — and carry on; every other call, `sync_once` included, returns it. (Step 103) |
 | `Encoding`             | JSON / TLS / Protobuf parse failure. |
 | `IntegrityCheck`       | A cryptographic integrity check failed on the asset path (SHA-256 / MAC / AEAD-tag mismatch). Migration checksum failures surface as `IncompatibleStore`, not here. |
+| `CertificateRejected(String)` | The server's TLS certificate was not trusted (Step 156): an issuer neither the built-in list nor `add_root_certificates` names, an expired certificate, or one for another host. Raised where a connection to a host is first made — the API version, a login, an authenticated call, the asset store's redirect, the push WebSocket. |
 | `IncompatibleStore { database, reason }` | The database does not fit this build (Step 157): its schema is `"newer"` than the code, or its applied migrations are `"divergent"` from the code's. `database` is `kupferdraht.db`, `mls.db` or `global.db`. Nothing is written; the build that fits the data — usually a newer one — opens it. An older database is migrated forward and opens. |
 | `InvalidInput`         | Caller-supplied argument violates a precondition. |
 | `MlsGroupMissing`      | No MLS group loaded for the conversation — `Client::join_room` first. |

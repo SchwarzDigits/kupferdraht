@@ -192,6 +192,12 @@ pub enum KupferdrahtError {
     /// data — usually the newer one — opens it.
     #[error("{database} does not fit this build ({reason})")]
     IncompatibleStore { database: String, reason: String },
+    /// The server's TLS certificate was not trusted (Step 156): an issuer
+    /// neither the built-in list nor the app's own anchors
+    /// (`add_root_certificates`) name, an expired certificate, or one for
+    /// another host. The payload says which connection and why.
+    #[error("the server's certificate was not trusted: {0}")]
+    CertificateRejected(String),
     #[error("unexpected error: {0}")]
     Generic(String),
 }
@@ -237,6 +243,7 @@ impl KupferdrahtError {
             Self::RateLimited { .. } => "RateLimited",
             Self::CiphersuiteMismatch { .. } => "CiphersuiteMismatch",
             Self::IncompatibleStore { .. } => "IncompatibleStore",
+            Self::CertificateRejected(_) => "CertificateRejected",
             Self::Generic(_) => "Generic",
         }
     }
@@ -298,6 +305,7 @@ mod variant_name_tests {
                 database: String::new(),
                 reason: String::new(),
             },
+            KupferdrahtError::CertificateRejected(String::new()),
             KupferdrahtError::Generic(String::new()),
         ]
     }

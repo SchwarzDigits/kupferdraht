@@ -50,8 +50,9 @@ impl HttpClient {
         let resp = tokio::time::timeout(self.transfer_idle, self.transfer.get(target).send())
             .await
             .map_err(|_| stalled_download(self.transfer_idle))?
+            // The pre-signed query is a credential: never into an error.
             .map_err(|e| {
-                KupferdrahtError::Network(format!("GET asset at {host}: {}", e.without_url()))
+                super::transport_error(&format!("GET asset at {host}"), &e.without_url())
             })?;
         if !resp.status().is_success() {
             return Err(KupferdrahtError::BackendRejected(format!(

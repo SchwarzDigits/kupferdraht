@@ -267,6 +267,12 @@ tokio = { version = "1", features = ["rt-multi-thread", "fs", "net"] }
 # webpki roots — no native-tls anywhere in the tree (Stack rule), same
 # TLS posture as reqwest above.
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+# Step 156: an app's own certificate authorities beside the Mozilla list. The
+# WebSocket takes them only as a rustls `ClientConfig`: the same rustls (ring
+# provider) and the same roots reqwest and tokio-tungstenite already pull in —
+# TLS configuration, no cryptography of Kupferdraht's own.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1.0"
 
 # Native integration-test deps (httpmock → tokio `net` → mio, tempfile, the
 # multi-thread test runtime, direct rusqlite) don't build for wasm, so they are
@@ -280,6 +286,10 @@ voprf = { package = "voprf-ng", version = "0.6", default-features = false, featu
 # without touching live Wire staging.
 httpmock = "0.8"
 tempfile = "3"
+# Step 156: a certificate authority made in the test, and a TLS server under it
+# for HTTP and the WebSocket (ring, like the rustls of the graph).
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
 # `net` for the in-process WebSocket server the Step-62a tests run
 # (`TcpListener` on loopback — httpmock cannot speak WS).
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "test-util"] }

@@ -254,19 +254,62 @@ async fn within<T>(
         })
 }
 
+/// The socket stream and the upgrade answer of a connect.
+type Connected = (
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+    tokio_tungstenite::tungstenite::handshake::client::Response,
+);
+
+/// Open `request` over the built-in roots, or over `trust`'s configuration
+/// when the app added certificate authorities (Step 156); a certificate the
+/// trust does not cover is `CertificateRejected`, any other failure
+/// `Network`.
+async fn open<R>(
+    request: R,
+    trust: &crate::wire::tls::TrustAnchors,
+    what: &str,
+) -> Result<Connected, KupferdrahtError>
+where
+    R: tokio_tungstenite::tungstenite::client::IntoClientRequest + Unpin,
+{
+    let connected = match trust.websocket_config()? {
+        None => tokio_tungstenite::connect_async(request).await,
+        Some(config) => {
+            tokio_tungstenite::connect_async_tls_with_config(
+                request,
+                None,
+                false,
+                Some(tokio_tungstenite::Connector::Rustls(config)),
+            )
+            .await
+        }
+    };
+    connected.map_err(|e| match crate::wire::tls::certificate_rejection(&e) {
+        Some(why) => KupferdrahtError::CertificateRejected(format!("{what}: {why}")),
+        None => KupferdrahtError::Network(format!("{what}: {e}")),
+    })
+}
+
 impl EventSocket {
     /// [`Self::connect`] with a deadline on the TCP + TLS + upgrade
     /// handshake (Step 132, M1): a listener that accepts and never answers
     /// fails as `KupferdrahtError::Network` after `timeout`, not never.
+    /// `trust` adds the app's certificate authorities to the built-in list
+    /// (Step 156).
     ///
     /// # Errors
     /// As [`Self::connect`], plus `Network` on the deadline.
-    pub(crate) async fn connect_with_timeout(
+    pub(crate) async fn connect_trusting(
         url: url::Url,
         timeout: std::time::Duration,
+        trust: &crate::wire::tls::TrustAnchors,
     ) -> Result<Self, KupferdrahtError> {
-        // Step 132 red: no deadline yet.
-        within(timeout, Self::connect(url), "events websocket connect").await
+        within(
+            timeout,
+            Self::connect(url, trust),
+            "events websocket connect",
+        )
+        .await
     }
 
     /// When the server last answered a ping (Step 132, M1): the keepalive
@@ -276,7 +319,7 @@ impl EventSocket {
     }
 
     /// [`Self::connect_with_bearer`] under the same deadline as
-    /// [`Self::connect_with_timeout`].
+    /// [`Self::connect_trusting`], with the same trust.
     ///
     /// # Errors
     /// As [`Self::connect_with_bearer`], plus `Network` on the deadline.
@@ -284,10 +327,11 @@ impl EventSocket {
         url: url::Url,
         access_token: &str,
         timeout: std::time::Duration,
+        trust: &crate::wire::tls::TrustAnchors,
     ) -> Result<Self, KupferdrahtError> {
         within(
             timeout,
-            Self::connect_with_bearer(url, access_token),
+            Self::connect_with_bearer(url, access_token, trust),
             "await websocket connect",
         )
         .await
@@ -297,20 +341,23 @@ impl EventSocket {
     /// complete the upgrade.
     ///
     /// # Errors
-    /// `KupferdrahtError::Network` on TCP/TLS/upgrade failure.
+    /// `KupferdrahtError::CertificateRejected` for a certificate `trust`
+    /// does not cover (Step 156); `KupferdrahtError::Network` on any other
+    /// TCP/TLS/upgrade failure.
     ///
     /// # Panics
     /// Panics when `url` is not `ws`/`wss` — callers must build it
     /// with [`events_url`], which enforces the scheme (the token in
     /// the query must never travel over plain HTTP).
-    pub(crate) async fn connect(url: url::Url) -> Result<Self, KupferdrahtError> {
+    pub(crate) async fn connect(
+        url: url::Url,
+        trust: &crate::wire::tls::TrustAnchors,
+    ) -> Result<Self, KupferdrahtError> {
         assert!(
             matches!(url.scheme(), "ws" | "wss"),
             "EventSocket::connect: non-websocket url — build it with events_url"
         );
-        let (inner, response) = tokio_tungstenite::connect_async(url.as_str())
-            .await
-            .map_err(|e| KupferdrahtError::Network(format!("events websocket connect: {e}")))?;
+        let (inner, response) = open(url.as_str(), trust, "events websocket connect").await?;
         // 101 is the only status connect_async resolves Ok with; pin
         // the §11.2 upgrade contract explicitly.
         debug_assert_eq!(
@@ -329,8 +376,10 @@ impl EventSocket {
     /// a separate constructor from [`Self::connect`]).
     ///
     /// # Errors
-    /// `KupferdrahtError::Network` on TCP/TLS/upgrade failure;
-    /// `KupferdrahtError::InvalidInput` for a malformed header value.
+    /// `KupferdrahtError::CertificateRejected` for a certificate `trust`
+    /// does not cover (Step 156); `KupferdrahtError::Network` on any other
+    /// TCP/TLS/upgrade failure; `KupferdrahtError::InvalidInput` for a
+    /// malformed header value.
     ///
     /// # Panics
     /// Panics when `url` is not `ws`/`wss` — callers must build it
@@ -338,6 +387,7 @@ impl EventSocket {
     pub(crate) async fn connect_with_bearer(
         url: url::Url,
         access_token: &str,
+        trust: &crate::wire::tls::TrustAnchors,
     ) -> Result<Self, KupferdrahtError> {
         use tokio_tungstenite::tungstenite::client::IntoClientRequest as _;
         assert!(
@@ -352,9 +402,7 @@ impl EventSocket {
             KupferdrahtError::InvalidInput(format!("await websocket bearer header: {e}"))
         })?;
         request.headers_mut().insert("Authorization", header);
-        let (inner, response) = tokio_tungstenite::connect_async(request)
-            .await
-            .map_err(|e| KupferdrahtError::Network(format!("await websocket connect: {e}")))?;
+        let (inner, response) = open(request, trust, "await websocket connect").await?;
         debug_assert_eq!(
             response.status(),
             tokio_tungstenite::tungstenite::http::StatusCode::SWITCHING_PROTOCOLS
@@ -547,10 +595,14 @@ mod tests {
         });
         let outcome = tokio::time::timeout(
             std::time::Duration::from_secs(3),
-            EventSocket::connect_with_timeout(url, std::time::Duration::from_millis(300)),
+            EventSocket::connect_trusting(
+                url,
+                std::time::Duration::from_millis(300),
+                &crate::wire::tls::TrustAnchors::default(),
+            ),
         )
         .await
-        .expect("connect_with_timeout must return within its deadline");
+        .expect("connect_trusting must return within its deadline");
         assert!(
             matches!(outcome, Err(KupferdrahtError::Network(_))),
             "a silent listener must surface as Network, got {:?}",
@@ -588,7 +640,9 @@ mod tests {
                 }
             }
         });
-        let mut socket = EventSocket::connect(url).await.expect("connect");
+        let mut socket = EventSocket::connect(url, &crate::wire::tls::TrustAnchors::default())
+            .await
+            .expect("connect");
         assert!(socket.last_pong().is_none(), "no pong before any frame");
         let frame = socket.next_frame().await.expect("read").expect("a frame");
         assert!(matches!(frame, ConsumableNotification::Event { .. }));
@@ -800,7 +854,9 @@ mod tests {
         });
 
         let url = events_url(&base, 14, "client-1", "marker-1", "tok-1").expect("url");
-        let _socket = EventSocket::connect(url).await.expect("connect");
+        let _socket = EventSocket::connect(url, &crate::wire::tls::TrustAnchors::default())
+            .await
+            .expect("connect");
 
         let uri = uri_rx.await.expect("server captured the request URI");
         assert!(uri.starts_with("/v14/events?"), "uri: {uri}");
@@ -826,7 +882,9 @@ mod tests {
         });
 
         let url = events_url(&base, 14, "c", "m", "t").expect("url");
-        let mut socket = EventSocket::connect(url).await.expect("connect");
+        let mut socket = EventSocket::connect(url, &crate::wire::tls::TrustAnchors::default())
+            .await
+            .expect("connect");
 
         let first = socket.next_frame().await.expect("first frame");
         assert!(
@@ -866,7 +924,9 @@ mod tests {
         });
 
         let url = events_url(&base, 14, "c", "m", "t").expect("url");
-        let mut socket = EventSocket::connect(url).await.expect("connect");
+        let mut socket = EventSocket::connect(url, &crate::wire::tls::TrustAnchors::default())
+            .await
+            .expect("connect");
         let first = socket.next_frame().await.expect("first frame");
         assert!(
             matches!(
@@ -902,7 +962,9 @@ mod tests {
         });
 
         let url = events_url(&base, 14, "c", "m", "t").expect("url");
-        let mut socket = EventSocket::connect(url).await.expect("connect");
+        let mut socket = EventSocket::connect(url, &crate::wire::tls::TrustAnchors::default())
+            .await
+            .expect("connect");
         socket.send_ack(1, false).await.expect("ack sent");
         server.await.expect("server task asserts the ack shape");
     }
@@ -927,7 +989,9 @@ mod tests {
         });
 
         let url = events_url(&base, 14, "c", "m", "t").expect("url");
-        let mut socket = EventSocket::connect(url).await.expect("connect");
+        let mut socket = EventSocket::connect(url, &crate::wire::tls::TrustAnchors::default())
+            .await
+            .expect("connect");
         // The pong must happen inside the read path — the caller only
         // ever sees the orderly close.
         let end = socket.next_frame().await.expect("read to close");

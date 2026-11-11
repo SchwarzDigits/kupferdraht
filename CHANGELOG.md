@@ -39,6 +39,14 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **A self-hosted backend under its own certificate authority** (Step 156,
+  ADR-0044): `add_root_certificates` on `ClientBuilder` and on
+  `KupferdrahtBuilder` (FFI
+  `Kupferdraht.openWithRootCertificates(baseDir, keystore, pem)`, CLI
+  `login --ca-file`) trusts certificate authorities, as PEM, beside the built-in
+  Mozilla list — for both HTTP clients, the asset store's redirect and the push
+  WebSocket. Without them nothing changes; the built-in list stays, the system
+  store is not read, and nothing turns the check off. No effect in the browser.
 - **Tabs of different releases do not mix** (Step 157): `kupferdraht-tabs` knows
   its own release (`KUPFERDRAHT_VERSION`, `host.version`), the leader announces
   its own (`host.leaderVersion`), and `leader-changed` carries `relation` — this
@@ -52,6 +60,12 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **BREAKING: a refused server certificate says so** (Step 156):
+  `KupferdrahtError::CertificateRejected(String)` (FFI too; in the browser not
+  raised, the browser checks itself) where a connection to a host is first made —
+  the API version, a login, an authenticated call, the asset store's redirect, the
+  push WebSocket — instead of `Network`. A new enum variant breaks an exhaustive
+  `switch` / `when` in Swift and Kotlin.
 - **BREAKING: a database that does not fit this build is refused by name**
   (Step 157): `KupferdrahtError::IncompatibleStore { database, reason }` (FFI
   too; in the browser `err.name` with `database` and `reason`). A database opens

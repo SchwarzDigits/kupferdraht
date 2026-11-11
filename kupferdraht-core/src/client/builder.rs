@@ -47,6 +47,7 @@ use crate::storage::{
 use crate::wire::HttpClient;
 use crate::wire::dto::{LoginOutcome, NewUserRequest, SelfUser};
 use crate::wire::http::checked_websocket_base;
+use crate::wire::tls::TrustAnchors;
 
 /// Wire-server addressing tuple supplied to `ClientBuilder`.
 ///
@@ -101,6 +102,10 @@ pub struct ClientBuilder {
     /// Where a new key of an account comes from (ADR-0035): `Seed` in the
     /// browser, set by the device manager; `Random` otherwise.
     account_keys: AccountKeySource,
+    /// The app's own certificate authorities, PEM (Step 156): trusted beside
+    /// the built-in list once [`ClientBuilder::add_root_certificates`] named
+    /// them; parsed when the client is built.
+    root_certificates: Vec<String>,
 }
 
 impl ClientBuilder {
@@ -142,6 +147,25 @@ impl ClientBuilder {
     pub fn storage_provider(mut self, provider: Arc<dyn StorageProvider>) -> Self {
         self.storage_provider = Some(provider);
         self
+    }
+
+    /// Trust these certificate authorities beside the built-in Mozilla list,
+    /// for every TLS connection to the server (Step 156): PEM text with one or
+    /// more certificates. Without it nothing changes. No effect in the
+    /// browser, which checks with its own list. Mirrors matrix-rust-sdk's
+    /// `ClientBuilder::add_root_certificates`.
+    #[must_use]
+    pub fn add_root_certificates(mut self, pem: impl Into<String>) -> Self {
+        self.root_certificates.push(pem.into());
+        self
+    }
+
+    /// The anchors [`Self::add_root_certificates`] named (Step 156).
+    ///
+    /// # Errors
+    /// `InvalidInput` for PEM without a certificate.
+    fn trust(&self) -> Result<TrustAnchors, KupferdrahtError> {
+        TrustAnchors::from_pems(&self.root_certificates)
     }
 
     /// Opt in to plain-HTTP connections.
@@ -207,12 +231,13 @@ impl ClientBuilder {
         success_redirect: &str,
         error_redirect: &str,
     ) -> Result<String, KupferdrahtError> {
+        let trust = self.trust()?;
         let server = self.server.ok_or_else(|| {
             KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
         })?;
         let idp = idp_id(code);
         require_non_empty("initiate_sso", &[("code", idp)])?;
-        let http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        let http = HttpClient::with_trust(&server.api_base_url, self.permit_http, &trust)?;
         checked_websocket_base(&server.websocket_url, self.permit_http)?;
         if !http.sso_code_exists(idp).await? {
             return Err(KupferdrahtError::InvalidInput(format!(
@@ -244,10 +269,11 @@ impl ClientBuilder {
                 "email must be non-empty".into(),
             ));
         }
+        let trust = self.trust()?;
         let server = self.server.ok_or_else(|| {
             KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
         })?;
-        let http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        let http = HttpClient::with_trust(&server.api_base_url, self.permit_http, &trust)?;
         checked_websocket_base(&server.websocket_url, self.permit_http)?;
         let code = http.sso_default_code().await?.ok_or_else(|| {
             KupferdrahtError::InvalidInput("no SSO provider is configured for this backend".into())
@@ -277,6 +303,7 @@ impl ClientBuilder {
         second_factor_code: Option<String>,
     ) -> Result<Arc<PendingLogin>, KupferdrahtError> {
         require_non_empty("login", &[("email", &email), ("password", &password)])?;
+        let trust = self.trust()?;
         let server = self.server.ok_or_else(|| {
             KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
         })?;
@@ -292,7 +319,8 @@ impl ClientBuilder {
         // Built first (Step 132): the URL scheme is refused before the home
         // or the keystore is touched, so a bad URL fails fast on a machine
         // whose keystore probe blocks (observations §76).
-        let device_ops_http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        let device_ops_http =
+            HttpClient::with_trust(&server.api_base_url, self.permit_http, &trust)?;
         checked_websocket_base(&server.websocket_url, self.permit_http)?;
         let home = open_home(self.base_dir.clone(), self.account_keys)?;
         let keystore = resolve_keystore(self.keystore.clone(), self.permit_http).await?;
@@ -306,6 +334,7 @@ impl ClientBuilder {
             server,
             None,
             self.permit_http,
+            &trust,
             None,
             cookie_label,
             device_label,
@@ -346,11 +375,13 @@ impl ClientBuilder {
         // wasm: the browser jar holds the cookie, the argument may be empty.
         #[cfg(not(target_arch = "wasm32"))]
         require_non_empty("finalize_sso", &[("sso_cookie", sso_cookie)])?;
+        let trust = self.trust()?;
         let server = self.server.ok_or_else(|| {
             KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
         })?;
         // Scheme checks first (Step 132), as in `login`.
-        let device_ops_http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        let device_ops_http =
+            HttpClient::with_trust(&server.api_base_url, self.permit_http, &trust)?;
         checked_websocket_base(&server.websocket_url, self.permit_http)?;
         let home = open_home(self.base_dir.clone(), self.account_keys)?;
         let keystore = resolve_keystore(self.keystore.clone(), self.permit_http).await?;
@@ -360,6 +391,7 @@ impl ClientBuilder {
             server,
             None,
             self.permit_http,
+            &trust,
             None,
             cookie_label,
             device_label,
@@ -405,8 +437,10 @@ impl ClientBuilder {
             keystore,
             account_id: requested_account,
             account_keys,
+            root_certificates,
             ..
         } = self;
+        let trust = TrustAnchors::from_pems(&root_certificates)?;
         let keystore = resolve_keystore(keystore, permit_http).await?;
         // Step 93: the home (and its id) is resolved once, up front.
         let home = open_home(base_dir, account_keys)?;
@@ -443,7 +477,7 @@ impl ClientBuilder {
         // `parts.session` in place when the persisted token has aged out.
         let mut parts = load_resume_state(&*store, &account_id).await?;
         let server = build_server_from_record(parts.server_cfg.clone());
-        let http = HttpClient::new(&server.api_base_url, permit_http)?;
+        let http = HttpClient::with_trust(&server.api_base_url, permit_http, &trust)?;
         checked_websocket_base(&server.websocket_url, permit_http)?;
         // If the persisted access token has aged out, refresh it in
         // place with the persisted zuid instead of forcing a re-login
@@ -518,11 +552,12 @@ impl ClientBuilder {
             "register",
             &[("name", &name), ("email", &email), ("password", &password)],
         )?;
+        let trust = self.trust()?;
         let server = self.server.clone().ok_or_else(|| {
             KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
         })?;
         let keystore = resolve_keystore(self.keystore.clone(), self.permit_http).await?;
-        let http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        let http = HttpClient::with_trust(&server.api_base_url, self.permit_http, &trust)?;
         checked_websocket_base(&server.websocket_url, self.permit_http)?;
         let body = NewUserRequest {
             name,
@@ -574,10 +609,11 @@ impl ClientBuilder {
             "activate",
             &[("email", &email), ("code", &code), ("password", &password)],
         )?;
+        let trust = self.trust()?;
         let server = self.server.as_ref().ok_or_else(|| {
             KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
         })?;
-        let http = HttpClient::new(&server.api_base_url, self.permit_http)?;
+        let http = HttpClient::with_trust(&server.api_base_url, self.permit_http, &trust)?;
         checked_websocket_base(&server.websocket_url, self.permit_http)?;
         http.activate(&email, &code).await?;
         self.login(email, password, None)

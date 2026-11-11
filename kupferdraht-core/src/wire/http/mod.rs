@@ -126,6 +126,10 @@ pub struct HttpClient {
     /// A download fails after this long without a byte (Step 98).
     #[cfg(not(target_arch = "wasm32"))]
     transfer_idle: std::time::Duration,
+    /// The app's own certificate authorities beside the built-in list
+    /// (Step 156); the push loop opens its sockets with them too.
+    #[cfg(not(target_arch = "wasm32"))]
+    trust: crate::wire::tls::TrustAnchors,
     base_url: Url,
     /// The `permit_http` opt-in this client was built with; the socket
     /// URL builders apply the same scheme rule (Step 132).
@@ -233,10 +237,38 @@ fn checked_base_url(api_base_url: &str, permit_http: bool) -> Result<Url, Kupfer
 /// (live-confirmed — login's rebind issued cookie `ucD8...`,
 /// the resume's rebind sent `Cookie: zuid=ucD8...` plus a duplicate
 /// store-derived `zuid=byav...`, and Wire rejected).
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tls_tests;
+
 fn build_reqwest(builder: reqwest::ClientBuilder) -> Result<ReqwestClient, KupferdrahtError> {
     builder
         .build()
         .map_err(|e| KupferdrahtError::Network(format!("build reqwest client: {e}")))
+}
+
+/// `builder` trusting `certificates` beside reqwest's built-in roots, which
+/// stay (Step 156).
+#[cfg(not(target_arch = "wasm32"))]
+fn trusting(
+    builder: reqwest::ClientBuilder,
+    certificates: &[reqwest::Certificate],
+) -> reqwest::ClientBuilder {
+    certificates
+        .iter()
+        .cloned()
+        .fold(builder, reqwest::ClientBuilder::add_root_certificate)
+}
+
+/// A failed request as the caller sees it (Step 156): a certificate the
+/// trust does not cover is `CertificateRejected`, anything else `Network`.
+/// Applied where a connection to a host is first made — the API version,
+/// a login, an authenticated call, the asset store's redirect target.
+pub(crate) fn transport_error(op: &str, e: &reqwest::Error) -> KupferdrahtError {
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(why) = crate::wire::tls::certificate_rejection(e) {
+        return KupferdrahtError::CertificateRejected(format!("{op}: {why}"));
+    }
+    KupferdrahtError::Network(format!("{op}: {e}"))
 }
 
 impl HttpClient {
@@ -260,9 +292,16 @@ impl HttpClient {
     ///   `false`.
     /// * `KupferdrahtError::Network` if the underlying reqwest client
     ///   fails to build.
+    // Step 156: natively every client is built `with_trust`; this is the
+    // browser's constructor and the tests'.
+    #[cfg(any(test, target_arch = "wasm32"))]
     pub fn new(api_base_url: &str, permit_http: bool) -> Result<Self, KupferdrahtError> {
         #[cfg(not(target_arch = "wasm32"))]
-        return Self::with_timeouts(api_base_url, permit_http, HttpTimeouts::PRODUCTION);
+        return Self::with_trust(
+            api_base_url,
+            permit_http,
+            &crate::wire::tls::TrustAnchors::default(),
+        );
         #[cfg(target_arch = "wasm32")]
         Ok(Self {
             client: build_reqwest(ReqwestClient::builder())?,
@@ -278,17 +317,71 @@ impl HttpClient {
         self.permit_http
     }
 
-    /// [`Self::new`] with explicit timeouts (Step 98; tests shrink them).
+    /// [`Self::new`] trusting `trust`'s certificate authorities beside the
+    /// built-in list, for both clients — the API's and the transfers', whose
+    /// redirect to the asset store follows the same trust (Step 156).
     ///
     /// # Errors
     /// As [`Self::new`].
     #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn with_trust(
+        api_base_url: &str,
+        permit_http: bool,
+        trust: &crate::wire::tls::TrustAnchors,
+    ) -> Result<Self, KupferdrahtError> {
+        Self::with_timeouts_trusting(api_base_url, permit_http, HttpTimeouts::PRODUCTION, trust)
+    }
+
+    /// In the browser `fetch` checks with the browser's list: [`Self::new`].
+    ///
+    /// # Errors
+    /// As [`Self::new`].
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn with_trust(
+        api_base_url: &str,
+        permit_http: bool,
+        _trust: &crate::wire::tls::TrustAnchors,
+    ) -> Result<Self, KupferdrahtError> {
+        Self::new(api_base_url, permit_http)
+    }
+
+    /// The app's own certificate authorities this client trusts (Step 156).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn trust(&self) -> &crate::wire::tls::TrustAnchors {
+        &self.trust
+    }
+
+    /// [`Self::new`] with explicit timeouts (Step 98; tests shrink them).
+    ///
+    /// # Errors
+    /// As [`Self::new`].
+    #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(crate) fn with_timeouts(
         api_base_url: &str,
         permit_http: bool,
         timeouts: HttpTimeouts,
     ) -> Result<Self, KupferdrahtError> {
+        Self::with_timeouts_trusting(
+            api_base_url,
+            permit_http,
+            timeouts,
+            &crate::wire::tls::TrustAnchors::default(),
+        )
+    }
+
+    /// [`Self::with_timeouts`] trusting `trust`'s anchors in both clients.
+    ///
+    /// # Errors
+    /// As [`Self::new`].
+    #[cfg(not(target_arch = "wasm32"))]
+    fn with_timeouts_trusting(
+        api_base_url: &str,
+        permit_http: bool,
+        timeouts: HttpTimeouts,
+        trust: &crate::wire::tls::TrustAnchors,
+    ) -> Result<Self, KupferdrahtError> {
         let base_url = checked_base_url(api_base_url, permit_http)?;
+        let anchors = trust.reqwest_certificates()?;
         // Step 132 (M2): reqwest follows no redirect. A followed 3xx could
         // re-send a login body to a host of the server's choosing (307) or
         // downgrade to plain HTTP; a 3xx answer surfaces as the status it
@@ -296,21 +389,24 @@ impl HttpClient {
         // to the asset store — `download_asset` follows by hand, without
         // credentials (Step 141, `asset_redirect.rs`). (The browser build
         // has no policy knob: `fetch` follows redirects by itself.)
-        let client = build_reqwest(
+        let client = build_reqwest(trusting(
             ReqwestClient::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .connect_timeout(timeouts.connect)
                 .timeout(timeouts.request),
-        )?;
-        let transfer = build_reqwest(
+            &anchors,
+        ))?;
+        let transfer = build_reqwest(trusting(
             ReqwestClient::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .connect_timeout(timeouts.connect),
-        )?;
+            &anchors,
+        ))?;
         Ok(Self {
             client,
             transfer,
             transfer_idle: timeouts.transfer_idle,
+            trust: trust.clone(),
             base_url,
             permit_http,
             refresher: OnceLock::new(),
@@ -397,7 +493,7 @@ impl HttpClient {
             .get(url)
             .send()
             .await
-            .map_err(|e| KupferdrahtError::Network(format!("GET /api-version: {e}")))?;
+            .map_err(|e| transport_error("GET /api-version", &e))?;
         if !resp.status().is_success() {
             return Err(KupferdrahtError::BackendRejected(format!(
                 "/api-version returned {}",
@@ -560,10 +656,7 @@ impl HttpClient {
         let stale = self
             .refresher()
             .map_or(0, |r| r.access_token_issued_at_ms());
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| KupferdrahtError::Network(format!("{op}: {e}")))?;
+        let resp = req.send().await.map_err(|e| transport_error(op, &e))?;
         if resp.status() != reqwest::StatusCode::UNAUTHORIZED {
             return Ok(resp);
         }

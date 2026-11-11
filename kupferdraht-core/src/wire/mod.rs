@@ -10,6 +10,8 @@ pub(crate) mod proto;
 pub(crate) mod push_frame;
 pub(crate) mod room_event;
 pub(crate) mod time;
+// Step 156: the app's own certificate authorities for the TLS connections.
+pub(crate) mod tls;
 mod version;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod websocket;

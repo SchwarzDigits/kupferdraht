@@ -331,6 +331,11 @@ enum Command {
         /// limit just prints the registered devices. Step 24.
         #[arg(long)]
         delete_device: Option<String>,
+        /// PEM file with the certificate authorities of a self-hosted
+        /// backend, trusted beside the built-in list (Step 156). Kept in
+        /// the CLI's home, so every later command trusts them too.
+        #[arg(long)]
+        ca_file: Option<std::path::PathBuf>,
     },
     /// Create a fresh account on the configured backend.
     ///
@@ -1203,6 +1208,7 @@ async fn async_main() -> ExitCode {
             email,
             password_stdin,
             delete_device,
+            ca_file,
         } => {
             let password = match read_password(password_stdin) {
                 Ok(p) if !p.is_empty() => p,
@@ -1216,7 +1222,9 @@ async fn async_main() -> ExitCode {
                 }
             };
             match backend::resolve_server(&api_url, ws_url.as_deref()) {
-                Ok(server) => cli::auth::login(server, email, password, delete_device).await,
+                Ok(server) => {
+                    cli::auth::login(server, email, password, delete_device, ca_file).await
+                }
                 Err(e) => Err(e),
             }
         }

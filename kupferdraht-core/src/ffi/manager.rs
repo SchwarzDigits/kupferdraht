@@ -43,6 +43,26 @@ impl Kupferdraht {
         Ok(Arc::new(Self { inner }))
     }
 
+    /// [`Self::open`] trusting `root_certificates_pem` — one or more
+    /// certificate authorities in PEM — beside the built-in list, for every
+    /// TLS connection to the server (Step 156).
+    ///
+    /// # Errors
+    /// `InvalidInput` for PEM without a certificate; see `KupferdrahtError`.
+    #[uniffi::constructor]
+    pub fn open_with_root_certificates(
+        base_dir: String,
+        keystore: Arc<dyn SecureKeyStore>,
+        root_certificates_pem: String,
+    ) -> Result<Arc<Self>, KupferdrahtError> {
+        let inner = CoreKupferdraht::builder()
+            .base_dir(PathBuf::from(base_dir))
+            .keystore(keystore)
+            .add_root_certificates(root_certificates_pem)
+            .build()?;
+        Ok(Arc::new(Self { inner }))
+    }
+
     /// The id of this home (Step 93, ADR-0025): 32 lowercase hex, persisted
     /// in `base_dir/home.id`; every keystore id of the home
     /// (`kupferdraht.<home-id>.…`) and its login cookie label carry it.
