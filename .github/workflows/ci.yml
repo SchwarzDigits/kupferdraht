@@ -158,16 +158,16 @@ jobs:
           version="$(awk '/^name = "wasm-bindgen"$/{getline; sub(/version = "/, ""); sub(/"/, ""); print; exit}' Cargo.lock)"
           cargo install --locked wasm-bindgen-cli --version "$version"
 
-      # Step 158 measurement branch, never merged: the tab scenarios 60 times,
+      # Step 158 measurement branch, never merged: the tab scenarios 150 times,
       # each timeout naming the waiting tab's state, the lease and the sightings.
-      - name: step_94_leader_tab, 60 runs
-        timeout-minutes: 40
+      - name: step_94_leader_tab, 150 runs
+        timeout-minutes: 90
         run: |
           export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="$(command -v wasm-bindgen-test-runner)"
           export WASM_BINDGEN_TEST_ONLY_WEB=1
           export GECKODRIVER="$(command -v geckodriver)"
           fails=0
-          for i in $(seq 1 60); do
+          for i in $(seq 1 150); do
             if cargo test -p kupferdraht-core --target wasm32-unknown-unknown --test step_94_leader_tab > run.log 2>&1; then
               echo "run $i ok: $(grep -E '^test result' run.log | tail -1)"
             else
@@ -176,7 +176,7 @@ jobs:
               grep -E 'FAIL|timeout waiting|Failed to detect|Invoking test|test result' run.log | cut -c1-4000
             fi
           done
-          echo "runs=60 failed=$fails"
+          echo "runs=150 failed=$fails"
 
   audit:
     # Same tool and policy as the local pre-commit gate (CLAUDE.md
