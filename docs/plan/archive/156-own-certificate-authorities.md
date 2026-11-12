@@ -1,10 +1,17 @@
 # Step 156 — Own certificate authorities: extra trust anchors for a self-hosted server
 
-**Status: implemented** on `step/156-own-certificate-authorities`, smoke 2026-11-11
-against the local wire-server-rs stack (refused without `--ca-file`; three users log
-in with it, one room, a message over the `/await` socket opened on the kept CA, no
-fallback to a socketless drain). Phase 1 decisions and red tests approved by Volker
-on 2026-11-11: rustls and webpki-roots directly for
+**Status: MERGED 2026-11-11** — `7ebf473` on `step/156-own-certificate-authorities`,
+merged to `main` as PR #75 (`3ab2da9`); locally fmt, 0 build warnings, clippy, the
+step's and the touched tests (17 binaries, 933 tests), the wasm32 check, `clippy --lib`
+and CI's wasm clippy line, the CLI's tests; the Kotlin bindings and `swift test` (5 of
+5) green; CI's full suite, doctests, deny, the browser job, the license report and ORT
+green on the first run. Smoke 2026-11-11 against the local wire-server-rs stack:
+refused by name without `--ca-file`; with it three users log in, one room, and a
+message over the `/await` socket opened on the kept CA, no fallback to a socketless
+drain. Scope: `add_root_certificates` on `ClientBuilder` and `KupferdrahtBuilder`, FFI
+`Kupferdraht.openWithRootCertificates`, CLI `login --ca-file` kept in the home,
+`KupferdrahtError::CertificateRejected` (BREAKING), ADR-0044. Phase 1 decisions and
+red tests approved by Volker on 2026-11-11: rustls and webpki-roots directly for
 the WebSocket's TLS configuration (CLAUDE.md's rule made precise), PEM text, ADR-0044
 (accepted); a new BREAKING variant `CertificateRejected`, mapped where a connection to
 a host is first made; FFI `openWithRootCertificates`; CLI `login --ca-file` kept in

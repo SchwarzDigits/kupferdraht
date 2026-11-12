@@ -125,7 +125,7 @@ WebSocket's `ClientConfig`, the walk to rustls' refusal through nested
 `io::Error`s); `HttpClient::with_trust` for both clients;
 `EventSocket::connect_trusting` and `connect_with_bearer_timeout(…, trust)`;
 `ManagerConfig` carries the PEM to every per-account `ClientBuilder`. Step 156
-(`docs/plan/156-own-certificate-authorities.md`).
+(`docs/plan/archive/156-own-certificate-authorities.md`).
 
 ## References
 
@@ -136,3 +136,4 @@ WebSocket's `ClientConfig`, the walk to rustls' refusal through nested
 ## Revision History
 
 - 2026-11-11: Created and accepted (Volker Zöpfel, Step 156).
+- 2026-11-11: The link to the plan `156-own-certificate-authorities` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.
