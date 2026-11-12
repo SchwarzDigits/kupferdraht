@@ -3126,3 +3126,31 @@ touched it.
   and built, not called by a test of its own. The wire-server-rs side drops its CLI
   build trick in its own session.
 
+### 5.95 Two flakes measured: one fixed by a process of its own, one put where it lives (Step 158)
+
+- **Measure, then choose.** The sender's capture failed 28 of 400 local runs. Reading
+  tracing-core 0.1.36 explained it: while only one dispatcher is registered, another
+  thread settles a callsite's interest with its own default — none. Three candidates
+  were measured, not argued: rebuilding the interest cache 3 of 400, a second live
+  dispatcher 0, a process of its own 0. The last is deterministic by construction and
+  §5.63's rule again; Volker chose it.
+- **My suspicion was refuted by the measurement.** I expected a dead leader's late
+  message with a higher epoch; the timeout's report showed none. Load did not
+  reproduce the flake locally (35 of 35), and CI was not slower than this Mac, so the
+  numbers had to come from CI itself. Of two hits, one was a worker that never started
+  under the test runner, the other an event the scenario never heard — neither in the
+  election. The earlier reading of a "cascade" as leftover state was the runner's total
+  timeout.
+- **A report beats a guess.** A timeout that says "timeout waiting for leader-changed"
+  cost three retrospectives; one that names the tab's state, its dispatched events, the
+  lease and the sightings settled the question in two runs.
+- **My own slips.** The first local loop passed `-q` through to the wasm runner and
+  measured nothing for five runs; the measurement script looked for a `lib` artifact
+  where the crate is `cdylib`, `staticlib` and `rlib`; a commit script again listed a
+  path a `git mv` had moved (§5.90); and a 150-run CI loop with a 90-minute ceiling was
+  more than Volker wanted — CI measurements stay small, with runs, duration and hit
+  probability named first.
+- **A test that was green from the start.** The timeout report was built during the
+  approved measurement, so its test passed at once; run against `main`'s driver it
+  failed, which is what shows it tests something.
+

@@ -144,8 +144,34 @@ mod tests {
 
     /// The drop is logged at `warn!` (not `debug!`) with the message id and
     /// the credential class, so an operator sees what vanished.
+    ///
+    /// Step 158: the capture runs in a process of its own. `tracing` caches a
+    /// callsite's interest for the whole process, and while the capture is
+    /// the only registered dispatcher, a parallel test that reaches the
+    /// `warn!` first settles it with that thread's dispatcher — none — so
+    /// the capture saw nothing in about one run of fourteen.
     #[test]
     fn a_dropped_non_basic_leaf_is_logged_at_warn_with_the_message_id() {
+        let run = std::process::Command::new(std::env::current_exe().expect("the test binary"))
+            .args([
+                "--exact",
+                "sync::sender::tests::the_drop_warning_captured_alone",
+                "--ignored",
+                "--test-threads=1",
+            ])
+            .output()
+            .expect("the test binary runs");
+        let stdout = String::from_utf8_lossy(&run.stdout);
+        assert!(
+            run.status.success() && stdout.contains("1 passed"),
+            "the capture, alone in its process: {stdout}{}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+    }
+
+    #[test]
+    #[ignore = "runs in a process of its own, started by a_dropped_non_basic_leaf_is_logged_at_warn_with_the_message_id"]
+    fn the_drop_warning_captured_alone() {
         let capture = CaptureSubscriber::default();
         let events = std::sync::Arc::clone(&capture.events);
         tracing::subscriber::with_default(capture, || {

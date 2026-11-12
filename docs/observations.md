@@ -2245,3 +2245,34 @@ Step Procedure phase 8).
 
 Each gate run relinks every test binary, so each pays the wait once per run.
 
+## 102) The browser suite's CI-only tab timeout: a module worker that never starts under wasm-bindgen's test runner (2026-11-12)
+
+Measured for Step 158 on a throwaway branch whose CI ran only `step_94_leader_tab`,
+60 and then 150 times (ubuntu-26.04 runner, headless Firefox,
+`wasm-bindgen-test-runner` 0.2.128). Not a Wire or MLS matter; it explains a flake of
+the browser suite.
+
+- **Rare, and only on CI.** Two timeouts in 210 runs (run 34 of 60, run 94 of 150).
+  Locally 35 of 35 runs were green, 15 of them with every core busy and 15 at
+  background QoS. CI is not slower: the scenarios take about 8 s there as here; a
+  failed run is 8 s longer by the one timeout.
+- **Run 94: a candidate worker never started.** A fresh tab waited from 1096 ms on:
+  its transport's hello went out, its worker's never did — no lease request, no
+  `error` event. The next scenario's worker did not start either, and the runner then
+  stopped ("Failed to detect test as having been run").
+- **Run 34, before the event recorder: an event the scenario never heard.** The
+  waiting tab followed the leader (thin, epoch 1) while the `leader-changed` it waited
+  for never reached the scenario. Unexplained.
+- **No sign of an election defect.** No foreign or higher epoch on the channel, no
+  leader left over from an earlier scenario; the leader held the lease. A failure
+  that carried into the next scenario (the 0.5.0 release's run, and run 94) was the
+  runner's own total timeout, not state a scenario left behind.
+- **The runner wraps the test page's `Worker`.** It reads a blob worker by synchronous
+  XHR, prepends a console shim, starts it from a new blob it revokes after the first
+  message or 5 s, and serves every module a worker imports uncached from its own HTTP
+  server. Which of these stalls was not measured further: CI measurements stay small.
+
+No workaround: the scenarios' timeout now names the waiting tab's state, the events
+it dispatched, the lease's holders and queue, and the last announcements on the
+request channel, so a future CI hit explains itself (Step 158).
+
