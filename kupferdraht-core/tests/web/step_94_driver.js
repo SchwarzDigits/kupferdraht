@@ -29,9 +29,37 @@ serveTab({ load: async () => StubKupferdraht, permitHttp: true, ...${JSON.string
   return () => new Worker(url, { type: 'module' });
 }
 
+/**
+ * Step 158: the page's own view of the election — every announcement, hello
+ * and eviction on the request channel, newest last — so a timeout says
+ * what the tabs were told.
+ */
+const sightings = [];
+const spy = new BroadcastChannel(REQUEST_CHANNEL);
+spy.onmessage = (e) => {
+  const m = e.data;
+  if (!m || !['leader', 'hello', 'evicted'].includes(m.kind)) return;
+  sightings.push(`${Math.round(performance.now())}ms ${m.kind} ${(m.leaderTabId ?? m.tabId ?? '').slice(0, 8)} e${m.epoch ?? '-'}`);
+  if (sightings.length > 24) sightings.shift();
+};
+
+/** Step 158: a waiting tab's state, the lease's holders and queue, and the last sightings. */
+async function describeElection(target) {
+  const tab = (id) => (id ?? 'none').slice(0, 8);
+  const host = 'state' in target
+    ? `tab ${tab(target.tabId)} state=${target.state} leader=${tab(target.leaderTabId)} epoch=${target.epoch}`
+    : 'not a tab host';
+  const locks = await navigator.locks.query();
+  const lease = (list) => list.filter((l) => l.name === 'kupferdraht:instance').length;
+  return `${host}; lease held=${lease(locks.held)} queued=${lease(locks.pending)}; sightings: ${sightings.join(' | ')}`;
+}
+
 function once(target, type, predicate = () => true, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { target.removeEventListener(type, handler); reject(new Error(`timeout waiting for ${type}`)); }, timeoutMs);
+    const timer = setTimeout(async () => {
+      target.removeEventListener(type, handler);
+      reject(new Error(`timeout waiting for ${type} — ${await describeElection(target)}`));
+    }, timeoutMs);
     const handler = (event) => {
       if (!predicate(event)) return;
       clearTimeout(timer);

@@ -25,7 +25,8 @@ env:
 jobs:
   check:
     name: fmt + clippy + test
-    if: github.event_name != 'schedule'
+    # Step 158 measurement branch: only the tab scenarios run.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -151,27 +152,31 @@ jobs:
       - name: cargo check (wasm32)
         run: cargo check -p kupferdraht-core --target wasm32-unknown-unknown
 
-      - name: cargo clippy (wasm32)
-        run: >
-          cargo clippy -p kupferdraht-core --target wasm32-unknown-unknown --lib
-          --test step_108_remote_vfs_spike --test step_111a_local_vfs_storage --test step_111a_eviction_reason
-          --test step_91_main_thread_refused --test step_92_single_active_tab
-          --test step_94_leader_tab --test step_115_browser_push_doorbell --test step_118_browser_sync_pace
-          --test step_119_takeover_event --test step_122_browser_surface
-          --test step_110_browser_error_names --test step_138_browser_read_state --test step_139_browser_service_token
-          --test step_140_browser_plaintext_guard --test step_130b_browser_resend
-          --test step_130c_browser_null_views
-          --test step_144_browser_avatar
-          --test indexeddb_keystore --test wasm_fetch -- -D warnings
-
       # The runner must match the lockfile's wasm-bindgen exactly.
       - name: Install wasm-bindgen-test-runner
         run: |
           version="$(awk '/^name = "wasm-bindgen"$/{getline; sub(/version = "/, ""); sub(/"/, ""); print; exit}' Cargo.lock)"
           cargo install --locked wasm-bindgen-cli --version "$version"
 
-      - name: Browser tests (headless Firefox)
-        run: scripts/wasm-test.sh
+      # Step 158 measurement branch, never merged: the tab scenarios 60 times,
+      # each timeout naming the waiting tab's state, the lease and the sightings.
+      - name: step_94_leader_tab, 60 runs
+        timeout-minutes: 40
+        run: |
+          export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="$(command -v wasm-bindgen-test-runner)"
+          export WASM_BINDGEN_TEST_ONLY_WEB=1
+          export GECKODRIVER="$(command -v geckodriver)"
+          fails=0
+          for i in $(seq 1 60); do
+            if cargo test -p kupferdraht-core --target wasm32-unknown-unknown --test step_94_leader_tab > run.log 2>&1; then
+              echo "run $i ok: $(grep -E '^test result' run.log | tail -1)"
+            else
+              fails=$((fails + 1))
+              echo "run $i FAILED"
+              grep -E 'FAIL|timeout waiting|Failed to detect|Invoking test|test result' run.log | cut -c1-4000
+            fi
+          done
+          echo "runs=60 failed=$fails"
 
   audit:
     # Same tool and policy as the local pre-commit gate (CLAUDE.md
@@ -183,6 +188,7 @@ jobs:
     # runs daily: the RustSec database changes between pull requests,
     # and Dependabot alerts only on the advisories GitHub carries too.
     name: cargo deny
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
