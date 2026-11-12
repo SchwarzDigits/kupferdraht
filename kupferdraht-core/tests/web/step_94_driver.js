@@ -8,7 +8,7 @@
 // loader — here the stub `Kupferdraht` — and let the module do the rest. The
 // module is imported relative to this file's copy beside the test glue
 // (`snippets/<crate>/tests/web/` → `snippets/bindings/web/kupferdraht-tabs/`).
-import { createTabHost, NoLeaderError } from '../../../bindings/web/kupferdraht-tabs/index.js';
+import { createTabHost, NoLeaderError, TabHost } from '../../../bindings/web/kupferdraht-tabs/index.js';
 import { PROTOCOL_VERSION, REQUEST_CHANNEL, responseChannelName } from '../../../bindings/web/kupferdraht-tabs/protocol.js';
 // Step 157: a namespace import, so the scenarios load before the constant exists.
 import * as protocol from '../../../bindings/web/kupferdraht-tabs/protocol.js';
@@ -29,9 +29,60 @@ serveTab({ load: async () => StubKupferdraht, permitHttp: true, ...${JSON.string
   return () => new Worker(url, { type: 'module' });
 }
 
+/**
+ * Step 158: the page's own view of the election — every announcement, hello
+ * and eviction on the request channel, newest last — so a timeout says
+ * what the tabs were told.
+ */
+const sightings = [];
+const sight = (text) => {
+  sightings.push(`${Math.round(performance.now())}ms ${text}`);
+  if (sightings.length > 40) sightings.shift();
+};
+const spy = new BroadcastChannel(REQUEST_CHANNEL);
+spy.onmessage = (e) => {
+  const m = e.data;
+  if (!m || !['leader', 'hello', 'evicted'].includes(m.kind)) return;
+  sight(`${m.kind} ${(m.leaderTabId ?? m.tabId ?? '').slice(0, 8)} e${m.epoch ?? '-'}`);
+};
+
+const now = () => `${Math.round(performance.now())}ms`;
+const short = (id) => (id ?? 'none').slice(0, 8);
+for (const kind of ['error', 'unhandledrejection']) {
+  self.addEventListener(kind, (e) => sight(`page ${kind}: ${e.message ?? e.reason}`));
+}
+
+/**
+ * Step 158: every event a tab host dispatches, from inside its constructor
+ * on, keyed by tab — so a timeout shows whether the event came, and when.
+ */
+const dispatched = new Map();
+const moduleDispatch = TabHost.prototype.dispatchEvent;
+TabHost.prototype.dispatchEvent = function recordDispatch(event) {
+  const log = dispatched.get(this.tabId) ?? [];
+  const detail = event.detail && typeof event.detail === 'object' ? ` ${short(event.detail.leaderTabId)} e${event.detail.epoch ?? '-'}` : '';
+  log.push(`${now()} ${event.type}${detail}`);
+  dispatched.set(this.tabId, log);
+  return moduleDispatch.call(this, event);
+};
+
+/** Step 158: a waiting tab's state and events, the lease's holders and queue, and the last sightings. */
+async function describeElection(target, since) {
+  const host = 'state' in target
+    ? `tab ${short(target.tabId)} waiting since ${since} state=${target.state} leader=${short(target.leaderTabId)} epoch=${target.epoch} dispatched: ${(dispatched.get(target.tabId) ?? []).join(', ') || 'nothing'}`
+    : 'not a tab host';
+  const locks = await navigator.locks.query();
+  const lease = (list) => list.filter((l) => l.name === 'kupferdraht:instance').length;
+  return `${host}; lease held=${lease(locks.held)} queued=${lease(locks.pending)}; sightings: ${sightings.join(' | ')}`;
+}
+
 function once(target, type, predicate = () => true, timeoutMs = 8000) {
+  const since = now();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { target.removeEventListener(type, handler); reject(new Error(`timeout waiting for ${type}`)); }, timeoutMs);
+    const timer = setTimeout(async () => {
+      target.removeEventListener(type, handler);
+      reject(new Error(`timeout waiting for ${type} — ${await describeElection(target, since)}`));
+    }, timeoutMs);
     const handler = (event) => {
       if (!predicate(event)) return;
       clearTimeout(timer);
@@ -687,6 +738,29 @@ export async function aWorkerOfAnotherWasmVersionDoesNotLead() {
   } finally {
     reports.close();
     host.close();
+  }
+}
+
+/**
+ * Step 158: a timeout names the election it waited in. A leader waits for an
+ * event no tab dispatches; the error must name the tab, its state, what it
+ * dispatched, the lease and the sightings.
+ */
+export async function aTimeoutNamesTheElection() {
+  const a = createTabHost({ worker: candidateWorker() });
+  try {
+    await leaderOf(a, a.tabId);
+    const message = await once(a, 'never-dispatched', () => true, 50).then(() => '', (err) => err.message);
+    const tab = a.tabId.slice(0, 8);
+    return {
+      namesTheTab: message.includes(`tab ${tab}`),
+      namesItsState: message.includes(`state=leader leader=${tab}`),
+      namesWhatItDispatched: message.includes(`leader-changed ${tab}`),
+      namesTheLease: message.includes('lease held=1'),
+      namesTheSightings: message.includes(`leader ${tab} e`),
+    };
+  } finally {
+    a.close();
   }
 }
 

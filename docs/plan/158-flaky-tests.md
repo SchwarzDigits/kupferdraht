@@ -1,6 +1,16 @@
 # Step 158 — Two flaky tests: the tab election's CI-only timeout and the sender's log capture
 
-**Status: commissioned 2026-11-11** (Volker), from the retrospectives of Steps 146 and
+**Status: implemented** on `step/158-flaky-tests`. Measured first: the sender's capture
+failed 28 of 400 local runs; three candidates measured (rebuilding tracing's interest
+cache 3 of 400, a second live dispatcher 0, a process of its own 0), and Volker chose
+the process of its own (0 of 400 after the change). The tab timeout: two CI hits in
+210 runs of a throwaway branch (PR #77, closed unmerged), neither in the election —
+a candidate worker that never started under wasm-bindgen's test runner, and one
+unexplained missed event (observations §102); Volker decided on no workaround, the
+timeout's report stays. No smoke (test harness only), no CLI command, no CHANGELOG
+entry (nothing consumer-facing).
+
+**Commissioned 2026-11-11** (Volker), from the retrospectives of Steps 146 and
 157 (LEARNINGS §5.90, §5.93): both flakes were met again at the 0.5.0 release, the
 tab timeout twice more since, each time green on a rerun. A third rerun is no fix;
 this step measures each cause first and then removes it.

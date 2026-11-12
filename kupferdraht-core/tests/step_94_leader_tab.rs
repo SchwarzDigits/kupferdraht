@@ -81,6 +81,8 @@ extern "C" {
     fn a_candidate_refused_by_newer_data_stops_scenario() -> js_sys::Promise;
     #[wasm_bindgen(js_name = aWorkerOfAnotherWasmVersionDoesNotLead)]
     fn a_worker_of_another_wasm_version_does_not_lead_scenario() -> js_sys::Promise;
+    #[wasm_bindgen(js_name = aTimeoutNamesTheElection)]
+    fn a_timeout_names_the_election_scenario() -> js_sys::Promise;
     #[wasm_bindgen(js_name = ownRenameThroughATab)]
     fn own_rename_through_a_tab() -> js_sys::Promise;
     #[wasm_bindgen(js_name = eventFanOut)]
@@ -722,4 +724,28 @@ async fn a_worker_of_another_wasm_version_does_not_lead() {
     assert_eq!(o.opens, 0);
     assert_eq!(o.errors, vec!["VersionMismatch".to_owned()]);
     assert_eq!(o.state, "electing");
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TimeoutReport {
+    names_the_tab: bool,
+    names_its_state: bool,
+    names_what_it_dispatched: bool,
+    names_the_lease: bool,
+    names_the_sightings: bool,
+}
+
+/// Step 158: a scenario's timeout reports the election it waited in — the
+/// waiting tab's state and the events it dispatched, the lease, and the
+/// announcements on the request channel — so a CI-only timeout explains
+/// itself.
+#[wasm_bindgen_test]
+async fn a_timeout_names_the_waiting_tab_and_the_lease() {
+    let r: TimeoutReport = outcome(a_timeout_names_the_election_scenario()).await;
+    assert!(r.names_the_tab, "the waiting tab");
+    assert!(r.names_its_state, "its state and leader");
+    assert!(r.names_what_it_dispatched, "the events it dispatched");
+    assert!(r.names_the_lease, "who holds the lease");
+    assert!(r.names_the_sightings, "the announcements it was sent");
 }
