@@ -1,6 +1,10 @@
 # Step 158 — Two flaky tests: the tab election's CI-only timeout and the sender's log capture
 
-**Status: implemented** on `step/158-flaky-tests`. Measured first: the sender's capture
+**Status: MERGED 2026-11-12** — `5b7ba68` on `step/158-flaky-tests`, merged to `main`
+as PR #78 (`58e7ef1`); locally fmt, 0 build warnings, clippy, the library's tests (856,
+one ignored by design), the wasm32 check, `clippy --lib` and CI's wasm clippy line,
+`step_94_leader_tab` in the browser (26) and the license headers; CI green on the first
+run, the browser job included. Measured first: the sender's capture
 failed 28 of 400 local runs; three candidates measured (rebuilding tracing's interest
 cache 3 of 400, a second live dispatcher 0, a process of its own 0), and Volker chose
 the process of its own (0 of 400 after the change). The tab timeout: two CI hits in
