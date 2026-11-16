@@ -173,6 +173,47 @@ jobs:
       - name: Browser tests (headless Firefox)
         run: scripts/wasm-test.sh
 
+  kotlin:
+    # Step 153: the Kotlin/JVM binding — generated from the library by
+    # build-jvm.sh and tested with Gradle — rots unseen unless CI builds it.
+    # The committed gradle-wrapper.jar is checked against Gradle's releases,
+    # and every artifact Gradle downloads against its SHA-256 in
+    # bindings/kotlin/gradle/verification-metadata.xml. Swift needs macOS and
+    # Xcode, Android the NDK; both stay local (NG-31).
+    name: Kotlin/JVM binding
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: Pinned toolchain
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: kotlin
+
+      - uses: gradle/actions/wrapper-validation@v6
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Build the library and generate the binding
+        run: bindings/kotlin/build-jvm.sh debug
+
+      - name: Gradle test
+        working-directory: bindings/kotlin
+        run: ./gradlew test --no-daemon
+
   audit:
     # Same tool and policy as the local pre-commit gate (CLAUDE.md
     # phase 8): deny.toml carries the curated, signed-off advisory

@@ -1114,9 +1114,24 @@ consumed through `Package.swift` (`Kupferdraht` library target).
 ./bindings/kotlin/build-jvm.sh [debug|release]
 cd bindings/kotlin && ./gradlew test
 ```
-Generates the Kotlin surface and bundles `libkupferdraht.dylib` under the
-JNA-resolved resource dir; produces a JAR. UniFFI Kotlin is JNA-backed and
-uses kotlinx-coroutines for the `async` exports.
+Generates the Kotlin surface and bundles the host's library
+(`libkupferdraht.dylib` on macOS, `libkupferdraht.so` on Linux) under the
+JNA-resolved resource dir (`darwin-aarch64`, `linux-x86-64`, …); produces a
+JAR. UniFFI Kotlin is JNA-backed and uses kotlinx-coroutines for the `async`
+exports.
+
+Since Step 153 CI runs both commands on every pull request, on the Linux
+runner with JDK 21 (`ci.yml`, job `Kotlin/JVM binding`), so the generated
+binding and its test cannot drift from the Rust surface unseen. The committed
+`gradle-wrapper.jar` is checked against Gradle's releases, and Gradle refuses
+any artifact — plugins and transitive dependencies included — whose SHA-256 is
+not in `bindings/kotlin/gradle/verification-metadata.xml`. A changed Gradle
+dependency therefore comes with that file regenerated, from an empty Gradle
+cache on Linux as on the runner (a warm cache on macOS left one plugin POM out):
+`./gradlew --write-verification-metadata sha256 test`, then
+`THIRD-PARTY-NOTICES` (the `third_party_notices` test compares it with
+`build.gradle.kts`). Dependabot does not update Gradle dependencies: it would
+not regenerate the checksums.
 
 ### Android — AAR
 ```
