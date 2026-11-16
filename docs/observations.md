@@ -2276,3 +2276,30 @@ No workaround: the scenarios' timeout now names the waiting tab's state, the eve
 it dispatched, the lease's holders and queue, and the last announcements on the
 request channel, so a future CI hit explains itself (Step 158).
 
+
+## 103) Wire's nginz compresses JSON answers on request; Kupferdraht's native builds never ask (2026-11-16)
+
+Read in wire-server `develop` at `7efe9b4c` and Kalium at `d803b51b` (the same day),
+the production backend probed live; indexed as reading 26 in
+`docs/wire/kalium-readings.md`.
+
+- **nginz compresses.** Its Helm chart (`charts/nginz/templates/conf/_nginx.conf.tpl`)
+  sets `gzip on` for `application/json` and text types from 1024 bytes on, level 6,
+  with `gzip_vary on` and `gzip_proxied any`; wire-server's docker-compose stacks
+  (`deploy/dockerephemeral`) carry the same block.
+- **Live.** Wire's production backend (`prod-nginz-https.wire.com`),
+  `GET /v14/api/swagger.json`: without `Accept-Encoding` 602,373 bytes; with
+  `Accept-Encoding: gzip` the answer carries `Content-Encoding: gzip` and
+  `Vary: Accept-Encoding` and is 83,327 bytes.
+- **Without the header nothing fails.** nginz answers uncompressed; the bytes are
+  only more.
+- **Kupferdraht.** The native reqwest is built without its `gzip` feature, so the
+  CLI and the Kotlin and Swift bindings send no `Accept-Encoding`. The browser
+  build's `fetch` asks and decodes by itself.
+- **Kalium** asks for `gzip` (and `identity`) on its base client, and builds its
+  asset API on a client that asks for nothing.
+- **No compression on the socket.** cannon's source configures none, and Kalium
+  installs no WebSocket deflate extension.
+
+Kupferdraht's answer is Step 159: gzip on the native transport, with every answer's
+decoded bytes bounded.
