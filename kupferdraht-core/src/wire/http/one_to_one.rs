@@ -87,10 +87,9 @@ impl HttpClient {
         if !resp.status().is_success() {
             return Err(reject_from_response(resp, "fetch_one_to_one_conversation").await);
         }
-        let envelope = resp
-            .json::<MlsOne2OneConversation>()
+        let envelope = crate::answer_bound::read_json::<MlsOne2OneConversation>(resp)
             .await
-            .map_err(|e| KupferdrahtError::Encoding(format!("one2one-conversations body: {e}")))?;
+            .map_err(|e| e.into_error("one2one-conversations body", KupferdrahtError::Encoding))?;
         Ok(envelope.conversation)
     }
 }

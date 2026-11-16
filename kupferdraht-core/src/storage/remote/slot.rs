@@ -77,10 +77,14 @@ pub(crate) async fn fetch_slot(
         }
         status => return Err(unavailable(format!("the storage server answered {status}"))),
     }
-    let body: SlotAnswer = response
-        .json()
+    let body: SlotAnswer = crate::answer_bound::read_json(response)
         .await
-        .map_err(|e| unavailable(format!("unreadable answer: {e}")))?;
+        .map_err(|e| {
+            e.into_error(
+                "slot query: unreadable answer",
+                KupferdrahtError::ServiceUnavailable,
+            )
+        })?;
     Ok(body.slot.map(|slot| Slot {
         label: slot.label,
         claimed_at_ms: slot.claimed_at_ms,

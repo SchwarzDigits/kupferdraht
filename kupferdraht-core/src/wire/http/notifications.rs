@@ -90,7 +90,9 @@ async fn since_not_found_or_rejected(
         reqwest::StatusCode::NOT_FOUND,
         "caller routes 404s only"
     );
-    let body = resp.text().await.unwrap_or_default();
+    let body = crate::answer_bound::read_text(resp)
+        .await
+        .unwrap_or_default();
     let label = serde_json::from_str::<WireErrorBody>(&body)
         .map(|b| b.label)
         .unwrap_or_default();
