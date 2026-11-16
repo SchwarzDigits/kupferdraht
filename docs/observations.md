@@ -2310,3 +2310,37 @@ the production backend probed live; indexed as reading 26 in
 
 Kupferdraht's answer is Step 159: gzip on the native transport, with every answer's
 decoded bytes bounded.
+
+## 104) What e2ei needs around the backend, and what the local stack lacks (2026-11-12)
+
+Read for Step 154 in the local wire-server checkout (`02071bd`) and wire-server-rs
+(`3f47712`), and in Wire's and smallstep's public repositories and docs as protocol
+observation (`docs/wire/kalium-readings.md` #27). Not yet seen live: no backend here has
+e2ei on (§100).
+
+- **The backend issues, the clients verify.** wire-server serves `HEAD|GET
+  /clients/{client}/nonce` (a UUIDv4 in `Replay-Nonce`, one per device, 300 s) and
+  `POST /clients/{cid}/access-token` (checks a DPoP proof, returns an `at+jwt` signed with
+  a P-256 key from `setPublicKeyBundle`; the user needs a team, a handle and a name).
+  In MLS it parses an X.509 credential's first certificate, takes the device from the SAN
+  URI `wireapp://{uid base64url}%21{cid hex}@{domain}` and requires the certificate's key
+  to be the leaf's signature key — but checks no chain, trust anchor, CRL or expiry.
+- **Around it:** smallstep step-ca (0.29.0; Wire's challenges `wire-dpop-01` and
+  `wire-oidc-01` are upstream) issues the certificates and serves `/roots.pem`,
+  `/federation` and `/crl`; an identity provider (Keycloak or Authelia in Wire's CI) must
+  echo the `keyauth` and `acme_aud` claims parameters in the ID token; an nginx beside
+  step-ca maps `/proxyCrl/<host>` to `https://<host>/crl`. The backend has no CRL proxy.
+- **The leaf certificate:** `O` = domain, `CN` = display name, SAN URIs
+  `wireapp://%40<handle>@<domain>` and the device URI above, `keyUsage` digitalSignature,
+  `extKeyUsage` clientAuth, a CRL distribution point; the key type follows the MLS
+  ciphersuite (P-256 for `0x0002`); chain leaf → intermediate (`pathlen:0`) → root.
+- **`acmeDiscoveryUrl` is the ACME directory.** Wire's docs name
+  `…/acme/{provisioner}/discovery`, a route step-ca does not have; the webapp and Kalium
+  fetch the URL as the directory. Clients rewrite a CRL URL whose path ends in `crl` to
+  `<crlProxy>/<host>`, and check credentials and CRLs at start and at most daily.
+- **The local stack lacks it all but the flag.** wire-server-rs has the `mlsE2EId`
+  feature; it has neither endpoint, ignores the DPoP settings, and refuses X.509
+  credentials outright in key-package upload and commits
+  (`crates/wire-mls/src/key_package.rs:89-95`), so an enrolled client cannot join a
+  conversation there. A requirements list went to the wire-server-rs team.
+

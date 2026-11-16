@@ -1,6 +1,16 @@
 # Step 154 — e2ei, reading: check the certificates of other members' devices
 
-**Status: commissioned 2026-11-10** (Volker), from the e2ei measurement
+**Status: parked 2026-11-16** (Volker) until an e2ei test environment exists. Phase 1
+began on 2026-11-12 and stopped at its first finding: no backend here can issue or carry
+an e2ei certificate (`docs/observations.md` §104). The requirements went to the team
+behind the Wire Rust Server on 2026-11-12, phrased as outcomes, in two stages: first the
+regular Wire server in Docker with e2ei on, as the reference this step is developed
+against; then the Wire Rust Server with the same abilities, checked with Kupferdraht —
+for which Kupferdraht delivers a check script that plays the mixed conversation, the
+trust anchors and revocation lists, revocation and expiry, and later its own
+enrollment, against both servers. The step resumes when stage 1 is handed over.
+
+**Commissioned 2026-11-10** (Volker), from the e2ei measurement
 (`docs/observations.md` §100): an identity provider is to be activated on the team's
 backend, and a team that switches e2ei on makes Kupferdraht drop its enrolled
 colleagues' messages. Kupferdraht's own devices stay on Basic credentials; their
