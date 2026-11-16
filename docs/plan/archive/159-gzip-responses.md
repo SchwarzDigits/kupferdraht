@@ -1,6 +1,19 @@
 # Step 159 — Compressed answers: gzip on the native transport, the decoded bytes bounded
 
-**Status: commissioned 2026-11-16** (Volker), from a comparison with Kalium: Kalium
+**Status: MERGED 2026-11-16** — `d671275` on `step/159-gzip-responses`, merged to
+`main` as PR #83 (`2c38a05`) after `main` was merged in (`05b6aba`, PR #81's parking
+of 154 and 155 had touched `PLAN.md`); locally fmt, 0 build warnings, clippy, 915
+tests in 5 suites (the library, the pin scan, Steps 144, 137 and 130a), the wasm32
+check, `clippy --lib` and CI's wasm clippy line, `third_party_notices` and
+`license_headers`; CI green on the first run and after the merge. The native builds
+ask for gzip; every answer read into memory goes through `src/answer_bound.rs` (16 MiB
+decoded, `BackendRejected` past it), 23 reads replaced, the avatar's reader folded in;
+the browser checks after the read. Smoke 2026-11-16 on the local stack: 24 ok, but
+that stack compresses no JSON (observations §103), so gzip is shown by the unit tests
+only. Found on the way: the browser's whole-asset download has no bound at all — Step
+160. No CLI command (no API change); CHANGELOG under Changed and Security.
+
+**Commissioned 2026-11-16** (Volker), from a comparison with Kalium: Kalium
 asks Wire for gzip-compressed answers, Kupferdraht's native builds never do
 (observations §103, kalium-readings entry 26). Both parts belong in one step: gzip
 makes an oversized answer cheap for a hostile server to send, so the bound comes
