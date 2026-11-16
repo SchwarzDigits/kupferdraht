@@ -2,7 +2,7 @@
 
 **Status: parked 2026-11-16** (Volker) until an e2ei test environment exists. Phase 1
 began on 2026-11-12 and stopped at its first finding: no backend here can issue or carry
-an e2ei certificate (`docs/observations.md` §103). The requirements went to the team
+an e2ei certificate (`docs/observations.md` §104). The requirements went to the team
 behind the Wire Rust Server on 2026-11-12, phrased as outcomes, in two stages: first the
 regular Wire server in Docker with e2ei on, as the reference this step is developed
 against; then the Wire Rust Server with the same abilities, checked with Kupferdraht —
