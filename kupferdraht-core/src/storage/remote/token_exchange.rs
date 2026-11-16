@@ -84,10 +84,9 @@ async fn exchange(
         .map_err(|e| KupferdrahtError::ServiceUnavailable(format!("token exchange: {e}")))?;
     let status = response.status().as_u16();
     if status == 200 {
-        let answer: TokenAnswer = response
-            .json()
+        let answer: TokenAnswer = crate::answer_bound::read_json(response)
             .await
-            .map_err(|e| KupferdrahtError::Encoding(format!("token exchange answer: {e}")))?;
+            .map_err(|e| e.into_error("token exchange answer", KupferdrahtError::Encoding))?;
         debug_assert!(!answer.token.is_empty(), "the exchange issues a token");
         return Ok(ExchangedToken {
             token: Zeroizing::new(answer.token),
@@ -205,7 +204,9 @@ async fn refusal(status: u16, response: reqwest::Response) -> KupferdrahtError {
         },
         503 => KupferdrahtError::ServiceUnavailable("the token exchange is overloaded".into()),
         _ => {
-            let text = response.text().await.unwrap_or_default();
+            let text = crate::answer_bound::read_text(response)
+                .await
+                .unwrap_or_default();
             KupferdrahtError::BackendRejected(format!(
                 "token exchange {status}: {}",
                 crate::redact::bounded_detail(&text)

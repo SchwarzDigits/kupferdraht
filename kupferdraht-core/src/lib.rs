@@ -41,6 +41,8 @@ pub mod wasm;
 // Not part of the matrix-rust-sdk-shaped public surface (ADR-0009).
 // Consumed only by sibling modules inside `kupferdraht-core`; integration
 // tests and kupferdraht-cli use the curated facade re-exported below.
+// Step 159: every answer read into memory, bounded on its decoded bytes.
+pub(crate) mod answer_bound;
 pub(crate) mod encryption;
 // Step 112 (ADR-0035): recovery data — the browser's account seed sealed
 // with a PIN. Compiled for the browser and for tests.

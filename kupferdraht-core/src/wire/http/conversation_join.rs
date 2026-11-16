@@ -52,9 +52,9 @@ impl HttpClient {
         if !resp.status().is_success() {
             return Err(reject_from_response(resp, "get_conversation_by_code").await);
         }
-        resp.json::<ConversationCoverView>().await.map_err(|e| {
-            KupferdrahtError::Encoding(format!("conversations/join body: {}", e.without_url()))
-        })
+        crate::answer_bound::read_json::<ConversationCoverView>(resp)
+            .await
+            .map_err(|e| e.into_error("conversations/join body", KupferdrahtError::Encoding))
     }
 
     /// `POST /v{api_version}/conversations/join` — Step 8 redeem.

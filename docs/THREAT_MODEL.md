@@ -1,6 +1,6 @@
 # Kupferdraht Threat Model
 
-**Version:** 0.15 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-11 **Status:** working draft, for review by Markus Troßbach
+**Version:** 0.16 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-16 **Status:** working draft, for review by Markus Troßbach
 
 ------
 
@@ -61,6 +61,8 @@ Three actors:
 **Foreign identifiers are data, not paths.** Envelope ids (`message_id`), sender and user ids and asset identifiers are attacker-controlled input: a malicious peer or a compromised backend can choose them freely. No foreign string becomes a path fragment: checked at the dispatch boundary (path-unsafe ids are discarded like malformed envelopes), at every path site (`storage::is_path_safe_id`) and when the account identity is materialised from server responses (Step 80, 2026-09-11; LEARNINGS §5.23 "validate the sink").
 
 **The server's redirects are not followed, but one.** The native HTTP clients follow no redirect (Step 132): a followed 3xx could re-send a login body to a host of the server's choosing or downgrade to plain HTTP. The one redirect Wire's API issues — an asset download's `302` to a pre-signed URL on the asset store — is followed by hand, once (Step 141): a plain GET without the bearer token or the `Asset-Token`, `https` only, no second hop. The server thereby chooses the host the ciphertext comes from; integrity does not depend on it (L6: the digest travels in the MLS message, a substituted blob fails `IntegrityCheck`). A malicious server can make the client issue one credential-free GET to an `https` URL of its choice when an attachment is opened — blind, the answer never goes back to the server. The browser build has no redirect policy of its own: `fetch` follows redirects (open.md §84).
+
+**What the server answers is read up to a bound** (Step 159). Every answer Kupferdraht reads into memory — from Wire's API, the PIN service, the token exchange and the storage server — stops at 16 MiB of decoded bytes and fails as `BackendRejected`. Kupferdraht asks for gzip-compressed answers, which make an oversized one up to a thousandfold cheaper to send: less than 64 KiB of gzip inflate past the bound. Natively the read stops at the first chunk past the bound. In the browser `fetch` decodes before Kupferdraht sees a byte, so the browser holds an oversized answer once before it is refused. An asset blob is no answer: natively it streams to disk, in the browser it is buffered whole (W7) without a bound, so a hostile server can make a browser hold an arbitrarily large blob when an attachment is opened.
 
 ------
 
@@ -241,6 +243,7 @@ Not blocking for the current implementation phase. To be picked up before the af
 | 0.13    | 2026-11-09 | Step 151: the Trust Model names the time a message shows as the backend's word. |
 | 0.14    | 2026-11-10 | Step 12 dropped (NG-30): G7 names it so, and the key-backup preview is removed. G7 names the browser's recovery data (ADR-0035, Step 112), which it had not since that step. |
 | 0.15    | 2026-11-11 | Step 156 (ADR-0044): A4 names the app's own certificate authorities beside the built-in list, and that pinning is still missing. |
+| 0.16    | 2026-11-16 | Step 159: the Trust Model names the bound on every answer read into memory (16 MiB decoded, compressed answers asked for), its weaker form in the browser, and the browser's unbounded asset download. |
 
 ------
 

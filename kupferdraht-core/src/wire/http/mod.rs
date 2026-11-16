@@ -88,6 +88,8 @@ pub(crate) trait TokenRefresh {
     ) -> Pin<Box<dyn Future<Output = Result<String, KupferdrahtError>> + 'a>>;
 }
 
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod answer_bound_tests;
 #[cfg(not(target_arch = "wasm32"))]
 mod asset_redirect;
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -500,9 +502,9 @@ impl HttpClient {
                 resp.status()
             )));
         }
-        resp.json::<ApiVersionResponse>()
+        crate::answer_bound::read_json::<ApiVersionResponse>(resp)
             .await
-            .map_err(|e| KupferdrahtError::Encoding(format!("/api-version: {e}")))
+            .map_err(|e| e.into_error("/api-version", KupferdrahtError::Encoding))
     }
 }
 
@@ -532,7 +534,9 @@ pub(super) async fn reject_from_response(
         );
         return KupferdrahtError::RateLimited { retry_after_secs };
     }
-    let detail = resp.text().await.unwrap_or_default();
+    let detail = crate::answer_bound::read_text(resp)
+        .await
+        .unwrap_or_default();
     if status == reqwest::StatusCode::CONFLICT && detail.contains("mls-stale-message") {
         return KupferdrahtError::MlsStaleMessage;
     }
@@ -564,7 +568,8 @@ pub(super) struct WireErrorBody {
 
 /// Classify a response of the standard Wire endpoint shape: `401` →
 /// [`KupferdrahtError::Unauthorized`], any other non-2xx →
-/// [`reject_from_response`], 2xx → the body deserialized as `T`.
+/// [`reject_from_response`], 2xx → the body deserialized as `T`, read through
+/// the answer bound (Step 159).
 pub(super) async fn decode_response<T: DeserializeOwned>(
     resp: reqwest::Response,
     op: &str,
@@ -576,9 +581,9 @@ pub(super) async fn decode_response<T: DeserializeOwned>(
     if !resp.status().is_success() {
         return Err(reject_from_response(resp, op).await);
     }
-    resp.json::<T>()
+    crate::answer_bound::read_json::<T>(resp)
         .await
-        .map_err(|e| KupferdrahtError::Encoding(format!("{op} body: {e}")))
+        .map_err(|e| e.into_error(&format!("{op} body"), KupferdrahtError::Encoding))
 }
 
 impl HttpClient {
@@ -633,7 +638,9 @@ impl HttpClient {
         if !resp.status().is_success() {
             return Err(reject_from_response(resp, op).await);
         }
-        Ok(resp.text().await.unwrap_or_default())
+        Ok(crate::answer_bound::read_text(resp)
+            .await
+            .unwrap_or_default())
     }
 
     /// Send `req`; on a `401` refresh the access token once (guarded)

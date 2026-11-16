@@ -75,6 +75,10 @@ is no skill for it — it is this short procedure:
   it says which and why, and nothing is written. `kupferdraht.db`, `mls.db` and,
   through a new `PRAGMA user_version` (1), `global.db`. A new enum variant breaks
   an exhaustive `switch` / `when` in Swift and Kotlin.
+- **Answers arrive compressed** (Step 159): the native builds (CLI, Kotlin,
+  Swift) ask the backend for gzip-compressed answers, as the browser's `fetch`
+  always did, so sync pages and room and user lists download smaller. Nothing
+  changes for a backend that does not compress.
 
 ### Deprecated
 
@@ -83,6 +87,13 @@ is no skill for it — it is this short procedure:
 ### Fixed
 
 ### Security
+
+- **No answer is read past 16 MiB** (Step 159): every answer from the backend,
+  the PIN service, the token exchange and the storage server is read up to
+  16 MiB of decoded bytes; past that it fails as `BackendRejected` ("answer over
+  16777216 bytes"), so a compressed answer cannot inflate into the app's memory.
+  In the browser the size is checked after `fetch` has read the answer; asset
+  downloads are no answer and stay unbounded there.
 
 ## [0.5.1] - 2026-11-10
 

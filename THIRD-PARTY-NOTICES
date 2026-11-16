@@ -155,6 +155,9 @@ Dual-licensed; used here under the Apache License 2.0.
   https://github.com/RustCrypto/password-hashes
 - async-compat 0.2.6 — Stjepan Glavina —
   https://github.com/smol-rs/async-compat
+- async-compression 0.4.52 (native targets only), compression-codecs 0.4.47
+  (native targets only), compression-core 0.4.34 (native targets only) — Wim
+  Looman; Allen Bui — https://github.com/Nullus157/async-compression
 - async-trait 0.1.92 — David Tolnay — https://github.com/dtolnay/async-trait
 - atomic-waker 1.1.2 (native targets only) — Stjepan Glavina; Contributors to
   futures-rs — https://github.com/smol-rs/atomic-waker

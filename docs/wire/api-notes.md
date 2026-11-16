@@ -48,6 +48,15 @@ with two MLS-specific exceptions:
 - `POST /v14/mls/messages` — body is a single TLS-serialized
   `MlsMessage(PrivateMessage)`, content-type `message/mls`.
 
+**Compressed answers.** nginz compresses a JSON or text answer of 1 KiB
+and more with gzip when the request carries `Accept-Encoding: gzip`, and
+answers uncompressed otherwise (observations §103) — as Wire's Helm chart
+configures it; wire-server's docker-compose stacks compress no JSON. Every Kupferdraht
+request asks for it: the native builds through reqwest's `gzip`
+feature, the browser's `fetch` by itself (Step 159). Request bodies go
+uncompressed. An answer is read up to 16 MiB of decoded bytes; past
+that it is `BackendRejected` ("answer over 16777216 bytes").
+
 ### Authentication
 
 Three channels, each with a narrow scope:
