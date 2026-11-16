@@ -174,7 +174,7 @@ Dual-licensed; used here under the Apache License 2.0.
   sha2 0.11.0 — RustCrypto Developers — https://github.com/RustCrypto/hashes
 - block-buffer 0.10.4, block-buffer 0.12.1, block-padding 0.3.3, cmov 0.5.4,
   cpubits 0.1.1, cpufeatures 0.2.17 (native targets only), cpufeatures 0.3.1
-  (native targets only), ctutils 0.4.7, inout 0.1.4, inout 0.2.6, opaque-debug
+  (native targets only), ctutils 0.4.8, inout 0.1.4, inout 0.2.6, opaque-debug
   0.3.1, zeroize 1.9.1, zeroize_derive 1.5.0 — RustCrypto Developers; The
   RustCrypto Project Developers — https://github.com/RustCrypto/utils
 - bumpalo 3.20.3 (browser target only) — Nick Fitzgerald —
@@ -207,7 +207,7 @@ Dual-licensed; used here under the Apache License 2.0.
   https://github.com/srijs/rust-crc32fast
 - crossbeam-deque 0.8.8, crossbeam-epoch 0.9.21, crossbeam-utils 0.8.23 —
   https://github.com/crossbeam-rs/crossbeam
-- crypto-bigint 0.7.10 — RustCrypto Developers —
+- crypto-bigint 0.7.11 — RustCrypto Developers —
   https://github.com/RustCrypto/crypto-bigint
 - curve25519-dalek-derive 0.1.1 (native targets only) —
   https://github.com/dalek-cryptography/curve25519-dalek
@@ -233,7 +233,7 @@ Dual-licensed; used here under the Apache License 2.0.
 - fdeflate 0.3.7 — The image-rs Developers —
   https://github.com/image-rs/fdeflate
 - ff 0.14.0 — Sean Bowe; Jack Grigg — https://github.com/zkcrypto/ff
-- fixedbitset 0.5.7 — bluss — https://github.com/petgraph/fixedbitset
+- fixedbitset 0.5.9 — bluss — https://github.com/petgraph/fixedbitset
 - flate2 1.1.11 — Alex Crichton; Josh Triplett —
   https://github.com/rust-lang/flate2-rs
 - form_urlencoded 1.2.2, idna 1.1.0, percent-encoding 2.3.2, url 2.5.8 — The
@@ -281,7 +281,7 @@ Dual-licensed; used here under the Apache License 2.0.
   https://github.com/polyfill-rs/is_terminal_polyfill
 - itertools 0.13.0 (native targets only), itertools 0.14.0 — bluss —
   https://github.com/rust-itertools/itertools
-- itoa 1.0.18 — David Tolnay — https://github.com/dtolnay/itoa
+- itoa 1.0.19 — David Tolnay — https://github.com/dtolnay/itoa
 - js-sys 0.3.105 (browser target only), wasm-bindgen 0.2.128 (browser target
   only), wasm-bindgen-futures 0.4.78 (browser target only), wasm-bindgen-macro
   0.2.128 (browser target only), wasm-bindgen-macro-support 0.2.128 (browser
@@ -392,7 +392,7 @@ Dual-licensed; used here under the Apache License 2.0.
   https://github.com/storyyeller/stable_deref_trait
 - static_assertions 1.1.0 — Nikolai Vazquez —
   https://github.com/nvzqz/static-assertions-rs
-- syn 2.0.119, syn 3.0.9 — David Tolnay — https://github.com/dtolnay/syn
+- syn 2.0.119, syn 3.0.10 — David Tolnay — https://github.com/dtolnay/syn
 - tempfile 3.27.0 — Steven Allen; The Rust Project Developers; Ashley Mannix
   and others — https://github.com/Stebalien/tempfile
 - thiserror 1.0.69 (native targets only), thiserror 2.0.21, thiserror-impl
@@ -415,7 +415,7 @@ Dual-licensed; used here under the Apache License 2.0.
 - utf8parse 0.2.2 (native targets only) — Joe Wilm; Christian Duerr —
   https://github.com/alacritty/vte
 - utf_types 1.0.0 — Henri Sivonen — https://github.com/hsivonen/utf_types
-- uuid 1.29.0 — Ashley Mannix; Dylan DPC; Hunar Roop Kahlon —
+- uuid 1.29.2 — Ashley Mannix; Dylan DPC; Hunar Roop Kahlon —
   https://github.com/uuid-rs/uuid
 - vcpkg 0.2.15 — Jim McGrath — https://github.com/mcgoo/vcpkg-rs; a build
   dependency of libsqlite3-sys (joins the graph with the fork's full crate;
