@@ -2285,8 +2285,15 @@ the production backend probed live; indexed as reading 26 in
 
 - **nginz compresses.** Its Helm chart (`charts/nginz/templates/conf/_nginx.conf.tpl`)
   sets `gzip on` for `application/json` and text types from 1024 bytes on, level 6,
-  with `gzip_vary on` and `gzip_proxied any`; wire-server's docker-compose stacks
-  (`deploy/dockerephemeral`) carry the same block.
+  with `gzip_vary on` and `gzip_proxied any`.
+- **wire-server's docker-compose stacks compress no JSON.** Their nginz configs
+  (`deploy/dockerephemeral/federation-v0` to `-v3`, and the nginz integration test's)
+  carry the same block, but write the list as one quoted string,
+  `gzip_types 'text/plain text/css application/json text/xml';`, which nginx reads as
+  a single type that matches no answer. The local `wire-server-rs` stack inherits the
+  line: its `POST /v14/conversations/list` answered 3,418 bytes to a client that asks
+  for gzip (Step 159's smoke, 2026-11-16) as to one that does not (2026-11-09), by
+  nginz's access log. A smoke there does not exercise compression.
 - **Live.** Wire's production backend (`prod-nginz-https.wire.com`),
   `GET /v14/api/swagger.json`: without `Accept-Encoding` 602,373 bytes; with
   `Accept-Encoding: gzip` the answer carries `Content-Encoding: gzip` and

@@ -231,9 +231,9 @@ impl HttpClient {
         if !resp.status().is_success() {
             return Err(reject_from_response(resp, "fetch_property_value").await);
         }
-        resp.text()
+        crate::answer_bound::read_text(resp)
             .await
-            .map_err(|e| KupferdrahtError::Network(format!("read property body: {e}")))
+            .map_err(|e| e.into_error("read property body", KupferdrahtError::Network))
     }
 }
 

@@ -85,10 +85,9 @@ pub(crate) async fn evaluate(
     if status != 200 {
         return Err(refusal(status, response.headers()));
     }
-    let answer: EvaluateAnswer = response
-        .json()
+    let answer: EvaluateAnswer = crate::answer_bound::read_json(response)
         .await
-        .map_err(|e| KupferdrahtError::Encoding(format!("PIN service answer: {e}")))?;
+        .map_err(|e| e.into_error("PIN service answer", KupferdrahtError::Encoding))?;
     let evaluated = STANDARD
         .decode(&answer.evaluated_element)
         .ok()
@@ -134,10 +133,9 @@ pub(crate) async fn refund(
     if status != 200 {
         return Err(refusal(status, response.headers()));
     }
-    let answer: RefundAnswer = response
-        .json()
+    let answer: RefundAnswer = crate::answer_bound::read_json(response)
         .await
-        .map_err(|e| KupferdrahtError::Encoding(format!("PIN service receipt answer: {e}")))?;
+        .map_err(|e| e.into_error("PIN service receipt answer", KupferdrahtError::Encoding))?;
     Ok(answer.attempts_remaining)
 }
 

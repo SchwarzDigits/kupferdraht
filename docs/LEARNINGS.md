@@ -3154,3 +3154,32 @@ touched it.
   approved measurement, so its test passed at once; run against `main`'s driver it
   failed, which is what shows it tests something.
 
+
+### 5.96 A bound that needed a census, a value I first misattributed, and a stack that never compressed (Step 159)
+
+- **A scan made the bound complete.** The plan named three read helpers and "a dozen"
+  direct reads; the pin test that looks for every awaited `.json()`, `.text()` or
+  `.bytes()` on a response found 23, five of them outside the Wire layer (the PIN
+  service, the token exchange, the storage server's slot query). Routing them through
+  one module was mechanical once the list was exact; the PIN service and the slot
+  query were in no list of the plan.
+- **The census also found what is no answer.** The browser's whole-asset download
+  reads an encrypted file into memory; a 16 MiB bound there would have broken large
+  attachments. It stays outside, named as the pin test's one exception, and its own
+  missing bound is in `THREAT_MODEL.md` 0.16 — a gap this step surfaced, not one it
+  closes.
+- **A number needs its source.** 16 MiB came as "Wire's standard"; it is
+  `wire-server-rs`'s bound on a decoded request body, which notes itself as unlike
+  Wire, whose services set none. The value still fits an answer (100 events a page),
+  so it stayed; the plan names where it comes from.
+- **The smoke could not show the feature.** The local stack answered `conversations/list`
+  with 3,418 bytes before and after: its nginz quotes the `gzip_types` list, as
+  wire-server's docker-compose stacks do, and so compresses no JSON (observations
+  §103). Comparing nginz's access log across two smoke runs found it; a green smoke
+  alone would have been read as "gzip works live". The gzip path is shown by the unit
+  tests; live it is not yet.
+- **My own slips.** A first red run filtered the pin test out with the lib filter and
+  reported it as passing nothing; two red tests dumped 16 MiB into the log on failure
+  until their `Ok` was mapped to its length; and the observation I wrote at the
+  commission said the docker-compose stacks "carry the same block" before anyone had
+  checked that the block works there.

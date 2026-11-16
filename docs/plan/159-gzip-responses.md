@@ -32,8 +32,8 @@ time offline reads many.
 (`resp.json::<T>()`), `send_keeping_answer` and `reject_from_response` read their
 text whole and bound only what they keep (`redact::bounded_detail`, Step 137). Only
 the avatar download reads through a bound (`read_bounded`, Step 144). A hostile
-server can already send an oversized answer; with gzip on, a few KB of it inflate to
-GB, a thousandfold cheaper for the sender.
+server can already send an oversized answer; with gzip on, it inflates up to a
+thousandfold, so it is that much cheaper for the sender.
 
 ## Scope
 
@@ -64,12 +64,33 @@ GB, a thousandfold cheaper for the sender.
 
 ### Phase 1
 
-- The error a bound answer becomes (`Network`, `Encoding` or a variant of its own) and
-  what a sync pass does with it.
-- The `transfer` client's `Accept-Encoding` (Scope 1) and the browser's bound
-  (Scope 3).
-- The real saving: a notifications page and the room list of the local stack, with and
-  without gzip.
+Decided with the red tests (Volker, 2026-11-16):
+
+- **The error:** `BackendRejected("<what>: answer over 16777216 bytes")`, as the
+  avatar's own bound — no new variant, nothing breaks. A read that fails otherwise
+  keeps the variant its site had. A notifications page past the bound fails the sync
+  pass; the cursor stays, and the next pass meets the same page: a hostile server can
+  deny service anyway.
+- **One module, `src/answer_bound.rs`**, beside `redact.rs`: the PIN service, the token
+  exchange and the storage server's slot query are no Wire layer. The avatar's two
+  `read_bounded` fold into it, with their own bound as a parameter.
+- **The `transfer` client asks for gzip too**, without a special case: nginz compresses
+  no `application/octet-stream`, and a decoded blob still hashes right.
+- **The browser** checks after the read (Scope 3, `THREAT_MODEL.md` 0.16); no browser
+  test, as for the avatar's browser read.
+- **Found while implementing:** the browser's whole-asset download
+  (`download_asset_bytes`, W7) reads an encrypted file, no answer, and stays outside
+  the bound — an asset may be larger than 16 MiB. It has no bound of its own
+  (`THREAT_MODEL.md` 0.16); the pin test names it as the one exception.
+
+## Smoke
+
+2026-11-16, local `wire-server-rs` stack, `kupferdraht-smoke.sh --throwaway`: 24 ok,
+0 failed, with a CLI that asks for gzip. The stack compresses no JSON, though: its
+nginz config quotes the `gzip_types` list, as wire-server's docker-compose stacks do
+(observations §103), so the answers stayed the size they were, and the smoke shows
+only that nothing broke. The gzip path end to end (the decoding, the real saving) is
+covered by the unit tests against a mock server, not yet live.
 
 ## Out of scope
 
@@ -85,7 +106,7 @@ GB, a thousandfold cheaper for the sender.
 - A request to a JSON endpoint carries `Accept-Encoding` naming `gzip` (httpmock).
 - A notifications page served with `Content-Encoding: gzip` yields the same events as
   the same page uncompressed.
-- A gzip answer of a few KB that inflates past the bound fails with the phase-1 error,
+- A gzip answer of less than 64 KiB that inflates past the bound fails with the phase-1 error,
   without reading the rest.
 - An uncompressed answer past the bound fails the same way: the bound is on the
   decoded bytes, whatever the encoding.

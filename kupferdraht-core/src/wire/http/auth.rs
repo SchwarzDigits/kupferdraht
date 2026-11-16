@@ -243,8 +243,8 @@ impl HttpClient {
             return Err(rebind_rejection(resp).await);
         }
         // Wire rotates the zuid on every successful /access. Capture
-        // the new value before consuming the response body — once
-        // `.json()` is called the headers are no longer accessible.
+        // the new value before consuming the response body — once the
+        // body is read the headers are no longer accessible.
         // On wasm the browser jar rotates it transparently (Set-Cookie is
         // unreadable), so there is nothing to capture — W6.
         #[cfg(not(target_arch = "wasm32"))]
@@ -497,7 +497,9 @@ async fn rebind_rejection(resp: reqwest::Response) -> KupferdrahtError {
             retry_after_secs: super::retry_after_secs(resp.headers()),
         };
     }
-    let body = resp.text().await.unwrap_or_default();
+    let body = crate::answer_bound::read_text(resp)
+        .await
+        .unwrap_or_default();
     if status == StatusCode::FORBIDDEN
         && serde_json::from_str::<WireErrorBody>(&body)
             .is_ok_and(|b| b.label == "invalid-credentials")
@@ -573,10 +575,9 @@ async fn decode_token_body(
     resp: reqwest::Response,
     what: &str,
 ) -> Result<LoginResponse, KupferdrahtError> {
-    let body: LoginResponse = resp
-        .json()
+    let body: LoginResponse = crate::answer_bound::read_json(resp)
         .await
-        .map_err(|e| KupferdrahtError::Encoding(format!("{what} body: {e}")))?;
+        .map_err(|e| e.into_error(&format!("{what} body"), KupferdrahtError::Encoding))?;
     if body.access_token.is_empty() || body.user.is_empty() || body.user.contains('@') {
         return Err(KupferdrahtError::Encoding(format!(
             "{what} body: empty access_token, or a user that is not a bare id"
@@ -611,8 +612,7 @@ fn extract_zuid(headers: &reqwest::header::HeaderMap) -> Option<String> {
 }
 
 async fn map_login_forbidden(resp: reqwest::Response) -> KupferdrahtError {
-    let label = resp
-        .json::<WireErrorBody>()
+    let label = crate::answer_bound::read_json::<WireErrorBody>(resp)
         .await
         .map(|b| b.label)
         .unwrap_or_default();

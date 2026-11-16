@@ -96,10 +96,9 @@ impl HttpClient {
         if !resp.status().is_success() {
             return Err(reject_from_response(resp, "sso_default_code").await);
         }
-        let settings: SsoSettings = resp
-            .json()
+        let settings: SsoSettings = crate::answer_bound::read_json(resp)
             .await
-            .map_err(|e| KupferdrahtError::Encoding(format!("/sso/settings body: {e}")))?;
+            .map_err(|e| e.into_error("/sso/settings body", KupferdrahtError::Encoding))?;
         Ok(settings.default_sso_code)
     }
 }

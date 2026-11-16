@@ -505,7 +505,9 @@ impl HttpClient {
         if !resp.status().is_success() {
             return Err(reject_from_response(resp, "download_public_image").await);
         }
-        read_bounded(resp, max_bytes).await
+        crate::answer_bound::read_bounded(resp, max_bytes)
+            .await
+            .map_err(|e| e.into_error("avatar image", KupferdrahtError::Network))
     }
 
     /// The answer behind the backend's `302`, followed by hand and without the
@@ -572,55 +574,6 @@ fn public_image_body(image: &[u8], mime_type: &str) -> Result<Vec<u8>, Kupferdra
     body.extend_from_slice(image);
     body.extend_from_slice(format!("\r\n--{MULTIPART_BOUNDARY}--\r\n").as_bytes());
     Ok(body)
-}
-
-fn image_over_the_cap(max_bytes: usize) -> KupferdrahtError {
-    KupferdrahtError::BackendRejected(format!("avatar image over {max_bytes} bytes"))
-}
-
-/// The body, up to `max_bytes`: reading stops at the first chunk past it.
-#[cfg(not(target_arch = "wasm32"))]
-async fn read_bounded(
-    mut resp: reqwest::Response,
-    max_bytes: usize,
-) -> Result<Vec<u8>, KupferdrahtError> {
-    let mut body = Vec::new();
-    while let Some(chunk) = resp
-        .chunk()
-        .await
-        .map_err(|e| KupferdrahtError::Network(format!("avatar image body: {e}")))?
-    {
-        if body.len() + chunk.len() > max_bytes {
-            return Err(image_over_the_cap(max_bytes));
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
-}
-
-/// The body, up to `max_bytes`. The browser's response has no chunk reader
-/// without `reqwest`'s `stream` feature, so the declared length decides before
-/// reading, and the read length after it: a store that lies about its length
-/// costs one buffered body, not a passed check.
-#[cfg(target_arch = "wasm32")]
-async fn read_bounded(
-    resp: reqwest::Response,
-    max_bytes: usize,
-) -> Result<Vec<u8>, KupferdrahtError> {
-    if resp
-        .content_length()
-        .is_some_and(|length| length > max_bytes as u64)
-    {
-        return Err(image_over_the_cap(max_bytes));
-    }
-    let body = resp
-        .bytes()
-        .await
-        .map_err(|e| KupferdrahtError::Network(format!("avatar image body: {e}")))?;
-    if body.len() > max_bytes {
-        return Err(image_over_the_cap(max_bytes));
-    }
-    Ok(body.to_vec())
 }
 
 // Compiled for native tests as well, so the guard on its path segments sits

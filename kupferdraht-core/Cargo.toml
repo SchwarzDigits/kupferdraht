@@ -258,8 +258,10 @@ web-sys = { version = "0.3", features = ["Window", "Location"] }
 # D-Bus) would be `sync-secret-service`; not before Linux is a target
 # (docs/non-goals.md NG-24).
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
-# Native reqwest TLS + cookie jar + streaming bodies (wasm uses fetch instead).
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "stream"] }
+# Native reqwest TLS + cookie jar + streaming bodies (wasm uses fetch instead);
+# `gzip`: answers compressed where nginz offers it, as the browser's fetch
+# asks by itself (Step 159).
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "stream", "gzip"] }
 # Threaded runtime + filesystem (unavailable on wasm); `net` for the
 # TcpStream under the Step-62 events WebSocket.
 tokio = { version = "1", features = ["rt-multi-thread", "fs", "net"] }
@@ -285,6 +287,8 @@ voprf = { package = "voprf-ng", version = "0.6", default-features = false, featu
 # Mocked HTTP server for integration tests against the wire::http client
 # without touching live Wire staging.
 httpmock = "0.8"
+# Step 159: gzip bodies the mock server answers with (in the graph through `png`).
+flate2 = "1.1"
 tempfile = "3"
 # Step 156: a certificate authority made in the test, and a TLS server under it
 # for HTTP and the WebSocket (ring, like the rustls of the graph).

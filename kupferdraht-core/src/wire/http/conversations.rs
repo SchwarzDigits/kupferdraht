@@ -322,7 +322,7 @@ impl HttpClient {
             // Newly created — Wire's body here is a member-update
             // Event, not the code envelope. Drain + discard, then
             // GET to retrieve the canonical info.
-            let _ = resp.bytes().await;
+            let _ = crate::answer_bound::read_answer(resp).await;
             return self
                 .get_conversation_code(api_version, access_token, room_local_id)
                 .await?
@@ -333,9 +333,9 @@ impl HttpClient {
                     ))
                 });
         }
-        resp.json::<ConversationCodeInfo>()
+        crate::answer_bound::read_json::<ConversationCodeInfo>(resp)
             .await
-            .map_err(|e| KupferdrahtError::Encoding(format!("conversations/code body: {e}")))
+            .map_err(|e| e.into_error("conversations/code body", KupferdrahtError::Encoding))
     }
 
     /// `GET /v{api_version}/conversations/{cnv}/code` — Step 8 fetch.
@@ -375,10 +375,9 @@ impl HttpClient {
         if !resp.status().is_success() {
             return Err(reject_from_response(resp, "get_conversation_code").await);
         }
-        let info = resp
-            .json::<ConversationCodeInfo>()
+        let info = crate::answer_bound::read_json::<ConversationCodeInfo>(resp)
             .await
-            .map_err(|e| KupferdrahtError::Encoding(format!("conversations/code body: {e}")))?;
+            .map_err(|e| e.into_error("conversations/code body", KupferdrahtError::Encoding))?;
         Ok(Some(info))
     }
 

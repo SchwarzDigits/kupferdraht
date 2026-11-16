@@ -71,11 +71,9 @@ impl HttpClient {
         if !resp.status().is_success() {
             return Err(reject_from_response(resp, "fetch_group_info").await);
         }
-        let bytes = resp
-            .bytes()
+        crate::answer_bound::read_answer(resp)
             .await
-            .map_err(|e| KupferdrahtError::Network(format!("fetch_group_info body: {e}")))?;
-        Ok(bytes.to_vec())
+            .map_err(|e| e.into_error("fetch_group_info body", KupferdrahtError::Network))
     }
 
     /// `POST /v{api_version}/mls/commit-bundles` — uploads a raw MLS
