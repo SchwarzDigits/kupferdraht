@@ -1,6 +1,12 @@
 # Step 153 — The Kotlin/JVM binding built and tested in CI
 
-**Status: implemented** on `step/153-kotlin-bindings-in-ci`. Phase 1 decisions approved
+**Status: MERGED 2026-11-16** — `958e103` on `step/153-kotlin-bindings-in-ci`, with
+`f1a3974` (main merged in after Step 159 landed first), merged to `main` as PR #84
+(`839f60a`); locally fmt, 0 build warnings, clippy, the step's pins,
+`third_party_notices` and `license_headers`; the binding built and tested on macOS with
+verification on, verification checked on Linux in a JDK container from an empty cache;
+CI green, the new job 4:03 on its first run and 1:38 with warm caches. No smoke (CI
+only). Phase 1 decisions approved
 by Volker on 2026-11-16: the Gradle wrapper validated, every Gradle artifact pinned by
 its SHA-256 (`verification-metadata.xml`), no Dependabot for Gradle (it would not
 regenerate the checksums); `build-jvm.sh` learns Linux; the red path shown locally (a
