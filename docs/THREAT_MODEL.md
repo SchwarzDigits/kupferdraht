@@ -1,6 +1,6 @@
 # Kupferdraht Threat Model
 
-**Version:** 0.16 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-16 **Status:** working draft, for review by Markus Troßbach
+**Version:** 0.17 (Draft) **Author:** Volker Zöpfel **Date:** 2026-11-16 **Status:** working draft, for review by Markus Troßbach
 
 ------
 
@@ -62,7 +62,7 @@ Three actors:
 
 **The server's redirects are not followed, but one.** The native HTTP clients follow no redirect (Step 132): a followed 3xx could re-send a login body to a host of the server's choosing or downgrade to plain HTTP. The one redirect Wire's API issues — an asset download's `302` to a pre-signed URL on the asset store — is followed by hand, once (Step 141): a plain GET without the bearer token or the `Asset-Token`, `https` only, no second hop. The server thereby chooses the host the ciphertext comes from; integrity does not depend on it (L6: the digest travels in the MLS message, a substituted blob fails `IntegrityCheck`). A malicious server can make the client issue one credential-free GET to an `https` URL of its choice when an attachment is opened — blind, the answer never goes back to the server. The browser build has no redirect policy of its own: `fetch` follows redirects (open.md §84).
 
-**What the server answers is read up to a bound** (Step 159). Every answer Kupferdraht reads into memory — from Wire's API, the PIN service, the token exchange and the storage server — stops at 16 MiB of decoded bytes and fails as `BackendRejected`. Kupferdraht asks for gzip-compressed answers, which make an oversized one up to a thousandfold cheaper to send: less than 64 KiB of gzip inflate past the bound. Natively the read stops at the first chunk past the bound. In the browser `fetch` decodes before Kupferdraht sees a byte, so the browser holds an oversized answer once before it is refused. An asset blob is no answer: natively it streams to disk, in the browser it is buffered whole (W7) without a bound, so a hostile server can make a browser hold an arbitrarily large blob when an attachment is opened.
+**What the server answers is read up to a bound** (Step 159). Every answer Kupferdraht reads into memory — from Wire's API, the PIN service, the token exchange and the storage server — stops at 16 MiB of decoded bytes and fails as `BackendRejected`. Kupferdraht asks for gzip-compressed answers, which make an oversized one up to a thousandfold cheaper to send: less than 64 KiB of gzip inflate past the bound. The read stops at the first chunk past the bound, natively and in the browser, where `fetch` hands the decoded body over in chunks (Step 160). An asset blob is bounded by what its sender declared (Step 160): `Asset.Original.size` travels in the MLS-protected message, which the server cannot change, and the download stops at the first chunk past that size plus 32 bytes (the IV and a block of padding) with `IntegrityCheck`. Natively the blob streams to disk and a partial file is removed; in the browser it is held in memory (W7), decrypted in that same buffer, and an asset declared over 100 MiB (cargohold's default limit for team users) is refused before any request. What a hostile server can still do is serve a different blob of the declared length, which fails the SHA-256 check.
 
 ------
 
@@ -244,6 +244,7 @@ Not blocking for the current implementation phase. To be picked up before the af
 | 0.14    | 2026-11-10 | Step 12 dropped (NG-30): G7 names it so, and the key-backup preview is removed. G7 names the browser's recovery data (ADR-0035, Step 112), which it had not since that step. |
 | 0.15    | 2026-11-11 | Step 156 (ADR-0044): A4 names the app's own certificate authorities beside the built-in list, and that pinning is still missing. |
 | 0.16    | 2026-11-16 | Step 159: the Trust Model names the bound on every answer read into memory (16 MiB decoded, compressed answers asked for), its weaker form in the browser, and the browser's unbounded asset download. |
+| 0.17    | 2026-11-16 | Step 160: the browser's answer read stops at the bound as the native one does; an asset download is bounded by its sender's declared size + 32 bytes, in the browser also by a 100 MiB ceiling, and decrypted there in its own buffer. |
 
 ------
 

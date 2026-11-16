@@ -56,6 +56,32 @@ deployment (wire-server's Helm chart, `CargoHold/API/Public.hs`).
   have let through.
 - The browser's read (Scope 3).
 
+### Phase 1 decisions (2026-11-16, Volker)
+
+- **More bytes than declared: `IntegrityCheck`.** The declared size travels in
+  the authenticated message; more bytes mean the server serves something other
+  than what the sender described, the class of a SHA-256 mismatch.
+  `BackendRejected` stays Step 159's, where no sender declared anything.
+- **Over the browser's ceiling: `InvalidInput`**, as the native `download()`
+  refuses past 64 MB and as an AES-GCM asset is refused; no new variant, so not
+  BREAKING. The ceiling stays 100 MiB + 32 bytes (a lower one would make files
+  that open today and that Wire admits unopenable in the browser, which has no
+  `save_to`), with the browser decrypting in the downloaded buffer, so an asset
+  is held once.
+- **The browser reads in chunks.** `reqwest`'s `stream` feature on wasm too:
+  a missing `Content-Length` would defeat a check before the read, and a check
+  after it comes when the body is already in memory. `wasm-streams` was already
+  in the lockfile; its notice marker becomes "browser target only".
+- **Step 159's browser answer read goes the same way.** `read_bounded` is one
+  loop over `bytes_stream` on both targets, so the 16 MiB bound holds in the
+  browser before the read too. The pin test's one exception
+  (`download_asset_bytes`) goes, since the asset download reads through
+  `read_bounded` with its own bound — unlike Scope 4 foresaw.
+- **Wire's clients declare the true size** (reading #28): Kalium's
+  `assetDataSize` is "the size of the unencrypted data to be uploaded"; the
+  webapp sets `file.size` of the file it uploads, for an image the length of
+  its bytes. Read in the code, not live.
+
 ## Out of scope
 
 - Upload limits: cargohold enforces them, and a refused upload already surfaces.
@@ -75,3 +101,16 @@ deployment (wire-server's Helm chart, `CargoHold/API/Public.hs`).
   through its bound.
 - Smoke: the local stack's `send-file` / `download-asset` stay green; phase 1 names
   how a file sent from the webapp is received.
+
+## Gate and smoke
+
+Local gate 2026-11-16 on the pinned 1.98: fmt, build without warnings, clippy, the
+wasm32 check and clippy (`--lib` and CI's line), the step's tests (882 across the library and
+Steps 141, 159 and 160), the browser suite in headless Firefox (18 suites, 89 tests,
+among them `wasm_fetch`'s chunked read).
+
+Smoke 2026-11-16, local `wire-server-rs` stack, `kupferdraht-smoke.sh --throwaway`:
+24 ok, 0 failed — `send-file`, `download-asset` and the SHA-256 match go through the
+bound with Kupferdraht as the sender. A file sent from a Wire client (the stack's
+webapp container) has not been downloaded under the bound; the size its sender
+declares is read from Kalium's and the webapp's code (reading #28), not seen live.

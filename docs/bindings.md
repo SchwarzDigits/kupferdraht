@@ -867,7 +867,10 @@ Since Step 110 (ADR-0035):
   `removeAvatar` reject `LeaderChangedError`.
 - Assets (W7): `sendFile(roomId, bytes, filename, mimeType)` (in-memory
   encrypted send), `downloadAsset(roomId, itemId) -> bytes` (download +
-  decrypt + SHA-256 verify).
+  decrypt + SHA-256 verify). The download is held in memory: an asset
+  whose sender declared over 100 MiB rejects `InvalidInput` before any
+  request, and more bytes than declared + 32 reject `IntegrityCheck`
+  (Step 160).
 - Session admin (Step 98a): `setDisplayName(name)`, `setHandle(handle)`,
   `updateEmail(email)` — the last one means "verification mail sent", not
   "address changed". Since Step 126 the first two also write the persisted

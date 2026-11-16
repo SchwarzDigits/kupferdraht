@@ -90,6 +90,8 @@ pub(crate) trait TokenRefresh {
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod answer_bound_tests;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod asset_bound_tests;
 #[cfg(not(target_arch = "wasm32"))]
 mod asset_redirect;
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -711,6 +713,7 @@ mod tests {
     use httpmock::MockServer;
 
     use super::HttpClient;
+    use super::assets::AssetDownload;
     use crate::error::KupferdrahtError;
 
     fn http(base_url: &str) -> HttpClient {
@@ -826,28 +829,46 @@ mod tests {
             "download_asset domain",
             h,
             client
-                .download_asset(14, "tok", h, "key-1", None, &sink)
+                .download_asset(
+                    14,
+                    "tok",
+                    AssetDownload::within_a_mebibyte(h, "key-1", None),
+                    &sink,
+                )
                 .await,
         );
         assert_refused(
             "download_asset id",
             h,
             client
-                .download_asset(14, "tok", "wire.com", h, None, &sink)
+                .download_asset(
+                    14,
+                    "tok",
+                    AssetDownload::within_a_mebibyte("wire.com", h, None),
+                    &sink,
+                )
                 .await,
         );
         assert_refused(
             "download_asset_bytes domain",
             h,
             client
-                .download_asset_bytes(14, "tok", h, "key-1", None)
+                .download_asset_bytes(
+                    14,
+                    "tok",
+                    AssetDownload::within_a_mebibyte(h, "key-1", None),
+                )
                 .await,
         );
         assert_refused(
             "download_asset_bytes id",
             h,
             client
-                .download_asset_bytes(14, "tok", "wire.com", h, None)
+                .download_asset_bytes(
+                    14,
+                    "tok",
+                    AssetDownload::within_a_mebibyte("wire.com", h, None),
+                )
                 .await,
         );
     }

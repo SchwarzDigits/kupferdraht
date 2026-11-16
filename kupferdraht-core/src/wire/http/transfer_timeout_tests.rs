@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::{TcpListener, TcpStream};
 
-use super::assets::AssetMultipart;
+use super::assets::{AssetDownload, AssetMultipart};
 use super::{HttpClient, HttpTimeouts};
 use crate::error::KupferdrahtError;
 
@@ -148,9 +148,7 @@ async fn a_download_that_keeps_flowing_outlives_the_request_timeout() {
         .download_asset(
             14,
             "tok",
-            "example.test",
-            "key-1",
-            None,
+            AssetDownload::within_a_mebibyte("example.test", "key-1", None),
             &dir.path().join("out"),
         )
         .await
@@ -178,9 +176,7 @@ async fn a_download_that_stalls_fails_after_the_idle_timeout() {
         .download_asset(
             14,
             "tok",
-            "example.test",
-            "key-1",
-            None,
+            AssetDownload::within_a_mebibyte("example.test", "key-1", None),
             &dir.path().join("out"),
         )
         .await;
