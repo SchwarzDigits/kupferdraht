@@ -104,7 +104,7 @@ The real layout, by responsibility:
 | `wasm/` | hand-written wasm-bindgen binding layer (`Kupferdraht`/`PendingLogin`/`Client` classes, `live_sync` polling loop) — parallel to `ffi/`, wasm32 only (Steps 44–59); driven from a **dedicated Web Worker** since Step 91 (OPFS); every view crosses through `js_view::to_js`, a missing value as `null` (Step 130c) |
 | `avatar/` | Step 144: every avatar written anew: format crates decode under limits (`decode`), EXIF orientation (`exif`), scaling (`pixels`), a new JPEG or PNG (`encode`), the per-client image cache (`cache`); `#![forbid(unsafe_code)]` |
 | `time.rs` | wall-clock shim (`now_ms`): `SystemTime` on native, `js_sys::Date` on wasm (W8, Step 48) |
-| `answer_bound.rs` | Step 159: every answer read into memory — Wire's API, the PIN service, the token exchange, the storage server — goes through a bound of 16 MiB decoded bytes (`read_answer` / `read_text` / `read_json`; the avatar passes its own bound to `read_bounded`); an asset blob is no answer |
+| `answer_bound.rs` | Step 159: every answer read into memory — Wire's API, the PIN service, the token exchange, the storage server — goes through a bound of 16 MiB decoded bytes (`read_answer` / `read_text` / `read_json`; the avatar passes its own bound to `read_bounded`, the browser's asset download the sender's declared size + 32 bytes, Step 160); the read stops at the first chunk past the bound, natively and in the browser |
 | `logging.rs` | Step 117: `init_logging` installs Kupferdraht's `tracing` subscriber that hands Kupferdraht's own events (`kupferdraht::…`) to the app's `LogListener` — Kupferdraht writes nowhere itself; UniFFI-annotated in place, `wasm/logging.rs` adapts the browser's `onLog` |
 
 Module organisation is **feature-based** (matrix-rust-sdk style), not
@@ -389,7 +389,8 @@ Files do **not** travel through MLS (ADR-0011,
 3. Send an MLS `GenericMessage { Asset }` carrying the key, the SHA-256,
    the mime/size, and the locator — the small **reference** rides
    through MLS; the bytes do not.
-4. The receiver decrypts the reference, downloads the ciphertext,
+4. The receiver decrypts the reference, downloads the ciphertext — at
+   most the declared `Original.size` + 32 bytes (Step 160) —,
    verifies SHA-256, decrypts, and surfaces it. Plaintext is never
    persisted; only ciphertext may be cached. Inbound AES-GCM assets are
    warn-and-skipped as "unsupported".

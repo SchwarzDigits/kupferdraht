@@ -314,6 +314,28 @@ its value is not visible from the client source.
 backend operator's configured cap, or a live probe with growing assets
 that records the failure mode (HTTP status and label).
 
+**Settled for wire-server (Step 160).** cargohold refuses an upload
+past `maxTotalBytes` for a team user and `maxTotalBytesStrict` for
+anyone else, by default `104857632 # limit to 100 MiB + 32 bytes` and
+`26214432 # limit to 25 MiB + 32 bytes`, configurable per deployment
+(wire-server, local `02071bd`: `charts/wire-server/values.yaml`
+lines 485–486, `services/cargohold/src/CargoHold/API/Public.hs`
+lines 182–183). The 32 bytes are the IV and a block of padding.
+
+**The download bound (Step 160).** The sender declares the plaintext
+size in `Asset.Original.size`, inside the MLS-protected message the
+server cannot change. AES-256-CBC with the IV prefix makes the
+ciphertext 17 to 32 bytes longer, so Kupferdraht stops a download at
+the first chunk past `Original.size + 32` bytes with `IntegrityCheck`;
+natively the partial file leaves the cache. Wire's clients declare the
+true plaintext size (`docs/wire/kalium-readings.md` #28): Kalium puts
+"the size of the unencrypted data to be uploaded" into `Original.size`,
+the webapp the `size` of the very file it uploads (for an image the
+length of its bytes). In the browser, where the download is held in
+memory (W7), an asset declared over 100 MiB is refused before any
+request with `InvalidInput`: cargohold's default for team users is the
+largest asset that fits.
+
 ---
 
 ## Q8 — Federation references

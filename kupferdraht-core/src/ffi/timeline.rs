@@ -895,7 +895,8 @@ impl Asset {
     /// Capped at 64 MB — use `save_to` for larger assets.
     ///
     /// # Errors
-    /// See `KupferdrahtError`.
+    /// See `KupferdrahtError`; `IntegrityCheck` also for a download longer
+    /// than the declared `size_bytes` + 32 bytes (Step 160).
     pub async fn download(&self) -> Result<Vec<u8>, KupferdrahtError> {
         self.inner.download().await
     }
@@ -903,7 +904,7 @@ impl Asset {
     /// Download + decrypt the asset, streaming the plaintext to a path.
     ///
     /// # Errors
-    /// See `KupferdrahtError`.
+    /// See `KupferdrahtError`; the same download bound as `download`.
     pub async fn save_to(&self, dest_path: &str) -> Result<(), KupferdrahtError> {
         self.inner.save_to(std::path::Path::new(dest_path)).await
     }

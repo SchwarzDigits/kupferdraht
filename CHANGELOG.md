@@ -92,8 +92,16 @@ is no skill for it — it is this short procedure:
   the PIN service, the token exchange and the storage server is read up to
   16 MiB of decoded bytes; past that it fails as `BackendRejected` ("answer over
   16777216 bytes"), so a compressed answer cannot inflate into the app's memory.
-  In the browser the size is checked after `fetch` has read the answer; asset
-  downloads are no answer and stay unbounded there.
+  The read stops at the first chunk past the bound, in the browser too
+  (Step 160).
+- **A file downloads only as far as its sender declared** (Step 160):
+  `AssetSummary::download` / `save_to` (FFI `Asset.download` / `saveTo`, browser
+  `downloadAsset`) stop past the size the sender put into the message
+  (`size_bytes`) plus 32 bytes with `IntegrityCheck`, so a hostile server cannot
+  fill the disk or the browser's memory; natively nothing stays in the asset
+  cache. In the browser an asset whose declared size is over 100 MiB rejects
+  `InvalidInput` before any request, and a downloaded file is decrypted in its
+  own buffer instead of beside a second copy.
 
 ## [0.5.1] - 2026-11-10
 

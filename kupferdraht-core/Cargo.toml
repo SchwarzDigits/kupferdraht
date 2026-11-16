@@ -15,10 +15,12 @@ name = "kupferdraht"
 
 [dependencies]
 uniffi = { version = "0.29", features = ["tokio"] }
-# Base features are wasm-safe; native adds `rustls-tls`/`cookies`/`stream`
+# Base features are wasm-safe; native adds `rustls-tls`/`cookies`/`gzip`
 # (see the `cfg(not(wasm32))` block below). On wasm reqwest uses the browser
 # `fetch` backend, which provides TLS itself and ignores those features.
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
+# `stream`: a body read chunk by chunk on both targets, so a bounded read
+# stops at its bound in the browser too (Step 160).
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream"] }
 # Only sync/macros/io-util/rt/time exist on wasm; native adds
 # `rt-multi-thread`/`fs` below. The single-thread `rt` + `time` cover the
 # wasm build's needs.
@@ -242,7 +244,7 @@ web-sys = { version = "0.3", features = [
 wasm-bindgen-test = "0.3"
 # W5 smoke test: drive reqwest's browser `fetch` backend directly (same features
 # as the wasm build) + read the harness origin for a same-origin, CORS-free call.
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream"] }
 web-sys = { version = "0.3", features = ["Window", "Location"] }
 
 # ── native (non-wasm) target ───────────────────────────────────────────────
@@ -258,10 +260,10 @@ web-sys = { version = "0.3", features = ["Window", "Location"] }
 # D-Bus) would be `sync-secret-service`; not before Linux is a target
 # (docs/non-goals.md NG-24).
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
-# Native reqwest TLS + cookie jar + streaming bodies (wasm uses fetch instead);
-# `gzip`: answers compressed where nginz offers it, as the browser's fetch
-# asks by itself (Step 159).
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "stream", "gzip"] }
+# Native reqwest TLS + cookie jar (wasm uses fetch instead); `gzip`: answers
+# compressed where nginz offers it, as the browser's fetch asks by itself
+# (Step 159). Streamed bodies come from the base `stream` above.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "gzip"] }
 # Threaded runtime + filesystem (unavailable on wasm); `net` for the
 # TcpStream under the Step-62 events WebSocket.
 tokio = { version = "1", features = ["rt-multi-thread", "fs", "net"] }

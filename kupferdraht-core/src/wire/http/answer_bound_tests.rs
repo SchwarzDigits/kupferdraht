@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Step 159 — answers arrive compressed where the server offers it, and no
-//! answer is read past 16 MiB of decoded bytes. TDD red.
+//! answer is read past 16 MiB of decoded bytes.
 //!
 //! nginz compresses `application/json` of 1 KiB and more when the request
 //! asks for it (observations §103). The bound counts decoded bytes, whatever
