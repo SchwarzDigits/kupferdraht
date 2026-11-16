@@ -3154,3 +3154,20 @@ touched it.
   approved measurement, so its test passed at once; run against `main`'s driver it
   failed, which is what shows it tests something.
 
+### 5.96 A checksum file written on the wrong machine, an element I guessed, and a script that knew one OS (Step 153)
+
+- **A warm cache writes an incomplete checksum file.** Gradle's
+  `--write-verification-metadata` on this Mac, whose Gradle cache already held the Kotlin
+  plugin's graph, left out one POM (`kotlinx-coroutines-bom` 1.6.4) that a fresh resolution
+  fetches. A run in a Linux JDK container from an empty cache, as the runner starts, failed
+  verification on exactly that file; regenerating there added it. Write such a file where
+  the consumer of it runs, from nothing.
+- **I guessed an element name.** The red pin asked for `<verify-checksums>`; Gradle writes
+  `<verify-metadata>` and checks checksums whenever entries exist. The guessed component
+  name (`kotlinx-coroutines-core-jvm`) was right, the element was not; I fixed the pin
+  after approval and said so. A pin on a generated file is written after reading one.
+- **`build-jvm.sh` knew macOS only.** A JVM binding that had never run on Linux needed the
+  library's name and JNA's folder per OS before CI could build it.
+- **The red path cost no CI run.** A broken Kotlin assertion failed `./gradlew test`
+  locally; the job's verdict is that command's, so the pull request only has to be green.
+

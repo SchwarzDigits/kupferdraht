@@ -165,7 +165,7 @@ to a package registry ([`docs/non-goals.md`](docs/non-goals.md) NG-31)
 | Target | Artifact / build | Status |
 |---|---|---|
 | Rust (library + CLI) | `kupferdraht-core` crate, `kupferdraht-cli` | usable today — the CLI exercises every feature |
-| Kotlin / JVM (desktop) | JAR — `bindings/kotlin/build-jvm.sh` | implemented, binding-level tests (`./gradlew test`) |
+| Kotlin / JVM (desktop) | JAR — `bindings/kotlin/build-jvm.sh` | implemented, binding-level tests (`./gradlew test`), run in CI since Step 153 |
 | Android | AAR (arm64-v8a) — `bindings/android/build-android.sh` (NDK + cargo-ndk) | implemented, builds + packages |
 | Swift (iOS + macOS) | `kupferdrahtFFI.xcframework` + SwiftPM — `bindings/swift/build-xcframework.sh` | implemented, binding-level tests (`swift test`) |
 | Browser (WASM) | `wasm-pack build --target web` (from `kupferdraht-core/`, needs a wasm-capable clang) + `bindings/web/kupferdraht-tabs/` (plain ES modules, no build) | usable subset — login incl. SSO, sync, send / receive, assets, read state, avatars and recovery data over the SQLite3MC store in IndexedDB or on a storage server (run in a dedicated Web Worker); many tabs served by one leader tab (`kupferdraht-tabs`, ADR-0026); storage pins and the tabs scenarios run in headless Firefox (`scripts/wasm-test.sh`), live-browser verification of the login vertical pending |

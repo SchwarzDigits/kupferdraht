@@ -1,6 +1,14 @@
 # Step 153 — The Kotlin/JVM binding built and tested in CI
 
-**Status: commissioned 2026-11-10** (Volker), from Step 20's closing review. No CI job
+**Status: implemented** on `step/153-kotlin-bindings-in-ci`. Phase 1 decisions approved
+by Volker on 2026-11-16: the Gradle wrapper validated, every Gradle artifact pinned by
+its SHA-256 (`verification-metadata.xml`), no Dependabot for Gradle (it would not
+regenerate the checksums); `build-jvm.sh` learns Linux; the red path shown locally (a
+broken Kotlin assertion fails `./gradlew test`) instead of an extra CI round. The
+checksum file was completed on Linux from an empty cache, which needed one plugin POM a
+warm macOS cache had skipped.
+
+**Commissioned 2026-11-10** (Volker), from Step 20's closing review. No CI job
 builds a native binding, so their tests rot unseen: observations §93 found on
 2026-10-31 that both test pins missed `onSessionExpired`, and the Kotlin test only
 compiled again in Step 151, when a JDK was first on the dev machine. The Swift test's
