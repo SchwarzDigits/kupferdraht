@@ -413,20 +413,18 @@ fn create_private_file(path: &Path) -> Result<(), KupferdrahtError> {
     }
 }
 
-/// Step 134: the write-ahead log of a native WAL database, truncated after
-/// each checkpoint (`journal_size_limit = 0`) so earlier page images — the
+/// Step 134: a native WAL database's write-ahead log is truncated after each
+/// checkpoint (`journal_size_limit = 0`), so earlier page images — the
 /// content of deleted rows among them — do not linger in it until they are
 /// overwritten. The browser keeps the rollback journal (ADR-0022 decision 5).
 ///
 /// # Errors
-/// `KupferdrahtError::Storage` if a pragma fails.
+/// `KupferdrahtError::Storage` if the pragma fails.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn enable_truncating_wal(
+pub(crate) fn truncate_wal_after_checkpoints(
     conn: &Connection,
     database: &str,
 ) -> Result<(), KupferdrahtError> {
-    conn.pragma_update(None, "journal_mode", "WAL")
-        .map_err(|e| KupferdrahtError::Storage(format!("{database}: set WAL: {e}")))?;
     conn.pragma_update(None, "journal_size_limit", 0)
         .map_err(|e| {
             KupferdrahtError::Storage(format!("{database}: set journal_size_limit: {e}"))

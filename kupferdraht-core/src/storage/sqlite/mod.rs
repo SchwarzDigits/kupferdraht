@@ -131,7 +131,10 @@ impl SqliteStore {
         // WAL is native-only (ADR-0022 decision 5): the browser's VFS provides
         // no shared memory — it keeps SQLite's rollback journal.
         #[cfg(not(target_arch = "wasm32"))]
-        crate::storage::enable_truncating_wal(&conn, "kupferdraht.db")?;
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .map_err(|e| KupferdrahtError::Storage(format!("set journal_mode=WAL: {e}")))?;
+        #[cfg(not(target_arch = "wasm32"))]
+        crate::storage::truncate_wal_after_checkpoints(&conn, "kupferdraht.db")?;
         // Step 85: busy_timeout + explicit synchronous=FULL (native).
         #[cfg(not(target_arch = "wasm32"))]
         crate::storage::set_multi_process_pragmas(&conn)?;

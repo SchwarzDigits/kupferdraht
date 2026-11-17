@@ -3243,4 +3243,10 @@ touched it.
 - **Volker asked why the step was needed,** and the answer split it: the deleted-content
   guarantee is concrete and cheap, the key rotation narrow and the largest part. The
   rotation is parked as Step 161 with phase 1's findings, not dropped.
+- **A source pin of another step failed on CI.** Step 113's pin scans every
+  `journal_mode` line for a `#[cfg(not(target_arch = "wasm32"))]` within three lines;
+  my helper was native-only as a whole, its attribute five lines up. My local gate ran
+  the tests of the files I touched, not the pins that read the whole source tree. The
+  WAL pragma went back under its call sites' attribute; before a commit that moves a
+  pinned pattern, the source-scanning pins run too.
 

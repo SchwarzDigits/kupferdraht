@@ -125,7 +125,10 @@ impl SqliteGlobalStore {
         // WAL is native-only: the browser's VFS provides no shared memory
         // (ADR-0022 decision 5), so it keeps the rollback journal.
         #[cfg(not(target_arch = "wasm32"))]
-        crate::storage::enable_truncating_wal(&conn, "global.db")?;
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .map_err(|e| KupferdrahtError::Storage(format!("global set WAL: {e}")))?;
+        #[cfg(not(target_arch = "wasm32"))]
+        crate::storage::truncate_wal_after_checkpoints(&conn, "global.db")?;
         #[cfg(not(target_arch = "wasm32"))]
         crate::storage::set_multi_process_pragmas(&conn)?;
         ensure_global_schema(&conn)?;
