@@ -1,6 +1,21 @@
 # Step 160 — The asset download bounded: the sender's size, a ceiling in the browser
 
-**Status: commissioned 2026-11-16** (Volker), from what Step 159 found: the browser's
+**Status: MERGED 2026-11-16** — `3fb5aa9` on `step/160-asset-download-bound`, merged
+to `main` as PR #90 (`e781310`); locally fmt, 0 build warnings, clippy, 882 tests (the
+library and Steps 141, 159 and 160), the wasm32 check, `clippy --lib` and CI's wasm
+clippy line, `third_party_notices` and `license_headers`, the browser suite in Firefox
+(18 suites, 89 tests); CI green on the first run and after the merge. A file
+downloads at most its sender's `Asset.Original.size` + 32 bytes (`IntegrityCheck`
+past it, natively the partial file leaves the cache); in the browser a declared size
+over 100 MiB + 32 bytes is refused before any request (`InvalidInput`) and the
+ciphertext is decrypted in its own buffer; `read_bounded` is one `bytes_stream` loop
+on both targets, so Step 159's 16 MiB bound stops the browser's read too. Smoke
+2026-11-16 on the local stack: 24 ok, with Kupferdraht as the sender; a file from a
+Wire client is not seen live under the bound (reading #28 reads the declared size in
+the clients' code). No API change, no CLI command (`download-asset` exercises it);
+CHANGELOG under Security, `THREAT_MODEL.md` 0.17.
+
+**Commissioned 2026-11-16** (Volker), from what Step 159 found: the browser's
 whole-asset download reads an encrypted file into memory without any bound, and Step
 159's answer bound does not fit it, since an asset may be larger than 16 MiB
 (`THREAT_MODEL.md` 0.16).
