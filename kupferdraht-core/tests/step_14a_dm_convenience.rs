@@ -108,12 +108,18 @@ fn one2one_envelope(conv_id: &str, peer_uuid: &str) -> String {
               }}
             }}
         }}"#,
-        conv = conv_json(conv_id, "wire.com", 2, "", &[(peer_uuid, "wire.com")]),
+        conv = conv_json(
+            conv_id,
+            "example.test",
+            2,
+            "",
+            &[(peer_uuid, "example.test")]
+        ),
     )
 }
 
 /// Mount the three sync-side mocks Wire would emit when a DM
-/// conversation with `peer-uuid@wire.com` is the only room visible
+/// conversation with `peer-uuid@example.test` is the only room visible
 /// to the caller. Hits land on list-ids → list → list-users in the
 /// order `sync_metadata` walks them.
 fn mount_sync_with_single_dm(server: &MockServer, conv_id: &str) {
@@ -124,7 +130,7 @@ fn mount_sync_with_single_dm(server: &MockServer, conv_id: &str) {
             .header("content-type", "application/json")
             .body(format!(
                 r#"{{"qualified_conversations":[
-                     {{"id":"{conv_id}","domain":"wire.com"}}
+                     {{"id":"{conv_id}","domain":"example.test"}}
                    ],"has_more":false,"paging_state":"END"}}"#
             ));
     });
@@ -134,7 +140,13 @@ fn mount_sync_with_single_dm(server: &MockServer, conv_id: &str) {
             .header("content-type", "application/json")
             .body(format!(
                 r#"{{"found":[{}], "not_found":[], "failed":[]}}"#,
-                conv_json(conv_id, "wire.com", 2, "", &[("peer-uuid", "wire.com")]),
+                conv_json(
+                    conv_id,
+                    "example.test",
+                    2,
+                    "",
+                    &[("peer-uuid", "example.test")]
+                ),
             ));
     });
     server.mock(|when, then| {
@@ -143,7 +155,7 @@ fn mount_sync_with_single_dm(server: &MockServer, conv_id: &str) {
             .header("content-type", "application/json")
             .body(
                 r#"{"found":[
-                     {"qualified_id":{"id":"peer-uuid","domain":"wire.com"},
+                     {"qualified_id":{"id":"peer-uuid","domain":"example.test"},
                       "name":"Peer Person","handle":"peerp"}
                    ]}"#,
             );
@@ -156,10 +168,10 @@ fn mount_sync_with_single_dm(server: &MockServer, conv_id: &str) {
 /// locally. The `GroupInfo` is a real openmls export under the
 /// fixture group id `grp-one`.
 fn mount_external_join(server: &MockServer) {
-    let group_info = common::mls::group_info_tls(b"grp-one", b"peer-uuid:peerdev01@wire.com");
+    let group_info = common::mls::group_info_tls(b"grp-one", b"peer-uuid:peerdev01@example.test");
     server.mock(move |when, then| {
         when.method(GET)
-            .path("/v14/conversations/wire.com/dm-uuid/groupinfo");
+            .path("/v14/conversations/example.test/dm-uuid/groupinfo");
         then.status(200)
             .header("content-type", "message/mls")
             .body(group_info.clone());
@@ -179,7 +191,7 @@ async fn create_dm_drives_get_then_returns_room_for_peer() {
 
     let get_one2one = server.mock(|when, then| {
         when.method(GET)
-            .path("/v14/one2one-conversations/wire.com/peer-uuid")
+            .path("/v14/one2one-conversations/example.test/peer-uuid")
             .header("authorization", "Bearer rebound.jwt.token");
         then.status(200)
             .header("content-type", "application/json")
@@ -189,21 +201,21 @@ async fn create_dm_drives_get_then_returns_room_for_peer() {
     mount_external_join(&server);
 
     let room = client
-        .create_dm("peer-uuid@wire.com")
+        .create_dm("peer-uuid@example.test")
         .await
         .expect("create_dm must succeed");
-    assert_eq!(room.id(), "dm-uuid@wire.com");
+    assert_eq!(room.id(), "dm-uuid@example.test");
     assert_eq!(room.room_type(), RoomType::DirectMessage);
     assert_eq!(
         room.counterpart().expect("counterpart").user_id,
-        "peer-uuid@wire.com"
+        "peer-uuid@example.test"
     );
     get_one2one.assert_calls(1);
 
     // After create_dm, dm_room returns the same conversation —
     // Arc identity holds because both share the cache slot.
     let looked_up = client
-        .dm_room("peer-uuid@wire.com")
+        .dm_room("peer-uuid@example.test")
         .expect("dm_room must find the just-created DM");
     assert!(
         Arc::ptr_eq(&room, &looked_up),
@@ -237,7 +249,7 @@ async fn dm_room_unknown_user_returns_none() {
     let client = logged_in_client(&server).await;
     // No rooms ever populated.
     assert!(
-        client.dm_room("unknown-uuid@wire.com").is_none(),
+        client.dm_room("unknown-uuid@example.test").is_none(),
         "dm_room must return None when no matching DM is cached"
     );
 }
@@ -257,7 +269,7 @@ async fn dm_room_ignores_group_room_with_peer_as_member() {
             .header("content-type", "application/json")
             .body(
                 r#"{"qualified_conversations":[
-                     {"id":"group-uuid","domain":"wire.com"}
+                     {"id":"group-uuid","domain":"example.test"}
                    ],"has_more":false,"paging_state":"END"}"#,
             );
     });
@@ -269,10 +281,10 @@ async fn dm_room_ignores_group_room_with_peer_as_member() {
                 r#"{{"found":[{}], "not_found":[], "failed":[]}}"#,
                 conv_json(
                     "group-uuid",
-                    "wire.com",
+                    "example.test",
                     0,
                     "Engineering",
-                    &[("peer-uuid", "wire.com")]
+                    &[("peer-uuid", "example.test")]
                 ),
             ));
     });
@@ -282,7 +294,7 @@ async fn dm_room_ignores_group_room_with_peer_as_member() {
             .header("content-type", "application/json")
             .body(
                 r#"{"found":[
-                     {"qualified_id":{"id":"peer-uuid","domain":"wire.com"},
+                     {"qualified_id":{"id":"peer-uuid","domain":"example.test"},
                       "name":"Peer Person","handle":"peerp"}
                    ]}"#,
             );
@@ -298,7 +310,7 @@ async fn dm_room_ignores_group_room_with_peer_as_member() {
     assert_eq!(rooms[0].room_type(), RoomType::Group);
     // But dm_room must NOT return it.
     assert!(
-        client.dm_room("peer-uuid@wire.com").is_none(),
+        client.dm_room("peer-uuid@example.test").is_none(),
         "dm_room must NOT return a Group room even when the peer is a member"
     );
 }
@@ -320,11 +332,11 @@ async fn dm_with_returns_cached_room_without_http_call() {
         .await
         .expect("sync");
     let cached = client
-        .dm_room("peer-uuid@wire.com")
+        .dm_room("peer-uuid@example.test")
         .expect("dm_room must find the pre-existing DM");
 
     let returned = client
-        .dm_with("peer-uuid@wire.com")
+        .dm_with("peer-uuid@example.test")
         .await
         .expect("dm_with must succeed on cache hit");
     assert!(
@@ -342,7 +354,7 @@ async fn dm_with_falls_through_to_create_dm_on_cache_miss() {
 
     let get_one2one = server.mock(|when, then| {
         when.method(GET)
-            .path("/v14/one2one-conversations/wire.com/peer-uuid");
+            .path("/v14/one2one-conversations/example.test/peer-uuid");
         then.status(200)
             .header("content-type", "application/json")
             .body(one2one_envelope("dm-uuid", "peer-uuid"));
@@ -351,10 +363,10 @@ async fn dm_with_falls_through_to_create_dm_on_cache_miss() {
     mount_external_join(&server);
 
     let room = client
-        .dm_with("peer-uuid@wire.com")
+        .dm_with("peer-uuid@example.test")
         .await
         .expect("dm_with must succeed via create_dm fallthrough");
-    assert_eq!(room.id(), "dm-uuid@wire.com");
+    assert_eq!(room.id(), "dm-uuid@example.test");
     assert_eq!(room.room_type(), RoomType::DirectMessage);
     get_one2one.assert_calls(1);
 }
@@ -369,7 +381,7 @@ async fn dm_with_dedupes_concurrent_calls() {
 
     let get_one2one = server.mock(|when, then| {
         when.method(GET)
-            .path("/v14/one2one-conversations/wire.com/peer-uuid");
+            .path("/v14/one2one-conversations/example.test/peer-uuid");
         then.status(200)
             .header("content-type", "application/json")
             // 50 ms delay so the second caller is guaranteed to
@@ -382,8 +394,8 @@ async fn dm_with_dedupes_concurrent_calls() {
 
     let c1 = client.clone();
     let c2 = client.clone();
-    let t1 = tokio::spawn(async move { c1.dm_with("peer-uuid@wire.com").await });
-    let t2 = tokio::spawn(async move { c2.dm_with("peer-uuid@wire.com").await });
+    let t1 = tokio::spawn(async move { c1.dm_with("peer-uuid@example.test").await });
+    let t2 = tokio::spawn(async move { c2.dm_with("peer-uuid@example.test").await });
 
     // Cap the wait so a hung in-flight dedup surface manifests as
     // a test timeout rather than blocking the suite.

@@ -163,7 +163,7 @@ mod tests {
     /// third member must ride the user's Remove-commit.
     #[test]
     fn kick_commit_carries_pending_peer_remove() {
-        const CHARLIE_USER: &str = "9e8d7c6b-1111-2222-3333-444455556666@wire.com";
+        const CHARLIE_USER: &str = "9e8d7c6b-1111-2222-3333-444455556666@example.test";
         let (alice, group_id, es) = ts::group_with_alice_and_bob();
         ts::add_member(&alice, &group_id, CHARLIE_USER, "aabbccdd00112233");
         let charlie_idx = ts::leaf_index_of(&alice, &group_id, CHARLIE_USER);
@@ -258,7 +258,7 @@ mod tests {
 
     fn alice_client() -> MlsClient {
         MlsClient::new_fresh(
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
         )
         .expect("alice MlsClient")
@@ -266,7 +266,7 @@ mod tests {
 
     fn bob_client() -> MlsClient {
         MlsClient::new_fresh(
-            "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@wire.com",
+            "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@example.test",
             "deadbeefcafef00d",
         )
         .expect("bob MlsClient")
@@ -292,7 +292,7 @@ mod tests {
         alice.merge_pending_commit(&group_id).expect("merge add");
         (
             group_id,
-            "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@wire.com".into(),
+            "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@example.test".into(),
         )
     }
 
@@ -313,7 +313,7 @@ mod tests {
     fn remove_members_commit_errors_when_group_not_in_storage() {
         let alice = alice_client();
         let err = alice
-            .remove_members_commit(b"never-stored", &["bob@wire.com".into()])
+            .remove_members_commit(b"never-stored", &["bob@example.test".into()])
             .expect_err("must fail without prior create_group");
         assert!(
             matches!(err, KupferdrahtError::InvalidInput(_)),
@@ -328,7 +328,7 @@ mod tests {
         let err = alice
             .remove_members_commit(
                 &group_id,
-                &["a11ce000-0000-4000-8000-000000000001@wire.com".into()],
+                &["a11ce000-0000-4000-8000-000000000001@example.test".into()],
             )
             .expect_err("self-kick must fail");
         assert!(
@@ -344,7 +344,7 @@ mod tests {
         let err = alice
             .remove_members_commit(
                 &group_id,
-                &["00000000-0000-0000-0000-000000000000@wire.com".into()],
+                &["00000000-0000-0000-0000-000000000000@example.test".into()],
             )
             .expect_err("non-member kick must fail");
         assert!(
@@ -383,7 +383,7 @@ mod tests {
         let pre = alice.group_leaves(&group_id).expect("pre");
         let pre_users: std::collections::HashSet<&str> =
             pre.iter().map(|l| l.user_id.as_str()).collect();
-        assert!(pre_users.contains("8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@wire.com"));
+        assert!(pre_users.contains("8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@example.test"));
         // Stage + merge the kick.
         let _bundle = alice
             .remove_members_commit(&group_id, &[bob_user_id])
@@ -393,11 +393,11 @@ mod tests {
         let post_users: std::collections::HashSet<&str> =
             post.iter().map(|l| l.user_id.as_str()).collect();
         assert!(
-            !post_users.contains("8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@wire.com"),
+            !post_users.contains("8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@example.test"),
             "post-merge tree must no longer enumerate bob"
         );
         assert!(
-            post_users.contains("a11ce000-0000-4000-8000-000000000001@wire.com"),
+            post_users.contains("a11ce000-0000-4000-8000-000000000001@example.test"),
             "alice (the committer) must still be present"
         );
     }

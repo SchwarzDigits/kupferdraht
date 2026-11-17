@@ -22,7 +22,8 @@ use kupferdraht::storage::Store;
 
 mod common;
 
-const DM_UUID: &str = "29d24d47-8e9e-5160-9b95-559113824997";
+/// An invented id in the shape of a one-to-one room's (a version-5 UUID).
+const DM_UUID: &str = "d0000068-0000-5000-8000-000000000001";
 const DOMAIN: &str = "example.test";
 const PEER_UUID: &str = "bob-uuid";
 /// b64("grp-dm") — the conversation's MLS group id.

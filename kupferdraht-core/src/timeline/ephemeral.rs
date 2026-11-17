@@ -19,8 +19,7 @@
 //!    chains keep resolving) and emits one `TimelineDiff::UpdateAt`
 //!    per row. For an INBOUND row it then broadcasts the expiry as a
 //!    delete-for-everyone (`MessageDelete` into the room, best-effort,
-//!    V1b): live-observed on wire-webapp and confirmed in Kalium's
-//!    protocol behaviour (observations §74), the RECEIVER enforces
+//!    V1b): as live-observed on wire-webapp (observations §74), the RECEIVER enforces
 //!    expiry network-wide while the SENDER only marks its own copy and
 //!    waits for exactly that delete to purge it. An own row therefore
 //!    stays local-only. The one official-client step Kupferdraht cannot

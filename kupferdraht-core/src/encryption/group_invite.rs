@@ -247,7 +247,7 @@ mod tests {
     use crate::encryption::mls_client::INITIAL_KEY_PACKAGE_COUNT;
     use crate::encryption::test_support as ts;
 
-    const DAVE_USER: &str = "1a2b3c4d-eeee-ffff-0000-111122223333@wire.com";
+    const DAVE_USER: &str = "1a2b3c4d-eeee-ffff-0000-111122223333@example.test";
 
     fn dave_key_package() -> Vec<u8> {
         let dave = MlsClient::new_fresh(DAVE_USER, "0011223344556677").expect("dave MlsClient");
@@ -277,7 +277,7 @@ mod tests {
         use openmls::group::{MlsGroupCreateConfig, PURE_CIPHERTEXT_WIRE_FORMAT_POLICY};
 
         let alice = MlsClient::new_fresh(
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
         )
         .expect("alice MlsClient");
@@ -374,7 +374,7 @@ mod tests {
 
     fn alice_client() -> MlsClient {
         MlsClient::new_fresh(
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
         )
         .expect("alice MlsClient")
@@ -382,7 +382,7 @@ mod tests {
 
     fn bob_client() -> MlsClient {
         MlsClient::new_fresh(
-            "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@wire.com",
+            "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@example.test",
             "deadbeefcafef00d",
         )
         .expect("bob MlsClient")
@@ -526,11 +526,11 @@ mod tests {
         let user_ids: std::collections::HashSet<&str> =
             leaves_after.iter().map(|l| l.user_id.as_str()).collect();
         assert!(
-            user_ids.contains("a11ce000-0000-4000-8000-000000000001@wire.com"),
+            user_ids.contains("a11ce000-0000-4000-8000-000000000001@example.test"),
             "post-merge tree must include alice"
         );
         assert!(
-            user_ids.contains("8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@wire.com"),
+            user_ids.contains("8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@example.test"),
             "post-merge tree must include bob"
         );
     }
@@ -547,12 +547,12 @@ mod tests {
         let alice = alice_client();
         let group_id = alice_group_id(&alice);
         let bob_device_1 = MlsClient::new_fresh(
-            "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@wire.com",
+            "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@example.test",
             "bob-device-1",
         )
         .expect("bob device 1 MlsClient");
         let bob_device_2 = MlsClient::new_fresh(
-            "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@wire.com",
+            "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@example.test",
             "bob-device-2",
         )
         .expect("bob device 2 MlsClient");

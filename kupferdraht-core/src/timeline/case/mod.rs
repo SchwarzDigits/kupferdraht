@@ -36,7 +36,7 @@ mod tests {
             case_type: Some("building-permit".into()),
             state: CaseState::Waiting,
             state_detail: Some("awaiting the environmental agency's statement".into()),
-            assignee: Some("aaaa-bbbb@wire.com".into()),
+            assignee: Some("aaaa-bbbb@example.test".into()),
             due_at_ms: Some(1_760_000_000_000),
             priority: Some(CasePriority::High),
             opened_at_ms: Some(1_755_000_000_000),

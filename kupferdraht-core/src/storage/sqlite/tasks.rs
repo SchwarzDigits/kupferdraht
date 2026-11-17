@@ -254,8 +254,8 @@ mod tests {
         let (_dir, store) = fresh_store();
         let row = crate::storage::records::TimelineEventRecord {
             message_id: "m-task".into(),
-            room_id: "r@wire.com".into(),
-            sender_user_id: "u@wire.com".into(),
+            room_id: "r@example.test".into(),
+            sender_user_id: "u@example.test".into(),
             sender_device_id: "dev".into(),
             kind: "task".into(),
             body: "{}".into(),
@@ -275,17 +275,17 @@ mod tests {
     #[test]
     fn upsert_preserves_creator_and_created_at_on_conflict() {
         let (_dir, store) = fresh_store();
-        upsert_task(&store, &record("r@wire.com", "t1", None, "open")).expect("insert");
-        let mut update = record("r@wire.com", "t1", Some("anna@wire.com"), "done");
-        update.creator_user_id = "someone-else@wire.com".into();
+        upsert_task(&store, &record("r@example.test", "t1", None, "open")).expect("insert");
+        let mut update = record("r@example.test", "t1", Some("anna@example.test"), "done");
+        update.creator_user_id = "someone-else@example.test".into();
         update.created_at_ms = 9999;
         update.updated_at_ms = 2000;
         upsert_task(&store, &update).expect("upsert");
-        let rows = load_tasks_for_room(&store, "r@wire.com").expect("load");
+        let rows = load_tasks_for_room(&store, "r@example.test").expect("load");
         assert_eq!(rows.len(), 1);
         let row = &rows[0];
         assert_eq!(row.status, "done", "state fields replaced");
-        assert_eq!(row.assignee.as_deref(), Some("anna@wire.com"));
+        assert_eq!(row.assignee.as_deref(), Some("anna@example.test"));
         assert_eq!(row.updated_at_ms, 2000);
         assert_eq!(
             row.creator_user_id, "creator@example.org",
@@ -299,30 +299,45 @@ mod tests {
         let (_dir, store) = fresh_store();
         upsert_task(
             &store,
-            &record("r1@wire.com", "mine-open", Some("me@wire.com"), "open"),
+            &record(
+                "r1@example.test",
+                "mine-open",
+                Some("me@example.test"),
+                "open",
+            ),
         )
         .expect("a");
         upsert_task(
             &store,
             &record(
-                "r2@wire.com",
+                "r2@example.test",
                 "mine-progress",
-                Some("me@wire.com"),
+                Some("me@example.test"),
                 "in_progress",
             ),
         )
         .expect("b");
         upsert_task(
             &store,
-            &record("r1@wire.com", "mine-done", Some("me@wire.com"), "done"),
+            &record(
+                "r1@example.test",
+                "mine-done",
+                Some("me@example.test"),
+                "done",
+            ),
         )
         .expect("c");
         upsert_task(
             &store,
-            &record("r1@wire.com", "other", Some("anna@wire.com"), "open"),
+            &record(
+                "r1@example.test",
+                "other",
+                Some("anna@example.test"),
+                "open",
+            ),
         )
         .expect("d");
-        let mine = load_open_tasks_for_assignee(&store, "me@wire.com").expect("mine");
+        let mine = load_open_tasks_for_assignee(&store, "me@example.test").expect("mine");
         let mut ids: Vec<&str> = mine.iter().map(|t| t.task_id.as_str()).collect();
         ids.sort_unstable();
         assert_eq!(ids, vec!["mine-open", "mine-progress"]);
@@ -334,18 +349,18 @@ mod tests {
     #[test]
     fn replace_room_tasks_rebuilds_only_that_room() {
         let (_dir, store) = fresh_store();
-        upsert_task(&store, &record("r1@wire.com", "t1", None, "open")).expect("a");
-        upsert_task(&store, &record("r2@wire.com", "t2", None, "open")).expect("b");
+        upsert_task(&store, &record("r1@example.test", "t1", None, "open")).expect("a");
+        upsert_task(&store, &record("r2@example.test", "t2", None, "open")).expect("b");
         replace_room_tasks(
             &store,
-            "r1@wire.com",
-            &[record("r1@wire.com", "t3", None, "open")],
+            "r1@example.test",
+            &[record("r1@example.test", "t3", None, "open")],
         )
         .expect("replace");
-        let r1 = load_tasks_for_room(&store, "r1@wire.com").expect("r1");
+        let r1 = load_tasks_for_room(&store, "r1@example.test").expect("r1");
         assert_eq!(r1.len(), 1);
         assert_eq!(r1[0].task_id, "t3");
-        let r2 = load_tasks_for_room(&store, "r2@wire.com").expect("r2");
+        let r2 = load_tasks_for_room(&store, "r2@example.test").expect("r2");
         assert_eq!(r2.len(), 1, "other rooms untouched");
     }
 }

@@ -667,7 +667,7 @@ mod tests {
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
             when.method(PUT)
-                .path("/v14/conversations/wire.com/c0ffee03-0000-4000-8000-000000000003/name")
+                .path("/v14/conversations/example.test/c0ffee03-0000-4000-8000-000000000003/name")
                 .header("authorization", "Bearer tok")
                 .is_true(|req| {
                     let bytes = req.body_ref();
@@ -682,7 +682,7 @@ mod tests {
             .rename_conversation(
                 14,
                 "tok",
-                "c0ffee03-0000-4000-8000-000000000003@wire.com",
+                "c0ffee03-0000-4000-8000-000000000003@example.test",
                 "Renamed via Kupferdraht",
             )
             .await
@@ -696,11 +696,11 @@ mod tests {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(PUT)
-                .path("/v14/conversations/wire.com/abc/name");
+                .path("/v14/conversations/example.test/abc/name");
             then.status(200);
         });
         http(&server.base_url())
-            .rename_conversation(14, "tok", "abc@wire.com", "Same Name")
+            .rename_conversation(14, "tok", "abc@example.test", "Same Name")
             .await
             .expect("200 (name unchanged) must be treated as success");
     }
@@ -713,7 +713,7 @@ mod tests {
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
             when.method(DELETE)
-                .path("/v14/conversations/wire.com/c0ffee03-0000-4000-8000-000000000003/members/wire.com/a11ce000-0000-4000-8000-000000000001")
+                .path("/v14/conversations/example.test/c0ffee03-0000-4000-8000-000000000003/members/example.test/a11ce000-0000-4000-8000-000000000001")
                 .header("authorization", "Bearer tok");
             then.status(200);
         });
@@ -721,8 +721,8 @@ mod tests {
             .delete_conversation_member(
                 14,
                 "tok",
-                "c0ffee03-0000-4000-8000-000000000003@wire.com",
-                "a11ce000-0000-4000-8000-000000000001@wire.com",
+                "c0ffee03-0000-4000-8000-000000000003@example.test",
+                "a11ce000-0000-4000-8000-000000000001@example.test",
             )
             .await
             .expect("self-leave must succeed");
@@ -735,11 +735,11 @@ mod tests {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(DELETE)
-                .path("/v14/conversations/wire.com/abc/members/wire.com/u");
+                .path("/v14/conversations/example.test/abc/members/example.test/u");
             then.status(204);
         });
         http(&server.base_url())
-            .delete_conversation_member(14, "tok", "abc@wire.com", "u@wire.com")
+            .delete_conversation_member(14, "tok", "abc@example.test", "u@example.test")
             .await
             .expect("204 (no change) must be treated as success");
     }
@@ -750,13 +750,13 @@ mod tests {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(DELETE)
-                .path("/v14/conversations/wire.com/abc/members/wire.com/u");
+                .path("/v14/conversations/example.test/abc/members/example.test/u");
             then.status(403)
                 .header("content-type", "application/json")
                 .body(r#"{"code":403,"label":"invalid-op","message":"x"}"#);
         });
         let err = http(&server.base_url())
-            .delete_conversation_member(14, "tok", "abc@wire.com", "u@wire.com")
+            .delete_conversation_member(14, "tok", "abc@example.test", "u@example.test")
             .await
             .expect_err("403 must surface as BackendRejected");
         assert!(matches!(err, KupferdrahtError::BackendRejected(_)));
@@ -766,7 +766,7 @@ mod tests {
     async fn delete_conversation_member_rejects_unqualified_room_id() {
         let server = MockServer::start();
         let err = http(&server.base_url())
-            .delete_conversation_member(14, "tok", "no-at-sign", "u@wire.com")
+            .delete_conversation_member(14, "tok", "no-at-sign", "u@example.test")
             .await
             .expect_err("unqualified room_id must be rejected client-side");
         assert!(matches!(err, KupferdrahtError::InvalidInput(_)));
@@ -776,7 +776,7 @@ mod tests {
     async fn delete_conversation_member_rejects_unqualified_user_id() {
         let server = MockServer::start();
         let err = http(&server.base_url())
-            .delete_conversation_member(14, "tok", "abc@wire.com", "no-at-sign")
+            .delete_conversation_member(14, "tok", "abc@example.test", "no-at-sign")
             .await
             .expect_err("unqualified user_id must be rejected client-side");
         assert!(matches!(err, KupferdrahtError::InvalidInput(_)));
@@ -802,7 +802,7 @@ mod tests {
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
             when.method(POST)
-                .path("/v14/conversations/wire.com/c0ffee03-0000-4000-8000-000000000003/typing")
+                .path("/v14/conversations/example.test/c0ffee03-0000-4000-8000-000000000003/typing")
                 .header("authorization", "Bearer tok")
                 .is_true(|req| {
                     let bytes = req.body_ref();
@@ -817,7 +817,7 @@ mod tests {
             .send_typing(
                 14,
                 "tok",
-                "c0ffee03-0000-4000-8000-000000000003@wire.com",
+                "c0ffee03-0000-4000-8000-000000000003@example.test",
                 "started",
             )
             .await
@@ -830,7 +830,7 @@ mod tests {
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
             when.method(POST)
-                .path("/v14/conversations/wire.com/abc/typing")
+                .path("/v14/conversations/example.test/abc/typing")
                 .is_true(|req| {
                     let bytes = req.body_ref();
                     let Ok(v): Result<serde_json::Value, _> = serde_json::from_slice(bytes) else {
@@ -841,7 +841,7 @@ mod tests {
             then.status(200);
         });
         http(&server.base_url())
-            .send_typing(14, "tok", "abc@wire.com", "stopped")
+            .send_typing(14, "tok", "abc@example.test", "stopped")
             .await
             .expect("send_typing stopped must succeed");
         mock.assert_calls(1);

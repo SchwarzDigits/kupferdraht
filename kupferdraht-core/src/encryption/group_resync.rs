@@ -114,8 +114,11 @@ mod tests {
     const REMOVAL_KEY_PLACEHOLDER: [u8; 65] = [0x04u8; 65];
 
     fn alice_client(client_id: &str) -> MlsClient {
-        MlsClient::new_fresh("a11ce000-0000-4000-8000-000000000001@wire.com", client_id)
-            .expect("alice MlsClient")
+        MlsClient::new_fresh(
+            "a11ce000-0000-4000-8000-000000000001@example.test",
+            client_id,
+        )
+        .expect("alice MlsClient")
     }
 
     fn alice_group_id(alice: &MlsClient) -> Vec<u8> {

@@ -783,15 +783,15 @@ mod tests {
     fn qualified_id_to_string_matches_display() {
         let qid = QualifiedId {
             id: "user-uuid".into(),
-            domain: "wire.com".into(),
+            domain: "example.test".into(),
         };
-        assert_eq!(qid.to_string(), "user-uuid@wire.com");
+        assert_eq!(qid.to_string(), "user-uuid@example.test");
     }
 
     #[test]
     fn qualified_id_from_user_id_splits_localpart_and_domain() {
-        let qid = QualifiedId::from(&UserId::new("user-uuid", "wire.com"));
+        let qid = QualifiedId::from(&UserId::new("user-uuid", "example.test"));
         assert_eq!(qid.id, "user-uuid");
-        assert_eq!(qid.domain, "wire.com");
+        assert_eq!(qid.domain, "example.test");
     }
 }

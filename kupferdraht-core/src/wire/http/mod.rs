@@ -835,7 +835,7 @@ mod tests {
         assert_refused(
             "delete_asset id",
             h,
-            client.delete_asset(14, "tok", "wire.com", h).await,
+            client.delete_asset(14, "tok", "example.test", h).await,
         );
         assert_refused(
             "download_asset domain",
@@ -856,7 +856,7 @@ mod tests {
                 .download_asset(
                     14,
                     "tok",
-                    AssetDownload::within_a_mebibyte("wire.com", h, None),
+                    AssetDownload::within_a_mebibyte("example.test", h, None),
                     &sink,
                 )
                 .await,
@@ -879,7 +879,7 @@ mod tests {
                 .download_asset_bytes(
                     14,
                     "tok",
-                    AssetDownload::within_a_mebibyte("wire.com", h, None),
+                    AssetDownload::within_a_mebibyte("example.test", h, None),
                 )
                 .await,
         );

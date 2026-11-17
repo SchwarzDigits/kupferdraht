@@ -254,7 +254,7 @@ mod tests {
     /// derive the `BasicCredential` payload — the group creator and the
     /// joiner both run through the same `MlsClient` constructor, so no
     /// cross-identity plumbing is needed.
-    const BOB_USER: &str = "a11ce000-0000-4000-8000-000000000001@wire.com";
+    const BOB_USER: &str = "a11ce000-0000-4000-8000-000000000001@example.test";
     const BOB_CLIENT: &str = "a11ce00000000001";
 
     /// Creates a standalone MLS group owned by an ad-hoc Alice provider
@@ -286,7 +286,8 @@ mod tests {
             .store(alice_provider.storage())
             .expect("store alice signer");
         let alice_credential = openmls::prelude::CredentialWithKey {
-            credential: openmls::prelude::BasicCredential::new(b"alice@wire.com".to_vec()).into(),
+            credential: openmls::prelude::BasicCredential::new(b"alice@example.test".to_vec())
+                .into(),
             signature_key: alice_signer.public().to_vec().into(),
         };
 

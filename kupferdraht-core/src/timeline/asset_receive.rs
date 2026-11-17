@@ -382,7 +382,7 @@ mod tests {
             otr_key_ct: vec![0u8; packed_envelope_len],
             asset_id: "asset-id".into(),
             asset_token: Some("tok".into()),
-            asset_domain: "wire.com".into(),
+            asset_domain: "example.test".into(),
             encryption_algo: "AES_CBC".into(),
             cache_path: None,
             created_at_ms: 0,

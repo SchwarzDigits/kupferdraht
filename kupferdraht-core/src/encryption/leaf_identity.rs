@@ -191,11 +191,11 @@ mod tests {
 
     #[test]
     fn wire_identity_round_trips_through_the_parser() {
-        let bytes = wire_identity("a11ce000@wire.com", "a11ce00000000001").expect("build");
+        let bytes = wire_identity("a11ce000@example.test", "a11ce00000000001").expect("build");
         assert_eq!(
             parse_leaf_identity(&basic(&bytes)),
             Ok(LeafIdentity {
-                user_id: "a11ce000@wire.com".into(),
+                user_id: "a11ce000@example.test".into(),
                 device_id: "a11ce00000000001".into(),
             })
         );
