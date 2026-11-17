@@ -25,7 +25,7 @@ fn http(base_url: &str) -> HttpClient {
 
 fn bounded(max_bytes: u64) -> AssetDownload<'static> {
     AssetDownload {
-        asset_domain: "wire.com",
+        asset_domain: "example.test",
         asset_id: "key-1",
         asset_token: Some("private-tok"),
         max_bytes,
@@ -36,7 +36,7 @@ fn bounded(max_bytes: u64) -> AssetDownload<'static> {
 fn serve(server: &MockServer, len: u64) -> Mock<'_> {
     let body = vec![0xc3; usize::try_from(len).expect("a test length")];
     server.mock(|when, then| {
-        when.method(GET).path("/v14/assets/wire.com/key-1");
+        when.method(GET).path("/v14/assets/example.test/key-1");
         then.status(200)
             .header("content-type", "application/octet-stream")
             .body(body);

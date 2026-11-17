@@ -48,7 +48,7 @@ use kupferdraht::{Client, RoomAccess, SyncSettings};
 mod common;
 
 const ROOM_UUID: &str = "room-uuid";
-const ROOM_DOMAIN: &str = "wire.com";
+const ROOM_DOMAIN: &str = "example.test";
 
 async fn logged_in_client(server: &MockServer) -> Arc<Client> {
     common::mount_full_login_flow(server);

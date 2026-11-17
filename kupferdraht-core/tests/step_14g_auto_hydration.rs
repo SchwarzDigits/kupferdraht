@@ -43,7 +43,7 @@ use kupferdraht::{ClientBuilder, SyncSettings};
 mod common;
 
 const ROOM_UUID: &str = "room-uuid";
-const ROOM_DOMAIN: &str = "wire.com";
+const ROOM_DOMAIN: &str = "example.test";
 
 fn room_id_str() -> String {
     format!("{ROOM_UUID}@{ROOM_DOMAIN}")
@@ -73,7 +73,7 @@ async fn logged_in_client_sharing_persistence(
 }
 
 /// Mounts the three sync endpoints so `sync_once` populates one
-/// MLS group room keyed by `room-uuid@wire.com`. Includes the
+/// MLS group room keyed by `room-uuid@example.test`. Includes the
 /// `empty_notifications` cursor mock.
 fn mount_sync_with_one_room(server: &MockServer) {
     common::mount_empty_notifications(server);

@@ -39,14 +39,14 @@ async fn room_create_join_link_without_password_marks_password_off() {
         then.status(200)
             .header("content-type", "application/json")
             .body(
-                r#"{"key":"k1","code":"c1","uri":"https://wire.com/join/k1/c1","has_password":false}"#,
+                r#"{"key":"k1","code":"c1","uri":"https://example.test/join/k1/c1","has_password":false}"#,
             );
     });
 
     let (_client, room) = logged_in_room(&server).await;
     let link: JoinLink = room.create_join_link(None).await.expect("create_join_link");
     create_mock.assert();
-    assert_eq!(link.url, "https://wire.com/join/k1/c1");
+    assert_eq!(link.url, "https://example.test/join/k1/c1");
     assert!(!link.password_protected);
 }
 
@@ -73,7 +73,7 @@ async fn room_create_join_link_201_follows_up_with_get_to_fetch_envelope() {
         then.status(200)
             .header("content-type", "application/json")
             .body(
-                r#"{"key":"k201","code":"c201","uri":"https://wire.com/join/k201/c201","has_password":false}"#,
+                r#"{"key":"k201","code":"c201","uri":"https://example.test/join/k201/c201","has_password":false}"#,
             );
     });
 
@@ -84,7 +84,7 @@ async fn room_create_join_link_201_follows_up_with_get_to_fetch_envelope() {
         .expect("create_join_link with 201 follow-up");
     post_mock.assert();
     get_mock.assert();
-    assert_eq!(link.url, "https://wire.com/join/k201/c201");
+    assert_eq!(link.url, "https://example.test/join/k201/c201");
 }
 
 #[tokio::test]
@@ -102,7 +102,7 @@ async fn room_create_join_link_with_password_marks_password_on() {
         then.status(200)
             .header("content-type", "application/json")
             .body(
-                r#"{"key":"k2","code":"c2","uri":"https://wire.com/join/k2/c2","has_password":true}"#,
+                r#"{"key":"k2","code":"c2","uri":"https://example.test/join/k2/c2","has_password":true}"#,
             );
     });
 
@@ -113,7 +113,7 @@ async fn room_create_join_link_with_password_marks_password_on() {
         .expect("create_join_link with password");
     create_mock.assert();
     assert!(link.password_protected);
-    assert_eq!(link.url, "https://wire.com/join/k2/c2");
+    assert_eq!(link.url, "https://example.test/join/k2/c2");
 }
 
 #[tokio::test]
@@ -150,7 +150,7 @@ async fn room_current_join_link_returns_some_when_code_exists() {
         then.status(200)
             .header("content-type", "application/json")
             .body(
-                r#"{"key":"k3","code":"c3","uri":"https://wire.com/join/k3/c3","has_password":false}"#,
+                r#"{"key":"k3","code":"c3","uri":"https://example.test/join/k3/c3","has_password":false}"#,
             );
     });
 
@@ -160,7 +160,7 @@ async fn room_current_join_link_returns_some_when_code_exists() {
         .await
         .expect("current_join_link")
         .expect("link present");
-    assert_eq!(link.url, "https://wire.com/join/k3/c3");
+    assert_eq!(link.url, "https://example.test/join/k3/c3");
     assert!(!link.password_protected);
 }
 

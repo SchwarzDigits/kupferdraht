@@ -955,8 +955,8 @@ mod mls_envelope_tests {
     fn a_subconv_id_is_not_a_device_claim() {
         let ev = serde_json::json!({
             "type": "conversation.mls-message-add",
-            "qualified_conversation": {"id": "room-uuid", "domain": "wire.com"},
-            "qualified_from": {"id": "bob-uuid", "domain": "wire.com"},
+            "qualified_conversation": {"id": "room-uuid", "domain": "example.test"},
+            "qualified_from": {"id": "bob-uuid", "domain": "example.test"},
             "subconv": "conference",
             "data": "AAAA",
         });
@@ -972,8 +972,8 @@ mod typing_event_tests {
     fn event(status: &str) -> serde_json::Value {
         serde_json::json!({
             "type": "conversation.typing",
-            "qualified_conversation": {"id": "room-uuid", "domain": "wire.com"},
-            "qualified_from": {"id": "alice-uuid", "domain": "wire.com"},
+            "qualified_conversation": {"id": "room-uuid", "domain": "example.test"},
+            "qualified_from": {"id": "alice-uuid", "domain": "example.test"},
             "data": {"status": status},
         })
     }
@@ -984,8 +984,8 @@ mod typing_event_tests {
         assert_eq!(
             parsed,
             (
-                "room-uuid@wire.com".to_string(),
-                "alice-uuid@wire.com".to_string(),
+                "room-uuid@example.test".to_string(),
+                "alice-uuid@example.test".to_string(),
                 true,
             )
         );
@@ -1006,7 +1006,7 @@ mod typing_event_tests {
     fn missing_qualified_conversation_is_skipped_not_errored() {
         let ev = serde_json::json!({
             "type": "conversation.typing",
-            "qualified_from": {"id": "a", "domain": "wire.com"},
+            "qualified_from": {"id": "a", "domain": "example.test"},
             "data": {"status": "started"},
         });
         // Best-effort: a malformed typing frame is skipped, not escalated.
@@ -1017,8 +1017,8 @@ mod typing_event_tests {
     fn missing_status_is_skipped_not_errored() {
         let ev = serde_json::json!({
             "type": "conversation.typing",
-            "qualified_conversation": {"id": "r", "domain": "wire.com"},
-            "qualified_from": {"id": "a", "domain": "wire.com"},
+            "qualified_conversation": {"id": "r", "domain": "example.test"},
+            "qualified_from": {"id": "a", "domain": "example.test"},
             "data": {},
         });
         assert!(parse_typing_event(&ev).is_none());
@@ -1035,8 +1035,8 @@ mod heal_trigger_tests {
     fn mls_add_event() -> serde_json::Value {
         serde_json::json!({
             "type": "conversation.mls-message-add",
-            "qualified_conversation": {"id": "room-uuid", "domain": "wire.com"},
-            "qualified_from": {"id": "bob-uuid", "domain": "wire.com"},
+            "qualified_conversation": {"id": "room-uuid", "domain": "example.test"},
+            "qualified_from": {"id": "bob-uuid", "domain": "example.test"},
             "data": "AAAA",
         })
     }

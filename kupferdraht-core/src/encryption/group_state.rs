@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn group_leaves_errors_on_unknown_group() {
         let client = MlsClient::new_fresh(
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
         )
         .expect("MlsClient");

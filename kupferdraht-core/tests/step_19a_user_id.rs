@@ -15,7 +15,7 @@ use kupferdraht::KupferdrahtError;
 use kupferdraht::identity::UserId;
 
 const UUID: &str = "c0ffee01-0000-4000-8000-000000000001";
-const DOMAIN: &str = "wire.com";
+const DOMAIN: &str = "example.test";
 
 #[test]
 fn new_builds_the_canonical_qualified_form() {

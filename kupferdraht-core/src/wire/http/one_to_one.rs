@@ -144,25 +144,25 @@ mod tests {
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
             when.method(GET)
-                .path("/v14/one2one-conversations/wire.com/peer-uuid")
+                .path("/v14/one2one-conversations/example.test/peer-uuid")
                 .header("authorization", "Bearer tok");
             then.status(200)
                 .header("content-type", "application/json")
                 .body(one2one_envelope(
                     "dm-uuid",
-                    "wire.com",
+                    "example.test",
                     "self-uuid",
                     "peer-uuid",
-                    "wire.com",
+                    "example.test",
                 ));
         });
 
         let conv = http(&server.base_url())
-            .fetch_one_to_one_conversation(14, "tok", "wire.com", "peer-uuid")
+            .fetch_one_to_one_conversation(14, "tok", "example.test", "peer-uuid")
             .await
             .expect("fetch must succeed");
         assert_eq!(conv.qualified_id.id, "dm-uuid");
-        assert_eq!(conv.qualified_id.domain, "wire.com");
+        assert_eq!(conv.qualified_id.domain, "example.test");
         assert_eq!(conv.members.others.len(), 1);
         mock.assert_calls(1);
     }
@@ -175,23 +175,23 @@ mod tests {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(GET)
-                .path("/v14/one2one-conversations/wire.com/peer-uuid");
+                .path("/v14/one2one-conversations/example.test/peer-uuid");
             then.status(200)
                 .header("content-type", "application/json")
                 .body(one2one_envelope(
                     "dm-uuid",
-                    "wire.com",
+                    "example.test",
                     "self-uuid",
                     "peer-uuid",
-                    "wire.com",
+                    "example.test",
                 ));
         });
         let conv = http(&server.base_url())
-            .fetch_one_to_one_conversation(14, "tok", "wire.com", "peer-uuid")
+            .fetch_one_to_one_conversation(14, "tok", "example.test", "peer-uuid")
             .await
             .expect("fetch must succeed");
         // Caller gets `OwnConversation` directly, not the envelope.
-        assert_eq!(conv.qualified_id.to_string(), "dm-uuid@wire.com");
+        assert_eq!(conv.qualified_id.to_string(), "dm-uuid@example.test");
     }
 
     #[tokio::test]
@@ -199,14 +199,14 @@ mod tests {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(GET)
-                .path("/v14/one2one-conversations/wire.com/peer-uuid");
+                .path("/v14/one2one-conversations/example.test/peer-uuid");
             then.status(500)
                 .header("content-type", "application/json")
                 .body(r#"{"code":500,"label":"server-error","message":"boom"}"#);
         });
 
         let err = http(&server.base_url())
-            .fetch_one_to_one_conversation(14, "tok", "wire.com", "peer-uuid")
+            .fetch_one_to_one_conversation(14, "tok", "example.test", "peer-uuid")
             .await
             .expect_err("5xx must propagate");
         assert!(

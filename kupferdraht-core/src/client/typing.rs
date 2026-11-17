@@ -110,9 +110,9 @@ impl TypingTracker {
 mod tests {
     use super::TypingTracker;
 
-    const ROOM: &str = "room-uuid@wire.com";
-    const ALICE: &str = "alice-uuid@wire.com";
-    const BOB: &str = "bob-uuid@wire.com";
+    const ROOM: &str = "room-uuid@example.test";
+    const ALICE: &str = "alice-uuid@example.test";
+    const BOB: &str = "bob-uuid@example.test";
 
     #[test]
     fn incoming_started_adds_and_stopped_removes() {
@@ -144,8 +144,11 @@ mod tests {
     #[test]
     fn incoming_rooms_are_independent() {
         let t = TypingTracker::default();
-        t.record_incoming("room-a@wire.com", ALICE, true);
-        assert_eq!(t.record_incoming("room-b@wire.com", BOB, true), vec![BOB]);
+        t.record_incoming("room-a@example.test", ALICE, true);
+        assert_eq!(
+            t.record_incoming("room-b@example.test", BOB, true),
+            vec![BOB]
+        );
     }
 
     #[test]

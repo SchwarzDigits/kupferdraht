@@ -304,8 +304,8 @@ mod paginate_timeline_rows_tests {
         ids.iter()
             .map(|id| TimelineEventRecord {
                 message_id: (*id).into(),
-                room_id: "room@wire.com".into(),
-                sender_user_id: "alice@wire.com".into(),
+                room_id: "room@example.test".into(),
+                sender_user_id: "alice@example.test".into(),
                 sender_device_id: "deviceA".into(),
                 kind: "text".into(),
                 body: "x".into(),
@@ -365,8 +365,8 @@ mod reconstruct_asset_kind_tests {
     fn asset_record(message_id: &str) -> TimelineEventRecord {
         TimelineEventRecord {
             message_id: message_id.into(),
-            room_id: "room@wire.com".into(),
-            sender_user_id: "alice@wire.com".into(),
+            room_id: "room@example.test".into(),
+            sender_user_id: "alice@example.test".into(),
             sender_device_id: "deviceA".into(),
             kind: "asset".into(),
             body: String::new(),
@@ -384,7 +384,7 @@ mod reconstruct_asset_kind_tests {
     fn attachment(message_id: &str) -> AttachmentRecord {
         AttachmentRecord {
             message_id: message_id.into(),
-            room_id: "room@wire.com".into(),
+            room_id: "room@example.test".into(),
             mime_type: "image/png".into(),
             filename: Some("cat.png".into()),
             size_bytes: 1234,
@@ -392,7 +392,7 @@ mod reconstruct_asset_kind_tests {
             otr_key_ct: vec![4, 5, 6],
             asset_id: "asset-abc".into(),
             asset_token: Some("tok".into()),
-            asset_domain: "wire.com".into(),
+            asset_domain: "example.test".into(),
             encryption_algo: "AES_GCM".into(),
             cache_path: None,
             created_at_ms: 0,

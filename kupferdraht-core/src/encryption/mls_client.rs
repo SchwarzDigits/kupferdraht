@@ -337,7 +337,7 @@ mod tests {
     #[test]
     fn new_fresh_uses_p256_signature_scheme() {
         let client = MlsClient::new_fresh(
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
         )
         .expect("new_fresh");
@@ -355,13 +355,13 @@ mod tests {
     #[test]
     fn new_fresh_credential_carries_wire_identity() {
         let client = MlsClient::new_fresh(
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
         )
         .expect("new_fresh");
         let credential: &Credential = &client.credential_with_key().credential;
         let identity = credential.serialized_content();
-        let expected = b"a11ce000-0000-4000-8000-000000000001:a11ce00000000001@wire.com";
+        let expected = b"a11ce000-0000-4000-8000-000000000001:a11ce00000000001@example.test";
         assert_eq!(identity, expected);
     }
 
@@ -379,7 +379,7 @@ mod tests {
     #[test]
     fn signature_public_key_b64_decodes_to_raw_key() {
         let client = MlsClient::new_fresh(
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
         )
         .expect("new_fresh");
@@ -405,7 +405,7 @@ mod tests {
 
     fn fresh_client() -> MlsClient {
         MlsClient::new_fresh(
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
         )
         .expect("new_fresh")
@@ -475,7 +475,7 @@ mod tests {
         let credential = kp_in.unverified_credential();
         let identity = credential.credential.serialized_content();
         assert_eq!(
-            identity, b"a11ce000-0000-4000-8000-000000000001:a11ce00000000001@wire.com",
+            identity, b"a11ce000-0000-4000-8000-000000000001:a11ce00000000001@example.test",
             "KeyPackage leaf must carry Wire's `<uuid>:<client_id>@<domain>` identity"
         );
     }
@@ -529,7 +529,7 @@ mod tests {
     #[test]
     fn new_fresh_with_storage_persists_signature_keypair_to_file() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let user_id = "a11ce000-0000-4000-8000-000000000001@wire.com";
+        let user_id = "a11ce000-0000-4000-8000-000000000001@example.test";
         let client_id = "a11ce00000000001";
 
         // First session: create + drop, forcing the Connection to flush.
@@ -561,7 +561,7 @@ mod tests {
         // provider, so the signature key table is empty.
         let result = MlsClient::resume_with_storage(
             provider,
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
             // A public key the store has never seen.
             &[0xDE, 0xAD, 0xBE, 0xEF],
@@ -583,7 +583,7 @@ mod tests {
         // (we inspect the raw table to avoid coupling the test to
         // openmls_sqlite_storage internals).
         let dir = tempfile::tempdir().expect("tempdir");
-        let user_id = "a11ce000-0000-4000-8000-000000000001@wire.com";
+        let user_id = "a11ce000-0000-4000-8000-000000000001@example.test";
         let client_id = "a11ce00000000001";
         {
             let provider = KupferdrahtProvider::open(open_file_conn(&dir)).expect("provider");

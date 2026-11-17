@@ -754,7 +754,10 @@ mod tests {
     /// Pins the digest for an emoji-bearing body so the UTF-16 BE
     /// surrogate-pair encoding path cannot drift silently — a single
     /// wrong code unit would change the digest and Wire web would
-    /// stop rendering the quote.
+    /// stop rendering the quote. Body, timestamp and digest are
+    /// Kupferdraht's own; the digest is a known answer computed outside
+    /// Kupferdraht with Python's `hashlib` over `FE FF`, the body in
+    /// UTF-16 BE and the seconds as i64 BE (`docs/observations.md` §33).
     #[test]
     fn compute_quote_sha256_pins_digest_for_emoji_body() {
         let body = "Hello \u{1F602}\u{1F622}!";
@@ -953,6 +956,8 @@ mod tests {
     /// Pins the digest for a plain ASCII URL body — same algorithm
     /// as the emoji vector but without surrogate pairs, so the two
     /// together cover both the simple and the multi-code-unit paths.
+    /// Body, timestamp and digest are Kupferdraht's own, computed outside
+    /// Kupferdraht like the emoji vector's.
     #[test]
     fn compute_quote_sha256_pins_digest_for_ascii_url_body() {
         let body = "https://youtu.be/Y6ljFaKRTrI?si=ErRXaTIctWbga_Lp";
@@ -1210,7 +1215,7 @@ mod task_tests {
             description: Some("Ship it — https://example.com/runbook".into()),
             assignee: Some(QualifiedUserId {
                 id: "aaaa-bbbb".into(),
-                domain: "wire.com".into(),
+                domain: "example.test".into(),
             }),
             due_at_ms: Some(1_752_000_000_000),
             priority: Some(TaskPriority::High as i32),
@@ -1225,7 +1230,7 @@ mod task_tests {
         let mention = MentionInput {
             start: 18,
             length: 5,
-            qualified_user_id: "aaaa-bbbb@wire.com".into(),
+            qualified_user_id: "aaaa-bbbb@example.test".into(),
         };
         let (id, bytes) = build_task_generic_message(
             full_payload(),

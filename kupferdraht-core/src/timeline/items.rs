@@ -469,8 +469,8 @@ mod tests {
     fn sample_record(message_id: &str, body: &str, sent_at_ms: i64) -> TimelineEventRecord {
         TimelineEventRecord {
             message_id: message_id.into(),
-            room_id: "room@wire.com".into(),
-            sender_user_id: "alice@wire.com".into(),
+            room_id: "room@example.test".into(),
+            sender_user_id: "alice@example.test".into(),
             sender_device_id: "deviceA".into(),
             kind: "text".into(),
             body: body.into(),
@@ -492,7 +492,7 @@ mod tests {
             task_id: "tid-1".into(),
             title: "Prepare deploy".into(),
             description: None,
-            assignee: Some("aaaa-bbbb@wire.com".into()),
+            assignee: Some("aaaa-bbbb@example.test".into()),
             due_at_ms: Some(1_752_000_000_000),
             status: crate::timeline::TaskStatus::Open,
             priority: None,
@@ -706,12 +706,12 @@ mod tests {
     fn append_diff_carries_room_id_and_item() {
         let item = TimelineItem::from_record(sample_record("m", "x", 0));
         let diff = TimelineDiff::Append {
-            room_id: "r@wire.com".into(),
+            room_id: "r@example.test".into(),
             item: item.clone(),
         };
         match diff {
             TimelineDiff::Append { room_id, item: got } => {
-                assert_eq!(room_id, "r@wire.com");
+                assert_eq!(room_id, "r@example.test");
                 assert_eq!(got, item);
             }
             _ => panic!("expected Append"),

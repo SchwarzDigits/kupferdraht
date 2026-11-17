@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn create_group_persists_single_member_group() {
         let client = MlsClient::new_fresh(
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
         )
         .expect("MlsClient");
@@ -256,7 +256,7 @@ mod tests {
         // release build still gets a clear error rather than a
         // silent-empty `Vec`.
         let client = MlsClient::new_fresh(
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
         )
         .expect("MlsClient");
@@ -279,7 +279,7 @@ mod tests {
         use tls_codec::DeserializeBytes as _;
 
         let client = MlsClient::new_fresh(
-            "a11ce000-0000-4000-8000-000000000001@wire.com",
+            "a11ce000-0000-4000-8000-000000000001@example.test",
             "a11ce00000000001",
         )
         .expect("MlsClient");

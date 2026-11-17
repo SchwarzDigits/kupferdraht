@@ -22,8 +22,8 @@ use tls_codec::Serialize as _;
 use crate::encryption::mls_client::{MLS_SIGNATURE_SCHEME, MlsClient};
 use crate::encryption::provider::TxProvider;
 
-pub(crate) const ALICE_USER: &str = "a11ce000-0000-4000-8000-000000000001@wire.com";
-pub(crate) const BOB_USER: &str = "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@wire.com";
+pub(crate) const ALICE_USER: &str = "a11ce000-0000-4000-8000-000000000001@example.test";
+pub(crate) const BOB_USER: &str = "8d1f2c34-aaaa-bbbb-cccc-dddddddddddd@example.test";
 
 /// Build a 2-member group (Alice = creator/self, Bob added) whose
 /// `external_senders` extension carries `es_signer`'s public key,

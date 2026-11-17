@@ -212,7 +212,7 @@ mod tests {
             otr_key_ct: vec![0xCDu8; 48], // simulated AES-GCM ciphertext (32B key + 12B nonce + 16B tag — 60B but Kupferdraht's envelope shape is opaque here)
             asset_id: "asset-key-uuid".into(),
             asset_token: Some("private-token-jwt".into()),
-            asset_domain: "prod.wire.com".into(),
+            asset_domain: "prod.example.test".into(),
             encryption_algo: "AES_CBC".into(),
             cache_path: None,
             created_at_ms: 2_000,

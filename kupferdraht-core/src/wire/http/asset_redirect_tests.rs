@@ -22,7 +22,7 @@ use super::assets::AssetDownload;
 use super::{HttpClient, HttpTimeouts};
 use crate::error::KupferdrahtError;
 
-const ASSET_PATH: &str = "/v14/assets/wire.com/key-1";
+const ASSET_PATH: &str = "/v14/assets/example.test/key-1";
 const STORE_PATH: &str = "/wire-assets/v3/otr/key-1";
 const PAYLOAD: &[u8] = b"ciphertext-from-the-asset-store";
 
@@ -77,7 +77,7 @@ async fn download(client: &HttpClient, sink: &std::path::Path) -> Result<u64, Ku
         .download_asset(
             14,
             "tok",
-            AssetDownload::within_a_mebibyte("wire.com", "key-1", Some("private-tok")),
+            AssetDownload::within_a_mebibyte("example.test", "key-1", Some("private-tok")),
             sink,
         )
         .await

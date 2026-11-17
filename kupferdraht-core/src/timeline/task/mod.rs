@@ -46,7 +46,7 @@ mod tests {
             task_id: "7f9c0e5a-1111-4222-8333-444455556666".into(),
             title: "Prepare deploy".into(),
             description: Some("Ship it — see https://example.com/runbook".into()),
-            assignee: Some("aaaa-bbbb@wire.com".into()),
+            assignee: Some("aaaa-bbbb@example.test".into()),
             due_at_ms: Some(1_752_000_000_000),
             status: TaskStatus::InProgress,
             priority: Some(TaskPriority::High),
@@ -67,7 +67,7 @@ mod tests {
         let (text, mentions) = task_fallback(
             "Prepare deploy",
             TaskStatus::Open,
-            Some(("@anna", "aaaa-bbbb@wire.com")),
+            Some(("@anna", "aaaa-bbbb@example.test")),
         );
         assert!(
             text.contains("Prepare deploy"),
@@ -87,7 +87,7 @@ mod tests {
             i32::try_from("@anna".encode_utf16().count()).expect("fits"),
             "mention length"
         );
-        assert_eq!(m.qualified_user_id, "aaaa-bbbb@wire.com");
+        assert_eq!(m.qualified_user_id, "aaaa-bbbb@example.test");
     }
 
     #[test]
@@ -158,7 +158,7 @@ mod tests {
     ) -> crate::storage::TimelineEventRecord {
         crate::storage::TimelineEventRecord {
             message_id: message_id.into(),
-            room_id: "room@wire.com".into(),
+            room_id: "room@example.test".into(),
             sender_user_id: sender.into(),
             sender_device_id: "dev".into(),
             kind: "task".into(),
@@ -246,15 +246,15 @@ mod tests {
         );
         v2.sort_key = Some("m".into());
         let rows = vec![
-            record_for(&v1, "alice@wire.com", 1000, "m1"),
-            record_for(&v2, "bob@wire.com", 2000, "m2"),
+            record_for(&v1, "alice@example.test", 1000, "m1"),
+            record_for(&v2, "bob@example.test", 2000, "m2"),
         ];
         let folded = fold_task_rows(&rows);
         assert_eq!(folded.len(), 1);
         let f = &folded[0];
         assert_eq!(f.item, v2, "later full state wins entirely, no merge");
         assert_eq!(
-            f.creator_user_id, "alice@wire.com",
+            f.creator_user_id, "alice@example.test",
             "creator = first sender"
         );
         assert_eq!(f.created_at_ms, 1000);
@@ -267,7 +267,7 @@ mod tests {
         // A late joiner may see only an update — it must still create
         // local state (upsert, ADR-0014).
         let update = item_with("tid-up", "Seen only as update", TaskStatus::Done);
-        let rows = vec![record_for(&update, "alice@wire.com", 5000, "m9")];
+        let rows = vec![record_for(&update, "alice@example.test", 5000, "m9")];
         let folded = fold_task_rows(&rows);
         assert_eq!(folded.len(), 1);
         assert_eq!(folded[0].item, update);
@@ -279,10 +279,10 @@ mod tests {
         // drops out of the fold and the prior state resurfaces.
         let v1 = item_with("tid-del", "Original", TaskStatus::Open);
         let v2 = item_with("tid-del", "Renamed", TaskStatus::InProgress);
-        let mut deleted = record_for(&v2, "alice@wire.com", 2000, "m2");
+        let mut deleted = record_for(&v2, "alice@example.test", 2000, "m2");
         deleted.body = String::new();
         deleted.redacted_at_ms = Some(2500);
-        let rows = vec![record_for(&v1, "alice@wire.com", 1000, "m1"), deleted];
+        let rows = vec![record_for(&v1, "alice@example.test", 1000, "m1"), deleted];
         let folded = fold_task_rows(&rows);
         assert_eq!(folded.len(), 1);
         assert_eq!(folded[0].item, v1, "redacted latest → prior state");
@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn fold_drops_task_whose_only_row_is_redacted() {
         let v1 = item_with("tid-gone", "To be deleted", TaskStatus::Open);
-        let mut deleted = record_for(&v1, "alice@wire.com", 1000, "m1");
+        let mut deleted = record_for(&v1, "alice@example.test", 1000, "m1");
         deleted.body = String::new();
         deleted.redacted_at_ms = Some(1500);
         assert!(fold_task_rows(&[deleted]).is_empty());
@@ -308,8 +308,8 @@ mod tests {
         let good = item_with("tid-ok", "Survives", TaskStatus::Open);
         let empty = item_with("", "No id", TaskStatus::Open);
         let rows = vec![
-            record_for(&empty, "alice@wire.com", 1000, "m1"),
-            record_for(&good, "alice@wire.com", 2000, "m2"),
+            record_for(&empty, "alice@example.test", 1000, "m1"),
+            record_for(&good, "alice@example.test", 2000, "m2"),
         ];
 
         let folded = fold_task_rows(&rows);
@@ -321,13 +321,13 @@ mod tests {
     #[test]
     fn fold_skips_malformed_and_non_task_rows() {
         let v1 = item_with("tid-ok", "Survives", TaskStatus::Open);
-        let mut garbled = record_for(&v1, "alice@wire.com", 2000, "m2");
+        let mut garbled = record_for(&v1, "alice@example.test", 2000, "m2");
         garbled.body = "{not json".into();
-        let mut text_row = record_for(&v1, "alice@wire.com", 3000, "m3");
+        let mut text_row = record_for(&v1, "alice@example.test", 3000, "m3");
         text_row.kind = "text".into();
         text_row.body = "just a chat message".into();
         let rows = vec![
-            record_for(&v1, "alice@wire.com", 1000, "m1"),
+            record_for(&v1, "alice@example.test", 1000, "m1"),
             garbled,
             text_row,
         ];
@@ -343,9 +343,9 @@ mod tests {
         let b1 = item_with("tid-b", "B v1", TaskStatus::Open);
         let a2 = item_with("tid-a", "A v2", TaskStatus::Done);
         let rows = vec![
-            record_for(&a1, "alice@wire.com", 1000, "m1"),
-            record_for(&b1, "bob@wire.com", 2000, "m2"),
-            record_for(&a2, "alice@wire.com", 3000, "m3"),
+            record_for(&a1, "alice@example.test", 1000, "m1"),
+            record_for(&b1, "bob@example.test", 2000, "m2"),
+            record_for(&a2, "alice@example.test", 3000, "m3"),
         ];
         let folded = fold_task_rows(&rows);
         assert_eq!(folded.len(), 2);
@@ -367,7 +367,7 @@ mod tests {
         // (the DB's UNIQUE(message_id) already dedupes; the fold
         // itself must also be stable under duplicates).
         let v1 = item_with("tid-r", "Once", TaskStatus::Open);
-        let row = record_for(&v1, "alice@wire.com", 1000, "m1");
+        let row = record_for(&v1, "alice@example.test", 1000, "m1");
         let once = fold_task_rows(std::slice::from_ref(&row));
         let twice = fold_task_rows(&[row.clone(), row]);
         assert_eq!(once, twice);
@@ -386,7 +386,7 @@ mod tests {
             item.priority = prio;
             FoldedTask {
                 item,
-                creator_user_id: "alice@wire.com".into(),
+                creator_user_id: "alice@example.test".into(),
                 created_at_ms: created,
                 updated_at_ms: created,
                 latest_message_id: format!("m-{task_id}"),
@@ -421,7 +421,7 @@ mod tests {
         item.sort_key = sort_key.map(str::to_string);
         FoldedTask {
             item,
-            creator_user_id: "alice@wire.com".into(),
+            creator_user_id: "alice@example.test".into(),
             created_at_ms: created,
             updated_at_ms: created,
             latest_message_id: format!("m-{task_id}"),
@@ -542,17 +542,17 @@ mod tests {
 
     #[test]
     fn filter_my_tasks_returns_open_work_across_rooms() {
-        let me = "me@wire.com";
+        let me = "me@example.test";
         let tasks = vec![
             room_task(
-                "room-1@wire.com",
+                "room-1@example.test",
                 "t-open",
-                "boss@wire.com",
+                "boss@example.test",
                 Some(me),
                 TaskStatus::Open,
             ),
             room_task(
-                "room-2@wire.com",
+                "room-2@example.test",
                 "t-progress",
                 me,
                 Some(me),
@@ -570,33 +570,33 @@ mod tests {
 
     #[test]
     fn filter_my_tasks_excludes_done_cancelled_and_foreign() {
-        let me = "me@wire.com";
+        let me = "me@example.test";
         let tasks = vec![
             room_task(
-                "r@wire.com",
+                "r@example.test",
                 "t-done",
-                "boss@wire.com",
+                "boss@example.test",
                 Some(me),
                 TaskStatus::Done,
             ),
             room_task(
-                "r@wire.com",
+                "r@example.test",
                 "t-cancelled",
-                "boss@wire.com",
+                "boss@example.test",
                 Some(me),
                 TaskStatus::Cancelled,
             ),
             room_task(
-                "r@wire.com",
+                "r@example.test",
                 "t-other",
-                "boss@wire.com",
-                Some("other@wire.com"),
+                "boss@example.test",
+                Some("other@example.test"),
                 TaskStatus::Open,
             ),
             room_task(
-                "r@wire.com",
+                "r@example.test",
                 "t-unassigned",
-                "boss@wire.com",
+                "boss@example.test",
                 None,
                 TaskStatus::Open,
             ),
@@ -606,20 +606,20 @@ mod tests {
 
     #[test]
     fn filter_delegated_returns_others_assigned_any_status() {
-        let me = "me@wire.com";
+        let me = "me@example.test";
         let tasks = vec![
             room_task(
-                "r1@wire.com",
+                "r1@example.test",
                 "d-open",
                 me,
-                Some("anna@wire.com"),
+                Some("anna@example.test"),
                 TaskStatus::Open,
             ),
             room_task(
-                "r2@wire.com",
+                "r2@example.test",
                 "d-done",
                 me,
-                Some("bob@wire.com"),
+                Some("bob@example.test"),
                 TaskStatus::Done,
             ),
         ];
@@ -637,21 +637,21 @@ mod tests {
 
     #[test]
     fn filter_delegated_excludes_self_assigned_and_unassigned() {
-        let me = "me@wire.com";
+        let me = "me@example.test";
         let tasks = vec![
             room_task(
-                "r@wire.com",
+                "r@example.test",
                 "self-assigned",
                 me,
                 Some(me),
                 TaskStatus::Open,
             ),
-            room_task("r@wire.com", "unassigned", me, None, TaskStatus::Open),
+            room_task("r@example.test", "unassigned", me, None, TaskStatus::Open),
             room_task(
-                "r@wire.com",
+                "r@example.test",
                 "foreign",
-                "boss@wire.com",
-                Some("anna@wire.com"),
+                "boss@example.test",
+                Some("anna@example.test"),
                 TaskStatus::Open,
             ),
         ];
@@ -711,26 +711,27 @@ mod tests {
                 task_id: "t-1".into(),
                 title: "Prepare deploy".into(),
                 description: Some("staging first".into()),
-                assignee: Some("anna@wire.com".into()),
+                assignee: Some("anna@example.test".into()),
                 due_at_ms: Some(1_700_000_000_000),
                 status: TaskStatus::InProgress,
                 priority: Some(TaskPriority::High),
                 sort_key: Some("hn".into()),
             },
-            creator_user_id: "boss@wire.com".into(),
+            creator_user_id: "boss@example.test".into(),
             created_at_ms: 1000,
             updated_at_ms: 2000,
             latest_message_id: "m-2".into(),
         };
-        let rec = task_record_from_folded("r@wire.com", &folded);
+        let rec = task_record_from_folded("r@example.test", &folded);
         let back = folded_from_task_record(rec);
-        assert_eq!(back.room_id, "r@wire.com");
+        assert_eq!(back.room_id, "r@example.test");
         assert_eq!(back.task, folded, "cache write → read must be lossless");
     }
 
     #[test]
     fn task_record_rehydration_tolerates_unknown_labels() {
-        let mut rec = task_record_from_folded("r@wire.com", &folded_with_key("t-1", None, 1000));
+        let mut rec =
+            task_record_from_folded("r@example.test", &folded_with_key("t-1", None, 1000));
         rec.status = "blocked".into();
         rec.priority = Some("asap".into());
         let back = folded_from_task_record(rec);

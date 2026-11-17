@@ -771,14 +771,14 @@ mod tests {
                 .body_includes("encrypted-bytes-here");
             then.status(201)
                 .header("content-type", "application/json")
-                .body(r#"{"key":"key-1","token":"tok-1","domain":"prod.wire.com"}"#);
+                .body(r#"{"key":"key-1","token":"tok-1","domain":"prod.example.test"}"#);
         });
         let resp = http(&server.base_url())
             .upload_asset(
                 14,
                 "tok",
                 AssetMultipart {
-                    conv_id: Some(("conv-uuid", "wire.com")),
+                    conv_id: Some(("conv-uuid", "example.test")),
                     filename: Some("photo.png"),
                     filetype: Some("image/png"),
                     ciphertext_path: &ct,
@@ -790,7 +790,7 @@ mod tests {
             .expect("upload_asset");
         assert_eq!(resp.key, "key-1");
         assert_eq!(resp.token.as_deref(), Some("tok-1"));
-        assert_eq!(resp.domain.as_deref(), Some("prod.wire.com"));
+        assert_eq!(resp.domain.as_deref(), Some("prod.example.test"));
         upload_mock.assert();
     }
 
@@ -876,13 +876,13 @@ mod tests {
         let client = http(&server.base_url());
         for (domain, id) in [
             ("", "key-1"),
-            ("wire.com", ""),
-            ("wire.com", "../../self"),
+            ("example.test", ""),
+            ("example.test", "../../self"),
             ("..", "self"),
-            ("wire.com", "%2e%2e"),
-            ("wire.com", "a/b"),
-            ("wire.com", "key?x=1"),
-            ("wire.com", "key#frag"),
+            ("example.test", "%2e%2e"),
+            ("example.test", "a/b"),
+            ("example.test", "key?x=1"),
+            ("example.test", "key#frag"),
         ] {
             let err = client
                 .download_asset(
@@ -907,7 +907,7 @@ mod tests {
         let payload = b"streamed-encrypted-bytes-up-to-megabytes-in-prod";
         let mock = server.mock(|when, then| {
             when.method(GET)
-                .path("/v14/assets/wire.com/key-1")
+                .path("/v14/assets/example.test/key-1")
                 .header("authorization", "Bearer tok")
                 .header("asset-token", "private-tok");
             then.status(200)
@@ -920,7 +920,7 @@ mod tests {
             .download_asset(
                 14,
                 "tok",
-                AssetDownload::within_a_mebibyte("wire.com", "key-1", Some("private-tok")),
+                AssetDownload::within_a_mebibyte("example.test", "key-1", Some("private-tok")),
                 &sink,
             )
             .await
@@ -958,7 +958,7 @@ mod tests {
     async fn download_asset_404_surfaces_as_backend_rejected() {
         let server = MockServer::start();
         server.mock(|when, then| {
-            when.method(GET).path("/v14/assets/wire.com/missing");
+            when.method(GET).path("/v14/assets/example.test/missing");
             then.status(404).body(r#"{"code":404,"label":"not-found"}"#);
         });
         let dir = TempDir::new().expect("tempdir");
@@ -967,7 +967,7 @@ mod tests {
             .download_asset(
                 14,
                 "tok",
-                AssetDownload::within_a_mebibyte("wire.com", "missing", None),
+                AssetDownload::within_a_mebibyte("example.test", "missing", None),
                 &sink,
             )
             .await
@@ -983,12 +983,12 @@ mod tests {
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
             when.method(DELETE)
-                .path("/v14/assets/wire.com/key-3")
+                .path("/v14/assets/example.test/key-3")
                 .header("authorization", "Bearer tok");
             then.status(200);
         });
         http(&server.base_url())
-            .delete_asset(14, "tok", "wire.com", "key-3")
+            .delete_asset(14, "tok", "example.test", "key-3")
             .await
             .expect("delete_asset");
         mock.assert();
