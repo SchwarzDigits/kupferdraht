@@ -2311,6 +2311,19 @@ the production backend probed live; indexed as reading 26 in
 Kupferdraht's answer is Step 159: gzip on the native transport, with every answer's
 decoded bytes bounded.
 
+**Live with Kupferdraht asking (2026-11-17).** A plain Haskell wire-server on a second
+machine in the LAN (`wire-server-rs-deploy`'s reference stack) compresses as production
+does: the same `GET /v14/api/swagger.json` answers 602,373 bytes without
+`Accept-Encoding`, and with `Accept-Encoding: gzip` 83,327 bytes with
+`Content-Encoding: gzip` and `Vary: Accept-Encoding`. Against it the smoke
+(`kupferdraht-smoke.sh` with two accounts of a team there, the CLI built from `main`
+after Step 160) passed 18 of 18: login, a group room and a 1:1 in both directions, a
+file sent and downloaded with matching SHA-256, a push over the WebSocket. reqwest
+removes `Content-Encoding` when it decodes, so which answer arrived compressed is not
+seen from the client; that the native builds ask is pinned by Step 159's tests, and
+nginz compresses every JSON answer from 1024 bytes on — the conversation list alone
+answered 3,418 bytes in Step 159's smoke on the local stack.
+
 ## 104) What e2ei needs around the backend, and what the local stack lacks (2026-11-12)
 
 Read for Step 154 in the local wire-server checkout (`02071bd`) and wire-server-rs

@@ -10,9 +10,8 @@ past it, natively the partial file leaves the cache); in the browser a declared 
 over 100 MiB + 32 bytes is refused before any request (`InvalidInput`) and the
 ciphertext is decrypted in its own buffer; `read_bounded` is one `bytes_stream` loop
 on both targets, so Step 159's 16 MiB bound stops the browser's read too. Smoke
-2026-11-16 on the local stack: 24 ok, with Kupferdraht as the sender; a file from a
-Wire client is not seen live under the bound (reading #28 reads the declared size in
-the clients' code). No API change, no CLI command (`download-asset` exercises it);
+2026-11-16 on the local stack: 24 ok; Wire's clients declare the size they upload
+(reading #28). No API change, no CLI command (`download-asset` exercises it);
 CHANGELOG under Security, `THREAT_MODEL.md` 0.17.
 
 **Commissioned 2026-11-16** (Volker), from what Step 159 found: the browser's
@@ -95,7 +94,7 @@ deployment (wire-server's Helm chart, `CargoHold/API/Public.hs`).
 - **Wire's clients declare the true size** (reading #28): Kalium's
   `assetDataSize` is "the size of the unencrypted data to be uploaded"; the
   webapp sets `file.size` of the file it uploads, for an image the length of
-  its bytes. Read in the code, not live.
+  its bytes. Read in the code.
 
 ## Out of scope
 
@@ -126,6 +125,5 @@ among them `wasm_fetch`'s chunked read).
 
 Smoke 2026-11-16, local `wire-server-rs` stack, `kupferdraht-smoke.sh --throwaway`:
 24 ok, 0 failed — `send-file`, `download-asset` and the SHA-256 match go through the
-bound with Kupferdraht as the sender. A file sent from a Wire client (the stack's
-webapp container) has not been downloaded under the bound; the size its sender
-declares is read from Kalium's and the webapp's code (reading #28), not seen live.
+bound. Again 2026-11-17 on a plain Haskell wire-server (the reference machine,
+observations §103): 18 ok, 0 failed, the file transfer among them.

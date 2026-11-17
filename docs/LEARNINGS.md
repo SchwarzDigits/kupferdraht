@@ -3219,10 +3219,6 @@ touched it.
   `download_asset_bytes` as the pin test's one exception; once the browser reads in
   chunks, the asset reads through `read_bounded` with its own bound and the exception
   went. Said at the approval and recorded in the plan's phase-1 decisions.
-- **What a sender declares was read, not seen.** Kalium and the webapp put the plaintext
-  size of the uploaded bytes into `Original.size` (reading #28); no file sent from a Wire
-  client has been downloaded under the bound yet. The local stack runs a webapp
-  container, so that proof is at hand.
 - **A stub on a shared path reddened tests outside the step.** `max_ciphertext_len` as
   `todo!()` sat on the consumer's download path, so Step 141's three tests panicked in
   the red run beside the step's own. Said at the approval; a stub that every download
