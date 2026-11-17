@@ -103,9 +103,7 @@ pub(super) fn open_mls_provider(
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let dir = home.account_dir(account_id);
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| KupferdrahtError::Storage(format!("mkdir {}: {e}", dir.display())))?;
+        crate::storage::create_private_dir(&home.account_dir(account_id))?;
     }
     let path = home.account_mls(account_id);
     let conn = open_mls_connection(&path, db_key)?;
@@ -926,5 +924,28 @@ mod mls_connection_tests {
             .query_row("PRAGMA synchronous", [], |row| row.get(0))
             .expect("synchronous");
         assert_eq!(synchronous, 2, "synchronous = FULL on mls.db");
+    }
+
+    /// Step 134: `mls.db` overwrites what it deletes (`secure_delete`) and
+    /// is created readable by its owner only.
+    #[test]
+    fn mls_connection_deletes_securely_and_is_private() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("mls.db");
+        let conn = open_mls_connection(&path, Some(&generate_db_key())).expect("open");
+        let secure: i64 = conn
+            .query_row("PRAGMA secure_delete", [], |row| row.get(0))
+            .expect("secure_delete");
+        assert_eq!(secure, 1, "secure_delete on mls.db");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let mode = std::fs::metadata(&path)
+                .expect("mls.db")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o600, "mls.db is private: {mode:o}");
+        }
     }
 }

@@ -672,6 +672,16 @@ target: SQLite (`storage/sqlite/`, with `refinery`-style numbered SQL
 migrations under `storage/migrations/`) — a file under `base_dir` on
 native, a database on sqlite-remote-vfs in the browser (Step 111,
 ADR-0035; in IndexedDB in the local mode).
+**Deleted content and private files (Step 134):** every database is SQLite3MC-encrypted,
+and SQLite3MC switches `secure_delete` on for each, so a deleted row's bytes are
+overwritten rather than left in a free page (observations §105). The native WAL
+databases (`kupferdraht.db`, `global.db`) truncate their WAL after each checkpoint
+(`storage::truncate_wal_after_checkpoints`, `journal_size_limit = 0`); `mls.db` and the browser
+keep the rollback journal. On Unix a new home, `accounts/`, `accounts/<id>/` and a new
+database file are created readable by their owner only (0700 / 0600,
+`storage::create_private_dir` and `storage::open_connection`; SQLite gives `-wal`,
+`-shm` and `-journal` the file's mode); an existing one keeps its mode. The keys are
+created once and never rotated (ADR-0029); rotation is Step 161, parked.
 Shipped migrations are immutable and SHA-pinned (Step 18b). A migration
 run is atomic (Step 87): every pending migration plus its
 `refinery_schema_history` row commits in one transaction (`set_grouped`),

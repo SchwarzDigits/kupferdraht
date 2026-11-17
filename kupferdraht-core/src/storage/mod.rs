@@ -317,7 +317,10 @@ fn database_exists(database: &Path) -> Result<bool, KupferdrahtError> {
 
 /// Open a connection on the database at `path`: natively the file, in the
 /// browser through the database's prepared VFS (Step 111a) — the one open
-/// every store and `mls.db` go through.
+/// every store and `mls.db` go through. Natively a file that does not exist
+/// yet is created readable by its owner only first (Step 134); deleted
+/// content is overwritten because `SQLite3MC` switches `secure_delete` on
+/// for every encrypted database (observations §105).
 ///
 /// # Errors
 /// `KupferdrahtError::Storage` when the open fails; in the browser also
@@ -325,6 +328,8 @@ fn database_exists(database: &Path) -> Result<bool, KupferdrahtError> {
 pub(crate) fn open_connection(path: &Path) -> Result<rusqlite::Connection, KupferdrahtError> {
     #[cfg(not(target_arch = "wasm32"))]
     {
+        #[cfg(unix)]
+        create_private_file(path)?;
         rusqlite::Connection::open(path)
             .map_err(|e| KupferdrahtError::Storage(format!("open {}: {e}", path.display())))
     }
@@ -364,8 +369,73 @@ pub(crate) fn create_parent_dir(path: &Path) -> Result<(), KupferdrahtError> {
             path.display()
         )));
     };
-    std::fs::create_dir_all(dir)
+    create_private_dir(dir)
+}
+
+/// Step 134: create `dir` and every missing parent readable by its owner
+/// only (0700 on Unix), as the keystore's files are; a directory that
+/// exists keeps its mode.
+///
+/// # Errors
+/// `KupferdrahtError::Storage` if a directory cannot be created.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn create_private_dir(dir: &Path) -> Result<(), KupferdrahtError> {
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    builder
+        .create(dir)
         .map_err(|e| KupferdrahtError::Storage(format!("mkdir {}: {e}", dir.display())))
+}
+
+/// Step 134: create a database file that does not exist yet readable by its
+/// owner only (0600) before `SQLite` opens it; `SQLite` gives `-wal`, `-shm`
+/// and `-journal` the main file's mode. An existing file keeps its mode.
+///
+/// # Errors
+/// `KupferdrahtError::Storage` if the file cannot be created.
+#[cfg(unix)]
+fn create_private_file(path: &Path) -> Result<(), KupferdrahtError> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+    {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) => Err(KupferdrahtError::Storage(format!(
+            "create {}: {e}",
+            path.display()
+        ))),
+    }
+}
+
+/// Step 134: a native WAL database's write-ahead log is truncated after each
+/// checkpoint (`journal_size_limit = 0`), so earlier page images — the
+/// content of deleted rows among them — do not linger in it until they are
+/// overwritten. The browser keeps the rollback journal (ADR-0022 decision 5).
+///
+/// # Errors
+/// `KupferdrahtError::Storage` if the pragma fails.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn truncate_wal_after_checkpoints(
+    conn: &Connection,
+    database: &str,
+) -> Result<(), KupferdrahtError> {
+    conn.pragma_update(None, "journal_size_limit", 0)
+        .map_err(|e| {
+            KupferdrahtError::Storage(format!("{database}: set journal_size_limit: {e}"))
+        })?;
+    let limit: i64 = conn
+        .query_row("PRAGMA journal_size_limit", [], |row| row.get(0))
+        .map_err(|e| {
+            KupferdrahtError::Storage(format!("{database}: read journal_size_limit: {e}"))
+        })?;
+    debug_assert_eq!(limit, 0, "journal_size_limit pragma took effect");
+    Ok(())
 }
 
 /// Supertrait bound for the storage traits ([`Store`], [`GlobalStore`]).
@@ -492,9 +562,7 @@ pub(crate) fn open_store_in(
     refuse_path_unsafe_account_id(account_id)?;
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let dir = home.account_dir(account_id);
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| KupferdrahtError::Storage(format!("mkdir {}: {e}", dir.display())))?;
+        create_private_dir(&home.account_dir(account_id))?;
     }
     let database = home.account_db(account_id);
     let key = load_or_create_key_locked(

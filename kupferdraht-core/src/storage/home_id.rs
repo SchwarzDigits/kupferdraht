@@ -47,8 +47,7 @@ pub(crate) fn resolve_home_id(_base: &Path) -> Result<String, KupferdrahtError> 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn resolve_home_id(base: &Path) -> Result<String, KupferdrahtError> {
     let path = base.join(HOME_ID_FILE);
-    std::fs::create_dir_all(base)
-        .map_err(|e| KupferdrahtError::Storage(format!("mkdir {}: {e}", base.display())))?;
+    super::create_private_dir(base)?;
     if let Some(id) = read_home_id(&path)? {
         return Ok(id);
     }

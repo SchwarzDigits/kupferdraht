@@ -3228,3 +3228,25 @@ touched it.
   the red run beside the step's own. Said at the approval; a stub that every download
   passes reads less cleanly than one only the new tests reach.
 
+### 5.99 Two premises of the plan were wrong, a guard was missing, and "why" split the step (Step 134)
+
+- **`secure_delete` was on all along.** The plan said it was set nowhere; it was not set
+  in our code, but SQLite3MC switches it on for every encrypted database. A red test that
+  came out green showed it; reading the amalgamation explained it. A test meant to be red
+  that passes is a finding, not a nuisance.
+- **"Only a `VACUUM` rewrites old pages" was wrong too.** SQLite3MC's rekey rewrites every
+  page, free ones included, in one transaction. Reading the engine's source settled both
+  before anything was designed on them.
+- **The plan's guard had a hole.** It counted on ADR-0024's account lock against another
+  process, but that lock guards two short sections only; another process may have the
+  database open. An exclusive SQLite lock detects it, measured.
+- **Volker asked why the step was needed,** and the answer split it: the deleted-content
+  guarantee is concrete and cheap, the key rotation narrow and the largest part. The
+  rotation is parked as Step 161 with phase 1's findings, not dropped.
+- **A source pin of another step failed on CI.** Step 113's pin scans every
+  `journal_mode` line for a `#[cfg(not(target_arch = "wasm32"))]` within three lines;
+  my helper was native-only as a whole, its attribute five lines up. My local gate ran
+  the tests of the files I touched, not the pins that read the whole source tree. The
+  WAL pragma went back under its call sites' attribute; before a commit that moves a
+  pinned pattern, the source-scanning pins run too.
+
