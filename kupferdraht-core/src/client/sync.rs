@@ -303,13 +303,13 @@ impl Client {
         settings: crate::sync::SyncSettings,
     ) -> futures_util::stream::BoxStream<'static, Result<crate::sync::SyncSummary, KupferdrahtError>>
     {
-        use futures_util::StreamExt as _;
         // wasm: the background sync loop uses `tokio::spawn` (a `Send` future) and
         // a multi-thread runtime, neither of which exists in the browser. The
         // real wasm sync (single-thread `spawn_local`) is a later step; for now
         // the stream yields a single error so callers don't hang. See docs/plan/44-*.
         #[cfg(target_arch = "wasm32")]
         {
+            use futures_util::StreamExt as _;
             let _ = settings;
             futures_util::stream::once(async {
                 Err(KupferdrahtError::Generic(
@@ -321,73 +321,91 @@ impl Client {
         #[cfg(not(target_arch = "wasm32"))]
         {
             if settings.transport == crate::sync::SyncTransport::WebSocket {
-                let weak = self.weak();
-                let (tx, rx) = tokio::sync::mpsc::channel::<
-                    Result<crate::sync::SyncSummary, KupferdrahtError>,
-                >(4);
-                tokio::spawn(async move {
-                    let Some(client) = weak.upgrade() else {
-                        return;
-                    };
-                    let frames_tx = tx.clone();
-                    let result = client
-                        .sync_push(settings, move |summary| {
-                            // A dropped receiver is the cancellation
-                            // signal — same contract as the polling arm
-                            // below. A full buffer drops the tick, never
-                            // the loop.
-                            match frames_tx.try_send(Ok(summary)) {
-                                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
-                                    std::ops::ControlFlow::Break(())
-                                }
-                                _ => std::ops::ControlFlow::Continue(()),
-                            }
-                        })
-                        .await;
-                    if let Err(e) = result {
-                        let _ = tx.send(Err(e)).await;
-                    }
-                });
-                return tokio_stream::wrappers::ReceiverStream::new(rx).boxed();
+                self.push_summary_stream(settings)
+            } else {
+                self.polling_summary_stream(settings)
             }
-            let weak = self.weak();
-            let (tx, rx) =
-                tokio::sync::mpsc::channel::<Result<crate::sync::SyncSummary, KupferdrahtError>>(4);
-            tokio::spawn(async move {
-                loop {
-                    let Some(client) = weak.upgrade() else {
-                        return;
-                    };
-                    let summary_result = client.sync_once(settings.clone()).await;
-                    if let Err(KupferdrahtError::RateLimited { retry_after_secs }) = summary_result
-                    {
-                        drop(client);
-                        wait_out_rate_limit(&settings, retry_after_secs).await;
-                        continue;
-                    }
-                    let is_err = summary_result.is_err();
-                    let zero_events = matches!(
-                        summary_result,
-                        Ok(crate::sync::SyncSummary {
-                            events_dispatched: 0,
-                            ..
-                        }),
-                    );
-                    // `send` returns Err when every receiver has been
-                    // dropped — that's our cancellation signal.
-                    if tx.send(summary_result).await.is_err() {
-                        return;
-                    }
-                    if is_err {
-                        return;
-                    }
-                    if zero_events {
-                        crate::time::sleep(settings.idle_pause()).await;
-                    }
-                }
-            });
-            tokio_stream::wrappers::ReceiverStream::new(rx).boxed()
         }
+    }
+
+    /// [`Self::sync_stream`]'s push arm: the push loop runs in a task and
+    /// forwards each summary; a dropped receiver is the cancellation
+    /// signal, and a full buffer drops the tick, never the loop.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn push_summary_stream(
+        &self,
+        settings: crate::sync::SyncSettings,
+    ) -> futures_util::stream::BoxStream<'static, Result<crate::sync::SyncSummary, KupferdrahtError>>
+    {
+        use futures_util::StreamExt as _;
+        let weak = self.weak();
+        let (tx, rx) =
+            tokio::sync::mpsc::channel::<Result<crate::sync::SyncSummary, KupferdrahtError>>(4);
+        tokio::spawn(async move {
+            let Some(client) = weak.upgrade() else {
+                return;
+            };
+            let frames_tx = tx.clone();
+            let result = client
+                .sync_push(settings, move |summary| {
+                    match frames_tx.try_send(Ok(summary)) {
+                        Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                            std::ops::ControlFlow::Break(())
+                        }
+                        _ => std::ops::ControlFlow::Continue(()),
+                    }
+                })
+                .await;
+            if let Err(e) = result {
+                let _ = tx.send(Err(e)).await;
+            }
+        });
+        tokio_stream::wrappers::ReceiverStream::new(rx).boxed()
+    }
+
+    /// [`Self::sync_stream`]'s polling arm: one `sync_once` per pass in a
+    /// task, waiting out a rate limit, pausing after an idle pass; the
+    /// first error ends the stream, a dropped receiver cancels it.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn polling_summary_stream(
+        &self,
+        settings: crate::sync::SyncSettings,
+    ) -> futures_util::stream::BoxStream<'static, Result<crate::sync::SyncSummary, KupferdrahtError>>
+    {
+        use futures_util::StreamExt as _;
+        let weak = self.weak();
+        let (tx, rx) =
+            tokio::sync::mpsc::channel::<Result<crate::sync::SyncSummary, KupferdrahtError>>(4);
+        tokio::spawn(async move {
+            loop {
+                let Some(client) = weak.upgrade() else {
+                    return;
+                };
+                let summary_result = client.sync_once(settings.clone()).await;
+                if let Err(KupferdrahtError::RateLimited { retry_after_secs }) = summary_result {
+                    drop(client);
+                    wait_out_rate_limit(&settings, retry_after_secs).await;
+                    continue;
+                }
+                let is_err = summary_result.is_err();
+                let zero_events = matches!(
+                    summary_result,
+                    Ok(crate::sync::SyncSummary {
+                        events_dispatched: 0,
+                        ..
+                    }),
+                );
+                // `send` returns Err when every receiver has been
+                // dropped — that's our cancellation signal.
+                if tx.send(summary_result).await.is_err() || is_err {
+                    return;
+                }
+                if zero_events {
+                    crate::time::sleep(settings.idle_pause()).await;
+                }
+            }
+        });
+        tokio_stream::wrappers::ReceiverStream::new(rx).boxed()
     }
 
     /// Steps 62b/73 — the long-lived push loop behind

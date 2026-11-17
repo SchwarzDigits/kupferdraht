@@ -724,6 +724,44 @@ impl Client {
         Ok(members)
     }
 
+    /// The profiles of every member but this device's own user, by qualified
+    /// id, from one `POST /v14/list-users`; none asked when the group holds
+    /// only the own user.
+    ///
+    /// # Errors
+    /// Network / backend errors from `/list-users`.
+    async fn other_members_profiles(
+        &self,
+        leaves: &[crate::encryption::GroupLeaf],
+        self_user_id: &str,
+    ) -> Result<HashMap<String, UserProfile>, KupferdrahtError> {
+        let non_self_qids: Vec<QualifiedId> = leaves
+            .iter()
+            .filter(|l| l.user_id != self_user_id)
+            .filter_map(|l| {
+                UserId::parse(&l.user_id)
+                    .ok()
+                    .map(|u| QualifiedId::from(&u))
+            })
+            .collect();
+        if non_self_qids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let resp = self
+            .http
+            .list_users(
+                self.api_version,
+                &self.current_access_token(),
+                &non_self_qids,
+            )
+            .await?;
+        Ok(resp
+            .found
+            .into_iter()
+            .map(|u| (u.qualified_id.to_string(), u))
+            .collect())
+    }
+
     /// Turn leaf identities into `RoomMember`s, tagging the self leaf
     /// and backfilling non-self display info via `POST /v14/list-users`.
     /// `self_user_id` is the qualified (`{uuid}@{domain}`) id of this
@@ -735,31 +773,7 @@ impl Client {
         self_user_id: &str,
         prior_roles: &HashMap<String, crate::rooms::RoomMemberRole>,
     ) -> Result<Vec<RoomMember>, KupferdrahtError> {
-        let non_self_qids: Vec<QualifiedId> = leaves
-            .iter()
-            .filter(|l| l.user_id != self_user_id)
-            .filter_map(|l| {
-                UserId::parse(&l.user_id)
-                    .ok()
-                    .map(|u| QualifiedId::from(&u))
-            })
-            .collect();
-        let lookup: HashMap<String, UserProfile> = if non_self_qids.is_empty() {
-            HashMap::new()
-        } else {
-            let resp = self
-                .http
-                .list_users(
-                    self.api_version,
-                    &self.current_access_token(),
-                    &non_self_qids,
-                )
-                .await?;
-            resp.found
-                .into_iter()
-                .map(|u| (u.qualified_id.to_string(), u))
-                .collect()
-        };
+        let lookup = self.other_members_profiles(leaves, self_user_id).await?;
         let account = self.account();
         let self_name = account.display_name().to_string();
         let self_handle = account.handle().map(str::to_string);

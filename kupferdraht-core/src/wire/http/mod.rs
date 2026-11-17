@@ -738,6 +738,13 @@ mod tests {
     /// The conversation endpoints: a qualified id's local part and domain,
     /// the team and conversation ids, the code endpoints, the group info.
     async fn assert_conversation_sites_refuse(client: &HttpClient, h: &str) {
+        assert_qualified_conversation_sites_refuse(client, h).await;
+        assert_conversation_code_sites_refuse(client, h).await;
+    }
+
+    /// The endpoints taking a qualified conversation or user id: `h` as its
+    /// local part and as its domain.
+    async fn assert_qualified_conversation_sites_refuse(client: &HttpClient, h: &str) {
         let local = format!("{h}@example.test");
         let domain = format!("room@{h}");
         for id in [local.as_str(), domain.as_str()] {
@@ -773,6 +780,11 @@ mod tests {
                 client.send_typing(14, "tok", id, "started").await,
             );
         }
+    }
+
+    /// The team conversation, the guest-link code and the group-info
+    /// endpoints.
+    async fn assert_conversation_code_sites_refuse(client: &HttpClient, h: &str) {
         assert_refused(
             "delete_team_conversation team",
             h,
@@ -876,6 +888,12 @@ mod tests {
     /// The account endpoints: the property key, clients, the rebind's
     /// query value, key packages, the 1:1 conversation, SSO.
     async fn assert_account_sites_refuse(client: &HttpClient, h: &str) {
+        assert_client_sites_refuse(client, h).await;
+        assert_key_package_sites_refuse(client, h).await;
+    }
+
+    /// The property key, the device endpoints and the rebind's query value.
+    async fn assert_client_sites_refuse(client: &HttpClient, h: &str) {
         assert_refused(
             "fetch_property_value",
             h,
@@ -911,6 +929,10 @@ mod tests {
             h,
             client.rebind_access_token(14, "zuid", h).await,
         );
+    }
+
+    /// The key packages, the 1:1 conversation and SSO.
+    async fn assert_key_package_sites_refuse(client: &HttpClient, h: &str) {
         assert_refused(
             "claim_key_packages domain",
             h,

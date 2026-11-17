@@ -555,6 +555,23 @@ mod tests {
     use crate::storage::Store as _;
     use crate::storage::records::{ExpiredMessageRecord, ResentTimes, TimelineEventRecord};
 
+    /// A text row of `u@wire.test`'s device in `room@wire.test`, sent and
+    /// arrived at 1000, in delivery state `status`.
+    fn text_row(message_id: &str, status: &str, body: &str) -> TimelineEventRecord {
+        TimelineEventRecord {
+            message_id: message_id.into(),
+            room_id: "room@wire.test".into(),
+            sender_user_id: "u@wire.test".into(),
+            sender_device_id: "dev".into(),
+            kind: "text".into(),
+            body: body.into(),
+            sent_at_ms: 1000,
+            arrived_at_ms: 1000,
+            delivery_status: status.into(),
+            ..TimelineEventRecord::default()
+        }
+    }
+
     /// Step 79: the resend flip is guarded — it moves exactly a live
     /// `failed` row to `submitted` (re-stamping `sent_at_ms`, setting
     /// the timer), reports `false` for anything else, and is
@@ -564,17 +581,8 @@ mod tests {
         let (_dir, store) = fresh_store();
         let room_id = "room@wire.test";
         let failed = TimelineEventRecord {
-            message_id: "m-failed".into(),
-            room_id: room_id.into(),
-            sender_user_id: "u@wire.test".into(),
-            sender_device_id: "dev".into(),
-            kind: "text".into(),
-            body: "stuck".into(),
-            sent_at_ms: 1000,
-            arrived_at_ms: 1000,
-            delivery_status: "failed".into(),
             ephemeral_ttl_ms: Some(5_000),
-            ..TimelineEventRecord::default()
+            ..text_row("m-failed", "failed", "stuck")
         };
         store.insert_timeline_event(&failed).await.expect("insert");
         let submitted = TimelineEventRecord {
@@ -613,50 +621,22 @@ mod tests {
         assert_eq!(row.ephemeral_ttl_ms, Some(5_000), "the ttl survives (V28)");
         assert_eq!(row.body, "stuck");
 
-        assert!(
-            !store
-                .mark_message_resent(
-                    room_id,
-                    "m-failed",
-                    &ResentTimes {
-                        sent_at_ms: 3000,
-                        arrived_at_ms: 3000,
-                        expires_at_ms: None
-                    }
-                )
+        let later = ResentTimes {
+            sent_at_ms: 3000,
+            arrived_at_ms: 3000,
+            expires_at_ms: None,
+        };
+        for (id, why) in [
+            ("m-failed", "idempotent: the row is no longer failed"),
+            ("m-sent", "a submitted row is not a failed send"),
+            ("nope", "an absent row is not flipped"),
+        ] {
+            let flipped = store
+                .mark_message_resent(room_id, id, &later)
                 .await
-                .expect("second flip"),
-            "idempotent: the row is no longer failed"
-        );
-        assert!(
-            !store
-                .mark_message_resent(
-                    room_id,
-                    "m-sent",
-                    &ResentTimes {
-                        sent_at_ms: 3000,
-                        arrived_at_ms: 3000,
-                        expires_at_ms: None
-                    }
-                )
-                .await
-                .expect("submitted row"),
-            "a submitted row is not a failed send"
-        );
-        assert!(
-            !store
-                .mark_message_resent(
-                    room_id,
-                    "nope",
-                    &ResentTimes {
-                        sent_at_ms: 3000,
-                        arrived_at_ms: 3000,
-                        expires_at_ms: None
-                    }
-                )
-                .await
-                .expect("absent row")
-        );
+                .expect(id);
+            assert!(!flipped, "{why}");
+        }
     }
 
     /// Step 97a: a `sending` row settles once — `submitted` (with the
@@ -666,18 +646,7 @@ mod tests {
     async fn mark_send_outcome_settles_only_sending_rows_and_never_downgrades_an_echo() {
         let (_dir, store) = fresh_store();
         let room_id = "room@wire.test";
-        let sending = TimelineEventRecord {
-            message_id: "m-sending".into(),
-            room_id: room_id.into(),
-            sender_user_id: "u@wire.test".into(),
-            sender_device_id: "dev".into(),
-            kind: "text".into(),
-            body: "on its way".into(),
-            sent_at_ms: 1000,
-            arrived_at_ms: 1000,
-            delivery_status: "sending".into(),
-            ..TimelineEventRecord::default()
-        };
+        let sending = text_row("m-sending", "sending", "on its way");
         store.insert_timeline_event(&sending).await.expect("insert");
         let echoed = TimelineEventRecord {
             message_id: "m-echoed".into(),
@@ -1003,22 +972,17 @@ mod tests {
     async fn expire_ephemeral_messages_tombstones_only_due_rows_and_is_idempotent() {
         let (_dir, store) = fresh_store();
         let room_id = "room-e@wire.test";
-        store
-            .insert_timeline_event(&ephemeral_event("due", room_id, Some(5_000)))
-            .await
-            .expect("insert due");
-        store
-            .insert_timeline_event(&ephemeral_event("exact", room_id, Some(6_000)))
-            .await
-            .expect("insert exact");
-        store
-            .insert_timeline_event(&ephemeral_event("future", room_id, Some(7_000)))
-            .await
-            .expect("insert future");
-        store
-            .insert_timeline_event(&ephemeral_event("plain", room_id, None))
-            .await
-            .expect("insert plain");
+        for (id, expires_at_ms) in [
+            ("due", Some(5_000)),
+            ("exact", Some(6_000)),
+            ("future", Some(7_000)),
+            ("plain", None),
+        ] {
+            store
+                .insert_timeline_event(&ephemeral_event(id, room_id, expires_at_ms))
+                .await
+                .expect(id);
+        }
 
         let mut retired = store.expire_ephemeral_messages(6_000).await.expect("sweep");
         retired.sort_by(|a, b| a.message_id.cmp(&b.message_id));
@@ -1043,26 +1007,23 @@ mod tests {
         let by_id = |id: &str| rows.iter().find(|r| r.message_id == id).expect(id).clone();
         for id in ["due", "exact"] {
             let row = by_id(id);
-            assert_eq!(
+            // Stamped with the sweep instant, the body cleared like a
+            // MessageDelete tombstone, the expiry stamp kept.
+            let retired = (
                 row.redacted_at_ms,
-                Some(6_000),
-                "{id}: stamped with the sweep instant"
-            );
-            assert_eq!(
-                row.body, "",
-                "{id}: body cleared like a MessageDelete tombstone"
-            );
-            assert!(
+                row.body.as_str(),
                 row.expires_at_ms.is_some(),
-                "{id}: the expiry stamp survives"
+            );
+            assert_eq!(retired, (Some(6_000), "", true), "{id}");
+        }
+        for id in ["future", "plain"] {
+            let row = by_id(id);
+            assert_eq!(
+                (row.redacted_at_ms, row.body.as_str()),
+                (None, "body"),
+                "{id}"
             );
         }
-        let future = by_id("future");
-        assert!(future.redacted_at_ms.is_none());
-        assert_eq!(future.body, "body");
-        let plain = by_id("plain");
-        assert!(plain.redacted_at_ms.is_none());
-        assert_eq!(plain.body, "body");
 
         let again = store
             .expire_ephemeral_messages(6_000)

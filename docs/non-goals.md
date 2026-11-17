@@ -151,3 +151,17 @@ limitations".
   Volker on 2026-11-10). The KMP consumer Step 20 was planned for wraps Kalium
   (NG-27), and no native consumer is in reach. A native consumer brings it back
   as a new step, with the support-tier ADR Step 20e named as its precondition.
+- **NG-32** No recovery from a poisoned cache lock. A lock is poisoned only by a
+  panic while it is held; the app's handlers run outside the locks, on a copy of
+  the handler list, and what runs under the 21 cache locks (the rooms cache, the
+  typing state, the handler and listener registries) is a clone, an insert, a
+  replacement or a `retain` — nothing that panics. So the `expect("… poisoned")`
+  stays (Volker, 2026-11-17, closing Step 136's first item); the rule that keeps
+  it so is that no foreign code runs under a lock. `lock_mls` keeps its recovery.
+- **NG-33** No length caps on Kupferdraht's own payloads (`TaskPayload`,
+  `CasePayload`, `TaskListMarker`, `extensions`). Wire's `/v14/mls/messages`
+  bounds every message to kilobytes (ADR-0011), so no field outgrows one
+  message; many large tasks fill the store as many text messages do, which are
+  not capped either. Per-field caps would be a protocol decision every client
+  keeps, with an ADR, for little gain (Volker, 2026-11-17, closing Step 136's
+  second item).

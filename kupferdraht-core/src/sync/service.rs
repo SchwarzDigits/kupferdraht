@@ -553,11 +553,7 @@ impl SyncService {
         origin: InboundOrigin<'_>,
         generic: GenericMessage,
     ) -> Result<(), KupferdrahtError> {
-        let InboundOrigin {
-            room_id,
-            sender_user_id,
-            ..
-        } = origin;
+        let (room_id, sender_user_id) = (origin.room_id, origin.sender_user_id);
         match generic.content {
             Some(generic_message::Content::Text(t)) => {
                 self.dispatch_inbound_text(client, origin, t).await
@@ -610,10 +606,7 @@ impl SyncService {
                     .await
             }
             None => {
-                warn!(
-                    message_id = %generic.message_id,
-                    "GenericMessage with no content variant — skip dispatch"
-                );
+                skip_contentless(&generic.message_id);
                 Ok(())
             }
         }
@@ -943,6 +936,12 @@ async fn surface_decoded(
             Ok(Decrypted::Nothing)
         }
     }
+}
+
+/// A `GenericMessage` without a content variant carries nothing to dispatch:
+/// logged and skipped, never an error.
+fn skip_contentless(message_id: &str) {
+    warn!(%message_id, "GenericMessage with no content variant — skip dispatch");
 }
 
 #[cfg(test)]

@@ -379,76 +379,7 @@ impl TimelineItem {
 
     pub(crate) fn from_record(record: TimelineEventRecord) -> Self {
         let redacted = record.redacted_at_ms.is_some();
-        let kind = if redacted {
-            TimelineItemKind::Redacted
-        } else if record.kind == "knock" {
-            // Step 26: the packed body is the `hot_knock` flag.
-            TimelineItemKind::Knock {
-                hot_knock: record.body == "true",
-            }
-        } else if record.kind == "location" {
-            // Step 26: the packed body is the JSON coordinates; a
-            // malformed payload degrades to the Text fallback below.
-            location_kind_from_body(&record.body).unwrap_or_else(|| TimelineItemKind::Text {
-                body: record.body.clone(),
-                reply_to: record.reply_to_id.clone(),
-                mentions: Vec::new(),
-            })
-        } else if record.kind == "task" {
-            // Step 60a: the packed body is the JSON task state; a
-            // malformed payload degrades to the Text fallback below.
-            crate::timeline::task::task_kind_from_body(&record.body).unwrap_or_else(|| {
-                TimelineItemKind::Text {
-                    body: record.body.clone(),
-                    reply_to: record.reply_to_id.clone(),
-                    mentions: Vec::new(),
-                }
-            })
-        } else if record.kind == "task_list_marker" {
-            // Step 75: the packed body is the JSON marker state; a
-            // malformed payload degrades to the Text fallback below.
-            crate::timeline::task::marker_kind_from_body(&record.body).unwrap_or_else(|| {
-                TimelineItemKind::Text {
-                    body: record.body.clone(),
-                    reply_to: record.reply_to_id.clone(),
-                    mentions: Vec::new(),
-                }
-            })
-        } else if record.kind == "case" {
-            // Step 72b: the packed body is the JSON case snapshot; a
-            // malformed payload degrades to the Text fallback below.
-            crate::timeline::case::case_kind_from_body(&record.body).unwrap_or_else(|| {
-                TimelineItemKind::Text {
-                    body: record.body.clone(),
-                    reply_to: record.reply_to_id.clone(),
-                    mentions: Vec::new(),
-                }
-            })
-        } else if crate::timeline::room_event::is_room_event_kind(&record.kind) {
-            // Step 145: the packed body is the room event's JSON; a
-            // malformed payload degrades to the Text fallback below.
-            crate::timeline::room_event::room_event_kind_from_row(&record.kind, &record.body)
-                .unwrap_or_else(|| TimelineItemKind::Text {
-                    body: record.body.clone(),
-                    reply_to: record.reply_to_id.clone(),
-                    mentions: Vec::new(),
-                })
-        } else if record.kind == "text" {
-            TimelineItemKind::Text {
-                body: record.body,
-                reply_to: record.reply_to_id.clone(),
-                mentions: Vec::new(),
-            }
-        } else {
-            // Unknown kinds round-trip through as Text with the body
-            // verbatim — keeps forwards-compatibility for content
-            // variants we haven't wired yet.
-            TimelineItemKind::Text {
-                body: record.body,
-                reply_to: record.reply_to_id.clone(),
-                mentions: Vec::new(),
-            }
-        };
+        let kind = kind_from_record(&record);
         Self {
             item_id: record.message_id,
             room_id: record.room_id,
@@ -466,6 +397,40 @@ impl TimelineItem {
             expires_at_ms: record.expires_at_ms,
         }
     }
+}
+
+/// The kind a stored row shows as: redacted, or decoded from its packed body
+/// by its `kind`. A malformed body, a plain text row and an unknown kind
+/// (forwards compatibility for content variants not wired yet) show as Text
+/// with the body verbatim.
+fn kind_from_record(record: &TimelineEventRecord) -> TimelineItemKind {
+    if record.redacted_at_ms.is_some() {
+        return TimelineItemKind::Redacted;
+    }
+    let decoded = match record.kind.as_str() {
+        // Step 26: the packed body is the `hot_knock` flag.
+        "knock" => Some(TimelineItemKind::Knock {
+            hot_knock: record.body == "true",
+        }),
+        // Step 26: the JSON coordinates.
+        "location" => location_kind_from_body(&record.body),
+        // Step 60a: the JSON task state.
+        "task" => crate::timeline::task::task_kind_from_body(&record.body),
+        // Step 75: the JSON marker state.
+        "task_list_marker" => crate::timeline::task::marker_kind_from_body(&record.body),
+        // Step 72b: the JSON case snapshot.
+        "case" => crate::timeline::case::case_kind_from_body(&record.body),
+        // Step 145: the room event's JSON.
+        kind if crate::timeline::room_event::is_room_event_kind(kind) => {
+            crate::timeline::room_event::room_event_kind_from_row(kind, &record.body)
+        }
+        _ => None,
+    };
+    decoded.unwrap_or_else(|| TimelineItemKind::Text {
+        body: record.body.clone(),
+        reply_to: record.reply_to_id.clone(),
+        mentions: Vec::new(),
+    })
 }
 
 /// Map a persisted `delivery_status` string onto the enum. Unknown
