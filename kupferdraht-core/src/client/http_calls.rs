@@ -149,18 +149,10 @@ impl Client {
     pub(crate) async fn http_download_asset_bytes(
         &self,
         access_token: &str,
-        asset_domain: &str,
-        asset_id: &str,
-        asset_token: Option<&str>,
+        download: crate::wire::http::assets::AssetDownload<'_>,
     ) -> Result<Vec<u8>, KupferdrahtError> {
         self.http
-            .download_asset_bytes(
-                self.api_version,
-                access_token,
-                asset_domain,
-                asset_id,
-                asset_token,
-            )
+            .download_asset_bytes(self.api_version, access_token, download)
             .await
     }
 
@@ -184,20 +176,11 @@ impl Client {
     pub(crate) async fn http_download_asset(
         &self,
         access_token: &str,
-        asset_domain: &str,
-        asset_id: &str,
-        asset_token: Option<&str>,
+        download: crate::wire::http::assets::AssetDownload<'_>,
         sink_path: &std::path::Path,
     ) -> Result<u64, KupferdrahtError> {
         self.http
-            .download_asset(
-                self.api_version,
-                access_token,
-                asset_domain,
-                asset_id,
-                asset_token,
-                sink_path,
-            )
+            .download_asset(self.api_version, access_token, download, sink_path)
             .await
     }
 }

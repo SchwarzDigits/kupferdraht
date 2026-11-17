@@ -423,7 +423,7 @@ Dual-licensed; used here under the Apache License 2.0.
 - version_check 0.9.5 — Sergio Benitez —
   https://github.com/SergioBenitez/version_check
 - voprf-ng 0.6.0 — https://github.com/raphaelrobert/voprf-ng/
-- wasm-streams 0.4.2 (native targets only) — Mattias Buelens —
+- wasm-streams 0.4.2 (browser target only) — Mattias Buelens —
   https://github.com/MattiasBuelens/wasm-streams
 - web-time 1.1.0 (browser target only) — https://github.com/daxpedda/web-time
 - weezl 0.1.12 — The image-rs Developers — https://github.com/image-rs/weezl

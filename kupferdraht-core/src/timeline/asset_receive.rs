@@ -19,7 +19,8 @@
 //! ```text
 //! download():
 //!   1. AES_GCM gate (warn + InvalidInput per ADR-0011)
-//!   2. resolve cache_path OR download to <kupferdraht_home>/<acct>/assets/<msg>.enc
+//!   2. resolve cache_path OR download to <kupferdraht_home>/<acct>/assets/<msg>.enc,
+//!      stopping past the declared size + 32 bytes (IntegrityCheck, Step 160)
 //!   3. SHA-256 verify over the ciphertext
 //!   4. unpack otr_key DEK envelope (60B packed = nonce ‖ tag ‖ ct,
 //!      32B = legacy plaintext)
@@ -36,9 +37,10 @@ use std::sync::{Arc, Weak};
 use crate::client::Client;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::encryption::asset_crypto::decrypt_to_memory;
-use crate::encryption::asset_crypto::decrypt_to_path;
+use crate::encryption::asset_crypto::{decrypt_to_path, max_ciphertext_len};
 use crate::error::KupferdrahtError;
 use crate::storage::AttachmentRecord;
+use crate::wire::http::assets::AssetDownload;
 
 /// Size of the raw AES-256 `otr_key`.
 const RAW_KEY_LEN: usize = 32;
@@ -208,7 +210,8 @@ impl AssetSummary {
     ///   `AES_GCM` (warn-and-skip per ADR-0011), or no `SqliteStore`
     ///   attached (no cache directory derivable).
     /// * `IntegrityCheck` — SHA-256 mismatch over the downloaded
-    ///   ciphertext.
+    ///   ciphertext, or a download longer than the declared size
+    ///   + 32 bytes (Step 160; no partial file stays in the cache).
     /// * `Network` / `BackendRejected` — `/v14/assets/...` failed.
     /// * `Storage` — filesystem error or DEK envelope unpack
     ///   failure.
@@ -223,10 +226,13 @@ impl AssetSummary {
     }
 
     /// wasm (W7): no filesystem cache — fetch the ciphertext into memory,
-    /// verify SHA-256, and decrypt in memory.
+    /// verify SHA-256, and decrypt it in that buffer. The fetch stops past
+    /// the declared size + 32 bytes, and an asset declared over 100 MiB is
+    /// refused before any request (Step 160).
     ///
     /// # Errors
-    /// As the native variant, plus `Network`/`BackendRejected` from the fetch.
+    /// As the native variant, plus `Network`/`BackendRejected` from the fetch
+    /// and `InvalidInput` for an asset over the in-memory ceiling.
     #[cfg(target_arch = "wasm32")]
     pub async fn download(&self) -> Result<Vec<u8>, KupferdrahtError> {
         if self.encryption_algo != "AES_CBC" {
@@ -246,14 +252,9 @@ impl AssetSummary {
             )
         })?;
         let ciphertext = client
-            .http_download_asset_bytes(
-                &access_token,
-                &self.asset_domain,
-                &self.asset_id,
-                self.asset_token.as_deref(),
-            )
+            .http_download_asset_bytes(&access_token, self.bounded_download())
             .await?;
-        crate::encryption::asset_crypto::decrypt_bytes(&ciphertext, &key, &sha)
+        crate::encryption::asset_crypto::decrypt_bytes(ciphertext, &key, &sha)
     }
 
     /// Same pipeline as [`Self::download`] but streams the
@@ -303,13 +304,7 @@ impl AssetSummary {
             })?;
         }
         client
-            .http_download_asset(
-                &access_token,
-                &self.asset_domain,
-                &self.asset_id,
-                self.asset_token.as_deref(),
-                &cache_path,
-            )
+            .http_download_asset(&access_token, self.bounded_download(), &cache_path)
             .await?;
         // Persist the cache_path back to the attachments row so the
         // NEXT call hits the local file. Silent no-op when no
@@ -322,6 +317,17 @@ impl AssetSummary {
                 .await?;
         }
         Ok(cache_path)
+    }
+
+    /// The download of this asset: the sender's locator, bounded at the
+    /// longest ciphertext its declared size can make (Step 160).
+    fn bounded_download(&self) -> AssetDownload<'_> {
+        AssetDownload {
+            asset_domain: &self.asset_domain,
+            asset_id: &self.asset_id,
+            asset_token: self.asset_token.as_deref(),
+            max_bytes: max_ciphertext_len(self.size_bytes),
+        }
     }
 
     /// `<kupferdraht_home>/<account_id>/assets/<message_id>.enc`.

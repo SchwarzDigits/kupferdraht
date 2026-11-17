@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Step 159 — every answer read into memory goes through the answer bound.
-//! TDD red.
 //!
 //! An awaited `.json()`, `.text()` or `.bytes()` on a response anywhere in
 //! `kupferdraht-core/src` but the bound's own module reads a body without a
@@ -10,8 +9,9 @@
 //! scanned: files of tests only (`*_tests.rs`, `test_support.rs`) and a
 //! file's trailing `mod tests` block.
 //!
-//! An asset blob is no answer: the browser's whole-asset download (W7) reads
-//! an encrypted file, which may be larger than any answer.
+//! The browser's whole-asset download (W7) reads through the same bound,
+//! with the sender's declared size as its own (Step 160): no body read is
+//! exempt.
 
 use std::path::{Path, PathBuf};
 
@@ -20,9 +20,6 @@ const THE_BOUND: &str = "answer_bound.rs";
 
 /// Body reads a `reqwest::Response` offers; `str::bytes` is never awaited.
 const READS: [&str; 3] = [".json", ".text", ".bytes"];
-
-/// Functions whose read is no answer.
-const NOT_ANSWERS: [&str; 1] = ["download_asset_bytes"];
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(dir).expect("read src") {
@@ -100,9 +97,6 @@ fn every_answer_is_read_through_the_bound() {
         }
         let text = std::fs::read_to_string(&file).expect("read source");
         for (line, function) in awaited_body_reads(shipped_part(&text)) {
-            if NOT_ANSWERS.contains(&function) {
-                continue;
-            }
             let shown = file
                 .strip_prefix(&src)
                 .unwrap_or(&file)

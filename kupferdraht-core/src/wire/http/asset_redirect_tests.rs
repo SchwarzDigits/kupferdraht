@@ -18,6 +18,7 @@ use httpmock::Method::GET;
 use httpmock::{Mock, MockServer};
 use tempfile::TempDir;
 
+use super::assets::AssetDownload;
 use super::{HttpClient, HttpTimeouts};
 use crate::error::KupferdrahtError;
 
@@ -73,7 +74,12 @@ fn mount_any(server: &MockServer) -> Mock<'_> {
 
 async fn download(client: &HttpClient, sink: &std::path::Path) -> Result<u64, KupferdrahtError> {
     client
-        .download_asset(14, "tok", "wire.com", "key-1", Some("private-tok"), sink)
+        .download_asset(
+            14,
+            "tok",
+            AssetDownload::within_a_mebibyte("wire.com", "key-1", Some("private-tok")),
+            sink,
+        )
         .await
 }
 

@@ -56,6 +56,13 @@ type Aes256CbcDec = cbc::Decryptor<Aes256>;
 /// peak RSS stays bounded for arbitrarily large assets.
 pub(crate) const STREAM_CHUNK: usize = 64 * 1024;
 
+/// The longest ciphertext a plaintext of `plaintext_size` bytes makes:
+/// the 16-byte IV and at most one 16-byte block of PKCS7 padding
+/// (ADR-0011). Bounds a download by the sender's declared size (Step 160).
+pub(crate) fn max_ciphertext_len(plaintext_size: u64) -> u64 {
+    plaintext_size.saturating_add(16 + 16)
+}
+
 /// Output of [`encrypt_file`] — everything the upload + send
 /// pipeline needs to ship the asset.
 ///
@@ -295,13 +302,15 @@ pub fn decrypt_to_memory(
 // ── wasm: in-memory (buffer) asset crypto (W7) ──────────────────────────────
 //
 // The browser has no filesystem, so the streaming file paths above are replaced
-// by `Vec<u8>`-in/`Vec<u8>`-out variants that reuse the same `stream_encrypt`/
-// `stream_decrypt` cores (both already generic over `Read`/`Write`). Same wire
-// format — `iv(16) || aes-cbc-pkcs7(plaintext)`, SHA-256 over the whole blob.
+// by `Vec<u8>`-in/`Vec<u8>`-out variants: encryption through the same
+// `stream_encrypt` core, decryption through `stream_decrypt`'s own core
+// `decrypt_in_place`, in the downloaded buffer. Same wire format —
+// `iv(16) || aes-cbc-pkcs7(plaintext)`, SHA-256 over the whole blob.
+// Compiled for native tests as well.
 
 /// The output of [`encrypt_bytes`]: the encrypted blob plus the key + digest a
 /// caller needs to upload and reference the asset.
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 pub(crate) struct EncryptedBytes {
     /// Compiler-wiped on drop (Step 70) — same serialization-boundary
     /// caveat as [`EncryptedAsset::key`].
@@ -312,7 +321,7 @@ pub(crate) struct EncryptedBytes {
     pub(crate) plaintext_size: u64,
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 impl EncryptedBytes {
     /// Borrow the per-asset AES-256 key material through its
     /// compiler-wiped handle (`THREAT_MODEL.md` G4 / gap-B.21).
@@ -326,7 +335,7 @@ impl EncryptedBytes {
 ///
 /// # Errors
 /// `KupferdrahtError` on the (in practice unreachable) streaming-cipher path.
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 pub(crate) fn encrypt_bytes(plaintext: &[u8]) -> Result<EncryptedBytes, KupferdrahtError> {
     let mut key = Zeroizing::new([0u8; 32]);
     let mut iv = [0u8; 16];
@@ -352,22 +361,22 @@ pub(crate) fn encrypt_bytes(plaintext: &[u8]) -> Result<EncryptedBytes, Kupferdr
     })
 }
 
-/// In-memory decrypt (W7): verify SHA-256 over the whole blob, strip the IV
-/// prefix, AES-256-CBC/PKCS7 decrypt to plaintext bytes.
+/// In-memory decrypt (W7): verify SHA-256 over the whole blob, then
+/// AES-256-CBC/PKCS7 decrypt it where it lies. The plaintext takes the
+/// blob's place, so the asset is held once, not as ciphertext and
+/// plaintext side by side (Step 160).
 ///
 /// # Errors
 /// * `IntegrityCheck` on SHA mismatch.
 /// * `Encoding` if the blob is shorter than the 16-byte IV prefix or unpadding
 ///   fails (wrong key / truncated ciphertext).
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 pub(crate) fn decrypt_bytes(
-    ciphertext: &[u8],
+    mut blob: Vec<u8>,
     key: &[u8; 32],
     expected_sha256: &[u8; 32],
 ) -> Result<Vec<u8>, KupferdrahtError> {
-    let mut hasher = Sha256::new();
-    hasher.update(ciphertext);
-    let actual: [u8; 32] = hasher.finalize().into();
+    let actual: [u8; 32] = Sha256::digest(&blob).into();
     if &actual != expected_sha256 {
         return Err(KupferdrahtError::IntegrityCheck(format!(
             "asset SHA-256 mismatch: expected {}, got {}",
@@ -375,17 +384,17 @@ pub(crate) fn decrypt_bytes(
             hex_lower(&actual),
         )));
     }
-    if ciphertext.len() < 16 {
+    if blob.len() < 16 {
         return Err(KupferdrahtError::Encoding(
             "ciphertext shorter than 16-byte IV prefix".into(),
         ));
     }
-    let iv: [u8; 16] = ciphertext[..16].try_into().expect("16 bytes");
-    let cipher = Aes256CbcDec::new(key.into(), &iv.into());
-    let mut reader = std::io::Cursor::new(&ciphertext[16..]);
-    let mut sink: Vec<u8> = Vec::with_capacity(ciphertext.len());
-    stream_decrypt(cipher, &mut reader, &mut sink)?;
-    Ok(sink)
+    let cipher = Aes256CbcDec::new_from_slices(key, &blob[..16])
+        .map_err(|e| KupferdrahtError::Encoding(format!("asset key or IV: {e}")))?;
+    let plaintext_len = decrypt_in_place(cipher, &mut blob[16..])?;
+    blob.copy_within(16..16 + plaintext_len, 0);
+    blob.truncate(plaintext_len);
+    Ok(blob)
 }
 
 /// Verify the actual SHA-256 of `path`'s contents against
@@ -494,7 +503,7 @@ fn stream_encrypt<R: Read, W: Write>(
 /// Drive AES-256-CBC decryption across a buffered stream, stripping
 /// PKCS7 padding from the final block.
 fn stream_decrypt<R: Read, W: Write>(
-    mut cipher: Aes256CbcDec,
+    cipher: Aes256CbcDec,
     reader: &mut R,
     writer: &mut W,
 ) -> Result<usize, KupferdrahtError> {
@@ -511,37 +520,46 @@ fn stream_decrypt<R: Read, W: Write>(
     reader
         .read_to_end(&mut all)
         .map_err(|e| KupferdrahtError::Storage(format!("read ciphertext: {e}")))?;
-    if all.is_empty() || all.len() % 16 != 0 {
+    let plaintext_len = decrypt_in_place(cipher, &mut all)?;
+    writer
+        .write_all(&all[..plaintext_len])
+        .map_err(|e| KupferdrahtError::Storage(format!("write plaintext: {e}")))?;
+    Ok(plaintext_len)
+}
+
+/// AES-256-CBC decrypt `blocks` (the ciphertext after its IV) where they
+/// lie and check their PKCS7 padding: the plaintext is
+/// `blocks[..returned]`.
+fn decrypt_in_place(
+    mut cipher: Aes256CbcDec,
+    blocks: &mut [u8],
+) -> Result<usize, KupferdrahtError> {
+    if blocks.is_empty() || !blocks.len().is_multiple_of(16) {
         return Err(KupferdrahtError::Encoding(format!(
             "ciphertext length {} is not a positive multiple of 16",
-            all.len()
+            blocks.len()
         )));
     }
-    for block_start in (0..all.len()).step_by(16) {
-        let block: &mut [u8; 16] = (&mut all[block_start..block_start + 16])
-            .try_into()
-            .expect("16 bytes");
+    for block in blocks.as_chunks_mut::<16>().0 {
         cipher.decrypt_block_mut(block.into());
     }
-    let pad = *all.last().expect("non-empty by check above") as usize;
+    let pad = blocks.last().map_or(0, |&b| usize::from(b));
     if pad == 0 || pad > 16 {
         return Err(KupferdrahtError::Encoding(format!(
             "PKCS7 padding byte {pad} out of range (1..=16); wrong key?"
         )));
     }
-    let plaintext_len = all.len() - pad;
+    let plaintext_len = blocks.len() - pad;
     // Validate every padding byte to catch wrong-key cases
     // (CBC decrypts garbage; PKCS7 catches statistically).
-    for b in &all[plaintext_len..] {
-        if *b as usize != pad {
-            return Err(KupferdrahtError::Encoding(
-                "PKCS7 padding mismatch (wrong key or corrupt ciphertext)".into(),
-            ));
-        }
+    if blocks[plaintext_len..]
+        .iter()
+        .any(|&b| usize::from(b) != pad)
+    {
+        return Err(KupferdrahtError::Encoding(
+            "PKCS7 padding mismatch (wrong key or corrupt ciphertext)".into(),
+        ));
     }
-    writer
-        .write_all(&all[..plaintext_len])
-        .map_err(|e| KupferdrahtError::Storage(format!("write plaintext: {e}")))?;
     Ok(plaintext_len)
 }
 
@@ -606,14 +624,55 @@ mod tests {
         assert_eq!(back, b"zeroize me");
     }
 
-    #[cfg(target_arch = "wasm32")]
     #[test]
     fn encrypt_bytes_key_material_is_compiler_wiped() {
         let enc = encrypt_bytes(b"tiny secret").expect("encrypt_bytes");
         requires_zeroize_on_drop(enc.key_material());
-        let back = decrypt_bytes(&enc.ciphertext, enc.key_material(), &enc.sha256)
+        let back = decrypt_bytes(enc.ciphertext.clone(), enc.key_material(), &enc.sha256)
             .expect("decrypt through the zeroizing handle");
         assert_eq!(back, b"tiny secret");
+    }
+
+    /// Step 160: the bound covers the IV and every padding length, and is
+    /// reached exactly when the plaintext fills whole blocks.
+    #[test]
+    fn the_ciphertext_bound_covers_the_iv_and_every_padding() {
+        for size in 0..=64usize {
+            let enc = encrypt_bytes(&vec![0x5a; size]).expect("encrypt_bytes");
+            let bound = max_ciphertext_len(enc.plaintext_size);
+            let made = enc.ciphertext.len() as u64;
+            assert!(made <= bound, "{size} bytes made {made}, bound {bound}");
+            if size % 16 == 0 {
+                assert_eq!(made, bound, "{size} bytes pad a whole block");
+            }
+        }
+        assert_eq!(max_ciphertext_len(u64::MAX), u64::MAX, "saturates");
+    }
+
+    /// Step 160: the browser decrypts in the downloaded buffer, so an asset
+    /// is held once, not as ciphertext and plaintext side by side.
+    #[test]
+    fn decrypt_bytes_decrypts_in_the_downloaded_buffer() {
+        let plaintext = b"a file of more than one block, decrypted where it lies";
+        let enc = encrypt_bytes(plaintext).expect("encrypt_bytes");
+        let blob = enc.ciphertext.clone();
+        let downloaded_at = blob.as_ptr();
+        let back = decrypt_bytes(blob, enc.key_material(), &enc.sha256).expect("decrypt_bytes");
+        assert_eq!(back, plaintext);
+        assert_eq!(back.as_ptr(), downloaded_at, "no second buffer");
+    }
+
+    #[test]
+    fn decrypt_bytes_refuses_other_bytes() {
+        let enc = encrypt_bytes(b"what the sender sent").expect("encrypt_bytes");
+        let mut blob = enc.ciphertext.clone();
+        blob[20] ^= 1;
+        let err = decrypt_bytes(blob, enc.key_material(), &enc.sha256)
+            .expect_err("a changed byte fails the digest");
+        assert!(
+            matches!(err, KupferdrahtError::IntegrityCheck(_)),
+            "{err:?}"
+        );
     }
 
     #[test]

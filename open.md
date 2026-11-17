@@ -375,6 +375,12 @@ through the same exchange client and shares the gap — a service token's
 response is read without a bound, a redirect is followed with the
 audience in the body. Nothing changed; the decision stays open.
 
+Steps 159 and 160 (2026-11-16) settled the size: every answer, and the
+browser's asset download, is read through a bounded `bytes_stream` that
+stops at the first chunk past its bound (16 MiB, or the sender's declared
+size + 32 bytes), in the browser as natively. The request timeout and the
+redirect policy stay open.
+
 ## 86) `room_read_markers` rows outlive their rooms (2026-11-03)
 
 A marker row (Step 67) and, since Step 138, its flag stay when the room

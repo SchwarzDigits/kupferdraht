@@ -44,7 +44,11 @@ use tokio_util::bytes::Bytes;
 #[cfg(not(target_arch = "wasm32"))]
 use tokio_util::io::ReaderStream;
 use tracing::debug;
+#[cfg(not(target_arch = "wasm32"))]
+use tracing::warn;
 
+#[cfg(any(target_arch = "wasm32", test))]
+use crate::answer_bound::{AnswerError, read_bounded};
 use crate::error::KupferdrahtError;
 
 use super::HttpClient;
@@ -153,6 +157,46 @@ pub struct AssetMultipart<'a> {
     /// Caller computes it once over the same tempfile pass that
     /// produced the SHA-256.
     pub md5_b64: &'a str,
+}
+
+/// The most bytes the browser's download holds in memory: cargohold's
+/// default upload limit for team users (`maxTotalBytes`, 100 MiB + 32
+/// bytes). The in-memory path holds the whole asset, and the page its
+/// plaintext once more, so a larger asset is refused before any request
+/// (Step 160).
+pub(crate) const MAX_BUFFERED_ASSET_BYTES: u64 = 100 * 1024 * 1024 + 32;
+
+/// Input bundle for [`HttpClient::download_asset`]: the sender's
+/// `Asset.RemoteData` locator and the most bytes the download may bring.
+/// No `Debug`: the `Asset-Token` is a credential (Step 101).
+#[derive(Clone, Copy)]
+pub struct AssetDownload<'a> {
+    /// `RemoteData.asset_domain`.
+    pub asset_domain: &'a str,
+    /// `RemoteData.asset_id`.
+    pub asset_id: &'a str,
+    /// `RemoteData.asset_token`; `None` for a public asset.
+    pub asset_token: Option<&'a str>,
+    /// The most ciphertext bytes: past them the download stops with
+    /// `IntegrityCheck` (Step 160).
+    pub max_bytes: u64,
+}
+
+#[cfg(test)]
+impl<'a> AssetDownload<'a> {
+    /// A download admitting 1 MiB, for a test whose body is smaller.
+    pub(super) fn within_a_mebibyte(
+        asset_domain: &'a str,
+        asset_id: &'a str,
+        asset_token: Option<&'a str>,
+    ) -> Self {
+        Self {
+            asset_domain,
+            asset_id,
+            asset_token,
+            max_bytes: 1024 * 1024,
+        }
+    }
 }
 
 impl HttpClient {
@@ -273,6 +317,8 @@ impl HttpClient {
     /// # Errors
     /// * `BackendRejected` on non-2xx (`404 not-found` when the
     ///   asset has been deleted, `403` for token mismatch).
+    /// * `IntegrityCheck` when the body runs past `max_bytes`; the
+    ///   partial file is removed (Step 160).
     /// * `InvalidInput` when `asset_domain` or `asset_id` is not a single
     ///   URL path segment (they are the sender's `RemoteData`, Step 95c).
     /// * `Network` for transport failures.
@@ -285,19 +331,10 @@ impl HttpClient {
         &self,
         api_version: u32,
         access_token: &str,
-        asset_domain: &str,
-        asset_id: &str,
-        asset_token: Option<&str>,
+        download: AssetDownload<'_>,
         sink_path: &Path,
     ) -> Result<u64, KupferdrahtError> {
-        let _ = (
-            api_version,
-            access_token,
-            asset_domain,
-            asset_id,
-            asset_token,
-            sink_path,
-        );
+        let _ = (api_version, access_token, download, sink_path);
         Err(KupferdrahtError::Generic(
             "asset download is not available on wasm yet".into(),
         ))
@@ -308,21 +345,19 @@ impl HttpClient {
         &self,
         api_version: u32,
         access_token: &str,
-        asset_domain: &str,
-        asset_id: &str,
-        asset_token: Option<&str>,
+        download: AssetDownload<'_>,
         sink_path: &Path,
     ) -> Result<u64, KupferdrahtError> {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
-        let asset_domain = Self::path_segment(asset_domain, "download_asset domain")?;
-        let asset_id = Self::path_segment(asset_id, "download_asset id")?;
+        let asset_domain = Self::path_segment(download.asset_domain, "download_asset domain")?;
+        let asset_id = Self::path_segment(download.asset_id, "download_asset id")?;
         let path = format!("/v{api_version}/assets/{asset_domain}/{asset_id}");
         let url = self.url(&path)?;
         debug!(%url, "GET asset download");
         // Step 98: the transfer client — no total deadline; the download
         // fails after `transfer_idle` without a byte instead.
         let mut request = self.transfer.get(url).bearer_auth(access_token);
-        if let Some(token) = asset_token {
+        if let Some(token) = download.asset_token {
             request = request.header("Asset-Token", token);
         }
         let resp = tokio::time::timeout(self.transfer_idle, request.send())
@@ -338,7 +373,7 @@ impl HttpClient {
         if !resp.status().is_success() {
             return Err(reject_from_response(resp, "download_asset").await);
         }
-        stream_response_to_path(resp, sink_path, self.transfer_idle).await
+        stream_response_to_path(resp, sink_path, self.transfer_idle, download.max_bytes).await
     }
 
     /// `DELETE /v{api_version}/assets/{asset_domain}/{asset_id}` —
@@ -584,22 +619,23 @@ impl HttpClient {
     /// blob into memory (W7).
     ///
     /// # Errors
-    /// `InvalidInput`/`BackendRejected`/`Network` as for the native
-    /// `download_asset`.
+    /// `InvalidInput`/`BackendRejected`/`IntegrityCheck`/`Network` as for the
+    /// native `download_asset`, and `InvalidInput` before any request when
+    /// `max_bytes` is over [`MAX_BUFFERED_ASSET_BYTES`] (Step 160).
     pub(crate) async fn download_asset_bytes(
         &self,
         api_version: u32,
         access_token: &str,
-        asset_domain: &str,
-        asset_id: &str,
-        asset_token: Option<&str>,
+        download: AssetDownload<'_>,
     ) -> Result<Vec<u8>, KupferdrahtError> {
-        let asset_domain = Self::path_segment(asset_domain, "download_asset_bytes domain")?;
-        let asset_id = Self::path_segment(asset_id, "download_asset_bytes id")?;
+        let max_bytes = buffered_bound(download.max_bytes)?;
+        let asset_domain =
+            Self::path_segment(download.asset_domain, "download_asset_bytes domain")?;
+        let asset_id = Self::path_segment(download.asset_id, "download_asset_bytes id")?;
         let path = format!("/v{api_version}/assets/{asset_domain}/{asset_id}");
         let url = self.url(&path)?;
         let mut request = self.client.get(url).bearer_auth(access_token);
-        if let Some(token) = asset_token {
+        if let Some(token) = download.asset_token {
             request = request.header("Asset-Token", token);
         }
         let resp = request
@@ -609,12 +645,36 @@ impl HttpClient {
         if !resp.status().is_success() {
             return Err(reject_from_response(resp, "download_asset_bytes").await);
         }
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|e| KupferdrahtError::Network(format!("download_asset body: {e}")))?;
-        Ok(bytes.to_vec())
+        read_bounded(resp, max_bytes).await.map_err(|e| match e {
+            AnswerError::OverTheBound(_) => asset_past_the_bound(download.max_bytes),
+            AnswerError::Read(_) | AnswerError::Malformed(_) => {
+                KupferdrahtError::Network(format!("download_asset body: {e}"))
+            }
+        })
     }
+}
+
+/// `max_bytes` as the bound of an in-memory download; over
+/// [`MAX_BUFFERED_ASSET_BYTES`] the asset is too large to hold (Step 160).
+#[cfg(any(target_arch = "wasm32", test))]
+fn buffered_bound(max_bytes: u64) -> Result<usize, KupferdrahtError> {
+    usize::try_from(max_bytes)
+        .ok()
+        .filter(|_| max_bytes <= MAX_BUFFERED_ASSET_BYTES)
+        .ok_or_else(|| {
+            KupferdrahtError::InvalidInput(format!(
+                "asset download: up to {max_bytes} bytes is over the \
+                 {MAX_BUFFERED_ASSET_BYTES}-byte ceiling of a download held in memory"
+            ))
+        })
+}
+
+/// A download that brought more than `max_bytes`: more than the asset's
+/// sender declared (Step 160).
+fn asset_past_the_bound(max_bytes: u64) -> KupferdrahtError {
+    KupferdrahtError::IntegrityCheck(format!(
+        "asset download: longer than its sender declared, over {max_bytes} bytes"
+    ))
 }
 
 /// A download that went silent for `idle` (Step 98).
@@ -626,14 +686,18 @@ pub(super) fn stalled_download(idle: std::time::Duration) -> KupferdrahtError {
 /// Stream a successful download response body to `sink_path`. Uses
 /// `bytes_stream` so memory profile stays constant regardless of
 /// asset size; each chunk must arrive within `idle` of the previous
-/// one (Step 98). Returns the byte count written.
+/// one (Step 98). The first chunk past `max_bytes` stops the download
+/// and removes the partial file (Step 160). Returns the byte count
+/// written.
 #[cfg(not(target_arch = "wasm32"))]
 async fn stream_response_to_path(
     resp: reqwest::Response,
     sink_path: &Path,
     idle: std::time::Duration,
+    max_bytes: u64,
 ) -> Result<u64, KupferdrahtError> {
     use tokio::io::AsyncWriteExt as _;
+    debug_assert!(max_bytes > 0, "a bound admits a download");
     let mut sink = File::create(sink_path)
         .await
         .map_err(|e| KupferdrahtError::Storage(format!("create {}: {e}", sink_path.display())))?;
@@ -645,15 +709,29 @@ async fn stream_response_to_path(
     {
         let bytes =
             chunk.map_err(|e| KupferdrahtError::Network(format!("download_asset stream: {e}")))?;
+        written = written.saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+        if written > max_bytes {
+            drop(sink);
+            return Err(remove_past_the_bound(sink_path, max_bytes).await);
+        }
         sink.write_all(&bytes)
             .await
             .map_err(|e| KupferdrahtError::Storage(format!("write asset chunk: {e}")))?;
-        written += u64::try_from(bytes.len()).unwrap_or(0);
     }
     sink.flush()
         .await
         .map_err(|e| KupferdrahtError::Storage(format!("flush asset sink: {e}")))?;
     Ok(written)
+}
+
+/// Remove the partial file of a download past `max_bytes`; the error names
+/// the bound whether or not the removal succeeds.
+#[cfg(not(target_arch = "wasm32"))]
+async fn remove_past_the_bound(sink_path: &Path, max_bytes: u64) -> KupferdrahtError {
+    if let Err(e) = tokio::fs::remove_file(sink_path).await {
+        warn!(path = %sink_path.display(), "partial asset download not removed: {e}");
+    }
+    asset_past_the_bound(max_bytes)
 }
 
 #[cfg(test)]
@@ -807,7 +885,12 @@ mod tests {
             ("wire.com", "key#frag"),
         ] {
             let err = client
-                .download_asset(14, "tok", domain, id, None, &sink)
+                .download_asset(
+                    14,
+                    "tok",
+                    AssetDownload::within_a_mebibyte(domain, id, None),
+                    &sink,
+                )
                 .await
                 .expect_err("a hostile segment must be refused");
             assert!(
@@ -834,7 +917,12 @@ mod tests {
         let dir = TempDir::new().expect("tempdir");
         let sink = dir.path().join("downloaded.enc");
         let n = http(&server.base_url())
-            .download_asset(14, "tok", "wire.com", "key-1", Some("private-tok"), &sink)
+            .download_asset(
+                14,
+                "tok",
+                AssetDownload::within_a_mebibyte("wire.com", "key-1", Some("private-tok")),
+                &sink,
+            )
             .await
             .expect("download_asset");
         assert_eq!(n, payload.len() as u64);
@@ -855,7 +943,12 @@ mod tests {
         let dir = TempDir::new().expect("tempdir");
         let sink = dir.path().join("public.enc");
         http(&server.base_url())
-            .download_asset(14, "tok", "assets.example.org", "key-2", None, &sink)
+            .download_asset(
+                14,
+                "tok",
+                AssetDownload::within_a_mebibyte("assets.example.org", "key-2", None),
+                &sink,
+            )
             .await
             .expect("download_asset");
         mock.assert();
@@ -871,7 +964,12 @@ mod tests {
         let dir = TempDir::new().expect("tempdir");
         let sink = dir.path().join("nope.enc");
         let err = http(&server.base_url())
-            .download_asset(14, "tok", "wire.com", "missing", None, &sink)
+            .download_asset(
+                14,
+                "tok",
+                AssetDownload::within_a_mebibyte("wire.com", "missing", None),
+                &sink,
+            )
             .await
             .expect_err("404 must surface as error");
         assert!(

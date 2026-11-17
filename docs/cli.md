@@ -2173,7 +2173,10 @@ into the local store. Verifies SHA-256 against the value carried
 inside the MLS-protected `Asset.RemoteData.sha256`; rejects
 tampered ciphertext with `IntegrityCheck`. Wire answers the download
 of a local asset with `302` to a pre-signed URL on its asset store; the
-command follows that one redirect without credentials (Step 141).
+command follows that one redirect without credentials (Step 141). A
+download longer than the sender's declared size (`size_bytes`) plus
+32 bytes stops with `IntegrityCheck` and leaves nothing in the cache
+(Step 160).
 
 ```bash
 kupferdraht-cli download-asset --message <id> [--id <room>] [--save-to <path>]

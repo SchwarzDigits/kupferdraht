@@ -3201,7 +3201,34 @@ touched it.
 - **The red path cost no CI run.** A broken Kotlin assertion failed `./gradlew test`
   locally; the job's verdict is that command's, so the pull request only has to be green.
 
-### 5.98 Two premises of the plan were wrong, a guard was missing, and "why" split the step (Step 134)
+### 5.98 A browser bound one feature flag away, a decrypt that held three copies, and a plan line the design overtook (Step 160)
+
+- **"No chunk reader in the browser" was a feature flag.** Step 159 accepted a check after
+  the read as the browser's weaker bound, because reqwest's wasm response has no
+  `chunk()`. Its `bytes_stream()` exists on wasm behind `stream`, over the `fetch` body's
+  `ReadableStream`, and `wasm-streams` was already in the lockfile. One loop now serves
+  both targets, and the 16 MiB bound holds in the browser before the read, not after it.
+  A platform that "cannot" is worth one look at its features before a weaker guarantee
+  is written down.
+- **The browser's decrypt held the asset three times.** `decrypt_bytes` copied the
+  ciphertext through a `Cursor` into `stream_decrypt`'s buffer and wrote the plaintext
+  into a third: download, copy and plaintext side by side. Decrypting in the downloaded
+  buffer leaves one; the core (`decrypt_in_place`) serves the file path as well. It came
+  up only because Volker asked whether the 100 MiB ceiling could be lower.
+- **The plan's pin-test line was overtaken by the design.** The plan kept
+  `download_asset_bytes` as the pin test's one exception; once the browser reads in
+  chunks, the asset reads through `read_bounded` with its own bound and the exception
+  went. Said at the approval and recorded in the plan's phase-1 decisions.
+- **What a sender declares was read, not seen.** Kalium and the webapp put the plaintext
+  size of the uploaded bytes into `Original.size` (reading #28); no file sent from a Wire
+  client has been downloaded under the bound yet. The local stack runs a webapp
+  container, so that proof is at hand.
+- **A stub on a shared path reddened tests outside the step.** `max_ciphertext_len` as
+  `todo!()` sat on the consumer's download path, so Step 141's three tests panicked in
+  the red run beside the step's own. Said at the approval; a stub that every download
+  passes reads less cleanly than one only the new tests reach.
+
+### 5.99 Two premises of the plan were wrong, a guard was missing, and "why" split the step (Step 134)
 
 - **`secure_delete` was on all along.** The plan said it was set nowhere; it was not set
   in our code, but SQLite3MC switches it on for every encrypted database. A red test that

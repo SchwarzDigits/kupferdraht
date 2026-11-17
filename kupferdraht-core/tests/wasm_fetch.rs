@@ -36,3 +36,28 @@ async fn fetch_backend_performs_a_real_round_trip() {
         "expected an HTTP status from {origin}"
     );
 }
+
+/// Step 160: in the browser a body arrives as a stream of chunks (`reqwest`'s
+/// `stream` feature over the `fetch` body's `ReadableStream`), which the
+/// bounded reads of answers and assets count as they come.
+#[wasm_bindgen_test]
+async fn a_body_arrives_as_a_stream_of_chunks() {
+    use futures_util::StreamExt as _;
+
+    let origin = web_sys::window()
+        .expect("window")
+        .location()
+        .origin()
+        .expect("origin");
+    let mut body = reqwest::get(&origin)
+        .await
+        .expect("reqwest fetch backend must reach the harness origin")
+        .bytes_stream();
+
+    let mut read = 0;
+    while let Some(chunk) = body.next().await {
+        read += chunk.expect("a chunk of the harness page").len();
+    }
+
+    assert!(read > 0, "the harness page has a body");
+}
