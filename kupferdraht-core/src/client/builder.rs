@@ -491,7 +491,12 @@ impl ClientBuilder {
             &mls_public_key,
             mls_db_key.as_ref(),
         )?;
-        assemble_resumed_client(parts, server, http, store, mls_client, mls_public_key, home)
+        let client =
+            assemble_resumed_client(parts, server, http, store, mls_client, mls_public_key, home)?;
+        // Step 84: a start removes what the asset cache holds that no row names.
+        #[cfg(not(target_arch = "wasm32"))]
+        client.remove_leftover_files().await;
+        Ok(client)
     }
 
     /// Create a fresh Wire account and return an `Arc<PendingClient>`

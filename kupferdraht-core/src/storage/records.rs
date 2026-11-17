@@ -1446,6 +1446,13 @@ pub trait Store: MaybeSendSync {
         room_id: &str,
     ) -> Result<(), KupferdrahtError>;
 
+    /// The message id of every attachment row, in no particular order — what
+    /// a client's start keeps of the asset cache (Step 84).
+    ///
+    /// # Errors
+    /// `KupferdrahtError::Storage` on `SQLite` failure.
+    async fn attachment_message_ids(&self) -> Result<Vec<String>, KupferdrahtError>;
+
     // ── Tasks — materialized fold cache (Step 60c, ADR-0014) ────────
     //
     // The `tasks` table holds one row per `(room_id, task_id)` — the

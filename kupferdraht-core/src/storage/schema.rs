@@ -272,4 +272,46 @@ mod tests {
             i64::try_from(versions.len()).expect("count")
         );
     }
+
+    /// Step 84: a file whose message was deleted for everyone before a delete
+    /// took the file's row loses that row when the database is migrated; a
+    /// live message keeps its file.
+    #[test]
+    fn the_migration_forgets_the_files_of_deleted_messages() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        embedded::migrations::runner()
+            .set_grouped(true)
+            .set_target(refinery::Target::Version(35))
+            .run(&mut conn)
+            .expect("the schema before Step 84");
+        for (message_id, redacted_at_ms) in [("deleted", Some(5_000_i64)), ("live", None)] {
+            conn.execute(
+                "INSERT INTO timeline_events (message_id, room_id, sender_user_id, \
+                 sender_device_id, kind, body, sent_at_ms, delivery_status, redacted_at_ms) \
+                 VALUES (?1, 'r@example.test', 'u@example.test', 'dev', 'asset', x'', 1000, \
+                 'received', ?2)",
+                rusqlite::params![message_id, redacted_at_ms],
+            )
+            .expect("a file message");
+            conn.execute(
+                "INSERT INTO attachments (message_id, room_id, mime_type, size_bytes, sha256, \
+                 otr_key, asset_id, asset_domain, encryption_algo, created_at_ms) \
+                 VALUES (?1, 'r@example.test', 'text/plain', 1, x'00', x'00', 'a', \
+                 'example.test', 'AES_CBC', 1000)",
+                [message_id],
+            )
+            .expect("its file");
+        }
+
+        run_migrations(&mut conn).expect("migrated forward");
+
+        let left: Vec<String> = conn
+            .prepare("SELECT message_id FROM attachments")
+            .expect("query")
+            .query_map([], |row| row.get(0))
+            .expect("rows")
+            .collect::<Result<_, _>>()
+            .expect("ids");
+        assert_eq!(left, ["live"], "the deleted message's file is forgotten");
+    }
 }

@@ -377,8 +377,8 @@ impl HttpClient {
     }
 
     /// `DELETE /v{api_version}/assets/{asset_domain}/{asset_id}` —
-    /// sender-driven asset removal. The HTTP surface ships; `Timeline`
-    /// and the CLI do not expose it yet (Step 84).
+    /// sender-driven asset removal, after the asset's message was deleted
+    /// for everyone (Step 84).
     ///
     /// # Errors
     /// `BackendRejected` on non-2xx; `Network` for transport.

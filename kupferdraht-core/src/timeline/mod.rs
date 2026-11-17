@@ -30,6 +30,8 @@ use std::sync::Arc;
 
 use crate::client::Client;
 
+#[cfg(not(target_arch = "wasm32"))]
+mod asset_cache;
 mod asset_receive;
 pub(crate) mod asset_send;
 pub(crate) mod case;

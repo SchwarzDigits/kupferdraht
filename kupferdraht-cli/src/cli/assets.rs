@@ -48,7 +48,7 @@ pub(crate) async fn download_asset(
     let summary = timeline.asset(&message_id).await?.ok_or_else(|| {
         KupferdrahtError::InvalidInput(format!(
             "no asset row for message {message_id} in room {room_id} \
-                 (run `sync-fetch` first; or the message isn't an asset)"
+                 (run `sync-fetch` first; or the message isn't an asset, or it was deleted)"
         ))
     })?;
     if let Some(dest) = save_to {

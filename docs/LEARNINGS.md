@@ -3262,3 +3262,26 @@ touched it.
 - **Cargo caches clippy's results across a `clippy.toml` change.** The first run with the
   new ceiling reported nothing; touching a source file made clippy look again.
 
+
+### 5.101 A delete reaches every copy, the handed-out ones too (Step 84)
+
+- **Follow the data to every holder, not only to its row.** The plan named the row and
+  the cache file. Phase 1 found two more holders: the `AssetSummary` the app already
+  holds carries the key and the locator in memory, so after the delete it fetched the
+  file again, cached it anew and returned the plaintext. A delete that only cleans up
+  at rest leaves a working handle. The fix is a check at the point of use (the download
+  asks for the row first), not a cleanup.
+- **Leaks hide on the failure paths.** The staged ciphertext was moved into the cache on
+  success only; every failed upload left a full encrypted copy behind, unnoticed since
+  Step 11. A guard that removes the staged copy on every exit (`Drop`) covers the
+  failure, the cancellation and the store-less client at once.
+- **A fix for new data needs a migration for the old.** Files deleted before the fix
+  kept their key; V36 forgets their rows, and the start's sweep their copies. Without it
+  the fix would have applied from the release on only.
+- **One sweep at the start replaced a public API.** With the deletes, the failed upload
+  and the cleared history handled at their source, what is left is Kupferdraht's own
+  state the app knows nothing about; removing it at `register_device` / `resume` needed
+  no new symbol, no CLI verb and no timer.
+- **Only the manager persists a session for `resume`.** A test that logs in through
+  `ClientBuilder` and resumes finds "no persisted session"; `Kupferdraht::login` /
+  `resume` is the path an app takes and the one such a test needs.

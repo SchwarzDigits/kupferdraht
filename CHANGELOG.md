@@ -110,6 +110,19 @@ is no skill for it — it is this short procedure:
   cache. In the browser an asset whose declared size is over 100 MiB rejects
   `InvalidInput` before any request, and a downloaded file is decrypted in its
   own buffer instead of beside a second copy.
+- **A file deleted for everyone is gone** (Step 84): `Timeline::redact` (FFI and
+  browser `redact`) of a file message, and a delete received from its sender,
+  now remove the file's key, token and locator with the message and its cached
+  ciphertext right after; until now only the text went, and the file could
+  still be downloaded and opened. An own delete also removes the upload at the
+  server, best effort. `AssetSummary::download` / `save_to` (FFI
+  `Asset.download` / `saveTo`, browser `downloadAsset`) of a deleted file
+  reject `InvalidInput`, also on a summary taken before the delete. Files of
+  messages deleted before this release lose their key when the database is
+  migrated, and their cached copies at the next start. A failed upload no
+  longer leaves its encrypted copy in `assets/staging/`, and a client's start
+  (`register_device`, `resume`) removes cached files no message names — among
+  them those of a history cleared when a device replaced a vanished one.
 
 ## [0.5.1] - 2026-11-10
 

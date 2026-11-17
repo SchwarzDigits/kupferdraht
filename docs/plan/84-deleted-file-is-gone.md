@@ -1,6 +1,7 @@
 # Step 84 — A deleted file is gone: its key and its cached ciphertext go with the message
 
-**Status: commissioned 2026-09-10, rewritten 2026-11-17** (Volker). First commissioned
+**Status: implemented** on `step/84-deleted-file-is-gone` (2026-11-17). Commissioned
+2026-09-10, rewritten 2026-11-17 (Volker). First commissioned
 as "asset deletion API + cache orphan cleanup" (open.md gap-B.3, gap-B.5, def-D.2): a
 public `delete_asset`, a cache sweep, `cache list | size | clear` and an LRU size cap.
 Rewritten after a look at the code: the case that matters was not in it — a file
@@ -44,7 +45,7 @@ smaller matter than the deleted file above, since rows are not removed anywhere 
    `docs/bindings.md` (`redact`, `asset`, the sweep), `docs/ARCHITECTURE.md` §7 if the
    store's contract changes, `CHANGELOG.md` under Security.
 
-### Phase 1
+### Phase 1 questions (answered below)
 
 - **The sweep's surface.** A call of its own on `Client`, or `cache size` / `cache
   clear` (the size as a reading the embedder asks for, clear as the sweep), with CLI
@@ -57,6 +58,60 @@ smaller matter than the deleted file above, since rows are not removed anywhere 
   call stays unused. Either way no public `delete_asset`.
 - **Stale staging files**: removed at the sweep only when no send is in flight, or at
   the client's start before any send.
+
+## Phase 1 (2026-11-17)
+
+Read against the code; three gaps beyond the plan, and Volker's decisions:
+
+- **A handle from before the delete.** An `AssetSummary` carries the key and the
+  locator in memory; after the delete its `download` / `save_to` fetched the file
+  again from the server, cached it anew and returned the plaintext. Removing row
+  and file is not enough: a download now checks the row first, natively and in the
+  browser, and answers `InvalidInput` (decided: no new error variant).
+- **A failed upload.** The staged ciphertext was moved into the cache only on
+  success; every failed `send_file` left a full encrypted copy in
+  `assets/staging/`. The send now removes its staged copy however it ends.
+- **A cleared history.** `clear_messaging_state` (a device that replaced a vanished
+  one, at login) deletes every attachment row and no file.
+- **Earlier deletes.** A file deleted before this step keeps its row and file; the
+  migration `V36__step_84_forget_deleted_files.sql` drops those rows (approved with
+  the red tests).
+- **The blob at cargohold — decided (a).** Kalium deletes an own upload at the
+  server after the delete went out, best effort; the webapp does not
+  (`kalium-readings.md` #29, `asset-protocol.md` Q9). An own delete for everyone
+  does as Kalium does; a received delete leaves the upload to its sender.
+- **The sweep — decided (1), no public call.** A client's start
+  (`register_device`, `resume`) empties `assets/staging/` — at a start no send can
+  be running — and removes every `.enc` file no attachment row names. The
+  remaining orphans (a crash between commit and removal, a failed removal, a
+  download racing a delete, a cleared history) are Kupferdraht's own state; the
+  app knows nothing about them Kupferdraht does not. No new public symbol, no new
+  CLI verb.
+
+## Smoke
+
+2026-11-17, local `wire-server-rs` stack, throwaway team: 18 ok, 0 failed — A sends a
+file, B downloads it, both hold a cached copy; A deletes it for everyone, nginz logs
+`DELETE /v14/assets/…` → `200` (observations §106), A's copy is gone and its
+`download-asset` refused; B syncs, its copy is gone, `download-asset` refused, nothing
+saved, the timeline shows the deletion. The stack's `kupferdraht-smoke.sh --throwaway`:
+24 ok, 0 failed.
+
+## Retrospective
+
+- **What the plan missed** — a handle the app already holds, the failed upload's staged
+  copy, the cleared history, the files of earlier deletes — came out of reading the
+  code in phase 1, not out of the tests the plan sketched (LEARNINGS 5.101).
+- **The start's sweep assumes no send is running.** It holds through the manager, which
+  keeps one live `Client` per account and hands it back instead of resuming again
+  (Step 39), and across processes, which cannot open the same account. A second
+  `ClientBuilder::resume` of a live account in the same process bypasses that; it could
+  remove a staged copy mid-send, and the send would fail and could be resent.
+- **Not probed:** a download after the server's delete (presumably `404`); whether a
+  forward by another client references the same upload, which the server's delete
+  would then take along (Kalium deletes as well).
+- **Left as it was:** `Store::delete_attachment` stays unused; the delete removes the
+  row inside its own transaction.
 
 ## Out of scope
 

@@ -2389,3 +2389,20 @@ storage provides (THREAT_MODEL G4).
 The rekey findings wait in Step 161; Step 134 pinned `secure_delete` and truncates the
 WAL after each checkpoint.
 
+
+## 106) Deleting an own asset: `DELETE /v14/assets/{domain}/{key}` answers `200` (2026-11-17)
+
+Live-confirmed for Step 84 on the local `wire-server-rs` stack. Not a protocol
+decision; it records what the call Step 84 makes looks like on the wire.
+
+- **The uploader's delete answers `200` with an empty body** (nginz access log
+  `"DELETE /v14/assets/<domain>/<key> HTTP/1.1" 200 0`), right after the
+  `MessageDelete` of the asset's message went out.
+- **Nothing else changes for the receiver:** the receiver had downloaded the file
+  before; its client removes the key's row and the cached copy when the
+  `MessageDelete` arrives, and `download-asset` then fails locally without a request.
+  Whether a download *after* the server's delete answers `404` was not probed.
+
+Smoke `smoke84.sh` (outside the repository, throwaway team): 18 ok, 0 failed —
+`send-file`, `download-asset`, `delete-message` of the file, both cached copies gone,
+both downloads refused. The stack's `kupferdraht-smoke.sh --throwaway`: 24 ok, 0 failed.

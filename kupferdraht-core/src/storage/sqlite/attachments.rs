@@ -157,6 +157,19 @@ pub(super) fn delete_attachment(
     Ok(())
 }
 
+pub(super) fn attachment_message_ids(store: &SqliteStore) -> Result<Vec<String>, KupferdrahtError> {
+    let storage_err =
+        |e: rusqlite::Error| KupferdrahtError::Storage(format!("attachment_message_ids: {e}"));
+    let conn = store.lock()?;
+    let mut stmt = conn
+        .prepare("SELECT message_id FROM attachments")
+        .map_err(storage_err)?;
+    stmt.query_map([], |row| row.get(0))
+        .map_err(storage_err)?
+        .collect::<Result<_, _>>()
+        .map_err(storage_err)
+}
+
 fn record_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachmentRecord> {
     let size_bytes_i64: i64 = row.get(4)?;
     Ok(AttachmentRecord {
@@ -394,6 +407,73 @@ mod tests {
             .await
             .expect("get");
         assert!(after.is_none(), "row gone after delete");
+    }
+
+    /// A file message in `room_id`: its timeline row and its attachment row.
+    async fn seed_file(
+        store: &crate::storage::sqlite::SqliteStore,
+        message_id: &str,
+        room_id: &str,
+    ) {
+        store
+            .insert_timeline_event(&sample_timeline(message_id, room_id))
+            .await
+            .expect("parent");
+        store
+            .insert_attachment(&sample_attachment(message_id, room_id))
+            .await
+            .expect("insert");
+    }
+
+    /// Step 84: a delete for everyone takes the file's row — key, token and
+    /// locator — in the transaction that tombstones the message.
+    #[tokio::test]
+    async fn a_delete_for_everyone_removes_the_messages_attachment() {
+        let (_dir, store) = fresh_store();
+        let room_id = "room-f@wire.test";
+        seed_file(&store, "msg-f", room_id).await;
+
+        let applied = store
+            .apply_message_delete(room_id, "msg-f", 5_000)
+            .await
+            .expect("delete");
+
+        assert!(applied, "the message is tombstoned");
+        let after = store.get_attachment("msg-f", room_id).await.expect("get");
+        assert!(after.is_none(), "the file's row goes with the message");
+    }
+
+    /// The delete is scoped to its room: the same message id in another room
+    /// keeps its file.
+    #[tokio::test]
+    async fn a_delete_for_everyone_keeps_another_rooms_attachment() {
+        let (_dir, store) = fresh_store();
+        seed_file(&store, "msg-g", "room-g1@wire.test").await;
+        seed_file(&store, "msg-g", "room-g2@wire.test").await;
+
+        store
+            .apply_message_delete("room-g1@wire.test", "msg-g", 5_000)
+            .await
+            .expect("delete");
+
+        let other = store
+            .get_attachment("msg-g", "room-g2@wire.test")
+            .await
+            .expect("get");
+        assert!(other.is_some(), "another room's file stays");
+    }
+
+    /// Step 84: the ids a client's start keeps cached files for.
+    #[tokio::test]
+    async fn attachment_message_ids_names_every_file_row() {
+        let (_dir, store) = fresh_store();
+        seed_file(&store, "msg-h", "room-h@wire.test").await;
+        seed_file(&store, "msg-i", "room-i@wire.test").await;
+
+        let mut ids = store.attachment_message_ids().await.expect("ids");
+        ids.sort();
+
+        assert_eq!(ids, ["msg-h", "msg-i"]);
     }
 
     #[tokio::test]

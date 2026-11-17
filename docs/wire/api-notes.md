@@ -1460,6 +1460,18 @@ serving both. A `Team`'s `icon` is an asset key or `"default"`.
 **Kupferdraht usage:** `wire/http/assets.rs::upload_public_image` and
 `download_public_image`, `wire/http/auth.rs::update_self_assets`.
 
+## Step 84: an own asset goes when its message is deleted for everyone
+
+`DELETE /v14/assets/{domain}/{key}` with the uploader's bearer token answers `200`
+with an empty body (live-confirmed on the `wire-server-rs` stack, observations
+§106). Kupferdraht calls it after the `MessageDelete` of an own file message went
+out, best effort: a failure is logged and the delete stands. Kalium does the same,
+the webapp does not (`asset-protocol.md` Q9). Only the uploader may delete an
+asset, so a received delete stays local.
+
+**Kupferdraht usage:** `wire/http/assets.rs::delete_asset` through
+`Client::http_delete_asset`, called by `timeline/delete.rs`.
+
 ## Step 141 discovery: an asset download answers `302` to the asset store
 
 `GET /v14/assets/{domain}/{id}` does not serve a local asset's bytes:

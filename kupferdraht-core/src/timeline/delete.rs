@@ -7,11 +7,16 @@
 //!
 //! Receivers tombstone the row: the body is hidden but the row stays
 //! so reply chains remain renderable as "(quoted message deleted)".
+//! A file goes entirely: its key's row, its cached copy and — for an own
+//! delete — its upload at the server (Step 84).
+
+use tracing::warn;
 
 use crate::time::now_ms;
 
 use crate::client::Client;
 use crate::error::KupferdrahtError;
+use crate::storage::AttachmentRecord;
 use crate::timeline::{MessageHandle, Timeline};
 
 impl Timeline {
@@ -21,7 +26,9 @@ impl Timeline {
     /// `MessageDelete { message_id: item_id }` inside a fresh
     /// `GenericMessage`. Receivers tombstone the row; the body is
     /// hidden but the row stays so reply chains remain renderable
-    /// as "(quoted message deleted)".
+    /// as "(quoted message deleted)". A file goes entirely: its key,
+    /// its cached copy and its upload at the server, the last best
+    /// effort (Step 84).
     ///
     /// matrix-rust-sdk analog: `Timeline::redact`.
     ///
@@ -54,34 +61,91 @@ impl Client {
         let (delete_event_id, redacted_at_ms) = self
             .upload_message_delete(room_id, target_message_id)
             .await?;
-        let applied = if let Some(store) = self.store_handle() {
-            store
-                .apply_message_delete(room_id, target_message_id, redacted_at_ms)
-                .await?
-        } else {
-            false
-        };
-        if applied
-            && let Some(canonical) = self
-                .canonical_message_id(room_id, target_message_id)
-                .await?
+        // Step 84: the file's locator is read before the delete takes its row.
+        let upload = self.attachment_of(room_id, target_message_id).await?;
+        if self
+            .apply_redaction(room_id, target_message_id, redacted_at_ms)
+            .await?
+            && let Some(upload) = upload
         {
-            self.emit_message_update_at(room_id, &canonical).await?;
-        }
-        // Step 60c: a redacted task message drops out of the fold —
-        // rebuild the room's materialized task cache.
-        if applied && let Some(store) = self.store_handle() {
-            crate::timeline::task::rebuild_tasks_if_redacted_task(
-                store,
-                room_id,
-                target_message_id,
-            )
-            .await?;
+            self.delete_own_upload(&upload).await;
         }
         Ok(MessageHandle {
             message_id: delete_event_id,
             sent_at_ms: redacted_at_ms,
         })
+    }
+
+    /// The local half of a delete for everyone, own or received: tombstone
+    /// the message and forget its file — the row in the same transaction,
+    /// the cached copy after it (Step 84) — then show the change. `false`
+    /// when nothing applied (no store, no such message, a later delete).
+    pub(crate) async fn apply_redaction(
+        &self,
+        room_id: &str,
+        target_message_id: &str,
+        redacted_at_ms: i64,
+    ) -> Result<bool, KupferdrahtError> {
+        let Some(store) = self.store_handle() else {
+            return Ok(false);
+        };
+        if !store
+            .apply_message_delete(room_id, target_message_id, redacted_at_ms)
+            .await?
+        {
+            return Ok(false);
+        }
+        if let Some(canonical) = self
+            .canonical_message_id(room_id, target_message_id)
+            .await?
+        {
+            #[cfg(not(target_arch = "wasm32"))]
+            self.remove_cached_file(&canonical);
+            self.emit_message_update_at(room_id, &canonical).await?;
+        }
+        // Step 60c: a redacted task message drops out of the fold —
+        // rebuild the room's materialized task cache.
+        crate::timeline::task::rebuild_tasks_if_redacted_task(store, room_id, target_message_id)
+            .await?;
+        Ok(true)
+    }
+
+    /// The attachment row of the message `target_message_id` names — `None`
+    /// for a message without a file.
+    async fn attachment_of(
+        &self,
+        room_id: &str,
+        target_message_id: &str,
+    ) -> Result<Option<AttachmentRecord>, KupferdrahtError> {
+        let Some(store) = self.store_handle() else {
+            return Ok(None);
+        };
+        let Some(canonical) = self
+            .canonical_message_id(room_id, target_message_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+        store.get_attachment(&canonical, room_id).await
+    }
+
+    /// Remove an own upload at the server once its message was deleted for
+    /// everyone, as Wire's Android client does (`kalium-readings.md` #29).
+    /// Best effort: a failure is logged and the delete stands (Step 84).
+    async fn delete_own_upload(&self, upload: &AttachmentRecord) {
+        let Some(access_token) = self.access_token() else {
+            warn!(
+                asset_id = upload.asset_id,
+                "own upload kept: no access token"
+            );
+            return;
+        };
+        if let Err(e) = self
+            .http_delete_asset(&access_token, &upload.asset_domain, &upload.asset_id)
+            .await
+        {
+            warn!(asset_id = upload.asset_id, error = %e, "own upload not deleted at the server");
+        }
     }
 
     /// The network half of a delete-for-everyone: build the

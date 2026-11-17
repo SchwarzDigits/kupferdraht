@@ -35,9 +35,9 @@ impl SyncService {
             target = delete.message_id,
             "MessageDelete received"
         );
-        let Some(store) = client.store_handle() else {
+        if client.store_handle().is_none() {
             return Ok(());
-        };
+        }
         if !target_op_is_authorized(
             client,
             room_id,
@@ -49,8 +49,10 @@ impl SyncService {
         {
             return Ok(());
         }
-        let applied = store
-            .apply_message_delete(room_id, &delete.message_id, now_ms())
+        // Step 84: a file goes with its message — the key's row and the
+        // cached copy; the upload at the server is its sender's to delete.
+        let applied = client
+            .apply_redaction(room_id, &delete.message_id, now_ms())
             .await?;
         if !applied {
             warn!(
@@ -58,19 +60,7 @@ impl SyncService {
                 target = delete.message_id,
                 "MessageDelete had no effect (parent missing locally or older than persisted delete)"
             );
-            return Ok(());
         }
-        if let Some(canonical) = client
-            .canonical_message_id(room_id, &delete.message_id)
-            .await?
-        {
-            client.emit_message_update_at(room_id, &canonical).await?;
-        }
-        // Step 60c: a redacted task message drops out of the fold —
-        // rebuild the room's materialized task cache (kind survives
-        // the body wipe, so the check is cheap).
-        crate::timeline::task::rebuild_tasks_if_redacted_task(store, room_id, &delete.message_id)
-            .await?;
         Ok(())
     }
 }

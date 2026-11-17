@@ -183,4 +183,17 @@ impl Client {
             .download_asset(self.api_version, access_token, download, sink_path)
             .await
     }
+
+    /// Crate-scoped wrapper for `DELETE /v14/assets/{domain}/{key}`: an own
+    /// upload whose message was deleted for everyone (Step 84).
+    pub(crate) async fn http_delete_asset(
+        &self,
+        access_token: &str,
+        asset_domain: &str,
+        asset_id: &str,
+    ) -> Result<(), KupferdrahtError> {
+        self.http
+            .delete_asset(self.api_version, access_token, asset_domain, asset_id)
+            .await
+    }
 }

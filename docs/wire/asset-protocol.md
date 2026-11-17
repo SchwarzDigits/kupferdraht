@@ -384,6 +384,36 @@ uses the `assets/{domain}/{id}` shape only.
 
 ---
 
+## Q9 — An asset when its message is deleted for everyone
+
+**Finding.** The two clients differ at the server and agree locally.
+Kalium, after the delete of an own message went out, deletes each of its
+assets at the server through `DELETE /assets/{domain}/{id}`, logging a
+failure and going on; it does so on the delete for itself as well, where
+the server refuses another user's asset. A received delete removes the
+asset locally only. The webapp's delete for everyone sends the
+`MessageDelete` and removes the message locally; it does not call the
+asset endpoint. Only the uploader may delete an asset at the server, so a
+receiver cannot do it either way.
+
+Kupferdraht follows Kalium for its own delete for everyone (Step 84): the
+upload goes at the server, best effort, after the message's local traces
+(the key's row, the cached ciphertext). A received delete removes the
+local traces and leaves the upload to its sender.
+
+**Observation points** (`kalium-readings.md` #29).
+
+- [`DeleteMessageUseCase.kt:148-160`](https://github.com/wireapp/kalium/blob/818b3419458738112abbd4b1554140ee67e63235/logic/src/commonMain/kotlin/com/wire/kalium/logic/feature/message/DeleteMessageUseCase.kt#L148-L160) and
+  [`:229-246`](https://github.com/wireapp/kalium/blob/818b3419458738112abbd4b1554140ee67e63235/logic/src/commonMain/kotlin/com/wire/kalium/logic/feature/message/DeleteMessageUseCase.kt#L229-L246) — the delete signal first, then
+  `deleteMessageAsset`, which calls `assetRepository.deleteAsset` for each
+  remote asset and logs a failure.
+- [`DeleteMessageHandler.kt:54-64`](https://github.com/wireapp/kalium/blob/818b3419458738112abbd4b1554140ee67e63235/logic/src/commonMain/kotlin/com/wire/kalium/logic/sync/receiver/handler/DeleteMessageHandler.kt#L54-L64) — a received delete calls
+  `deleteAssetLocally`.
+- [`MessageRepository.ts:1397-1450`](https://github.com/wireapp/wire-webapp/blob/2f275fd55e73cc3958f49fc34f76f4f81f5437ac/apps/webapp/src/script/repositories/conversation/MessageRepository.ts#L1397-L1450) — the webapp's
+  `deleteMessageForEveryone`: the delete message, then `deleteMessageById`.
+
+---
+
 ## Open items / follow-ups
 
 - **AES-GCM receive-path coverage.** Kalium's outbound code hard-codes
@@ -406,6 +436,6 @@ uses the `assets/{domain}/{id}` shape only.
   dimensions were out of Kupferdraht's first scope; if previews ship,
   they deserve their own ADR section.
 - **Asset deletion vs retention.** `DELETE /assets/{domain}/{id}` is
-  exposed and Kalium calls it (`AssetRepository.kt:448-450`). Whether
+  exposed and Kalium calls it (`AssetRepository.kt:448-450`; when, Q9). Whether
   `persistent` assets are reaped on conversation deletion or stay
   forever is server-side policy, not visible from the client.
