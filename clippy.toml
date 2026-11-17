@@ -1,0 +1,2 @@
+# Step 136: clippy holds every function of the library to 60 lines (CLAUDE.md, Design).
+too-many-lines-threshold = 60

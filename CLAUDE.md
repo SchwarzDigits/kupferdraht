@@ -138,7 +138,7 @@ when a step touches one (Step 132 learned it on CI). `wasm-test.sh` runs the was
 ### Design
 
 - SRP at function level: one responsibility, describable in one sentence without "and".
-- ≤ 40 lines per function (60 only for a justified large `match`); longer is a review defect.
+- ≤ 40 lines per function (60 only for a justified large `match`); longer is a review defect. clippy enforces the 60-line ceiling (`too-many-lines-threshold = 60` in `clippy.toml`, Step 136); 41 to 60 stays a review matter — split a function when a step touches it.
 - SRP at module level: one module per responsibility, not per type. Split a file > 200 code lines (`#[cfg(test)]` excluded) that hosts > 1 responsibility. Different types → different files.
 - Naming describes effect: `upload_key_package`, `encrypt_message`, `derive_key` — never `process` / `handle` / `do_work`. matrix-rust-sdk naming in core outside `wire/`; verbatim Wire names inside `wire/`.
 - SoC: a concern crossing a layer boundary is a design defect.

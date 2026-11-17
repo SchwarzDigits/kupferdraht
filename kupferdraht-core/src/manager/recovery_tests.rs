@@ -80,70 +80,9 @@ impl Services {
     /// last one from then on.
     fn with_slot_answers(answers: &[(u16, &str)]) -> Self {
         let server = MockServer::start();
-        let answers: Vec<(u16, String)> = answers
-            .iter()
-            .map(|(status, body)| (*status, (*body).to_owned()))
-            .collect();
-        let slot_queries = Arc::new(AtomicU32::new(0));
-        let asked = slot_queries.clone();
-        server.mock(move |when, then| {
-            when.method(GET)
-                .path("/v1/slot")
-                .header("authorization", "Bearer pin.jwt");
-            then.respond_with(move |_: &HttpMockRequest| {
-                let n = asked.fetch_add(1, Ordering::SeqCst) as usize;
-                let (status, body) = &answers[n.min(answers.len() - 1)];
-                HttpMockResponse::builder()
-                    .status(*status)
-                    .header("content-type", "application/json")
-                    .body(body.clone())
-                    .build()
-            });
-        });
-        let tokens = Arc::new(AtomicU32::new(0));
-        let bought = tokens.clone();
-        server.mock(move |when, then| {
-            when.method(POST)
-                .path("/v1/token")
-                .json_body(json!({"audience": "pin"}));
-            then.respond_with(move |_: &HttpMockRequest| {
-                bought.fetch_add(1, Ordering::SeqCst);
-                HttpMockResponse::builder()
-                    .status(200)
-                    .header("content-type", "application/json")
-                    .body(r#"{"token":"pin.jwt","expiresIn":600}"#)
-                    .build()
-            });
-        });
-        let evaluations = Arc::new(AtomicU32::new(0));
-        let counter = evaluations.clone();
-        server.mock(|when, then| {
-            when.method(POST)
-                .path("/v1/evaluate")
-                .header("authorization", "Bearer pin.jwt");
-            then.respond_with(move |request: &HttpMockRequest| {
-                let count = counter.fetch_add(1, Ordering::SeqCst) + 1;
-                let body: serde_json::Value =
-                    serde_json::from_slice(request.body_ref()).expect("a JSON body");
-                let blinded = STANDARD
-                    .decode(body["blindedElement"].as_str().expect("an element"))
-                    .expect("base64");
-                let evaluated = evaluate_as_service(&SERVICE_KEY, &blinded);
-                HttpMockResponse::builder()
-                    .status(200)
-                    .header("content-type", "application/json")
-                    .body(
-                        json!({
-                            "keyVersion": 1,
-                            "evaluatedElement": STANDARD.encode(evaluated),
-                            "attemptsRemaining": DAILY_ATTEMPTS.saturating_sub(count),
-                            "attemptId": "AAECAwQFBgcICQoLDA0ODw==",
-                        })
-                        .to_string(),
-                    )
-                    .build()
-            });
-        });
+        let slot_queries = mock_slot(&server, answers);
+        let tokens = mock_pin_token(&server);
+        let evaluations = mock_evaluate(&server);
         // Step 124: receipts are accepted (their signatures are checked in
         // `recovery::flow`'s tests).
         server.mock(|when, then| {
@@ -182,6 +121,87 @@ impl Services {
             self.slot_queries.load(Ordering::SeqCst),
         )
     }
+}
+
+/// The slot query answering `answers` in turn, the last one from then on;
+/// returns the count of queries asked.
+fn mock_slot(server: &MockServer, answers: &[(u16, &str)]) -> Arc<AtomicU32> {
+    let answers: Vec<(u16, String)> = answers
+        .iter()
+        .map(|(status, body)| (*status, (*body).to_owned()))
+        .collect();
+    let slot_queries = Arc::new(AtomicU32::new(0));
+    let asked = slot_queries.clone();
+    server.mock(move |when, then| {
+        when.method(GET)
+            .path("/v1/slot")
+            .header("authorization", "Bearer pin.jwt");
+        then.respond_with(move |_: &HttpMockRequest| {
+            let n = asked.fetch_add(1, Ordering::SeqCst) as usize;
+            let (status, body) = &answers[n.min(answers.len() - 1)];
+            HttpMockResponse::builder()
+                .status(*status)
+                .header("content-type", "application/json")
+                .body(body.clone())
+                .build()
+        });
+    });
+    slot_queries
+}
+
+/// The token exchange selling a PIN token; returns the count of tokens bought.
+fn mock_pin_token(server: &MockServer) -> Arc<AtomicU32> {
+    let tokens = Arc::new(AtomicU32::new(0));
+    let bought = tokens.clone();
+    server.mock(move |when, then| {
+        when.method(POST)
+            .path("/v1/token")
+            .json_body(json!({"audience": "pin"}));
+        then.respond_with(move |_: &HttpMockRequest| {
+            bought.fetch_add(1, Ordering::SeqCst);
+            HttpMockResponse::builder()
+                .status(200)
+                .header("content-type", "application/json")
+                .body(r#"{"token":"pin.jwt","expiresIn":600}"#)
+                .build()
+        });
+    });
+    tokens
+}
+
+/// The PIN service evaluating as the real one does, under `SERVICE_KEY`;
+/// returns the count of evaluations.
+fn mock_evaluate(server: &MockServer) -> Arc<AtomicU32> {
+    let evaluations = Arc::new(AtomicU32::new(0));
+    let counter = evaluations.clone();
+    server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/evaluate")
+            .header("authorization", "Bearer pin.jwt");
+        then.respond_with(move |request: &HttpMockRequest| {
+            let count = counter.fetch_add(1, Ordering::SeqCst) + 1;
+            let body: serde_json::Value =
+                serde_json::from_slice(request.body_ref()).expect("a JSON body");
+            let blinded = STANDARD
+                .decode(body["blindedElement"].as_str().expect("an element"))
+                .expect("base64");
+            let evaluated = evaluate_as_service(&SERVICE_KEY, &blinded);
+            HttpMockResponse::builder()
+                .status(200)
+                .header("content-type", "application/json")
+                .body(
+                    json!({
+                        "keyVersion": 1,
+                        "evaluatedElement": STANDARD.encode(evaluated),
+                        "attemptsRemaining": DAILY_ATTEMPTS.saturating_sub(count),
+                        "attemptId": "AAECAwQFBgcICQoLDA0ODw==",
+                    })
+                    .to_string(),
+                )
+                .build()
+        });
+    });
+    evaluations
 }
 
 /// One browser: its own home, keystore and Wire backend mocks.

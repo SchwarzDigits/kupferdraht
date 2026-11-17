@@ -332,37 +332,7 @@ impl Client {
         let Some(store) = self.store_handle().cloned() else {
             return Ok(None);
         };
-        let (room_id, mime_type, filename) = (send.room_id, send.mime_type, send.filename);
-        let sender_user_id = self.own_qualified_user_id();
-        let device_id = self
-            .device_id()
-            .ok_or_else(|| {
-                KupferdrahtError::InvalidInput("send_file: no device_id (locked client?)".into())
-            })?
-            .to_string();
-        // 8a. Insert the `timeline_events` row first — the
-        // attachments FK depends on it.
-        let timeline = TimelineEventRecord {
-            message_id: message_id.to_string(),
-            room_id: room_id.to_string(),
-            sender_user_id,
-            sender_device_id: device_id,
-            kind: "asset".into(),
-            body: filename.unwrap_or_default().to_string(),
-            sent_at_ms,
-            arrived_at_ms: sent_at_ms,
-            delivery_status: status.as_db_str().into(),
-            reply_to_id: None,
-            edited_at_ms: None,
-            redacted_at_ms: None,
-            expires_at_ms: None,
-            ephemeral_ttl_ms: None,
-        };
-        // 8b. Store the otr_key verbatim: the `attachments.otr_key`
-        // column lives in the whole-DB-encrypted `kupferdraht.db`, and the
-        // asset *content* is separately E2E-encrypted under this key for
-        // Wire (`asset_crypto`), so no extra wrapping is needed here.
-        let envelope = encrypted.key_material().to_vec();
+        let timeline = self.outgoing_asset_row(send, message_id, sent_at_ms, status)?;
         // 8c. Move the encrypted tempfile to the per-account cache
         // so a future `download` on this same device hits a local
         // file. Cache directory creation is best-effort; failure
@@ -373,24 +343,14 @@ impl Client {
             .as_deref()
             .and_then(|p| p.to_str())
             .map(str::to_string);
-        let attachment = AttachmentRecord {
-            message_id: message_id.to_string(),
-            room_id: room_id.to_string(),
-            mime_type: mime_type.to_string(),
-            filename: filename.map(str::to_string),
-            size_bytes: encrypted.plaintext_size,
-            sha256: encrypted.sha256.to_vec(),
-            otr_key_ct: envelope,
-            asset_id: upload.key.clone(),
-            asset_token: upload.token.clone(),
-            asset_domain: upload
-                .domain
-                .clone()
-                .unwrap_or_else(|| default_asset_domain(self)),
-            encryption_algo: "AES_CBC".into(),
-            cache_path: cache_path_str,
-            created_at_ms: sent_at_ms,
-        };
+        let attachment = self.outgoing_attachment(
+            send,
+            message_id,
+            encrypted,
+            upload,
+            sent_at_ms,
+            cache_path_str,
+        );
         // Step 105: the row and its attachment are one write.
         if !insert_outgoing_row(store.as_ref(), &timeline, &[], Some(&attachment), send.key).await?
         {
@@ -401,6 +361,75 @@ impl Client {
             attachment,
             timeline,
         }))
+    }
+
+    /// 8a. The outbound asset's `timeline_events` row — inserted before the
+    /// attachment, whose foreign key depends on it.
+    ///
+    /// # Errors
+    /// `KupferdrahtError::InvalidInput` when the client has no device id.
+    fn outgoing_asset_row(
+        &self,
+        send: &AssetSend<'_>,
+        message_id: &str,
+        sent_at_ms: i64,
+        status: DeliveryStatus,
+    ) -> Result<TimelineEventRecord, KupferdrahtError> {
+        let device_id = self
+            .device_id()
+            .ok_or_else(|| {
+                KupferdrahtError::InvalidInput("send_file: no device_id (locked client?)".into())
+            })?
+            .to_string();
+        Ok(TimelineEventRecord {
+            message_id: message_id.to_string(),
+            room_id: send.room_id.to_string(),
+            sender_user_id: self.own_qualified_user_id(),
+            sender_device_id: device_id,
+            kind: "asset".into(),
+            body: send.filename.unwrap_or_default().to_string(),
+            sent_at_ms,
+            arrived_at_ms: sent_at_ms,
+            delivery_status: status.as_db_str().into(),
+            reply_to_id: None,
+            edited_at_ms: None,
+            redacted_at_ms: None,
+            expires_at_ms: None,
+            ephemeral_ttl_ms: None,
+        })
+    }
+
+    /// 8b. The outbound asset's `attachments` row. The `otr_key` is stored
+    /// verbatim: the column lives in the whole-DB-encrypted `kupferdraht.db`,
+    /// and the asset *content* is separately E2E-encrypted under this key
+    /// for Wire (`asset_crypto`), so no extra wrapping is needed here.
+    fn outgoing_attachment(
+        &self,
+        send: &AssetSend<'_>,
+        message_id: &str,
+        encrypted: &EncryptedAsset,
+        upload: &crate::wire::http::assets::AssetUploadResponse,
+        sent_at_ms: i64,
+        cache_path: Option<String>,
+    ) -> AttachmentRecord {
+        AttachmentRecord {
+            message_id: message_id.to_string(),
+            room_id: send.room_id.to_string(),
+            mime_type: send.mime_type.to_string(),
+            filename: send.filename.map(str::to_string),
+            size_bytes: encrypted.plaintext_size,
+            sha256: encrypted.sha256.to_vec(),
+            otr_key_ct: encrypted.key_material().to_vec(),
+            asset_id: upload.key.clone(),
+            asset_token: upload.token.clone(),
+            asset_domain: upload
+                .domain
+                .clone()
+                .unwrap_or_else(|| default_asset_domain(self)),
+            encryption_algo: "AES_CBC".into(),
+            cache_path,
+            created_at_ms: sent_at_ms,
+        }
     }
 
     /// `<kupferdraht_home>/<account_id>/assets/<message_id>.enc`. `None`

@@ -448,31 +448,9 @@ impl ClientBuilder {
         // READY per-account store via the provider, and read tokens /
         // removal key / `self_user.email` from it. mls.db is opened with
         // its own separate key (`kupferdraht.<home-id>.account-<id>-mls`).
-        let account_id = requested_account.ok_or_else(|| {
-            KupferdrahtError::InvalidInput(
-                "ClientBuilder::resume requires an explicit account — set .account(id), \
-                 or use Kupferdraht::resume for registry-based selection"
-                    .into(),
-            )
-        })?;
-        // Step 104: a key created here exists durably before its database.
-        if let Some(home) = home.as_ref() {
-            // Step 111a: the browser registers each database's VFS first.
-            #[cfg(target_arch = "wasm32")]
-            crate::storage::prepare_account_databases(home, &account_id).await?;
-            ensure_account_keys_durable(home, &keystore, &account_id, storage_provider.is_none())
-                .await?;
-        }
-        let provider = resolve_provider(storage_provider, home.as_ref(), &keystore);
-        let store = provider
-            .as_ref()
-            .map(|p| p.open_store(&account_id))
-            .transpose()?
-            .ok_or_else(|| {
-                KupferdrahtError::InvalidInput(
-                    "ClientBuilder::resume requires base_dir(..) or storage_provider(..)".into(),
-                )
-            })?;
+        let account_id = resume_account(requested_account)?;
+        let store =
+            open_resume_store(home.as_ref(), &keystore, &account_id, storage_provider).await?;
         // `mut` because the access-token refresh below rewrites
         // `parts.session` in place when the persisted token has aged out.
         let mut parts = load_resume_state(&*store, &account_id).await?;
@@ -685,6 +663,50 @@ async fn resolve_keystore(
 /// ephemeral one.
 fn home_cookie_label(home: Option<&KupferdrahtHome>) -> String {
     home.map_or_else(ephemeral_cookie_label, KupferdrahtHome::cookie_label)
+}
+
+/// The account [`ClientBuilder::resume`] opens: named explicitly, never
+/// chosen from the registry here.
+///
+/// # Errors
+/// `KupferdrahtError::InvalidInput` when no account was named.
+fn resume_account(requested: Option<String>) -> Result<String, KupferdrahtError> {
+    requested.ok_or_else(|| {
+        KupferdrahtError::InvalidInput(
+            "ClientBuilder::resume requires an explicit account — set .account(id), \
+             or use Kupferdraht::resume for registry-based selection"
+                .into(),
+        )
+    })
+}
+
+/// Open the ready store [`ClientBuilder::resume`] reads the account from.
+/// With a home, the account's keys exist durably first (Step 104), and the
+/// browser registers each database's VFS before that (Step 111a).
+///
+/// # Errors
+/// `KupferdrahtError::InvalidInput` without a home or a storage provider;
+/// storage and keystore errors from making the keys durable or opening.
+async fn open_resume_store(
+    home: Option<&KupferdrahtHome>,
+    keystore: &Arc<dyn SecureKeyStore>,
+    account_id: &str,
+    storage_provider: Option<Arc<dyn StorageProvider>>,
+) -> Result<Arc<dyn Store>, KupferdrahtError> {
+    if let Some(home) = home {
+        #[cfg(target_arch = "wasm32")]
+        crate::storage::prepare_account_databases(home, account_id).await?;
+        ensure_account_keys_durable(home, keystore, account_id, storage_provider.is_none()).await?;
+    }
+    resolve_provider(storage_provider, home, keystore)
+        .as_ref()
+        .map(|p| p.open_store(account_id))
+        .transpose()?
+        .ok_or_else(|| {
+            KupferdrahtError::InvalidInput(
+                "ClientBuilder::resume requires base_dir(..) or storage_provider(..)".into(),
+            )
+        })
 }
 
 /// Resolve the storage provider: a custom override wins; otherwise the

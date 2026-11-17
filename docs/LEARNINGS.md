@@ -3246,3 +3246,19 @@ touched it.
   WAL pragma went back under its call sites' attribute; before a commit that moves a
   pinned pattern, the source-scanning pins run too.
 
+### 5.100 Three residuals checked against the code, and a rule only a tool keeps (Step 136)
+
+- **A residual is a claim about the code; read the code before building on it.** The
+  lock-poison recovery assumed a panic under a cache lock was possible; the handlers run
+  outside the locks and nothing under them panics. The payload caps assumed an unbounded
+  field; Wire bounds every message. Both closed as non-goals in an afternoon instead of
+  built in a step.
+- **The plan's list was a sample, not the debt.** Seven functions were named; 74 were
+  over 40 lines and 13 over the 60-line ceiling by clippy's count. Splitting seven would
+  have left the picture as it was.
+- **"Split when touched" did not hold — I broke it myself** (Step 156 grew `login` to 60).
+  A rule a tool enforces holds; clippy's `too_many_lines`, already denied through
+  `clippy::pedantic`, only needed its ceiling lowered to 60.
+- **Cargo caches clippy's results across a `clippy.toml` change.** The first run with the
+  new ceiling reported nothing; touching a source file made clippy look again.
+

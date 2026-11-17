@@ -51,9 +51,9 @@ mod tests {
         RoomRecord, SendKeyRecord, SyncStateRecord, TimelineEventRecord,
     };
 
-    #[tokio::test]
-    async fn clear_messaging_state_empties_rooms_and_cursor() {
-        let (_dir, store) = fresh_store();
+    /// A room, a sync cursor and a keyed failed send — the messaging state
+    /// a wipe must clear.
+    async fn seed_messaging_state(store: &super::super::SqliteStore) {
         let room = RoomRecord {
             room_id: "room-a@example.test".to_string(),
             group_id: Some("Z3JwLWFh".to_string()),
@@ -100,6 +100,12 @@ mod tests {
             .insert_timeline_event_keyed(&failed_send, &[], None, &key)
             .await
             .expect("seed a keyed send");
+    }
+
+    #[tokio::test]
+    async fn clear_messaging_state_empties_rooms_and_cursor() {
+        let (_dir, store) = fresh_store();
+        seed_messaging_state(&store).await;
         assert_eq!(store.load_rooms().await.expect("load").len(), 1);
 
         store.clear_messaging_state().await.expect("clear");
