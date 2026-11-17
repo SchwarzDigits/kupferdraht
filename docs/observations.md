@@ -2344,3 +2344,35 @@ e2ei on (§100).
   (`crates/wire-mls/src/key_package.rs:89-95`), so an enrolled client cannot join a
   conversation there. A requirements list went to the wire-server-rs team.
 
+## 105) SQLite3MC keeps `secure_delete` on; what a rekey costs and when it is safe (2026-11-16)
+
+Measured for Step 134 with throwaway tests (never committed) on the developer's Mac
+(release build) and in headless Firefox on the browser's local VFS, and read in the
+vendored amalgamation (SQLite3MC 2.5.1). Not a Wire or MLS matter; it decides what local
+storage provides (THREAT_MODEL G4).
+
+- **`secure_delete` is on for every encrypted database.** `mcAdjustBtree` calls
+  `sqlite3BtreeSecureDelete(pBt, 1)` whenever a cipher is set up; the linked SQLite is
+  not built with `SQLITE_SECURE_DELETE` (`PRAGMA compile_options` names only
+  `TEMP_STORE=2` of the relevant ones) and a plain connection reads 0, while
+  `kupferdraht.db`, `mls.db` and `global.db` read 1. Its cost, switched on and off by
+  hand: natively none (51 200 rows of 1 KB deleted in 723 ms off, 647 ms on); on the
+  local VFS one `DELETE` of 4 096 rows 521 / 535 ms off, 507 / 523 ms on, 512 single-row
+  `DELETE`s 862 / 874 ms off, 928 / 916 ms on (about 6 %). The storage server's VFS was
+  not measured.
+- **`PRAGMA rekey` rewrites every page in one transaction.** `sqlite3_rekey_v2` begins a
+  write transaction, rewrites pages 1 to the page count (free pages included, the lock
+  page skipped) and commits; an error rolls back and the old key stays valid. On a 267 MB
+  WAL database: 1.1–1.2 s; the WAL grows to 268 MB; right after the commit only the new
+  key opens the file, before any checkpoint; `wal_checkpoint(TRUNCATE)` 1.0 s, then the
+  WAL is empty.
+- **A rekey does not stop another connection.** With a second connection open on the old
+  key, the rekey succeeds and that connection's next write fails with "file is not a
+  database"; the file stays intact (`integrity_check` ok with the new key).
+  `PRAGMA locking_mode = EXCLUSIVE` with `busy_timeout = 0` and `BEGIN EXCLUSIVE` fails at
+  once with "database is locked" while another connection is open, succeeds when none
+  is, and then keeps other connections out until it is released.
+
+The rekey findings wait in Step 161; Step 134 pinned `secure_delete` and truncates the
+WAL after each checkpoint.
+

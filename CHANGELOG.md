@@ -88,6 +88,14 @@ is no skill for it — it is this short procedure:
 
 ### Security
 
+- **Deleted content does not linger, and new files are private** (Step 134): every
+  database is SQLite3MC-encrypted, and SQLite3MC switches `secure_delete` on for each,
+  so a deleted row's bytes are overwritten — now pinned by tests and documented. The
+  WAL of `kupferdraht.db` and `global.db` is truncated after each checkpoint
+  (`journal_size_limit = 0`), so earlier page images no longer stay in it. On Unix a
+  new home, its account directories and its database files are created 0700 / 0600
+  (resolves open.md §69's umask entry); existing ones keep their mode. The database
+  keys are still never rotated (Step 161, parked).
 - **No answer is read past 16 MiB** (Step 159): every answer from the backend,
   the PIN service, the token exchange and the storage server is read up to
   16 MiB of decoded bytes; past that it fails as `BackendRejected` ("answer over

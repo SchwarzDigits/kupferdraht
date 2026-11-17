@@ -125,8 +125,7 @@ impl SqliteGlobalStore {
         // WAL is native-only: the browser's VFS provides no shared memory
         // (ADR-0022 decision 5), so it keeps the rollback journal.
         #[cfg(not(target_arch = "wasm32"))]
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(|e| KupferdrahtError::Storage(format!("global set WAL: {e}")))?;
+        crate::storage::enable_truncating_wal(&conn, "global.db")?;
         #[cfg(not(target_arch = "wasm32"))]
         crate::storage::set_multi_process_pragmas(&conn)?;
         ensure_global_schema(&conn)?;
@@ -313,6 +312,34 @@ mod pragma_tests {
             .query_row("PRAGMA synchronous", [], |row| row.get(0))
             .expect("synchronous");
         assert_eq!(synchronous, 2, "synchronous = FULL on global.db");
+    }
+
+    /// Step 134: a deleted row's bytes are overwritten, not left in a free
+    /// page (`secure_delete`, read back as 1).
+    #[test]
+    fn global_store_connection_deletes_securely() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = SqliteGlobalStore::open(&dir.path().join("global.db"), &generate_db_key())
+            .expect("open global store");
+        let conn = store.lock().expect("lock");
+        let secure: i64 = conn
+            .query_row("PRAGMA secure_delete", [], |row| row.get(0))
+            .expect("secure_delete");
+        assert_eq!(secure, 1, "secure_delete on global.db");
+    }
+
+    /// Step 134: the WAL is truncated after each checkpoint, so earlier page
+    /// images do not linger in it (`journal_size_limit`, read back as 0).
+    #[test]
+    fn global_store_truncates_its_wal() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = SqliteGlobalStore::open(&dir.path().join("global.db"), &generate_db_key())
+            .expect("open global store");
+        let conn = store.lock().expect("lock");
+        let limit: i64 = conn
+            .query_row("PRAGMA journal_size_limit", [], |row| row.get(0))
+            .expect("journal_size_limit");
+        assert_eq!(limit, 0, "global.db's WAL is truncated after a checkpoint");
     }
 }
 

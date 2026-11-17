@@ -3201,3 +3201,19 @@ touched it.
 - **The red path cost no CI run.** A broken Kotlin assertion failed `./gradlew test`
   locally; the job's verdict is that command's, so the pull request only has to be green.
 
+### 5.98 Two premises of the plan were wrong, a guard was missing, and "why" split the step (Step 134)
+
+- **`secure_delete` was on all along.** The plan said it was set nowhere; it was not set
+  in our code, but SQLite3MC switches it on for every encrypted database. A red test that
+  came out green showed it; reading the amalgamation explained it. A test meant to be red
+  that passes is a finding, not a nuisance.
+- **"Only a `VACUUM` rewrites old pages" was wrong too.** SQLite3MC's rekey rewrites every
+  page, free ones included, in one transaction. Reading the engine's source settled both
+  before anything was designed on them.
+- **The plan's guard had a hole.** It counted on ADR-0024's account lock against another
+  process, but that lock guards two short sections only; another process may have the
+  database open. An exclusive SQLite lock detects it, measured.
+- **Volker asked why the step was needed,** and the answer split it: the deleted-content
+  guarantee is concrete and cheap, the key rotation narrow and the largest part. The
+  rotation is parked as Step 161 with phase 1's findings, not dropped.
+

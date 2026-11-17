@@ -131,8 +131,7 @@ impl SqliteStore {
         // WAL is native-only (ADR-0022 decision 5): the browser's VFS provides
         // no shared memory — it keeps SQLite's rollback journal.
         #[cfg(not(target_arch = "wasm32"))]
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(|e| KupferdrahtError::Storage(format!("set journal_mode=WAL: {e}")))?;
+        crate::storage::enable_truncating_wal(&conn, "kupferdraht.db")?;
         // Step 85: busy_timeout + explicit synchronous=FULL (native).
         #[cfg(not(target_arch = "wasm32"))]
         crate::storage::set_multi_process_pragmas(&conn)?;
@@ -879,3 +878,40 @@ pub(super) fn fresh_store() -> (tempfile::TempDir, SqliteStore) {
 /// agree on the same vector.
 #[cfg(test)]
 pub(super) const INVALID_UTF8: &[u8] = &[0xFF, 0xFE, 0xFD];
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod secure_delete_tests {
+    use super::SqliteStore;
+    use crate::storage::db_key::generate_db_key;
+
+    /// Step 134: `kupferdraht.db` overwrites what it deletes
+    /// (`secure_delete`, read back as 1).
+    #[test]
+    fn store_connection_deletes_securely() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = SqliteStore::open(&dir.path().join("kupferdraht.db"), &generate_db_key())
+            .expect("open store");
+        let conn = store.lock().expect("lock");
+        let secure: i64 = conn
+            .query_row("PRAGMA secure_delete", [], |row| row.get(0))
+            .expect("secure_delete");
+        assert_eq!(secure, 1, "secure_delete on kupferdraht.db");
+    }
+
+    /// Step 134: the WAL is truncated after each checkpoint, so earlier page
+    /// images do not linger in it (`journal_size_limit`, read back as 0).
+    #[test]
+    fn store_truncates_its_wal() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = SqliteStore::open(&dir.path().join("kupferdraht.db"), &generate_db_key())
+            .expect("open store");
+        let conn = store.lock().expect("lock");
+        let limit: i64 = conn
+            .query_row("PRAGMA journal_size_limit", [], |row| row.get(0))
+            .expect("journal_size_limit");
+        assert_eq!(
+            limit, 0,
+            "kupferdraht.db's WAL is truncated after a checkpoint"
+        );
+    }
+}
