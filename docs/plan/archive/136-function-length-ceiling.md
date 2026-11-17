@@ -1,6 +1,11 @@
 # Step 136 — A function-length ceiling clippy enforces
 
-**Status: implemented** on `step/136-function-length-ceiling`. Rewritten on 2026-11-17
+**Status: MERGED 2026-11-17** — `7b72809` on `step/136-function-length-ceiling`, with
+`429097a` (main merged in after Step 84's rewrite), merged to `main` as PR #97
+(`2868669`); locally fmt, 0 build warnings, clippy native and wasm (both wasm lines),
+1190 tests in 50 suites (the library's and the integration tests around sync, resume,
+assets, members, the timeline and every source-scanning pin); CI green on the first run.
+No smoke (refactor). Rewritten on 2026-11-17
 (Volker, option B) after phase 1 checked the commissioned residuals against the code.
 
 **Commissioned 2026-11-02** as "Step 95c residuals: lock-poison recovery, payload caps,
