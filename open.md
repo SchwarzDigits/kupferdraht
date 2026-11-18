@@ -75,7 +75,8 @@ anyway; a verified item leaves here (the fact goes to `docs/observations.md`).
 - **gap-B.15** the `WIRE_RECEIPT_MODE` off path against a live backend;
 - **gap-B.13** a live `/feature-configs` fixture captured (the tests use a synthesised one);
 - **gap-B.7 residual** the low-pool live drain of the key-package top-up (Step 63) — needs a claim source, i.e. a second device (observations §66);
-- **gap-B.37** whether the backend itself refuses an MLS message for a future epoch (the Step-106 healing does not depend on it; robustness, not security).
+- **gap-B.37** whether the backend itself refuses an MLS message for a future epoch (the Step-106 healing does not depend on it; robustness, not security);
+- **gap-B.38** the SSO login's browser path and its refusal, live (Step 162): `ssoLoginUrl` in a popup → the page's `postMessage` → `loginWithSsoCallback` with the cookie in the browser's jar, and a refused login's `reason` / `AUTH_ERROR` (read in spar's source, kalium-readings #30; the native redirect path ran end to end, observations §107).
 
 ### Code quality / maintainability
 

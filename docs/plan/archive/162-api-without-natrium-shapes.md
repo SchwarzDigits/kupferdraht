@@ -1,6 +1,16 @@
 # Step 162 — The API without Natrium's shapes: SSO, typing and the email change in matrix form
 
-**Status: commissioned 2026-11-17** (Volker), from an audit of the public API's
+**Status: MERGED 2026-11-18** — `004c454` on `step/162-api-without-natrium-shapes`,
+merged to `main` as PR #103 (`4b315d3`); locally fmt, 0 build warnings, clippy native
+and wasm (both wasm lines), 950 library and step tests, the CLI's 32, the browser suite
+(18 suites, 89 tests); CI green on the first run. Smoke 2026-11-18 on the reference
+machine (Wire 5.38.9, Keycloak as SAML identity provider): 12 ok, 0 failed
+(observations §107). Scope as shipped: `sso_login_url` / `login_with_sso_callback`,
+`Room::typing_notice`, `request_email_change` across Rust, FFI, browser and CLI
+(BREAKING); SSO works against Wire for the first time; the email change sends the
+session cookie Wire wants. Retrospective: LEARNINGS 5.102.
+
+Commissioned 2026-11-17 (Volker), from an audit of the public API's
 provenance the same day. Three surfaces were built as a "drop-in" that "maps 1:1"
 onto Natrium's facade during the Natrium migration of May and June 2026, and
 Natrium wraps Kalium. The October provenance audit
