@@ -377,7 +377,11 @@ impl HttpClient {
     /// flow**: it sends a confirmation mail to the new address and
     /// returns `202 Accepted`; the address only actually changes once
     /// the user clicks the link (`204` is also accepted). The caller's
-    /// local profile is therefore *not* updated by this call.
+    /// local profile is therefore *not* updated by this call. Like every
+    /// route under `/access`, it wants the `zuid` cookie beside the token:
+    /// without it `403 invalid-credentials` "Missing cookie"
+    /// (live-confirmed, `docs/observations.md` §107). On wasm the browser
+    /// jar carries the cookie and `refresh_token` is the empty sentinel.
     ///
     /// # Errors
     /// * `BackendRejected` on non-2xx — notably `400 invalid-email` and
@@ -387,15 +391,19 @@ impl HttpClient {
         &self,
         api_version: u32,
         access_token: &str,
+        refresh_token: &str,
         email: &str,
     ) -> Result<(), KupferdrahtError> {
         debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
+        #[cfg(not(target_arch = "wasm32"))]
+        debug_assert!(!refresh_token.is_empty(), "refresh_token must be non-empty");
         debug_assert!(!email.is_empty(), "email must be non-empty");
         let path = format!("/v{api_version}/access/self/email");
         let url = self.url(&path)?;
         let body = serde_json::json!({ "email": email });
         debug!(%url, "PUT access/self/email");
         let req = self.client.put(url).bearer_auth(access_token).json(&body);
+        let req = browser_credentials(with_zuid_cookie(req, refresh_token));
         self.send_no_body(req, "update_self_email").await
     }
 
@@ -1055,6 +1063,7 @@ mod tests {
             when.method(PUT)
                 .path("/v14/access/self/email")
                 .header("authorization", "Bearer tok")
+                .header("cookie", "zuid=cookie")
                 .is_true(|req| {
                     let bytes = req.body_ref();
                     let Ok(v): Result<serde_json::Value, _> = serde_json::from_slice(bytes) else {
@@ -1067,7 +1076,7 @@ mod tests {
             then.status(202);
         });
         http(&server.base_url())
-            .update_self_email(14, "tok", "alice@example.test")
+            .update_self_email(14, "tok", "cookie", "alice@example.test")
             .await
             .expect("202 (verification mail sent) must be treated as success");
         mock.assert_calls(1);
@@ -1083,7 +1092,7 @@ mod tests {
             then.status(204);
         });
         http(&server.base_url())
-            .update_self_email(14, "tok", "v@example.test")
+            .update_self_email(14, "tok", "cookie", "v@example.test")
             .await
             .expect("204 must be treated as success");
     }
@@ -1102,7 +1111,7 @@ mod tests {
                 );
         });
         let err = http(&server.base_url())
-            .update_self_email(14, "tok", "not-an-email")
+            .update_self_email(14, "tok", "cookie", "not-an-email")
             .await
             .expect_err("400 invalid-email must surface as BackendRejected");
         assert!(matches!(err, KupferdrahtError::BackendRejected(_)));
@@ -1120,7 +1129,7 @@ mod tests {
             );
         });
         let err = http(&server.base_url())
-            .update_self_email(14, "tok", "taken@example.test")
+            .update_self_email(14, "tok", "cookie", "taken@example.test")
             .await
             .expect_err("409 key-exists must surface as BackendRejected");
         assert!(matches!(err, KupferdrahtError::BackendRejected(_)));

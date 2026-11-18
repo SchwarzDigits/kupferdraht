@@ -974,7 +974,7 @@ mod tests {
         assert_refused(
             "sso_initiate_login_url",
             h,
-            client.sso_initiate_login_url(h, "s", "e"),
+            client.sso_initiate_login_url(h, None, "label"),
         );
         assert_refused("sso_code_exists", h, client.sso_code_exists(h).await);
     }

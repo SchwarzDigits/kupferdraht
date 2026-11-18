@@ -466,16 +466,16 @@ impl Kupferdraht {
         })
     }
 
-    /// SSO (Step 17β) — build the interactive initiate URL for `code`, validated
-    /// against the Wire server at `api_base_url`. Open the returned URL in a
-    /// browser; the post-`IdP` redirect's `zuid` cookie feeds `finalize_sso` (17b).
-    #[wasm_bindgen(js_name = initiateSso)]
-    pub async fn initiate_sso(
+    /// The URL that starts an SSO login (Step 162) on the Wire server at
+    /// `api_base_url`; open it in a popup. The backend's page there reports
+    /// the outcome to the opener by `postMessage`; hand that event's `data`
+    /// to `loginWithSsoCallback`. `provider` names the identity provider by
+    /// its code; omitted, the backend's default.
+    #[wasm_bindgen(js_name = ssoLoginUrl)]
+    pub async fn sso_login_url(
         &self,
         api_base_url: String,
-        code: String,
-        success_redirect: String,
-        error_redirect: String,
+        provider: Option<String>,
     ) -> Result<String, JsValue> {
         let server = ServerConfig {
             api_base_url,
@@ -483,47 +483,29 @@ impl Kupferdraht {
             title: String::new(),
         };
         self.inner
-            .initiate_sso(server, &code, &success_redirect, &error_redirect)
+            .sso_login_url(server, None, provider.as_deref())
             .await
             .map_err(|e| to_js(&e))
     }
 
-    /// SSO email discovery (Step 17β) — resolve the backend's default SSO code
-    /// (`GET /sso/settings`) and return the interactive initiate URL. Wire v14
-    /// has no per-domain discovery, so the team default is used; multi-IdP
-    /// backends must use `initiateSso` with an explicit code.
-    #[wasm_bindgen(js_name = initiateSsoByEmail)]
-    pub async fn initiate_sso_by_email(
-        &self,
-        api_base_url: String,
-        email: String,
-        success_redirect: String,
-        error_redirect: String,
-    ) -> Result<String, JsValue> {
-        let server = ServerConfig {
-            api_base_url,
-            websocket_url: String::new(),
-            title: String::new(),
-        };
-        self.inner
-            .initiate_sso_by_email(server, &email, &success_redirect, &error_redirect)
-            .await
-            .map_err(|e| to_js(&e))
-    }
-
-    /// SSO finalize (Step 17β) — complete login from the `zuid` cookie handed
-    /// back by Wire's `/sso/finalize-login` redirect, returning a
-    /// [`PendingLogin`] to drive through `registerDevice`. `websocket_url` /
-    /// `title` complete the `ServerConfig` (pass empty strings if unused).
-    #[wasm_bindgen(js_name = finalizeSso)]
-    pub async fn finalize_sso(
+    /// Log in from the message the backend's SSO page posted (Step 162):
+    /// the `message` event's `data`. The session cookie is in the browser's
+    /// own jar. Returns a [`PendingLogin`] to drive through
+    /// `registerDevice`; a refused login rejects with `BackendRejected` and
+    /// the backend's reason. `websocket_url` / `title` complete the
+    /// `ServerConfig`.
+    #[wasm_bindgen(js_name = loginWithSsoCallback)]
+    pub async fn login_with_sso_callback(
         &self,
         api_base_url: String,
         websocket_url: String,
         title: String,
-        sso_cookie: String,
+        message: JsValue,
         device_label: Option<String>,
     ) -> Result<PendingLogin, JsValue> {
+        let message: crate::wire::sso::PageMessage = serde_wasm_bindgen::from_value(message)
+            .map_err(|e| named_error("InvalidInput", &format!("SSO page message: {e}")))?;
+        let outcome = message.outcome().map_err(|e| to_js(&e))?;
         let server = ServerConfig {
             api_base_url,
             websocket_url,
@@ -531,7 +513,7 @@ impl Kupferdraht {
         };
         let inner = self
             .inner
-            .finalize_sso(server, &sso_cookie, device_label)
+            .login_with_sso_outcome(server, outcome, device_label)
             .await
             .map_err(|e| to_js(&e))?;
         Ok(PendingLogin {
@@ -1035,21 +1017,13 @@ impl Client {
         self.inner.own_device_thumbprint().map_err(|e| to_js(&e))
     }
 
-    /// Notify the room that this user started typing (W4). The receiver gets it
-    /// via `startSync`'s `onTyping` callback.
-    #[wasm_bindgen(js_name = startTyping)]
-    pub async fn start_typing(&self, room_id: String) -> Result<(), JsValue> {
+    /// Tell the room whether this user is typing (W4, Step 162). `true` may
+    /// be sent on every keystroke: repeats while one is outstanding are
+    /// dropped. The receiver gets it via `startSync`'s `onTyping` callback.
+    #[wasm_bindgen(js_name = typingNotice)]
+    pub async fn typing_notice(&self, room_id: String, typing: bool) -> Result<(), JsValue> {
         self.inner
-            .send_typing_started(&room_id)
-            .await
-            .map_err(|e| to_js(&e))
-    }
-
-    /// Notify the room that this user stopped typing (W4).
-    #[wasm_bindgen(js_name = stopTyping)]
-    pub async fn stop_typing(&self, room_id: String) -> Result<(), JsValue> {
-        self.inner
-            .send_typing_stopped(&room_id)
+            .typing_notice(&room_id, typing)
             .await
             .map_err(|e| to_js(&e))
     }
@@ -1613,11 +1587,15 @@ impl Client {
         self.inner.set_handle(&handle).await.map_err(|e| to_js(&e))
     }
 
-    /// Request a change of the account email (Step 98a). Wire sends a
-    /// verification mail; the address only changes once it is confirmed.
-    #[wasm_bindgen(js_name = updateEmail)]
-    pub async fn update_email(&self, email: String) -> Result<(), JsValue> {
-        self.inner.update_email(&email).await.map_err(|e| to_js(&e))
+    /// Ask the backend to change the account's email address (Step 98a,
+    /// renamed in 162). It mails a confirmation link; the address only
+    /// changes once the user follows it.
+    #[wasm_bindgen(js_name = requestEmailChange)]
+    pub async fn request_email_change(&self, email: String) -> Result<(), JsValue> {
+        self.inner
+            .request_email_change(&email)
+            .await
+            .map_err(|e| to_js(&e))
     }
 
     /// The account's registered devices (Step 98a).

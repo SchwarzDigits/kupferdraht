@@ -96,17 +96,36 @@ password; no SSO code in Kupferdraht, documentation only.
 
 ## Decision
 
-**Option β.** Kupferdraht drives Wire's SP-side SSO endpoints:
-`initiate_sso(server, code, success_redirect, error_redirect)` returns
-the URL to open; `initiate_sso_by_email(server, email, …)` discovers the
-team's SSO code first; `finalize_sso(server, cookie, device_label)`
-completes the login from the captured `zuid` cookie and returns a
+**Option β.** Kupferdraht drives Wire's SP-side SSO endpoints, in
+matrix-rust-sdk's two-call shape since Step 162:
+`sso_login_url(redirect_url, provider)` returns the URL to open — the
+provider by its code, `None` for the backend's default; with a redirect URL
+the browser comes back to it, without one (the browser) Wire's page reports
+to the window that opened it. `login_with_sso_callback(callback_url)` reads
+the outcome out of the URL the browser came back to — the session cookie,
+or the reason of a refusal as `BackendRejected` — and returns a
 `PendingLogin`, from which `register_device` yields the `Client` as with a
 password login. SAML signing and validation stay on Wire's server;
 Kupferdraht holds no identity-provider configuration and no SAML code.
 Options α and γ are out of scope — later extensions that would not
 change the β API; α is revisited only if a headless or SCIM-only consumer
 is confirmed.
+
+**Revised 2026-11-18 (Step 162).** Step 17 shipped β as
+`initiate_sso(code, success_redirect, error_redirect)`,
+`initiate_sso_by_email(email, …)` and `finalize_sso(cookie)`: the shape of the
+first consumer's facade (Natrium, which wraps Kalium — `ssoLoginWithCode`,
+`ssoLogin(email)`, `completeSSOLogin(cookie)`), which this ADR gave as a
+reason. Its claim that the naming followed matrix-rust-sdk's verbs was wrong:
+matrix-rust-sdk has `get_sso_login_url(redirect_url, idp_id)` and
+`login_with_sso_callback(callback_url)`, which parses the callback itself.
+Step 162 adopts that shape. One redirect URL: Kupferdraht derives Wire's
+success and error redirects from it, each with a query parameter of its own
+(`credential`, `reason`) that carries Wire's placeholder (`$cookie`,
+`$label`), so the application never picks a cookie out of a redirect. The
+email lookup goes: under v14 the email never selected the provider, only
+the backend's default did, which `provider: None` now names. The start URL
+also carries the home's cookie label (ADR-0025), as a password login does.
 
 ## Consequences
 
@@ -115,28 +134,36 @@ is confirmed.
 - One login pipeline for both authentication methods; every later
   change to registration, device reuse or session persistence reaches
   SSO logins automatically.
-- The public surface is three methods on `ClientBuilder` and their
+- The public surface is two methods on `ClientBuilder` and their
   manager-aware twins on `Kupferdraht`, mirrored over UniFFI and in the
-  browser (`initiateSso`, `initiateSsoByEmail`, `finalizeSso`), and two
-  CLI commands (`sso initiate`, `sso finalize`).
+  browser (`ssoLoginUrl`, `loginWithSsoCallback`, which takes the Wire
+  page's `postMessage` data; the cookie stays in the browser's jar), and two
+  CLI commands (`sso url`, `sso callback`).
 - No cryptographic or protocol surface was added: the only new HTTP
   calls are the initiate URL (built, not called, except `HEAD` to
   validate a code), `GET /sso/settings` and the cookie-to-token exchange
   that resume already used.
+- Live-confirmed end to end on 2026-11-18 against a Wire 5.38.9 backend
+  with Keycloak as identity provider (`docs/observations.md` §107): the
+  `/sso/*` paths are unversioned, the success redirect carries the whole
+  `Set-Cookie` line percent-encoded in Kupferdraht's parameter,
+  `POST /access` mints the first token from it, and `/sso/settings`
+  answers the default (`null` when none is set).
 
 ### Negative
 
 - SSO login is interactive by construction: it needs a browser the user
   can see and a way for the application to receive the redirect. The CLI
-  therefore splits the flow into two invocations with the cookie passed
-  by hand (`docs/cli.md` "sso initiate" / "sso finalize").
-- The flow has not been verified end to end against a Wire backend with
-  a configured identity provider; four facts are still assumptions
-  pinned by tests (`docs/wire/api-notes.md` §2b): the `/sso/*` paths are
-  unversioned, the success redirect carries the cookie as a query
-  parameter, `POST /access` mints the first token from a bare `zuid`, and
-  `/sso/settings` is the right discovery source. Recorded as an open
-  test-coverage gap (`open.md` gap-B.36).
+  therefore splits the flow into two invocations with the callback URL
+  passed by hand (`docs/cli.md` "sso url" / "sso callback").
+- Wire accepts only redirect schemes beginning with `wire` and redirect
+  URLs of at most 140 bytes as it re-serializes them
+  (`docs/wire/kalium-readings.md` #30), so an application registers a
+  `wire…` scheme for its callback. Step 17's CLI default
+  (`kupferdraht://sso/done`) was refused (`invalid-schema`), and its cookie
+  never travelled in the redirect, only in the browser's jar: before
+  Step 162 the flow worked only with the cookie read out of the browser by
+  hand.
 
 ### Neutral
 
@@ -146,13 +173,15 @@ is confirmed.
 ## Implementation Notes
 
 Shipped as Step 17 (sub-steps 17a initiate, 17b finalize, 17c email
-discovery; merged 2026-07-09). The reuse seam is
+discovery; merged 2026-07-09), reshaped as Step 162. The reuse seam is
 `client/login_pipeline.rs::finalize` with `client/pending_login.rs`
-(`password: Option`); the cookie-to-token exchange is
+(`password: Option`); the public pair is `client/sso_login.rs`; the redirect
+pair, the callback and the page message are read in `wire/sso.rs`, the start
+URL is built in `wire/http/sso.rs`; the cookie-to-token exchange is
 `wire/http/auth.rs` (`access_from_sso_cookie`). The CLI's default redirect
-URLs use Kupferdraht's own scheme (`docs/cli.md`). Naming follows
-matrix-rust-sdk's `ClientBuilder` verbs (ADR-0009); the Wire endpoint
-names stay inside `wire::*`.
+is `wire-kupferdraht://sso` (`docs/cli.md`). Naming follows
+matrix-rust-sdk (ADR-0009); Wire's endpoint names, placeholders and page
+messages stay inside `wire::*`.
 
 ## References
 
@@ -162,10 +191,17 @@ names stay inside `wire::*`.
 - Related: Step 16 (`sso_id` registration plumbing, option α's
   groundwork); `docs/plan/archive/17-saml-sso.md` (the decision record of
   2026-07-08 with the α/β/γ framework); `docs/wire/api-notes.md` §2b (the
-  endpoints and the open live-probe questions); `docs/cli.md` "sso
-  initiate" / "sso finalize"; `docs/bindings.md` (FFI and browser mirrors).
+  endpoints); `docs/wire/kalium-readings.md` #30 (how Wire hands the
+  outcome back); `docs/observations.md` §107 (the live check);
+  `docs/wire/provenance-audit-2026-10.md` (the addendum on the Natrium
+  channel); `docs/cli.md` "sso url" / "sso callback"; `docs/bindings.md`
+  (FFI and browser mirrors).
 
 ## Revision History
 
 - 2026-11-01: Created — the decision of 2026-07-08 lifted out of the
   archived Step 17 plan into an ADR (open.md §61).
+- 2026-11-18: Step 162 — the surface reshaped to matrix-rust-sdk's
+  `sso_login_url` / `login_with_sso_callback`, the naming claim corrected,
+  the provenance through Natrium stated, the redirect rules and the live
+  check recorded; option β unchanged.

@@ -9,6 +9,8 @@ pub(crate) mod notification_dto;
 pub(crate) mod proto;
 pub(crate) mod push_frame;
 pub(crate) mod room_event;
+// Step 162: the SSO login's redirect pair and callback, without HTTP.
+pub(crate) mod sso;
 pub(crate) mod time;
 // Step 156: the app's own certificate authorities for the TLS connections.
 pub(crate) mod tls;

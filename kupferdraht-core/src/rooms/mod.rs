@@ -20,6 +20,7 @@
 
 mod devices;
 mod room;
+mod typing;
 
 pub use devices::{DeviceCredential, RoomDevice, RoomDevicesChange, RoomDevicesListener};
 pub(crate) use devices::{device_set_change, room_device_from_leaf};

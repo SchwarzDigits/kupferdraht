@@ -239,64 +239,55 @@ enum AvatarCommand {
 
 #[derive(Subcommand)]
 enum SsoCommand {
-    /// Build the interactive SSO initiate URL for a known SSO code.
+    /// Print the URL that starts an SSO login (Step 162).
     ///
-    /// Validates the code against the backend
-    /// (`HEAD /sso/initiate-login/{code}`) and prints the URL to open in a
-    /// browser. The post-IdP redirect carries the `zuid` cookie that
-    /// `sso finalize` (Step 17b) will consume.
-    Initiate {
+    /// Open it in a browser and sign in at the identity provider; the
+    /// browser then comes back to `--redirect`, carrying the outcome. No app
+    /// claims the default scheme, so the browser shows the URL (or its
+    /// developer tools do): copy it whole for `sso callback`.
+    Url {
         /// Base https URL of a self-hosted Wire-compatible backend.
         #[arg(long)]
         api_url: String,
         /// WebSocket URL (wss://…); derived from --api-url when omitted.
         #[arg(long)]
         ws_url: Option<String>,
-        /// The SSO code (idp identifier). Provide this or --email.
-        #[arg(
-            short = 'c',
-            long,
-            required_unless_present = "email",
-            conflicts_with = "email"
-        )]
-        code: Option<String>,
-        /// Discover the SSO code from the backend default
-        /// (`GET /sso/settings`) for this email instead of passing --code.
-        #[arg(short = 'e', long)]
-        email: Option<String>,
-        /// Where the backend redirects after a successful IdP round-trip
-        /// (carries the `zuid` cookie for `sso finalize`). Any URL works;
-        /// the default is a scheme no installed app claims, so the browser
-        /// shows the redirect instead of handing it to another client.
-        #[arg(long, default_value = "kupferdraht://sso/done")]
-        success_redirect: String,
-        /// Where the backend redirects on IdP failure.
-        #[arg(long, default_value = "kupferdraht://sso/error")]
-        error_redirect: String,
+        /// The identity provider's code; omitted, the backend's default.
+        #[arg(short = 'p', long)]
+        provider: Option<String>,
+        /// Where the browser comes back to. The backend takes only schemes
+        /// beginning with `wire`.
+        #[arg(long, default_value = "wire-kupferdraht://sso")]
+        redirect: String,
+        /// PEM file with the backend's own certificate authorities, kept in
+        /// the home as `login --ca-file` does (Step 156).
+        #[arg(long)]
+        ca_file: Option<std::path::PathBuf>,
     },
-    /// Complete SSO login from the `zuid` cookie captured off the redirect.
+    /// Log in from the URL the browser came back to after `sso url`.
     ///
-    /// After `sso initiate`, the browser round-trip redirects to
-    /// `success_redirect` carrying the `zuid` refresh cookie. That value —
-    /// prompted on the TTY (no echo), or the first line of stdin with
-    /// `--cookie-stdin`, never an argument — mints the session, registers
-    /// this device, and persists the account (listable via `accounts`,
-    /// resumable via `resume`).
-    Finalize {
+    /// The URL carries a session of its own: it is prompted on the TTY (no
+    /// echo), or read from stdin's first line with `--callback-stdin`, never
+    /// taken as an argument. Registers this device and persists the account
+    /// (listable via `accounts`, resumable via `resume`).
+    Callback {
         /// Base https URL of a self-hosted Wire-compatible backend.
         #[arg(long)]
         api_url: String,
         /// WebSocket URL (wss://…); derived from --api-url when omitted.
         #[arg(long)]
         ws_url: Option<String>,
-        /// Read the `zuid` cookie value (captured from the finalize-login
-        /// redirect) from stdin, its first line, instead of the TTY prompt.
-        /// The cookie is a session on its own and never goes into argv.
+        /// Read the callback URL from stdin, its first line, instead of the
+        /// TTY prompt.
         #[arg(long)]
-        cookie_stdin: bool,
+        callback_stdin: bool,
         /// On the 7-device cap, delete this device id to free a slot and retry.
         #[arg(long)]
         delete_device: Option<String>,
+        /// PEM file with the backend's own certificate authorities, kept in
+        /// the home as `login --ca-file` does (Step 156).
+        #[arg(long)]
+        ca_file: Option<std::path::PathBuf>,
     },
 }
 
@@ -715,14 +706,27 @@ enum Command {
         #[arg(long)]
         handle: Option<String>,
     },
-    /// Request a change of the account email (Step 98a). Patches Wire's
-    /// `PUT /v{N}/access/self/email`; Wire mails a verification link and the
-    /// address only changes once that link is followed — so a success
-    /// here means "mail sent", not "email changed".
-    EmailUpdate {
+    /// Ask the backend to change the account email (Step 98a, renamed in
+    /// 162): `PUT /v{N}/access/self/email`. The backend mails a confirmation
+    /// link and the address only changes once that link is followed — so a
+    /// success here means "mail sent", not "email changed".
+    EmailChange {
         /// The new email address.
         #[arg(long)]
         email: String,
+    },
+    /// Tell a room that this user is typing, then that they stopped
+    /// (Step 162): `Room::typing_notice(true)`, `--seconds` later
+    /// `typing_notice(false)`. A stop sends only after a start of the same
+    /// process, so one command does both. Past 11 seconds the automatic
+    /// stop comes first and the explicit one sends nothing.
+    Typing {
+        /// Qualified room id (`<uuid>@<domain>`).
+        #[arg(long)]
+        id: String,
+        /// How long the notice stands before the stop.
+        #[arg(long, default_value_t = 3)]
+        seconds: u64,
     },
     /// Change the account password (Step 27). Prompts for the current
     /// and new password on the TTY (no passwords in argv). On success
@@ -1275,32 +1279,32 @@ async fn async_main() -> ExitCode {
             }
         }
         Command::Sso { action } => match action {
-            SsoCommand::Initiate {
+            SsoCommand::Url {
                 api_url,
                 ws_url,
-                code,
-                email,
-                success_redirect,
-                error_redirect,
+                provider,
+                redirect,
+                ca_file,
             } => match backend::resolve_server(&api_url, ws_url.as_deref()) {
-                Ok(server) => {
-                    cli::auth::sso_initiate(server, code, email, success_redirect, error_redirect)
-                        .await
-                }
+                Ok(server) => cli::auth::sso_url(server, redirect, provider, ca_file).await,
                 Err(e) => Err(e),
             },
-            SsoCommand::Finalize {
+            SsoCommand::Callback {
                 api_url,
                 ws_url,
-                cookie_stdin,
+                callback_stdin,
                 delete_device,
+                ca_file,
             } => {
-                let cookie = match secret_or_exit(cookie_stdin, "zuid cookie: ", "cookie") {
-                    Ok(cookie) => cookie,
-                    Err(exit) => return exit,
-                };
+                let callback =
+                    match secret_or_exit(callback_stdin, "SSO callback URL: ", "callback URL") {
+                        Ok(callback) => callback,
+                        Err(exit) => return exit,
+                    };
                 match backend::resolve_server(&api_url, ws_url.as_deref()) {
-                    Ok(server) => cli::auth::sso_finalize(server, cookie, delete_device).await,
+                    Ok(server) => {
+                        cli::auth::sso_callback(server, callback, delete_device, ca_file).await
+                    }
                     Err(e) => Err(e),
                 }
             }
@@ -1365,7 +1369,8 @@ async fn async_main() -> ExitCode {
             display_name,
             handle,
         } => cli::config::profile_set(display_name, handle).await,
-        Command::EmailUpdate { email } => cli::config::email_update(email).await,
+        Command::EmailChange { email } => cli::config::email_change(email).await,
+        Command::Typing { id, seconds } => cli::rooms::typing(id, seconds).await,
         Command::ChangePassword => cli::auth::change_password().await,
         Command::RoomRename { id, name } => cli::rooms::room_rename(id, name).await,
         Command::RoomLeave { id } => cli::rooms::room_leave(id).await,
@@ -1609,30 +1614,90 @@ mod tests {
         v
     }
 
-    /// Step 137 (M1): the `zuid` cookie is a session on its own — as an
-    /// argument it lands in `ps` and the shell history. `sso finalize`
-    /// reads it from stdin (`--cookie-stdin`) or prompts on the TTY;
-    /// `--cookie` is gone.
+    /// Step 137 (M1), Step 162: the SSO callback carries a session of its
+    /// own — as an argument it lands in `ps` and the shell history.
+    /// `sso callback` reads it from stdin (`--callback-stdin`) or prompts on
+    /// the TTY.
     #[test]
-    fn sso_finalize_takes_the_cookie_from_stdin_or_the_prompt_never_from_argv() {
+    fn sso_callback_takes_the_url_from_stdin_or_the_prompt_never_from_argv() {
         let base = [
             "kupferdraht-cli",
             "sso",
-            "finalize",
+            "callback",
             "--api-url",
             "https://backend.example",
         ];
         assert!(
-            Cli::try_parse_from(argv(&base, &["--cookie", "zuid-value"])).is_err(),
-            "--cookie must be refused"
+            Cli::try_parse_from(argv(
+                &base,
+                &["--callback", "wire-kupferdraht://sso?credential=x"]
+            ))
+            .is_err(),
+            "--callback must be refused"
         );
         assert!(
-            Cli::try_parse_from(argv(&base, &["--cookie-stdin"])).is_ok(),
-            "--cookie-stdin must parse"
+            Cli::try_parse_from(argv(&base, &["--callback-stdin"])).is_ok(),
+            "--callback-stdin must parse"
         );
         assert!(
             Cli::try_parse_from(argv(&base, &[])).is_ok(),
-            "without a flag the cookie is prompted"
+            "without a flag the callback is prompted"
+        );
+    }
+
+    /// Step 162: `sso url` takes one redirect and an optional provider —
+    /// without one, the backend's default.
+    #[test]
+    fn sso_url_takes_one_redirect_and_an_optional_provider() {
+        let base = [
+            "kupferdraht-cli",
+            "sso",
+            "url",
+            "--api-url",
+            "https://backend.example",
+        ];
+        assert!(
+            Cli::try_parse_from(argv(&base, &[])).is_ok(),
+            "without a provider the backend's default is taken"
+        );
+        assert!(
+            Cli::try_parse_from(argv(&base, &["--provider", "p"])).is_ok(),
+            "--provider must parse"
+        );
+        assert!(
+            Cli::try_parse_from(argv(&base, &["--redirect", "wire-app://sso"])).is_ok(),
+            "--redirect must parse"
+        );
+        assert!(
+            Cli::try_parse_from(argv(&base, &["--success-redirect", "wire-app://ok"])).is_err(),
+            "one redirect, not a pair"
+        );
+    }
+
+    /// Step 162: `typing --id <room>` starts and, `--seconds` later, stops —
+    /// a stop sends only after a start of the same process; the email
+    /// change is `email-change`.
+    #[test]
+    fn typing_and_email_change_parse() {
+        let typing = ["kupferdraht-cli", "typing", "--id", "room@example.test"];
+        assert!(Cli::try_parse_from(typing).is_ok(), "typing must parse");
+        assert!(
+            Cli::try_parse_from(argv(&typing, &["--seconds", "5"])).is_ok(),
+            "typing --seconds must parse"
+        );
+        assert!(
+            Cli::try_parse_from(argv(&typing, &["--stop"])).is_err(),
+            "a stop on its own would send nothing"
+        );
+        assert!(
+            Cli::try_parse_from([
+                "kupferdraht-cli",
+                "email-change",
+                "--email",
+                "a@example.test"
+            ])
+            .is_ok(),
+            "email-change must parse"
         );
     }
 

@@ -288,14 +288,11 @@ export class KupferdrahtProxy {
   login(apiBaseUrl, websocketUrl, title, email, password, secondFactorCode, deviceLabel) {
     return this.#call('login', [apiBaseUrl, websocketUrl, title, email, password, secondFactorCode, deviceLabel], 'PendingLogin');
   }
-  initiateSso(apiBaseUrl, code, successRedirect, errorRedirect) {
-    return this.#call('initiateSso', [apiBaseUrl, code, successRedirect, errorRedirect]);
+  ssoLoginUrl(apiBaseUrl, provider) {
+    return this.#call('ssoLoginUrl', [apiBaseUrl, provider]);
   }
-  initiateSsoByEmail(apiBaseUrl, email, successRedirect, errorRedirect) {
-    return this.#call('initiateSsoByEmail', [apiBaseUrl, email, successRedirect, errorRedirect]);
-  }
-  finalizeSso(apiBaseUrl, websocketUrl, title, ssoCookie, deviceLabel) {
-    return this.#call('finalizeSso', [apiBaseUrl, websocketUrl, title, ssoCookie, deviceLabel], 'PendingLogin');
+  loginWithSsoCallback(apiBaseUrl, websocketUrl, title, message, deviceLabel) {
+    return this.#call('loginWithSsoCallback', [apiBaseUrl, websocketUrl, title, message, deviceLabel], 'PendingLogin');
   }
   resume(accountId, options) { return this.#call('resume', [accountId, options], 'Client'); }
   accounts() { return this.#call('accounts', []); }
@@ -347,7 +344,7 @@ export class ClientProxy extends HandleProxy {
   refreshAccount() { return this.#callTakingGetters('refreshAccount', []); }
   setDisplayName(name) { return this.#callTakingGetters('setDisplayName', [name]); }
   setHandle(handle) { return this.#callTakingGetters('setHandle', [handle]); }
-  updateEmail(email) { return this.#call('updateEmail', [email]); }
+  requestEmailChange(email) { return this.#call('requestEmailChange', [email]); }
   devices() { return this.#call('devices', []); }
   deleteDevice(deviceId, password) { return this.#call('deleteDevice', [deviceId, password]); }
   renameRoom(roomId, name) { return this.#call('renameRoom', [roomId, name]); }
@@ -379,8 +376,7 @@ export class ClientProxy extends HandleProxy {
     this.transport.subscribe(subscription);
     return new SyncHandleProxy(this.transport, subscription);
   }
-  startTyping(roomId) { return this.#call('startTyping', [roomId]); }
-  stopTyping(roomId) { return this.#call('stopTyping', [roomId]); }
+  typingNotice(roomId, typing) { return this.#call('typingNotice', [roomId, typing]); }
   syncOnce() { return this.#call('syncOnce', []); }
   rooms() { return this.#call('rooms', []); }
   sendText(roomId, body, options) { return this.#call('sendText', [roomId, body, withKey(options)]); }

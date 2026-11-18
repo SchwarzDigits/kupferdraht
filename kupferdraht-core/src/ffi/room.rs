@@ -212,6 +212,17 @@ impl Room {
         self.inner.delete().await
     }
 
+    /// Tell the room whether this user is typing (Step 162). `true` may be
+    /// sent on every keystroke: repeats while one is outstanding are
+    /// dropped, and a `false` follows on its own after ~11 s unless the app
+    /// sends it sooner.
+    ///
+    /// # Errors
+    /// See `KupferdrahtError`.
+    pub async fn typing_notice(&self, typing: bool) -> Result<(), KupferdrahtError> {
+        self.inner.typing_notice(typing).await
+    }
+
     /// Rename the room; returns the refreshed handle.
     ///
     /// # Errors

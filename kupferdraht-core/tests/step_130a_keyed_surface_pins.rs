@@ -35,11 +35,10 @@ const KEYED: [&str; 6] = [
 ];
 
 /// Mutations a repeat converges and answers like the first call — re-issued.
-const NOW_IDEMPOTENT: [&str; 10] = [
+const NOW_IDEMPOTENT: [&str; 9] = [
     "markAsRead",
     "markAsUnread",
-    "startTyping",
-    "stopTyping",
+    "typingNotice",
     "redact",
     "createDm",
     "renameRoom",
@@ -61,7 +60,7 @@ const STAY_MUTATION: [&str; 11] = [
     "editMessage",
     "createJoinLink",
     "joinViaLink",
-    "updateEmail",
+    "requestEmailChange",
 ];
 
 /// `Class.method → kind` from `protocol.js`'s `METHODS`.
@@ -122,7 +121,7 @@ fn protocol_classifies_the_three_classes() {
     );
     for method in [
         "login",
-        "finalizeSso",
+        "loginWithSsoCallback",
         "registerDevice",
         "recover",
         "cancel",

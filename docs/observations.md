@@ -2406,3 +2406,52 @@ decision; it records what the call Step 84 makes looks like on the wire.
 Smoke `smoke84.sh` (outside the repository, throwaway team): 18 ok, 0 failed —
 `send-file`, `download-asset`, `delete-message` of the file, both cached copies gone,
 both downloads refused. The stack's `kupferdraht-smoke.sh --throwaway`: 24 ok, 0 failed.
+
+## 107) SSO against Wire 5.38.9: the redirect pair, the callback, an SSO user's `/self` (2026-11-17, 2026-11-18)
+
+Live-confirmed for Step 162 on the reference machine (plain Wire 5.38.9 with
+spar; Keycloak 26.4 as SAML identity provider for a team of its own) and, for the
+first probe, on the local `wire-server-rs` stack (spar stays Haskell there). Valid
+client flows only; the identity provider's login ran as the requests a browser
+makes, without a browser. How spar builds the answer: `docs/wire/kalium-readings.md`
+#30.
+
+- **2026-11-17, before an identity provider was configured:** both servers serve
+  `/sso/*` unversioned. `GET /sso/settings` → `200 {"default_sso_code":null}`;
+  `HEAD /sso/initiate-login/<random id>` → `404`.
+- **2026-11-18, with Keycloak:** `HEAD` for the team's provider → `200`. The start
+  URL with `success_redirect=wire-kupferdraht://sso?credential=$cookie`,
+  `error_redirect=wire-kupferdraht://sso?reason=$label` and a `label` → `200`, an
+  HTML form that posts a `SAMLRequest` to Keycloak; Keycloak's login form; its
+  answer posts a `SAMLResponse` to `/sso/finalize-login/<team>` on the API host.
+- **spar answers `303` to `wire-kupferdraht://sso?credential=…`**, the parameter
+  Kupferdraht named and nothing else in the query. The value is the whole
+  `Set-Cookie` line, percent-encoded (`=`, `;`, space, `/` and `,` all as `%XX`):
+  `zuid=<166 bytes>; Path=/access; Expires=<date, with a comma>; HttpOnly` — no
+  `Secure` on this deployment. The cookie's value holds `=`, `.`, `-` and `_`. The
+  `303` also sets the cookie (`Set-Cookie: zuid=…`) for the API host.
+- **`POST /v14/access` with that cookie and no `client_id` → `200`**, a Bearer token
+  whose user is the SSO user; a second call → `200` without a new cookie.
+- **An SSO user's `GET /v14/self` after the first login:** in the team, no `handle`,
+  `name` = the NameID (the email address), `managed_by: "wire"`,
+  `sso_id {subject, tenant}`, and `email_unvalidated` instead of `email` while the
+  team's `validateSAMLemails` holds the address unconfirmed. Kupferdraht's account
+  has no email for such a user until then.
+- **The email change wants the session cookie:** `PUT /v14/access/self/email` with
+  only the bearer → `403 invalid-credentials` "Missing cookie"; with the `zuid`
+  cookie beside it → accepted. Wire's route definition names both (`Cookies` and
+  `Bearer`); Kupferdraht sent only the bearer since Step 22, so `update_email` never
+  reached a Wire backend's mail.
+- **Not probed:** a refusal (`reason=`), the page without redirects (it posts to a
+  browser opener), and the length and scheme refusals — oversized and malformed
+  requests stay off the reference machine; Kupferdraht refuses them before a
+  request.
+
+Smoke `smoke162.sh` (outside the repository, SSO user 2, a fresh CLI home): 12 ok,
+0 failed — `sso url` without a default refused, `sso url` with the team's
+provider (the redirect pair and the home's label in the URL), the identity
+provider's login as a browser makes it, `sso callback` (the user in the SSO team,
+no handle), `status` (the session's label is the home's), `room-create`,
+`typing --seconds 2`, `room-leave`, `email-change` to the user's own address,
+`logout --purge-local`. The device stays at the backend: the CLI deletes a device
+only with a password, and an SSO user has none.

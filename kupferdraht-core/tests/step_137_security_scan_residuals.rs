@@ -534,14 +534,14 @@ async fn a_failed_refresh_after_the_welcome_keeps_the_welcome_and_retries_the_li
 #[test]
 fn cli_doc_reads_the_cookie_and_the_link_key_from_stdin_or_the_prompt() {
     let doc = workspace_file("docs/cli.md");
-    let finalize = section(&doc, "### `sso finalize`");
+    let callback = section(&doc, "### `sso callback`");
     assert!(
-        finalize.contains("--cookie-stdin"),
-        "sso finalize documents --cookie-stdin"
+        callback.contains("--callback-stdin"),
+        "sso callback documents --callback-stdin"
     );
     assert!(
-        !finalize.contains("--cookie <"),
-        "the cookie is no longer an argument"
+        !callback.contains("--callback <"),
+        "the callback, which carries the session, is no argument"
     );
     let join = section(&doc, "### join-via-link");
     assert!(

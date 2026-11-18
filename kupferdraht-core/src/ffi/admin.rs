@@ -126,16 +126,17 @@ impl Client {
         self.inner.set_handle(handle).await
     }
 
-    /// Request a change of the user's email. Wire sends a verification
-    /// mail to the new address; the change takes effect only after the
-    /// user confirms, so this returns once the request is accepted (it
-    /// does not update the local profile). `400 invalid-email` and
-    /// `409 key-exists` surface as `KupferdrahtError` with the Wire label.
+    /// Ask the backend to change the user's email address (Step 162). It
+    /// mails a confirmation link to the new address; the change takes
+    /// effect only after the user follows it, so this returns once the
+    /// request is accepted (it does not update the local profile). An
+    /// invalid or taken address surfaces as `BackendRejected` with the
+    /// backend's label.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn update_email(&self, email: &str) -> Result<(), KupferdrahtError> {
-        self.inner.update_email(email).await
+    pub async fn request_email_change(&self, email: &str) -> Result<(), KupferdrahtError> {
+        self.inner.request_email_change(email).await
     }
 
     /// Change the account password (`old_password` re-authenticates).

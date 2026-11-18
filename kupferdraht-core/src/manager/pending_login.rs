@@ -59,7 +59,8 @@ impl PendingLogin {
         self.inner.user_id()
     }
 
-    /// The email the session was authenticated under.
+    /// The email the session was authenticated under; empty after an SSO
+    /// login while the backend holds the address unconfirmed.
     #[must_use]
     pub fn email(&self) -> &str {
         self.inner.email()

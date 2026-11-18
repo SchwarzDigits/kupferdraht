@@ -124,58 +124,41 @@ impl Kupferdraht {
             .map(PendingLogin::wrap)
     }
 
-    /// SSO (Step 17β) — validate `code` against `server` and return the
-    /// interactive initiate URL to open in a browser. The `zuid` cookie
-    /// from the post-`IdP` redirect feeds `finalize_sso` (17b).
+    /// The URL that starts an SSO login on `server` (Step 162); the app
+    /// opens it in a browser. `provider` names the identity provider by its
+    /// code, `None` takes the backend's default. The browser comes back to
+    /// `redirect_url` (its scheme must begin with `wire`), which goes to
+    /// [`login_with_sso_callback`](Self::login_with_sso_callback).
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn initiate_sso(
+    pub async fn sso_login_url(
         &self,
         server: ServerConfig,
-        code: &str,
-        success_redirect: &str,
-        error_redirect: &str,
+        redirect_url: Option<String>,
+        provider: Option<String>,
     ) -> Result<String, KupferdrahtError> {
         self.inner
-            .initiate_sso(server, code, success_redirect, error_redirect)
+            .sso_login_url(server, redirect_url.as_deref(), provider.as_deref())
             .await
     }
 
-    /// SSO email discovery (Step 17β) — resolve the backend's default SSO code
-    /// (`GET /sso/settings`) and return the interactive initiate URL. Wire v14
-    /// has no per-domain discovery, so the team default is used; multi-IdP
-    /// backends must use `initiate_sso` with an explicit code.
-    ///
-    /// # Errors
-    /// See `KupferdrahtError`.
-    pub async fn initiate_sso_by_email(
-        &self,
-        server: ServerConfig,
-        email: &str,
-        success_redirect: &str,
-        error_redirect: &str,
-    ) -> Result<String, KupferdrahtError> {
-        self.inner
-            .initiate_sso_by_email(server, email, success_redirect, error_redirect)
-            .await
-    }
-
-    /// SSO finalize (Step 17β) — complete login from the `zuid` cookie handed
-    /// back by Wire's `/sso/finalize-login` redirect, returning a
+    /// Log in on `server` from the URL the browser came back to after
+    /// [`sso_login_url`](Self::sso_login_url) (Step 162), returning a
     /// [`PendingLogin`] to drive through `register_device` like the password
     /// flow.
     ///
     /// # Errors
-    /// See `KupferdrahtError`.
-    pub async fn finalize_sso(
+    /// See `KupferdrahtError`; a refused login is `BackendRejected` with the
+    /// backend's reason.
+    pub async fn login_with_sso_callback(
         &self,
         server: ServerConfig,
-        sso_cookie: &str,
+        callback_url: &str,
         device_label: Option<String>,
     ) -> Result<Arc<PendingLogin>, KupferdrahtError> {
         self.inner
-            .finalize_sso(server, sso_cookie, device_label)
+            .login_with_sso_callback(server, callback_url, device_label)
             .await
             .map(PendingLogin::wrap)
     }

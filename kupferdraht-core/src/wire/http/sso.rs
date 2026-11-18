@@ -1,50 +1,58 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Wire SSO (spar) HTTP surface — Step 17β (interactive / SP-driven).
+//! Wire SSO (spar) HTTP surface — Step 17β (interactive / SP-driven), its
+//! start URL reshaped in Step 162.
 //!
-//! Kupferdraht builds the `GET /sso/initiate-login/{code}` redirect URL and
-//! validates the SSO code (`HEAD`); the SAML round-trip and
-//! `POST /sso/finalize-login` happen on Wire's server. The consumer opens
-//! the initiate URL in a browser and later hands the returned `zuid` cookie
-//! to the finalize path (17b). See `docs/plan/archive/17-saml-sso.md`.
-//!
-//! **Open question (live-probe):** `/sso/*` is assumed **unversioned** here
-//! (spar service), not `/v14/sso/*` — see plan-doc Open Question #1.
+//! Kupferdraht builds the `GET /sso/initiate-login/{code}` URL and validates
+//! the SSO code (`HEAD`); the SAML round-trip and `POST /sso/finalize-login`
+//! happen on Wire's server. How the outcome comes back is `wire::sso`.
+//! `/sso/*` is unversioned (spar), live-confirmed (`docs/observations.md`
+//! §107).
 
 use tracing::debug;
 
 use crate::error::KupferdrahtError;
 use crate::wire::dto::SsoSettings;
+use crate::wire::sso::RedirectPair;
 
 use super::{HttpClient, reject_from_response};
 
 impl HttpClient {
     /// Build the interactive SSO initiate URL:
-    /// `{base}/sso/initiate-login/{code}?success_redirect=…&error_redirect=…`.
+    /// `{base}/sso/initiate-login/{code}?success_redirect=…&error_redirect=…&label=…`,
+    /// the redirects only when `redirects` names them.
     ///
     /// Pure URL construction — the consumer opens the returned URL in a
-    /// browser; after the `IdP` round-trip Wire redirects to `success_redirect`
-    /// (carrying the `zuid` cookie) or to `error_redirect`.
+    /// browser. With `redirects` Wire sends the browser to one of them after
+    /// the `IdP`; without, its page reports to the window that opened it.
+    /// `label` is the session cookie's label (ADR-0025).
     ///
     /// # Errors
     /// * `InvalidInput` for an empty `code` or a URL that fails to join.
     pub fn sso_initiate_login_url(
         &self,
         code: &str,
-        success_redirect: &str,
-        error_redirect: &str,
+        redirects: Option<&RedirectPair>,
+        label: &str,
     ) -> Result<String, KupferdrahtError> {
         if code.is_empty() {
             return Err(KupferdrahtError::InvalidInput(
                 "SSO code must be non-empty".into(),
             ));
         }
+        debug_assert!(!label.is_empty(), "a cookie label is never empty");
         let code = Self::path_segment(code, "sso_initiate_login_url code")?;
         let mut url = self.url(&format!("/sso/initiate-login/{code}"))?;
-        url.query_pairs_mut()
-            .append_pair("success_redirect", success_redirect)
-            .append_pair("error_redirect", error_redirect);
+        {
+            let mut query = url.query_pairs_mut();
+            if let Some(redirects) = redirects {
+                query
+                    .append_pair("success_redirect", &redirects.on_success)
+                    .append_pair("error_redirect", &redirects.on_refusal);
+            }
+            query.append_pair("label", label);
+        }
         Ok(url.into())
     }
 
@@ -75,11 +83,10 @@ impl HttpClient {
         }
     }
 
-    /// `GET /sso/settings` — the backend's **default** SSO code, if any
-    /// (Step 17β email discovery). `Ok(Some(code))` when a default `IdP` is
-    /// configured, `Ok(None)` when none is. Wire v14 exposes no per-email-
-    /// domain discovery, so this team default is all `ssoLogin(email)` can
-    /// resolve; multi-`IdP` backends must pass an explicit code.
+    /// `GET /sso/settings` — the backend's **default** SSO code, if any.
+    /// `Ok(Some(code))` when a default `IdP` is configured, `Ok(None)` when
+    /// none is (live-confirmed `{"default_sso_code":null}`,
+    /// `docs/observations.md` §107).
     ///
     /// # Errors
     /// * `BackendRejected` for a non-2xx status.
@@ -115,52 +122,69 @@ mod tests {
 
     // --- initiate URL construction (pure) ---------------------------
 
+    fn pair() -> RedirectPair {
+        RedirectPair {
+            on_success: "wire-app://sso?credential=$cookie".into(),
+            on_refusal: "wire-app://sso?reason=$label".into(),
+        }
+    }
+
+    fn query(url: &str) -> std::collections::HashMap<String, String> {
+        url::Url::parse(url)
+            .expect("valid URL")
+            .query_pairs()
+            .into_owned()
+            .collect()
+    }
+
     #[test]
     fn sso_initiate_url_builds_unversioned_path_with_code() {
-        // Spar's `/sso/initiate-login/{code}` is unversioned (Open Question
-        // #1 — to confirm by live-probe); assert the exact path here.
+        // Spar's `/sso/initiate-login/{code}` is unversioned
+        // (live-confirmed, `docs/observations.md` §107).
         let c = http("https://wire.example");
         let url = c
-            .sso_initiate_login_url(
-                "9c8a1f00-idp-code",
-                "kupferdraht://sso/done",
-                "kupferdraht://sso/error",
-            )
+            .sso_initiate_login_url("9c8a1f00-idp-code", Some(&pair()), "label-1")
             .expect("initiate url must build");
         let parsed = url::Url::parse(&url).expect("returned value must be a valid URL");
         assert_eq!(parsed.path(), "/sso/initiate-login/9c8a1f00-idp-code");
     }
 
     #[test]
-    fn sso_initiate_url_carries_success_and_error_redirects_as_query() {
+    fn sso_initiate_url_carries_the_redirects_and_the_label_as_query() {
         let c = http("https://wire.example");
         let url = c
-            .sso_initiate_login_url(
-                "code-1",
-                "kupferdraht://sso/done",
-                "kupferdraht://sso/error",
-            )
+            .sso_initiate_login_url("code-1", Some(&pair()), "label-1")
             .expect("initiate url must build");
-        let parsed = url::Url::parse(&url).expect("valid URL");
-        let pairs: std::collections::HashMap<String, String> =
-            parsed.query_pairs().into_owned().collect();
+        let pairs = query(&url);
         assert_eq!(
             pairs.get("success_redirect").map(String::as_str),
-            Some("kupferdraht://sso/done"),
+            Some("wire-app://sso?credential=$cookie"),
             "success_redirect must round-trip url-decoded"
         );
         assert_eq!(
             pairs.get("error_redirect").map(String::as_str),
-            Some("kupferdraht://sso/error"),
+            Some("wire-app://sso?reason=$label"),
             "error_redirect must round-trip url-decoded"
         );
+        assert_eq!(pairs.get("label").map(String::as_str), Some("label-1"));
+    }
+
+    #[test]
+    fn sso_initiate_url_without_redirects_carries_only_the_label() {
+        let c = http("https://wire.example");
+        let url = c
+            .sso_initiate_login_url("code-1", None, "label-1")
+            .expect("initiate url must build");
+        let pairs = query(&url);
+        assert_eq!(pairs.len(), 1, "{url}");
+        assert_eq!(pairs.get("label").map(String::as_str), Some("label-1"));
     }
 
     #[test]
     fn sso_initiate_url_rejects_empty_code() {
         let c = http("https://wire.example");
         let err = c
-            .sso_initiate_login_url("", "kupferdraht://s", "kupferdraht://e")
+            .sso_initiate_login_url("", None, "label-1")
             .expect_err("empty code must be rejected");
         assert!(
             matches!(err, KupferdrahtError::InvalidInput(_)),

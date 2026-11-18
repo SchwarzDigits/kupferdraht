@@ -215,9 +215,9 @@ There is **no** `--password` flag by design — secrets in argv leak
 into `ps`, shell history, and process listings. Without
 `--password-stdin` the CLI prompts on the TTY with `rpassword`
 (echo off); from stdin a secret is its first line, without the line
-ending. The same rule holds for the `zuid` cookie of `sso finalize`
-(`--cookie-stdin`) and a guest link's key (`join-via-link --key-stdin`)
-since Step 137.
+ending. The same rule holds for the callback URL of `sso callback`
+(`--callback-stdin`, Step 162; it carries a session) and a guest link's key
+(`join-via-link --key-stdin`) since Step 137.
 
 A backend whose team default MLS ciphersuite is not Kupferdraht's
 (`mls.config.defaultCipherSuite` other than `2`) is refused at login
@@ -284,42 +284,45 @@ starts with a fresh in-memory state — `register`'s `PendingClient`
 (and its `Zeroizing<String>`-wrapped password) is gone by the time
 `activate` runs.
 
-### `sso initiate`
+### `sso url`
 
 ```bash
-kupferdraht-cli sso initiate --api-url https://nginz-https.example.com -c <sso-code>          # explicit SSO code
-kupferdraht-cli sso initiate --api-url https://nginz-https.example.com -e you@example.com      # discover the team default code
-kupferdraht-cli sso initiate --api-url https://nginz-https.example.com -c <sso-code> \
-    --success-redirect kupferdraht://sso/done \
-    --error-redirect   kupferdraht://sso/error
+kupferdraht-cli sso url --api-url https://nginz-https.example.com                       # the backend's default provider
+kupferdraht-cli sso url --api-url https://nginz-https.example.com -p wire-<provider-id> # a named provider
+kupferdraht-cli sso url --api-url https://nginz-https.example.com --redirect wire-myapp://sso
 ```
 
-Step 17β (interactive SSO). With `-c/--code`, validates it against the backend
-(`HEAD /sso/initiate-login/{code}`; an unknown code errors). With `-e/--email`
-(mutually exclusive), discovers the backend's **default** SSO code via
-`GET /sso/settings` — Wire v14 has no per-domain discovery, so multi-IdP backends
-must pass an explicit `--code`. Either way it prints the
-`GET /sso/initiate-login/{code}?success_redirect&error_redirect` URL to open in a
-browser. After the IdP round-trip Wire redirects to `success_redirect` carrying
-the `zuid` cookie — which `sso finalize` (Step 17b) will consume to complete
-login. `--success-redirect` / `--error-redirect` default to `kupferdraht://sso/…`.
+Step 162 (`ClientBuilder::sso_login_url`, ADR-0043). Prints the URL that starts
+an SSO login; open it in a browser and sign in at the identity provider.
+`-p/--provider` names the provider by its code (validated with
+`HEAD /sso/initiate-login/{id}`; an unknown one errors); omitted, the backend's
+default from `GET /sso/settings` (none configured: an error). The browser then
+comes back to `--redirect` (default `wire-kupferdraht://sso`) with the outcome in
+the query. The backend takes only redirect schemes beginning with `wire` and at
+most 140 bytes per redirect as it counts them; Kupferdraht refuses anything else
+before a request. No app claims the default scheme, so the browser shows the URL
+it was sent to, or its developer tools do (the `Location` of the last `303`):
+copy it whole for `sso callback`. `--ca-file <path>` keeps a self-hosted
+backend's certificate authorities in the home, as `login --ca-file` does
+(Step 156); `sso callback` takes it too.
 
-### `sso finalize`
+### `sso callback`
 
 ```bash
-kupferdraht-cli sso finalize --api-url https://nginz-https.example.com                   # prompts for the zuid cookie (no echo)
-kupferdraht-cli sso finalize --api-url https://nginz-https.example.com --cookie-stdin < zuid.txt
-kupferdraht-cli sso finalize --api-url https://nginz-https.example.com --cookie-stdin --delete-device <id> < zuid.txt   # frees a slot on the 7-device cap
+kupferdraht-cli sso callback --api-url https://nginz-https.example.com                       # prompts for the URL (no echo)
+kupferdraht-cli sso callback --api-url https://nginz-https.example.com --callback-stdin < callback.txt
+kupferdraht-cli sso callback --api-url https://nginz-https.example.com --callback-stdin --delete-device <id> < callback.txt   # frees a slot on the 7-device cap
 ```
 
-Step 17β. Takes the `zuid` cookie captured off the `success_redirect` and mints
-the session (`POST /access`, no `client_id`), then registers this device and
-persists the account — immediately listable via `accounts` and resumable via
-`resume`, exactly like `login`. The cookie is read on the TTY (no echo) or,
-with `--cookie-stdin`, as the first line of stdin — never from an argument:
-the value is a session on its own and would land in `ps` and the shell
-history like a password (Step 137). The 7-device cap is recoverable with
-`--delete-device` on the same finalized session (no re-auth).
+Step 162 (`ClientBuilder::login_with_sso_callback`). Takes the URL the browser
+came back to after `sso url`, mints the session from the cookie in it
+(`POST /access`, no `client_id`), then registers this device and persists the
+account — immediately listable via `accounts` and resumable via `resume`,
+exactly like `login`. A refused login errors with the backend's reason. The URL
+is read on the TTY (no echo) or, with `--callback-stdin`, as the first line of
+stdin — never from an argument: it carries a session of its own and would land
+in `ps` and the shell history like a password (Step 137). The 7-device cap is
+recoverable with `--delete-device` on the same session (no re-auth).
 
 ### `status`
 
@@ -363,7 +366,7 @@ this home's label.
 `team:` (Step 143) is the team's name and id as of the last login: `—` for a
 personal account, and `— (<id>)` when the login could not fetch the name. It
 stays that way until the next login, since `status` makes no network calls.
-`login`, `activate` and `sso finalize` print the same line.
+`login`, `activate` and `sso callback` print the same line.
 
 No flags. No network calls. Run this first when something feels
 off. An `access_token_issued_at_ms` older than ~15 minutes is no
@@ -1151,16 +1154,16 @@ profile-set ok
 Note: the local `Account` snapshot (visible via `kupferdraht-cli status`)
 reflects login-time values until the next `sync`.
 
-### `email-update`
+### `email-change`
 
-Request a change of the account email (Step 98a — the CLI consumer of
-`Client::update_email`, which had none). Wire answers before the address
-changes: it mails a verification link to the new address and applies the
-change only once that link is followed, so a success here means "mail
-sent", not "email changed".
+Ask the backend to change the account email (Step 98a, renamed in Step 162 —
+the CLI consumer of `Client::request_email_change`). The backend answers
+before the address changes: it mails a confirmation link to the new address
+and applies the change only once that link is followed, so a success here
+means "mail sent", not "email changed".
 
 ```bash
-kupferdraht-cli email-update --email "new@example.com"
+kupferdraht-cli email-change --email "new@example.com"
 ```
 
 | Flag      | Required | Description                                                                 |
@@ -1170,7 +1173,7 @@ kupferdraht-cli email-update --email "new@example.com"
 Output:
 
 ```
-email-update ok
+email-change ok
   verification sent to: <email>
   the address changes once the link in that mail is followed
 ```
@@ -1346,6 +1349,34 @@ mark-unread ok
 ```
 
 `rooms` shows the flag as `unread: 0 (flagged by hand)`.
+
+### `typing`
+
+Tell a room that this user is typing, then that they stopped (Step 162 — the
+CLI consumer of `Room::typing_notice`, Step 21's send side). It sends the start,
+holds it `--seconds`, then sends the stop. A stop sends only after a start of
+the same process, so one command does both; past 11 seconds the automatic stop
+comes first and the explicit one sends nothing. The other members see it in
+`sync-stream` as a typing line.
+
+```bash
+kupferdraht-cli typing --id <room>@<domain>
+kupferdraht-cli typing --id <room>@<domain> --seconds 8
+```
+
+| Flag        | Required | Description                                   |
+|-------------|----------|-----------------------------------------------|
+| `--id`      | yes      | Qualified room id; must be known locally (`sync` first). |
+| `--seconds` | no       | How long the notice stands before the stop (default 3). |
+
+Output:
+
+```
+typing ok
+  room_id: <room>@<domain>
+  started; the stop follows in 3 s
+  stopped
+```
 
 ### `react`
 

@@ -280,18 +280,19 @@ impl LoginPipeline {
         Ok((login_outcome, self_user))
     }
 
-    /// SSO analogue of [`authenticate`](Self::authenticate) (Step 17β): mint
-    /// the first access token from the `zuid` cookie handed back by Wire's
-    /// `/sso/finalize-login` redirect, then fetch the self-profile. No
-    /// password and no `client_id` — the rest of the pipeline (phases 3–6)
-    /// is identical to the password flow.
-    pub(super) async fn finalize_sso(
+    /// SSO analogue of [`authenticate`](Self::authenticate) (Step 17β, 162):
+    /// mint the first access token from the session cookie an SSO login
+    /// ended with, then fetch the self-profile. No password and no
+    /// `client_id` — the rest of the pipeline (phases 3–6) is identical to
+    /// the password flow. In the browser the cookie is in its jar and
+    /// `session_cookie` empty.
+    pub(super) async fn authenticate_with_session_cookie(
         &self,
-        sso_cookie: &str,
+        session_cookie: &str,
     ) -> Result<(LoginOutcome, SelfUser), KupferdrahtError> {
         let login_outcome = self
             .http
-            .access_from_sso_cookie(self.api_version, sso_cookie)
+            .access_from_sso_cookie(self.api_version, session_cookie)
             .await?;
         let self_user = self
             .http

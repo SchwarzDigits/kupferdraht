@@ -147,23 +147,23 @@ async fn empty_credentials_are_refused() {
     assert_invalid(account.activate("").await, "PendingAccount::activate(\"\")");
 }
 
-/// SSO: an empty cookie, an empty code, and a bare `wire-` prefix (which
-/// strips to an empty `IdP` id).
+/// SSO: an empty callback, an empty provider, and a bare `wire-` prefix
+/// (which strips to an empty provider id).
 #[tokio::test]
 async fn empty_sso_arguments_are_refused() {
     let server = MockServer::start();
     common::mount_full_login_flow(&server);
 
     assert_invalid(
-        builder(&server).finalize_sso("").await,
-        "finalize_sso(\"\")",
+        builder(&server).login_with_sso_callback("").await,
+        "login_with_sso_callback(\"\")",
     );
-    for code in ["", "wire-"] {
+    for provider in ["", "wire-"] {
         assert_invalid(
             builder(&server)
-                .initiate_sso(code, "kupferdraht://ok", "kupferdraht://err")
+                .sso_login_url(Some("wire-kupferdraht://sso"), Some(provider))
                 .await,
-            &format!("initiate_sso({code:?})"),
+            &format!("sso_login_url({provider:?})"),
         );
     }
 }
@@ -309,14 +309,6 @@ async fn malformed_ids_at_room_entry_points_are_refused() {
             &format!("invite_members([{invitee:?}])"),
         );
     }
-    assert_invalid(
-        client.send_typing_started("").await,
-        "send_typing_started(\"\")",
-    );
-    assert_invalid(
-        client.send_typing_stopped("").await,
-        "send_typing_stopped(\"\")",
-    );
     let unqualified = format!("@{DOMAIN}");
     assert_invalid(
         client.create_join_link(&unqualified, None).await,
