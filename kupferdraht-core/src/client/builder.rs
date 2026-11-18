@@ -212,75 +212,6 @@ impl ClientBuilder {
         self
     }
 
-    /// SSO — validate the SSO `code` resolves to a configured `IdP`
-    /// (`HEAD /sso/initiate-login/{idp}`) and return the interactive
-    /// initiate URL the consumer opens in a browser
-    /// (`GET /sso/initiate-login/{idp}?success_redirect&error_redirect`).
-    /// Step 17β; the `zuid` cookie from the post-`IdP` redirect feeds the
-    /// finalize path (`ClientBuilder::finalize_sso`, 17b).
-    ///
-    /// Wire's user-facing code is `wire-<idp-uuid>` but the SP endpoint wants
-    /// the bare `IdP` UUID, so a `wire-` prefix is stripped (see [`idp_id`]).
-    ///
-    /// # Errors
-    /// * `InvalidInput` — `server` unset, or the code is unknown (404).
-    /// * `BackendRejected` / `Network` — from the code-existence probe.
-    pub async fn initiate_sso(
-        self,
-        code: &str,
-        success_redirect: &str,
-        error_redirect: &str,
-    ) -> Result<String, KupferdrahtError> {
-        let trust = self.trust()?;
-        let server = self.server.ok_or_else(|| {
-            KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
-        })?;
-        let idp = idp_id(code);
-        require_non_empty("initiate_sso", &[("code", idp)])?;
-        let http = HttpClient::with_trust(&server.api_base_url, self.permit_http, &trust)?;
-        checked_websocket_base(&server.websocket_url, self.permit_http)?;
-        if !http.sso_code_exists(idp).await? {
-            return Err(KupferdrahtError::InvalidInput(format!(
-                "SSO code not recognized: {code}"
-            )));
-        }
-        http.sso_initiate_login_url(idp, success_redirect, error_redirect)
-    }
-
-    /// SSO email discovery (Step 17β) — resolve the backend's **default** SSO
-    /// code (`GET /sso/settings`) and return the interactive initiate URL.
-    /// Wire v14 exposes no per-email-domain discovery, so the team default is
-    /// used for every `email`; multi-IdP backends must call [`initiate_sso`]
-    /// with an explicit code. `email` is the account identifier but does not
-    /// select the `IdP` under v14.
-    ///
-    /// # Errors
-    /// * `InvalidInput` — `server` unset, empty `email`, or no default SSO
-    ///   code configured on the backend.
-    /// * `BackendRejected` / `Network` — from `GET /sso/settings`.
-    pub async fn initiate_sso_by_email(
-        self,
-        email: &str,
-        success_redirect: &str,
-        error_redirect: &str,
-    ) -> Result<String, KupferdrahtError> {
-        if email.is_empty() {
-            return Err(KupferdrahtError::InvalidInput(
-                "email must be non-empty".into(),
-            ));
-        }
-        let trust = self.trust()?;
-        let server = self.server.ok_or_else(|| {
-            KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
-        })?;
-        let http = HttpClient::with_trust(&server.api_base_url, self.permit_http, &trust)?;
-        checked_websocket_base(&server.websocket_url, self.permit_http)?;
-        let code = http.sso_default_code().await?.ok_or_else(|| {
-            KupferdrahtError::InvalidInput("no SSO provider is configured for this backend".into())
-        })?;
-        http.sso_initiate_login_url(idp_id(&code), success_redirect, error_redirect)
-    }
-
     /// Phase 1 of login: authenticate with email/password (optional 2FA),
     /// open the per-account store, and return a [`PendingLogin`] that holds
     /// the captured session. Call [`PendingLogin::register_device`] to run
@@ -357,24 +288,40 @@ impl ClientBuilder {
         .await
     }
 
-    /// SSO finalize (Step 17β) — complete login from the `zuid` cookie handed
-    /// back by Wire's `/sso/finalize-login` redirect. Mints the first access
-    /// token (no password, no `client_id`), fetches the self-profile, opens
-    /// the per-account store, and returns a [`PendingLogin`] whose
-    /// `register_device` runs phase 2 exactly as the password flow does. The
-    /// account email is taken from the fetched profile.
+    /// The transport an SSO start URL is built on, and the home's cookie
+    /// label it names (ADR-0025) — Step 162,
+    /// [`sso_login_url`](Self::sso_login_url). The WebSocket URL plays no
+    /// part in it (the browser passes none); the login checks it.
+    ///
+    /// # Errors
+    /// `InvalidInput` — `server` unset or the API URL's scheme refused;
+    /// home errors.
+    pub(super) fn sso_transport(self) -> Result<(HttpClient, String), KupferdrahtError> {
+        let trust = self.trust()?;
+        let server = self.server.ok_or_else(|| {
+            KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
+        })?;
+        let http = HttpClient::with_trust(&server.api_base_url, self.permit_http, &trust)?;
+        let home = open_home(self.base_dir, self.account_keys)?;
+        Ok((http, home_cookie_label(home.as_ref())))
+    }
+
+    /// Phase 1 of an SSO login (Step 17β, 162): mint the first access token
+    /// from the session cookie the login ended with (no password, no
+    /// `client_id`), fetch the self-profile, open the per-account store, and
+    /// return a [`PendingLogin`] whose `register_device` runs phase 2 exactly
+    /// as the password flow does. The account's email is the profile's
+    /// confirmed one, empty while the backend holds it unconfirmed. In the
+    /// browser the cookie is in its jar and `session_cookie` empty.
     ///
     /// # Errors
     /// * `InvalidInput` — `server` was not set.
-    /// * `SessionExpired` — the `zuid` cookie is already revoked / rotated.
+    /// * `SessionExpired` — the cookie is already revoked / rotated.
     /// * Other `KupferdrahtError` — network / storage failures.
-    pub async fn finalize_sso(
+    pub(super) async fn login_with_session_cookie(
         self,
-        sso_cookie: &str,
+        session_cookie: &str,
     ) -> Result<Arc<PendingLogin>, KupferdrahtError> {
-        // wasm: the browser jar holds the cookie, the argument may be empty.
-        #[cfg(not(target_arch = "wasm32"))]
-        require_non_empty("finalize_sso", &[("sso_cookie", sso_cookie)])?;
         let trust = self.trust()?;
         let server = self.server.ok_or_else(|| {
             KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
@@ -385,19 +332,19 @@ impl ClientBuilder {
         checked_websocket_base(&server.websocket_url, self.permit_http)?;
         let home = open_home(self.base_dir.clone(), self.account_keys)?;
         let keystore = resolve_keystore(self.keystore.clone(), self.permit_http).await?;
-        let cookie_label = home_cookie_label(home.as_ref());
-        let device_label = self.device_label.clone();
         let pipeline = LoginPipeline::start(
             server,
             None,
             self.permit_http,
             &trust,
             None,
-            cookie_label,
-            device_label,
+            home_cookie_label(home.as_ref()),
+            self.device_label.clone(),
         )
         .await?;
-        let (login_outcome, self_user) = pipeline.finalize_sso(sso_cookie).await?;
+        let (login_outcome, self_user) = pipeline
+            .authenticate_with_session_cookie(session_cookie)
+            .await?;
         let email = self_user.email.clone().unwrap_or_default();
         assemble_pending_login(
             self.storage_provider,
@@ -731,15 +678,8 @@ fn resolve_provider(
     })
 }
 
-/// Wire's user-facing SSO code is `wire-<idp-uuid>`, but the SP endpoint
-/// `/sso/initiate-login/{idp}` wants the bare `IdP` UUID (the prefixed form
-/// 400s). Strip a leading `wire-`; a bare id passes through unchanged.
-fn idp_id(code: &str) -> &str {
-    code.strip_prefix("wire-").unwrap_or(code)
-}
-
 /// Shared post-authentication assembly for [`ClientBuilder::login`] and
-/// [`ClientBuilder::finalize_sso`]: open the per-account store + `mls.db` key
+/// [`ClientBuilder::login_with_session_cookie`]: open the per-account store + `mls.db` key
 /// from the resolved identity and build the [`PendingLogin`]. `password` is
 /// `None` for the SSO path (Step 17β). Both flows converge here the moment
 /// they hold a `(LoginOutcome, SelfUser)` — the pipeline is auth-agnostic
@@ -844,23 +784,6 @@ pub(super) async fn open_account_storage(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn idp_id_strips_wire_prefix() {
-        // Wire's user-facing code `wire-<uuid>` → the SP endpoint's bare id.
-        assert_eq!(
-            idp_id("wire-0f1e2d3c-4b5a-4978-8796-a5b4c3d2e1f0"),
-            "0f1e2d3c-4b5a-4978-8796-a5b4c3d2e1f0"
-        );
-    }
-
-    #[test]
-    fn idp_id_passes_bare_id_through() {
-        assert_eq!(
-            idp_id("0f1e2d3c-4b5a-4978-8796-a5b4c3d2e1f0"),
-            "0f1e2d3c-4b5a-4978-8796-a5b4c3d2e1f0"
-        );
-    }
 
     /// Step 93: the label is the home's; without a home it is ephemeral —
     /// a fresh one per build, never shared between two builds.

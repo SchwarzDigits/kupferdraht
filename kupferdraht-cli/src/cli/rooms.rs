@@ -346,6 +346,26 @@ pub(crate) async fn room_delete(room_id: String) -> Result<(), KupferdrahtError>
     Ok(())
 }
 
+/// `kupferdraht-cli typing --id <room> [--seconds N]` (Step 162):
+/// `Room::typing_notice(true)`, then after `seconds` `typing_notice(false)`.
+/// A stop sends only after a start of the same process, so one command
+/// does both.
+pub(crate) async fn typing(room_id: String, seconds: u64) -> Result<(), KupferdrahtError> {
+    let client = resume_client().await?;
+    let room = client
+        .room(&room_id)
+        .await
+        .ok_or_else(|| KupferdrahtError::InvalidInput(format!("typing: {room_id} not in cache")))?;
+    room.typing_notice(true).await?;
+    println!("typing ok");
+    println!("  room_id: {room_id}");
+    println!("  started; the stop follows in {seconds} s");
+    tokio::time::sleep(std::time::Duration::from_secs(seconds)).await;
+    room.typing_notice(false).await?;
+    println!("  stopped");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::grouped_thumbprint;

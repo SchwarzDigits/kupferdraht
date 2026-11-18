@@ -145,9 +145,13 @@ async fn an_sso_login_gets_them_too() {
         .permit_http();
 
     let client = app
-        .finalize_sso(common::server_config(&server.base_url()), "test", None)
+        .login_with_sso_callback(
+            common::server_config(&server.base_url()),
+            "wire-kupferdraht://sso?credential=zuid%3Dtest%3B%20Path%3D%2Faccess%3B%20HttpOnly",
+            None,
+        )
         .await
-        .expect("finalize_sso")
+        .expect("login_with_sso_callback")
         .register_device()
         .await
         .expect("register device");

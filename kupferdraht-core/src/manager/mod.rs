@@ -243,65 +243,55 @@ impl Kupferdraht {
         Ok(Arc::new(pending))
     }
 
-    /// SSO (Step 17β) — validate `code` against `server` and return the
-    /// interactive initiate URL the consumer opens in a browser. The
-    /// `zuid` cookie from the post-`IdP` redirect then feeds `finalize_sso`
-    /// (17b) to complete login.
+    /// The URL that starts an SSO login on `server` (Step 162); see
+    /// [`ClientBuilder::sso_login_url`](crate::ClientBuilder::sso_login_url).
     ///
     /// # Errors
-    /// `InvalidInput` for an unknown code; `BackendRejected` / `Network`
-    /// from the code-existence probe.
-    pub async fn initiate_sso(
+    /// Whatever `ClientBuilder::sso_login_url` surfaces.
+    pub async fn sso_login_url(
         &self,
         server: ServerConfig,
-        code: &str,
-        success_redirect: &str,
-        error_redirect: &str,
+        redirect_url: Option<&str>,
+        provider: Option<&str>,
     ) -> Result<String, KupferdrahtError> {
         self.client_builder(Some(server))
-            .initiate_sso(code, success_redirect, error_redirect)
+            .sso_login_url(redirect_url, provider)
             .await
     }
 
-    /// SSO email discovery (Step 17β) — resolve the backend's default SSO code
-    /// (`GET /sso/settings`) for `email` and return the interactive initiate
-    /// URL. Wire v14 has no per-domain discovery, so the team default is used;
-    /// multi-IdP backends must use [`initiate_sso`](Self::initiate_sso).
+    /// Log in on `server` from the SSO callback (Step 162), returning a
+    /// [`PendingLogin`] whose `register_device` finishes login (and writes
+    /// the registry row) exactly as the password flow.
     ///
     /// # Errors
-    /// `InvalidInput` for an empty email or a backend with no default SSO
-    /// code; otherwise whatever `ClientBuilder::initiate_sso_by_email` surfaces.
-    pub async fn initiate_sso_by_email(
+    /// Whatever `ClientBuilder::login_with_sso_callback` surfaces.
+    pub async fn login_with_sso_callback(
         &self,
         server: ServerConfig,
-        email: &str,
-        success_redirect: &str,
-        error_redirect: &str,
-    ) -> Result<String, KupferdrahtError> {
-        self.client_builder(Some(server))
-            .initiate_sso_by_email(email, success_redirect, error_redirect)
+        callback_url: &str,
+        device_label: Option<String>,
+    ) -> Result<Arc<PendingLogin>, KupferdrahtError> {
+        let outcome = crate::wire::sso::read_callback_url(callback_url)?;
+        self.login_with_sso_outcome(server, outcome, device_label)
             .await
     }
 
-    /// SSO finalize (Step 17β) — complete login from the `zuid` cookie handed
-    /// back by Wire's `/sso/finalize-login` redirect, returning a
-    /// [`PendingLogin`] whose `register_device` finishes login (and writes the
-    /// registry row) exactly as the password flow.
+    /// Log in on `server` from how an SSO login ended: read from the
+    /// callback, or in the browser from the backend page's message.
     ///
     /// # Errors
-    /// `InvalidCredentials` / `SessionExpired` for a revoked cookie; otherwise
-    /// whatever `ClientBuilder::finalize_sso` surfaces.
-    pub async fn finalize_sso(
+    /// Whatever `ClientBuilder::login_with_sso_callback` surfaces.
+    pub(crate) async fn login_with_sso_outcome(
         &self,
         server: ServerConfig,
-        sso_cookie: &str,
+        outcome: crate::wire::sso::SsoResult,
         device_label: Option<String>,
     ) -> Result<Arc<PendingLogin>, KupferdrahtError> {
         let mut builder = self.client_builder(Some(server.clone()));
         if let Some(label) = device_label {
             builder = builder.device_label(label);
         }
-        let inner = builder.finalize_sso(sso_cookie).await?;
+        let inner = builder.login_with_sso_outcome(outcome).await?;
         let pending = PendingLogin::new(inner, server, self.global.clone());
         #[cfg(any(target_arch = "wasm32", test))]
         let pending = self.attach_first_setup(pending).await?;

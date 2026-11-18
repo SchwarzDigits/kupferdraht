@@ -81,17 +81,19 @@ kupferdraht-core/src/
 │                              wasm js_sys::Date), pub(crate)
 ├── client/                  — Client, ClientBuilder, ServerConfig, Account,
 │   │                          PendingClient; decomposed (Step 29) across
-│   │                          builder.rs, account.rs, login_pipeline.rs,
+│   │                          builder.rs, sso_login.rs (Step 162),
+│   │                          account.rs, login_pipeline.rs,
 │   │                          resume.rs, session.rs, sync.rs, rooms.rs,
 │   │                          membership.rs, timeline_read.rs, profile.rs,
 │   │                          typing.rs, mentions.rs, message_lookup.rs,
 │   │                          server_configs.rs, device.rs, http_calls.rs,
 │   │                          pending*.rs
 │   └── mod.rs                — the Client struct + cross-module accessors
-├── rooms/                   — Room, RoomType, RoomMember, RoomAccess, JoinLink
+├── rooms/                   — Room, RoomType, RoomMember, RoomAccess, JoinLink;
+│                              typing.rs: Room::typing_notice (Step 162)
 ├── timeline/                 — Timeline + one child module per interaction
 │   │                          (Step 30 split): text, reaction, confirmation,
-│   │                          delete, knock, location, typing, asset_send,
+│   │                          delete, knock, location, asset_send,
 │   │                          asset_receive, lookup, ephemeral (Step 89:
 │   │                          send + expiry sweep + timers), keyed
 │   │                          (Step 130a: send_keyed, OutgoingContent)
@@ -408,7 +410,7 @@ e.g. the OS device name. When unset, a platform-derived default is
 used. Threaded into `POST /v14/clients` during `register_device`
 (phase 2 of login). The `Kupferdraht` manager exposes the same knob as the
 `device_label: Option<String>` parameter on `Kupferdraht::login` /
-`Kupferdraht::finalize_sso` — set for a manager-driven login, `None` falls
+`Kupferdraht::login_with_sso_callback` — set for a manager-driven login, `None` falls
 back to the same platform default.
 
 ### `ClientBuilder::login(self, email, password, second_factor_code) -> Arc<PendingLogin>`
@@ -480,28 +482,44 @@ Errors map to typed `KupferdrahtError` variants — see `error.rs`.
 > the SDK through it (`Kupferdraht`, `Client`, `parse_user_id`, …) rather than
 > the native types above. See `docs/bindings.md`.
 
-### SSO login (Step 17β): `initiate_sso` / `initiate_sso_by_email` / `finalize_sso`
+### SSO login (Step 17β, reshaped in 162): `sso_login_url` / `login_with_sso_callback`
 
-Interactive, SP-driven SSO. `initiate_sso(code, success_redirect,
-error_redirect) -> String` validates the SSO code against the backend
-(`InvalidInput` when unknown) and returns the interactive initiate URL to
-open in a browser; `initiate_sso_by_email(email, success_redirect,
-error_redirect) -> String` resolves the backend's default SSO code via
-`GET /sso/settings` first (`InvalidInput` when the backend has none).
-After the IdP redirect, `finalize_sso(sso_cookie) -> Arc<PendingLogin>`
-mints an access token from the captured `zuid` cookie — no password —
-and returns the same phase-1 `PendingLogin` handle as password login;
-`register_device` (phase 2, incl. device-limit recovery) is unchanged.
-`finalize_sso` surfaces `SessionExpired` when the cookie is already
-revoked or rotated. All three require `ClientBuilder::server`.
-matrix-rust-sdk analog: `Client::login_sso` (redirect-closure model —
-see the mapping doc; Wire's SP-driven flow splits it into
-initiate/finalize around the `zuid` cookie). Manager-level twins exist
-on `Kupferdraht` (`initiate_sso` / `initiate_sso_by_email` / `finalize_sso`
-with the manager's server wiring); the **manager trio** is FFI-mirrored
-(`ffi::Kupferdraht`) and bound on wasm (`initiateSso` / `initiateSsoByEmail`
-/ `finalizeSso`) — the builder trio reaches foreign code only through
-the manager, since there is no FFI `ClientBuilder`.
+Interactive, SP-driven SSO in matrix-rust-sdk's two-call shape (ADR-0043).
+
+- `sso_login_url(redirect_url: Option<&str>, provider: Option<&str>) -> String`
+  — the URL the application opens in a browser. `provider` names the
+  identity provider by its code (`wire-<id>` or the bare id; validated,
+  `InvalidInput` when unknown or empty); `None` takes the backend's default
+  (`GET /sso/settings`, `InvalidInput` when it has none). With a
+  `redirect_url` the browser comes back to it after the identity provider:
+  its scheme must begin with `wire` and each redirect may be at most 140
+  bytes as the backend counts them (re-serialized, every query byte outside
+  `A–Z a–z 0–9 - . _ ~` percent-encoded) — Kupferdraht refuses anything else
+  with `InvalidInput` before a request. Without one (the browser) the
+  backend's page reports to the window that opened it. The URL names the
+  home's cookie label (ADR-0025), as a password login does.
+- `login_with_sso_callback(callback_url: &str) -> Arc<PendingLogin>` — reads
+  the outcome out of the URL the browser came back to: a sign-in mints an
+  access token from the session cookie in it — no password — and returns
+  the same phase-1 `PendingLogin` handle as password login;
+  `register_device` (phase 2, incl. device-limit recovery) is unchanged. A
+  refused login is `BackendRejected` with the backend's reason; a URL with
+  no outcome is `InvalidInput`; an already revoked or rotated session is
+  `SessionExpired`. The account's email is the confirmed one: an SSO user
+  whose address the backend has not confirmed yet has none
+  (`PendingLogin::email()` is empty, `Account::email()` is `None`).
+
+Both require `ClientBuilder::server`. matrix-rust-sdk analog:
+`Client::get_sso_login_url` / `Client::login_with_sso_callback`
+(`matrix_auth()`). Manager-level twins exist on `Kupferdraht` (with the
+manager's server wiring, `login_with_sso_callback` also takes the
+`device_label`); they are FFI-mirrored (`ffi::Kupferdraht`) and bound on
+wasm as `ssoLoginUrl(apiBaseUrl, provider?)` — no redirect: open it in a
+popup — and `loginWithSsoCallback(apiBaseUrl, websocketUrl, title, message,
+deviceLabel?)`, which takes the `data` of the page's `message` event; the
+session cookie is in the browser's own jar. The builder pair reaches
+foreign code only through the manager, since there is no FFI
+`ClientBuilder`.
 
 ### `ClientBuilder::register(self, name, email, password) -> Arc<PendingClient>`
 
@@ -779,7 +797,7 @@ is immediately listable via `Kupferdraht::accounts` and resumable via
 In-memory only (like `PendingAccount`); the held login token can expire on
 a very long recovery (`Unauthorized`) — re-enter via a fresh `login`. The
 recovery surface is auth-agnostic: SSO login (Step 17β, shipped) returns
-the same handle from `finalize_sso` and reuses it unchanged. No
+the same handle from `login_with_sso_callback` and reuses it unchanged. No
 matrix-rust-sdk analog (Wire extension).
 
 ---
@@ -1381,9 +1399,7 @@ not echoed to the sender. Both directions are supported.
 
 | Method                                                      | Returns                 | Notes |
 |---|---|---|
-| `Timeline::send_typing_started()`                           | `Result<(), KupferdrahtError>` | POST `conversation.typing` `started` for the room and auto-enqueue a `stopped` after an 11-second window. Deduped per room — repeat calls while one is in flight are no-ops, so it is safe to call on every keystroke. matrix-rust-sdk analog: `Room::typing_notice(true)`. |
-| `Timeline::send_typing_stopped()`                           | `Result<(), KupferdrahtError>` | POST `stopped`, but only if a `started` is outstanding (a no-op otherwise). With the auto-stop this guarantees exactly one `stopped` per `started`. matrix-rust-sdk analog: `Room::typing_notice(false)`. |
-| `Client::send_typing_started(room_id)` / `Client::send_typing_stopped(room_id)` | `Result<(), KupferdrahtError>` | The qualified-room-id-keyed forms `Timeline` delegates to. |
+| `Room::typing_notice(typing: bool)` (Step 162)              | `Result<(), KupferdrahtError>` | `true`: POST `conversation.typing` `started` for the room and auto-enqueue a `stopped` after an 11-second window. Deduped per room — repeats while one is in flight are no-ops, so it is safe to call on every keystroke. `false`: POST `stopped`, but only if a `started` of this process is outstanding (a no-op otherwise); with the auto-stop this guarantees exactly one `stopped` per `started`. `InvalidInput` once the owning `Client` is dropped. matrix-rust-sdk analog: `Room::typing_notice` (same name, same rule for a `false` without a start). |
 
 **Receive side.** Inbound `conversation.typing` events drive a
 per-room set of currently-typing users. When the set changes,
@@ -1612,7 +1628,7 @@ abandoned `Sending` row as `Failed` like every other reader.
 |---|---|---|
 | `set_display_name(&str)`                              | `Result<(), KupferdrahtError>` | `PUT /v{N}/self` with `{"name": "..."}`. matrix-rust-sdk analog: `Account::set_display_name`. Kupferdraht puts the mutator on `Client` for transport-locality (`Account` stays a frozen snapshot). The local `Account` returned by `Client::account()` is **not** updated — call `sync_once` to refresh. |
 | `set_handle(&str)`                                    | `Result<(), KupferdrahtError>` | `PUT /v{N}/self/handle` with `{"handle": "..."}`. Wire enforces global uniqueness — collisions surface as `BackendRejected("update_self_handle 409: handle-exists")`. matrix-rust-sdk analog: `Account::set_handle`. |
-| `update_email(&str)`                                  | `Result<(), KupferdrahtError>` | `PUT /v{N}/access/self/email` with `{"email": "..."}`. **Verification flow** — Wire sends a confirmation mail and returns `202`; the address changes only after the user clicks the link, so the local `Account` is **not** updated (refetch via `sync_metadata` once verified). `400 invalid-email` / `409 key-exists` (in use) surface as `BackendRejected` with the label in the body. matrix-rust-sdk analog: `Account` 3PID/email management (Drift). |
+| `request_email_change(&str)` (Step 22, renamed in 162) | `Result<(), KupferdrahtError>` | `PUT /v{N}/access/self/email` with `{"email": "..."}`. **Confirmation flow** — the backend mails a confirmation link and returns `202`; the address changes only after the user follows it, so the local `Account` is **not** updated (`refresh_account` once confirmed). `400 invalid-email` / `409 key-exists` (in use) surface as `BackendRejected` with the label in the body. matrix-rust-sdk analog: `Account` 3PID/email management (Drift). |
 | `change_password(old: &str, new: &str)`               | `Result<(), KupferdrahtError>` | `PUT /v{N}/self/password` with `{"old_password","new_password"}` (Step 27). On success Wire invalidates **every** device's refresh cookie — all sessions must re-`login` (devices + MLS state survive). Deliberately does **not** touch the in-memory session: the current access token works until expiry, then `resume`'s rebind fails into re-login. `403 invalid-credentials` (wrong old password) / `400` (policy) surface as `BackendRejected`. matrix-rust-sdk analog: `Account::change_password` (Drift: Wire carries re-auth as `old_password`, not interactive-auth `auth_data`). |
 | `rename_room(room_id: &str, new_name: &str)`          | `Result<Arc<Room>, KupferdrahtError>` | `PUT /v{N}/conversations/{domain}/{id}/name`. Wire emits a `conversation.rename` event to all members. Step 14e: after the PUT succeeds the local cache is refreshed via `sync_metadata` and the freshly-cached `Arc<Room>` (carrying the new name) is returned. Same handle `Client::room(id)` yields (`Arc::ptr_eq`-verified). matrix-rust-sdk analog: `Room::set_name` (Kupferdraht also exposes a `Room::set_name` thin wrapper that delegates here and returns `Arc<Self>`). |
 
@@ -2019,7 +2035,7 @@ current variants:
 | `InvalidSecondFactor`  | Wire `403 code-authentication-failed`. |
 | `NotLoggedIn`          | Operation requires an authenticated client. |
 | `Unauthorized`         | Access token expired or rejected mid-session (Wire `401`); distinct from the terminal `SessionExpired`. |
-| `SessionExpired`       | The `zuid` refresh cookie is no longer valid — re-login required. **Terminal for the sync family**: `sync_once` / `sync` / `sync_stream` return it and the FFI background loop maps it to `SyncListener::on_session_expired` (fires at most once, loop already stopped). Also raised by `finalize_sso` on a revoked/rotated cookie. (Step 39) |
+| `SessionExpired`       | The `zuid` refresh cookie is no longer valid — re-login required. **Terminal for the sync family**: `sync_once` / `sync` / `sync_stream` return it and the FFI background loop maps it to `SyncListener::on_session_expired` (fires at most once, loop already stopped). Also raised by `login_with_sso_callback` on a revoked/rotated session. (Step 39) |
 | `TooManyDevices`       | Wire's 7-device cap on `register_device`; the `PendingLogin` handle stays valid for recovery. (Step 24) |
 | `AccountLocked(String)` | Another Kupferdraht process is inside the account's critical section — the token refresh + persist, or the first-time creation of a database key (the payload names the scope and the holder's pid when the lock file recorded one). Since Step 97d also from a sync call (`sync_once`, the sync loops) when another `Client` or process on the account kept the drain lock (`sync.lock`) for more than 5 s (scope `sync of account <id>`). **Retryable**: the holder finishes in milliseconds; nothing was changed on this side. Native only. (Steps 85, 97d) |
 | `KeyUnavailable(String)` | A database (`global.db`, `kupferdraht.db` or `mls.db`) exists but the keystore returns no key for it; nothing was written to the keystore (the payload names the database and the keystore id). A locked or not-yet-ready keystore succeeds on a later attempt; a key that is gone for good leaves the database unreadable — the payload names the way out (`global.db` → the home's registry file; `kupferdraht.db` / `mls.db` → the account directory). Kupferdraht never replaces the key of an existing database. (Step 96, ADR-0029) |

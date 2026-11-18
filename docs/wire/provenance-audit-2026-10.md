@@ -101,3 +101,32 @@ the maintainer. Kupferdraht's keystore, recovery, task and case
 subsystems, its FFI, wasm and CLI layers were not paired because Kalium
 has no counterpart for them. The comparison scripts are not part of the
 repository; the method is described above so that it can be repeated.
+
+## Addendum (November 2026): the channel through Natrium
+
+The audit compared the tree with Kalium directly. A second channel stayed
+outside it: Natrium, the first embedding application, wraps Kalium, and
+during its migration onto Kupferdraht in May and June 2026 three surfaces
+were built so that Natrium's facade would "map 1:1" onto them.
+
+- **SSO (Step 17, ADR-0043):** `initiate_sso` / `initiate_sso_by_email` /
+  `finalize_sso(cookie)` after Natrium's `ssoLoginWithCode` / `ssoLogin(email)`
+  / `completeSSOLogin(cookie)`; the CLI's `sso initiate` / `sso finalize`.
+- **Typing (Step 21):** `send_typing_started` / `send_typing_stopped` after
+  Natrium's `sendTypingStarted` / `sendTypingStopped`.
+- **The email change (Step 22):** `update_email` after Natrium's
+  `Session.updateEmail`.
+
+An API review of 2026-11-17 found them. Whether Natrium's names are Kalium's
+own was not settled, and after Step 162 it no longer matters for the API:
+the three surfaces now carry matrix-rust-sdk's shapes —
+`sso_login_url` / `login_with_sso_callback`, `Room::typing_notice(bool)` —
+and, where matrix-rust-sdk has no counterpart, a name for what the call does
+(`request_email_change`); the browser, the FFI and the CLI follow
+(`docs/api-mapping-matrix-rust-sdk.md`). Wire's own vocabulary elsewhere in
+the public API is Step 163.
+
+The CLI's SSO redirect of finding 3 is one URL since then,
+`wire-kupferdraht://sso`: Wire refuses redirect schemes that do not begin
+with `wire`, so `kupferdraht://sso/done` never reached a Wire backend
+(`docs/wire/api-notes.md` §2b).

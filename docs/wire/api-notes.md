@@ -309,42 +309,87 @@ cookie.
 
 **v5 → v14:** shape unchanged.
 
+#### `PUT /v14/access/self/email`
+
+Ask for a change of the own email address (`change-self-email`): body
+`{"email": "<address>"}`; the backend mails a confirmation link and answers
+`202` (`204` when nothing changes). The address changes once the user follows
+the link.
+
+**Headers:** like every route under `/access`, both
+`Authorization: Bearer <access_token>` **and** `Cookie: zuid=<refresh-token>`.
+Without the cookie: `403 invalid-credentials` "Missing cookie" — live on Wire
+5.38.9 on 2026-11-18 (`docs/observations.md` §107), from Wire's route
+definition (`Cookies '["zuid" ::: SomeUserToken]` beside the bearer). Kupferdraht
+sent only the bearer until Step 162.
+
+**Status codes:** `202` / `204` success; `400 invalid-email`; `403`
+(cookie missing or invalid); `409 key-exists` (the address is taken).
+
+**Kupferdraht usage:** `wire/http/auth.rs::update_self_email`, behind
+`Client::request_email_change`.
+
 ---
 
-### 2b. SSO login (Step 17β — interactive / SP-driven)
+### 2b. SSO login (Step 17β, reshaped in Step 162 — interactive / SP-driven)
 
-Kupferdraht drives Wire's SP-side SSO endpoints; the SAML round-trip and signature
-validation happen on Wire's server. Kupferdraht builds the initiate redirect URL and,
-after the browser round-trip, finalises the session from the returned `zuid`
-cookie (17b). **These `/sso/*` paths are treated as unversioned (spar service);
-confirm vs. `/v14/sso/*` on live-probe.**
+Kupferdraht drives Wire's SP-side SSO endpoints (spar); the SAML round-trip and
+signature validation happen on Wire's server (ADR-0043). The `/sso/*` paths are
+**unversioned**, live-confirmed on 2026-11-18 against Wire 5.38.9 with Keycloak
+as identity provider (`docs/observations.md` §107). How spar hands the outcome
+back was read in its source (`docs/wire/kalium-readings.md` #30) and confirmed
+in the same live run.
 
 #### `GET | HEAD /sso/initiate-login/{idp}`
 
-- `{idp}` — the SSO **code** identifying the team's configured IdP.
-- Query: `success_redirect`, `error_redirect` — where Wire redirects the browser
-  after the IdP round-trip (success carries the `zuid` cookie; failure carries an
-  error code). Kupferdraht url-encodes both.
-- `GET` returns the IdP redirect (opened in a browser). `HEAD` validates the code
-  without initiating: **200** → code resolves to an IdP, **404** → unknown code.
+- `{idp}` — the bare id of the team's identity provider. The code users see is
+  `wire-<idp>`; the endpoint wants the id (`wire::sso::provider_id`).
+- Query `success_redirect` and `error_redirect` — **both or neither**
+  (`400 need-both-redirect-urls`). Each must have a scheme beginning with `wire`
+  (`400 invalid-schema`) and be at most **140 bytes as spar re-serializes it**
+  (`400 url-too-long`): every query byte outside `A–Z a–z 0–9 - . _ ~`
+  percent-encoded, so a `$` counts 3. Kupferdraht checks both rules before any
+  request (`wire::sso::redirect_pair`).
+- Query `label` — the cookie label of the session spar creates (ADR-0025);
+  Kupferdraht sends the home's, as a password login does.
+- `GET` answers `200` with an HTML form that posts the SAML request to the
+  identity provider (opened in a browser). `HEAD` validates the id without
+  starting a login: **200** → known, **404** → unknown.
 - Kupferdraht: `HttpClient::sso_initiate_login_url` (builds the URL, pure) +
   `HttpClient::sso_code_exists` (`HEAD`, 200→true / 404→false).
 
-#### `POST /sso/finalize-login` (17b — not called by the client)
+#### How the outcome comes back
 
-The IdP→Wire callback: Wire receives the SAML assertion, sets the `zuid`
-`Set-Cookie`, and redirects the browser to `success_redirect`. The client never
-calls this directly — it catches the redirect and extracts the cookie.
+- **With the redirect pair**, spar answers the identity provider's
+  `POST /sso/finalize-login/{team}` with a `303` to one of them, after replacing
+  a placeholder in it: `$cookie` (or `%24cookie`) in the success URL by the whole
+  rendered `Set-Cookie` line of the new session (`$userid` by the user id),
+  `$label` in the error URL by the error label (`forbidden` for a denied
+  login). Kupferdraht names the parameters itself: the success URL gets
+  `credential=$cookie`, the error URL `reason=$label`. Live, the callback was
+  `…?credential=zuid%3D<value>%3B%20Path%3D%2Faccess%3B%20Expires%3D<date>%3B%20HttpOnly`:
+  the whole line, percent-encoded; the cookie's value itself holds `=`, `.`, `-`
+  and `_`. The `303` sets the same cookie for the API host as well.
+- **Without the pair**, spar answers with an HTML page (title `wire:sso:success`
+  or `wire:sso:error:<label>`) that sets the cookie in the browser's jar and posts
+  `{type: "AUTH_SUCCESS"}` or `{type: "AUTH_ERROR", payload: {label, errors}}` to
+  `window.opener`.
+- The cookie mints the first access token with `POST /v14/access` (no
+  `client_id`; live `200`, the token's user is the SSO user).
+- After the first login an SSO user's `GET /v14/self` carries a `team`, no
+  `handle`, the NameID as `name`, `managed_by: "wire"`, `sso_id` and — while
+  `validateSAMLemails` holds the address unconfirmed — `email_unvalidated`
+  instead of `email`. Kupferdraht takes only `email` as the account's address.
 
-#### `GET /sso/settings` (17c)
+#### `POST /sso/finalize-login[/{team}]` (not called by the client)
 
-Returns the team's **default** SSO code — used for email-domain discovery
-(single-IdP teams). Per-domain vs. team-default semantics: live-probe (17c).
+The identity provider's callback through the browser. The client never calls it;
+it receives the outcome as above.
 
-**Open questions (live-probe):** endpoint versioning; whether the `zuid` is
-delivered as a `?cookie=…` query on `success_redirect` or a `Set-Cookie` the app
-reads; whether `POST /access` with no `client_id` mints the first token from a
-bare `zuid`. See `docs/plan/archive/17-saml-sso.md`.
+#### `GET /sso/settings`
+
+`{"default_sso_code": <idp id> | null}` — the backend's default provider, taken
+when the caller names none. Live: `null` on a backend without a default.
 
 ---
 

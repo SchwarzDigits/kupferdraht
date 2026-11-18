@@ -704,25 +704,6 @@ impl Timeline {
             .await
     }
 
-    /// Send a typing `started` notification for this room. Kupferdraht
-    /// auto-stops after ~11 s and dedupes repeat calls, so call this
-    /// freely on keystrokes.
-    ///
-    /// # Errors
-    /// See `KupferdrahtError`.
-    pub async fn send_typing_started(&self) -> Result<(), KupferdrahtError> {
-        self.inner.send_typing_started().await
-    }
-
-    /// Send a typing `stopped` notification for this room (a no-op when
-    /// nothing is in flight).
-    ///
-    /// # Errors
-    /// See `KupferdrahtError`.
-    pub async fn send_typing_stopped(&self) -> Result<(), KupferdrahtError> {
-        self.inner.send_typing_stopped().await
-    }
-
     /// Like `send_text`, but probes for local MLS state first and joins
     /// the room (external commit) when it is absent, then sends.
     ///

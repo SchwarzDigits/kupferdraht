@@ -33,20 +33,20 @@ pub(crate) async fn profile_set(
     Ok(())
 }
 
-/// `kupferdraht-cli email-update --email <addr>` (Step 98a).
+/// `kupferdraht-cli email-change --email <addr>` (Step 98a, renamed in 162).
 ///
-/// Wire answers before the address changes: it mails a verification link and
-/// only applies the change once that link is followed. The wording says so, so
-/// nobody reads "ok" as "done".
-pub(crate) async fn email_update(email: String) -> Result<(), KupferdrahtError> {
+/// The backend answers before the address changes: it mails a confirmation
+/// link and only applies the change once that link is followed. The wording
+/// says so, so nobody reads "ok" as "done".
+pub(crate) async fn email_change(email: String) -> Result<(), KupferdrahtError> {
     if email.trim().is_empty() {
         return Err(KupferdrahtError::InvalidInput(
-            "email-update: --email must not be empty".into(),
+            "email-change: --email must not be empty".into(),
         ));
     }
     let client = resume_client().await?;
-    client.update_email(email.trim()).await?;
-    println!("email-update ok");
+    client.request_email_change(email.trim()).await?;
+    println!("email-change ok");
     println!("  verification sent to: {}", email.trim());
     println!("  the address changes once the link in that mail is followed");
     Ok(())

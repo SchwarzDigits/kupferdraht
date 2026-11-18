@@ -19,63 +19,22 @@ use super::{
     resume_active, resume_client,
 };
 
-/// SSO (Step 17β) — validate `code` against the backend and print the
-/// interactive initiate URL to open in a browser. The post-`IdP` redirect
-/// carries the `zuid` cookie that `sso finalize` (Step 17b) consumes.
-pub(crate) async fn sso_initiate(
-    server: ServerConfig,
-    code: Option<String>,
-    email: Option<String>,
-    success_redirect: String,
-    error_redirect: String,
-) -> Result<(), KupferdrahtError> {
-    let app = Kupferdraht::open(kupferdraht_home()?, cli_keystore())?;
-    let url = match (code, email) {
-        (Some(code), _) => {
-            app.initiate_sso(server, &code, &success_redirect, &error_redirect)
-                .await?
-        }
-        (None, Some(email)) => {
-            app.initiate_sso_by_email(server, &email, &success_redirect, &error_redirect)
-                .await?
-        }
-        (None, None) => {
-            return Err(KupferdrahtError::InvalidInput(
-                "provide --code or --email".into(),
-            ));
-        }
+/// Step 156: keep the backend's own certificate authorities in the home
+/// before a login, so it and every later command trust them.
+fn remember_ca_file(ca_file: Option<std::path::PathBuf>) -> Result<(), KupferdrahtError> {
+    let Some(path) = ca_file else {
+        return Ok(());
     };
-    println!("sso initiate ok");
-    println!("  open this URL in a browser to authenticate:");
-    println!("    {url}");
-    println!();
-    println!("After the IdP round-trip, capture the zuid cookie from the redirect");
-    println!("and run `kupferdraht-cli sso finalize` (Step 17b).");
-    Ok(())
+    let pem = std::fs::read_to_string(&path).map_err(|e| {
+        KupferdrahtError::InvalidInput(format!("--ca-file {}: {e}", path.display()))
+    })?;
+    super::remember_trusted_authorities(&kupferdraht_home()?, &pem)
 }
 
-/// SSO finalize (Step 17β) — mint the session from the `zuid` cookie, register
-/// this device, and persist the account. Mirrors `login`'s phase-2 device
-/// registration (including the 7-device-cap recovery).
-pub(crate) async fn sso_finalize(
-    server: ServerConfig,
-    cookie: String,
-    delete_device: Option<String>,
-) -> Result<(), KupferdrahtError> {
-    let app = Kupferdraht::open(kupferdraht_home()?, cli_keystore())?;
-    let pending = app.finalize_sso(server, &cookie, None).await?;
-    let client = match pending.register_device().await {
-        Ok(client) => client,
-        Err(KupferdrahtError::TooManyDevices) => {
-            match recover_device_limit(&pending, delete_device).await? {
-                Some(client) => client,
-                None => return Ok(()),
-            }
-        }
-        Err(e) => return Err(e),
-    };
+/// The lines `login` and `sso callback` print for the new session.
+fn print_session(command: &str, client: &Client) {
     let account = client.account();
-    println!("sso finalize ok");
+    println!("{command} ok");
     println!(
         "  user_id:     {}",
         client.user_id().map_or("—", UserId::as_str)
@@ -89,6 +48,55 @@ pub(crate) async fn sso_finalize(
     println!("  name:        {}", account.display_name());
     println!("  api_version: {}", client.api_version());
     println!("  server:      {}", client.server_title());
+}
+
+/// `sso url` (Step 162) — print the URL that starts an SSO login; the
+/// browser comes back to `redirect` with the outcome for `sso callback`.
+pub(crate) async fn sso_url(
+    server: ServerConfig,
+    redirect: String,
+    provider: Option<String>,
+    ca_file: Option<std::path::PathBuf>,
+) -> Result<(), KupferdrahtError> {
+    remember_ca_file(ca_file)?;
+    let app = super::open_manager()?;
+    let url = app
+        .sso_login_url(server, Some(&redirect), provider.as_deref())
+        .await?;
+    println!("sso url ok");
+    println!("  open this URL in a browser and sign in:");
+    println!("    {url}");
+    println!();
+    println!("The browser then comes back to {redirect}?… — copy that whole URL");
+    println!("and run `kupferdraht-cli sso callback` (it asks for the URL).");
+    Ok(())
+}
+
+/// `sso callback` (Step 162) — log in from the URL the browser came back
+/// to, register this device, and persist the account. Mirrors `login`'s
+/// phase-2 device registration (including the 7-device-cap recovery).
+pub(crate) async fn sso_callback(
+    server: ServerConfig,
+    callback_url: String,
+    delete_device: Option<String>,
+    ca_file: Option<std::path::PathBuf>,
+) -> Result<(), KupferdrahtError> {
+    remember_ca_file(ca_file)?;
+    let app = super::open_manager()?;
+    let pending = app
+        .login_with_sso_callback(server, &callback_url, None)
+        .await?;
+    let client = match pending.register_device().await {
+        Ok(client) => client,
+        Err(KupferdrahtError::TooManyDevices) => {
+            match recover_device_limit(&pending, delete_device).await? {
+                Some(client) => client,
+                None => return Ok(()),
+            }
+        }
+        Err(e) => return Err(e),
+    };
+    print_session("sso callback", &client);
     Ok(())
 }
 
@@ -99,14 +107,7 @@ pub(crate) async fn login(
     delete_device: Option<String>,
     ca_file: Option<std::path::PathBuf>,
 ) -> Result<(), KupferdrahtError> {
-    // Step 156: the backend's own certificate authorities, kept in the home
-    // before the login so it and every later command trust them.
-    if let Some(path) = ca_file {
-        let pem = std::fs::read_to_string(&path).map_err(|e| {
-            KupferdrahtError::InvalidInput(format!("--ca-file {}: {e}", path.display()))
-        })?;
-        super::remember_trusted_authorities(&kupferdraht_home()?, &pem)?;
-    }
+    remember_ca_file(ca_file)?;
     // The device manager logs in, registers the account in the device
     // registry (so `accounts` lists it), marks it active, and persists
     // the session — the CLI never constructs the store or keystore beyond
@@ -127,21 +128,7 @@ pub(crate) async fn login(
         }
         Err(e) => return Err(e),
     };
-    let account = client.account();
-    println!("login ok");
-    println!(
-        "  user_id:     {}",
-        client.user_id().map_or("—", UserId::as_str)
-    );
-    println!("  device_id:   {}", client.device_id().unwrap_or("—"));
-    println!("  handle:      {}", account.handle().unwrap_or("—"));
-    println!(
-        "  team:        {}",
-        team_line(account.team_name(), account.team_id())
-    );
-    println!("  name:        {}", account.display_name());
-    println!("  api_version: {}", client.api_version());
-    println!("  server:      {}", client.server_title());
+    print_session("login", &client);
     Ok(())
 }
 

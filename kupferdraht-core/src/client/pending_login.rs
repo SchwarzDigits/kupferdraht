@@ -84,7 +84,10 @@ impl PendingLogin {
         &self.user_id
     }
 
-    /// The email the session was authenticated under. Echoes input verbatim.
+    /// The email the session was authenticated under: a password login's
+    /// input verbatim; after an SSO login the account's confirmed address,
+    /// empty while the backend holds it unconfirmed (live-confirmed,
+    /// `docs/observations.md` §107).
     #[must_use]
     pub fn email(&self) -> &str {
         &self.email

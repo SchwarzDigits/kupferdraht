@@ -52,6 +52,7 @@ mod sent_signal;
 mod server_configs;
 pub(crate) use server_configs::ensure_default_ciphersuite;
 mod session;
+mod sso_login;
 mod sync;
 mod timeline_read;
 mod token_refresh;

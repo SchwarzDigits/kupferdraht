@@ -75,7 +75,6 @@ anyway; a verified item leaves here (the fact goes to `docs/observations.md`).
 - **gap-B.15** the `WIRE_RECEIPT_MODE` off path against a live backend;
 - **gap-B.13** a live `/feature-configs` fixture captured (the tests use a synthesised one);
 - **gap-B.7 residual** the low-pool live drain of the key-package top-up (Step 63) — needs a claim source, i.e. a second device (observations §66);
-- **gap-B.36** the SSO login (ADR-0043) end to end against a backend with a configured identity provider; four assumptions pinned by tests (`docs/wire/api-notes.md` §2b: unversioned `/sso/*` paths, the cookie as a query parameter on the success redirect, `POST /access` from a bare `zuid`, `/sso/settings` as the discovery source);
 - **gap-B.37** whether the backend itself refuses an MLS message for a future epoch (the Step-106 healing does not depend on it; robustness, not security).
 
 ### Code quality / maintainability

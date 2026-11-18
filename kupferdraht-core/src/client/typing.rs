@@ -192,17 +192,32 @@ mod tests {
 const TYPING_AUTOSTOP: std::time::Duration = std::time::Duration::from_secs(11);
 
 impl Client {
+    /// Tell `room_id` whether this user is typing — the send side of
+    /// [`Room::typing_notice`](crate::rooms::Room::typing_notice) (Step 21,
+    /// 162). `room_id` is the qualified `<uuid>@<domain>` form.
+    ///
+    /// # Errors
+    /// * `InvalidInput` if `room_id` is empty or unqualified.
+    /// * `BackendRejected` / `Network` from the typing POST.
+    pub(crate) async fn typing_notice(
+        &self,
+        room_id: &str,
+        typing: bool,
+    ) -> Result<(), KupferdrahtError> {
+        crate::client::input::require_non_empty("typing_notice", &[("room_id", room_id)])?;
+        if typing {
+            self.begin_typing(room_id).await
+        } else {
+            self.end_typing(room_id).await
+        }
+    }
+
     /// Send a typing `started` for `room_id` and auto-enqueue a
     /// `stopped` after [`TYPING_AUTOSTOP`]. Deduped: a second call while
     /// one is in flight is a no-op. The app/UI decides when to call
     /// this; Kupferdraht guarantees a `stopped` follows within the window
-    /// (Step 21). `room_id` is the qualified `<uuid>@<domain>` form.
-    ///
-    /// # Errors
-    /// * `InvalidInput` if `room_id` is unqualified.
-    /// * `BackendRejected` / `Network` from the typing POST.
-    pub async fn send_typing_started(&self, room_id: &str) -> Result<(), KupferdrahtError> {
-        crate::client::input::require_non_empty("send_typing_started", &[("room_id", room_id)])?;
+    /// (Step 21).
+    async fn begin_typing(&self, room_id: &str) -> Result<(), KupferdrahtError> {
         // Hold the send lock across the marker check + POST so a
         // concurrent `stopped` (explicit or auto) cannot reorder ahead of
         // this `started` on the wire. The auto-stop is spawned only after
@@ -220,7 +235,7 @@ impl Client {
         // The ~11 s typing auto-stop runs on a spawned background task. On wasm
         // there is no `tokio::spawn`/multi-thread runtime; the auto-stop is
         // skipped until the single-thread `spawn_local` sync work lands (a later
-        // step). The explicit `send_typing_stopped` path still works. docs/plan/44-*.
+        // step). The explicit `false` path still works. docs/plan/44-*.
         #[cfg(not(target_arch = "wasm32"))]
         {
             let weak = self.weak();
@@ -228,7 +243,7 @@ impl Client {
             tokio::spawn(async move {
                 tokio::time::sleep(TYPING_AUTOSTOP).await;
                 if let Some(client) = weak.upgrade()
-                    && let Err(e) = client.send_typing_stopped(&room).await
+                    && let Err(e) = client.end_typing(&room).await
                 {
                     tracing::debug!(error = %e, room, "typing auto-stop send failed");
                 }
@@ -240,14 +255,8 @@ impl Client {
     /// Send a typing `stopped` for `room_id`, but only if one was
     /// outstanding — a no-op otherwise. Together with the auto-stop this
     /// guarantees exactly one `stopped` per `started`. Step 21.
-    ///
-    /// # Errors
-    /// * `InvalidInput` if `room_id` is unqualified.
-    /// * `BackendRejected` / `Network` from the typing POST.
-    pub async fn send_typing_stopped(&self, room_id: &str) -> Result<(), KupferdrahtError> {
-        crate::client::input::require_non_empty("send_typing_stopped", &[("room_id", room_id)])?;
-        // Same send-lock-across-POST ordering guarantee as
-        // `send_typing_started`.
+    async fn end_typing(&self, room_id: &str) -> Result<(), KupferdrahtError> {
+        // Same send-lock-across-POST ordering guarantee as `begin_typing`.
         let _send = self.typing_send_lock.lock().await;
         if !self.typing.end_outgoing(room_id) {
             return Ok(());

@@ -74,15 +74,16 @@ object identity)
   `purge_local` as natively; `forget_account` drops the account's
   databases, keys and registry row without a session, the device at the
   backend stays), `register(server, name, email, password) -> PendingClient`,
-  `initiate_sso(server, code, success_redirect, error_redirect) -> String`
-  (Step 17β — validates the SSO code and returns the interactive initiate URL
-  to open in a browser; wasm: `initiateSso`),
-  `finalize_sso(server, sso_cookie, device_label?) -> PendingLogin` (Step 17β —
-  completes login from the `zuid` cookie captured off the redirect; drive
-  `register_device` as with password login; wasm: `finalizeSso`),
-  `initiate_sso_by_email(server, email, success_redirect, error_redirect) -> String`
-  (Step 17β — resolves the backend's default SSO code via `GET /sso/settings`;
-  wasm: `initiateSsoByEmail`).
+  `sso_login_url(server, redirect_url?, provider?) -> String` (Step 162 — the
+  URL that starts an SSO login; `provider` `null`/`nil` takes the backend's
+  default; the redirect's scheme must begin with `wire`; wasm:
+  `ssoLoginUrl(apiBaseUrl, provider?)` without a redirect),
+  `login_with_sso_callback(server, callback_url, device_label?) ->
+  PendingLogin` (Step 162 — logs in from the URL the browser came back to;
+  drive `register_device` as with password login; a refused login is
+  `BackendRejected` with the backend's reason; wasm:
+  `loginWithSsoCallback(apiBaseUrl, websocketUrl, title, message,
+  deviceLabel?)` with the `data` of the SSO page's `message` event).
 - `PendingClient` — `user_id()`, `email()`, `activate(code) -> Client`
   (once-only on success; a failed activation can be retried),
   `resend_activation_email()`. Activation registers the account in the
@@ -106,14 +107,15 @@ object identity)
   `leave_room`, `delete_room`, `rename_room`, `join_via_link`,
   `find_message_room`, `find_message_by_id`, `resync_room`,
   `resync_existing_rooms`, …); admin (`logout`,
-  `set_display_name`, `set_handle`, `update_email`, `change_password`, `devices`,
+  `set_display_name`, `set_handle`, `request_email_change`, `change_password`, `devices`,
   `feature_configs`, `file_sharing`, `receipt_mode`, …); avatars (Step 144:
   `avatar(user_id, size) -> Avatar?`, `avatar_key(user_id)`, `team_avatar()`,
   `upload_avatar(image)`, `remove_avatar()`; the rules are in
   [library.md](library.md)); sync + observers (below).
 - `Room` — getters (`id`, `name`, `room_type`, `counterpart`, `members`,
   …), membership (`join`, `leave`, `delete` — team-admin, `invite`, `kick`,
-  `set_name`), access /
+  `set_name`), `typing_notice(typing)` (Step 162 — auto-stop + dedupe; a
+  `false` sends only after a `true`), access /
   guest links (`access`, `set_access`, `create_join_link`, …),
   `timeline() -> Timeline`, `messages(limit?, before?)` (`limit`
   `null`/`nil` = everything), `failed_sends()` (the room's `Failed`
@@ -136,9 +138,7 @@ object identity)
   (`send_keyed(idempotency_key, content: OutgoingContent)` — a text,
   reply, knock, location, file or reaction under a caller-chosen key; a
   repeat of the key answers the stored handle instead of sending twice;
-  Step 130a, `docs/library.md`),
-  typing (`send_typing_started`,
-  `send_typing_stopped` — auto-stop + dedupe), `asset(message_id) -> Asset?`,
+  Step 130a, `docs/library.md`), `asset(message_id) -> Asset?`,
   `subscribe(listener) -> Subscription`.
 - `Asset` — `metadata() -> AssetMeta`, `download() -> bytes`,
   `save_to(path)`; both refuse with `InvalidInput` once the asset's message
@@ -655,10 +655,12 @@ manager:
 - `login(apiBaseUrl, websocketUrl, title, email, password,
   secondFactorCode?, deviceLabel?) -> PendingLogin` — phase-1 password
   login.
-- `initiateSso(apiBaseUrl, code, successRedirect, errorRedirect) ->
-  String`, `initiateSsoByEmail(...)`, `finalizeSso(apiBaseUrl,
-  websocketUrl, title, ssoCookie, deviceLabel?) -> PendingLogin`
-  (Step 17β — same semantics as the UniFFI methods above).
+- `ssoLoginUrl(apiBaseUrl, provider?) -> String` (Step 162) — open it in a
+  popup; without a redirect the backend's page reports to the opener by
+  `postMessage`. `loginWithSsoCallback(apiBaseUrl, websocketUrl, title,
+  message, deviceLabel?) -> PendingLogin` takes that `message` event's
+  `data` (`AUTH_SUCCESS`, or `AUTH_ERROR` → `BackendRejected` with the
+  reason); the session cookie is already in the browser's jar.
 - `resume(accountId) -> Client` — resume a registered account from the
   browser's storage, no network login. `SessionExpired` → log in again;
   `RecoveryDataRequired` → this browser no longer holds the account's
@@ -843,9 +845,10 @@ Since Step 110 (ADR-0035):
   the stop. All three are re-issued at a leader change (`idempotent`).
   Nothing retries on its own: call them when the user asks, or when
   `startSync`'s `onSync` reports the first successful pass.
-- Typing: `startTyping(roomId)` / `stopTyping(roomId)` — outbound only;
-  the browser prototype manages start/stop explicitly (the core 11-s
-  auto-stop timer is native-only, `tokio::spawn` is cfg'd out on wasm).
+- Typing: `typingNotice(roomId, typing)` (Step 162) — outbound only; the
+  app sends the `false` itself (the core 11-s auto-stop timer is
+  native-only, `tokio::spawn` is cfg'd out on wasm). A `false` sends only
+  after a `true`.
 - Room events (Step 145): `messages()` carries a room's creation, renames, joins and
   leaves as items of the kinds `membership_change` (`change`: `joined` / `added` /
   `left` / `kicked`, `actor`, `users`), `room_name_change` (`name`) and `room_created`
@@ -876,7 +879,7 @@ Since Step 110 (ADR-0035):
   request, and more bytes than declared + 32 reject `IntegrityCheck`
   (Step 160).
 - Session admin (Step 98a): `setDisplayName(name)`, `setHandle(handle)`,
-  `updateEmail(email)` — the last one means "verification mail sent", not
+  `requestEmailChange(email)` — the last one means "confirmation mail sent", not
   "address changed". Since Step 126 the first two also write the persisted
   `self_user` row, so the next `resume` reports the new value; since
   Step 152 the `displayName` / `handle` getters answer it right after the
@@ -1029,9 +1032,9 @@ instance" into "served to every tab". Two halves:
 - **Failover, honest by construction (L3, three classes since Step
   130a):** when a new leader announces itself, an **idempotent** call in
   flight — the reads (`accounts`, `rooms`, `messages`, `members`,
-  `downloadAsset`, `resume`, `syncOnce`, `initiateSso*`, `recovery`,
+  `downloadAsset`, `resume`, `syncOnce`, `ssoLoginUrl`, `recovery`,
   `Recovery.state` / `verifyPin`, …) and the mutations a repeat converges
-  (`markAsRead`, `markAsUnread`, `startTyping`, `stopTyping`, `redact`,
+  (`markAsRead`, `markAsUnread`, `typingNotice`, `redact`,
   `createDm`, `renameRoom`, `setRoomAccess`, `allowGuests`,
   `setDisplayName`) — is re-issued to it (a `Client` proxy re-resumes by
   `userId` first, a `Recovery` proxy asks its client again); a **keyed**
@@ -1039,11 +1042,11 @@ instance" into "served to every tab". Two halves:
   `sendFile`, `toggleReaction`) is re-issued with its `idempotencyKey` —
   the proxy adds one when the caller gave none — so a send the old leader
   completed answers its stored handle and nothing reaches the backend
-  twice; a **mutation** in flight (`login`, `finalizeSso`,
+  twice; a **mutation** in flight (`login`, `loginWithSsoCallback`,
   `registerDevice`, `recover`, `Recovery.enable` / `changePin`,
   `createRoom`, `editMessage`, `invite`, `kick`, `leave`, `deleteRoom`,
   `createJoinLink`, `revokeJoinLink`, `joinViaLink`, `setHandle`,
-  `updateEmail`, `deleteDevice`, `logout`, …) rejects with
+  `requestEmailChange`, `deleteDevice`, `logout`, …) rejects with
   `LeaderChangedError` (`name === "LeaderChanged"`) and is **never
   retried by the module** — it cannot know whether the call reached the
   backend, and a repeat is not safe; the embedder offers "try again".

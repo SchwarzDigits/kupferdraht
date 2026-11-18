@@ -69,6 +69,49 @@ after this step it no longer matters for the API.
   from the one URL (a marker parameter) or takes both.
 - `request_email_change` or `set_email`.
 
+### Phase 1 — results (2026-11-17/18)
+
+- **The callback, settled from spar's source and live** (`docs/wire/kalium-readings.md`
+  #30, `docs/observations.md` §107): the cookie was never a query parameter of its
+  own. spar replaces a `$cookie` placeholder in the success URL with the whole
+  `Set-Cookie` line, a `$label` in the error URL with the reason; redirect schemes
+  must begin with `wire`, each URL at most 140 bytes as spar re-serializes it.
+  Step 17's flow therefore worked only with the cookie read out of the browser by
+  hand. The reference machine got Keycloak (team "SSO Referenz") for this step, so
+  the smoke covers the login end to end.
+- **One redirect URL** (Volker): `sso_login_url(redirect_url, provider)`;
+  Kupferdraht derives the pair with parameters of its own, `credential=$cookie`
+  and `reason=$label`. The CLI's default is `wire-kupferdraht://sso`; the URL comes
+  back by prompt or stdin.
+- **The provider is optional** — `None` takes the backend's default; the email
+  lookup goes (under v14 it only ever found the default).
+- **The browser** takes no redirect: `ssoLoginUrl(apiBaseUrl, provider?)` for a
+  popup, `loginWithSsoCallback(…, message, …)` with the page's `postMessage` data;
+  the cookie stays in the browser's jar (Volker).
+- **`request_email_change`** (Volker).
+- **The start URL names the home's cookie label** (ADR-0025), as a password login.
+- **No Wire vocabulary in Kupferdraht's own names, words, tests or functions**
+  (Volker): Wire's placeholders, page messages and endpoint names stay in `wire/`.
+- **The CLI's `typing`** sends the start and, `--seconds` later, the stop in one
+  process: a `false` sends only after a `true` of the same process, as in
+  matrix-rust-sdk.
+
+### Found on the way
+
+- **The email change never reached Wire** (smoke, 2026-11-18): `PUT
+  /access/self/email` wants the `zuid` cookie beside the token; Kupferdraht sent
+  only the token since Step 22 (`403` "Missing cookie"). Fixed here, test first.
+- **The redirect's length** counts as spar re-serializes it (`$` as `%24`), not
+  as written — the check measures that way.
+- **The browser's old `initiateSso`** could never have worked: it passed an empty
+  WebSocket URL, which the scheme check refuses. The start URL no longer checks
+  the socket.
+- **The CLI's SSO commands ignored `login --ca-file`'s authorities**; they read
+  them now and take `--ca-file` themselves.
+- **An SSO user cannot delete a device through the CLI**: `logout --purge-device`
+  and `device-delete` want a non-empty password, and an SSO user has none. Not
+  fixed here.
+
 ## Out of scope
 
 - Wire vocabulary elsewhere in the public API: Step 163.

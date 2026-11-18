@@ -79,9 +79,8 @@ export class StubKupferdraht {
     return new StubClient(accountId);
   }
   async login() { throw new Error('stub: no Wire backend behind the fixture'); }
-  async finalizeSso() { throw new Error('stub: no Wire backend behind the fixture'); }
-  async initiateSso() { return 'https://wire.example.test/sso'; }
-  async initiateSsoByEmail() { return 'https://wire.example.test/sso'; }
+  async loginWithSsoCallback() { throw new Error('stub: no Wire backend behind the fixture'); }
+  async ssoLoginUrl() { return 'https://wire.example.test/sso'; }
   validateNewPin(pin) { return pin.length < 6 ? 'tooShort' : 'ok'; }
 }
 

@@ -265,9 +265,10 @@ export class KupferdrahtProxy {
   /** The leader's login cookie label (Step 93); `undefined` until a leader has announced itself. */
   readonly cookieLabel: string | undefined;
   login(apiBaseUrl: string, websocketUrl: string, title: string, email: string, password: string, secondFactorCode?: string, deviceLabel?: string): Promise<PendingLoginProxy>;
-  initiateSso(apiBaseUrl: string, code: string, successRedirect: string, errorRedirect: string): Promise<string>;
-  initiateSsoByEmail(apiBaseUrl: string, email: string, successRedirect: string, errorRedirect: string): Promise<string>;
-  finalizeSso(apiBaseUrl: string, websocketUrl: string, title: string, ssoCookie: string, deviceLabel?: string): Promise<PendingLoginProxy>;
+  /** Open the URL in a popup; its page posts the outcome back. `provider` omitted: the backend's default. */
+  ssoLoginUrl(apiBaseUrl: string, provider?: string): Promise<string>;
+  /** `message` is the `data` of the SSO page's `message` event; a refusal rejects with `BackendRejected`. */
+  loginWithSsoCallback(apiBaseUrl: string, websocketUrl: string, title: string, message: unknown, deviceLabel?: string): Promise<PendingLoginProxy>;
   /** `takeOver` takes the account's databases over from another browser that holds them (`HeldElsewhere` otherwise; Step 111c). */
   resume(accountId: string, options?: { takeOver?: boolean }): Promise<ClientProxy>;
   accounts(): Promise<AccountEntry[]>;
@@ -334,8 +335,8 @@ export class ClientProxy {
   refreshAccount(): Promise<void>;
   setDisplayName(name: string): Promise<void>;
   setHandle(handle: string): Promise<void>;
-  /** Wire mails a verification link; the address changes once confirmed. */
-  updateEmail(email: string): Promise<void>;
+  /** The backend mails a confirmation link; the address changes once confirmed. */
+  requestEmailChange(email: string): Promise<void>;
   devices(): Promise<DeviceInfo[]>;
   /** Wire requires the account password to re-authenticate. */
   deleteDevice(deviceId: string, password: string): Promise<void>;
@@ -352,8 +353,8 @@ export class ClientProxy {
   joinViaLink(code: string, key: string, password?: string): Promise<Room>;
   /** A subscription to the leader's one sync loop; callbacks run in this tab. */
   startSync(onMessage: (m: MessageEvent_) => void, onTyping?: (t: TypingEvent_) => void, onExpired?: () => void, onSync?: (s: SyncSummary) => void, onDevicesChanged?: (c: DevicesChange) => void, onStorage?: (state: 'online' | 'reconnecting') => void, onRoomsChanged?: (c: ReadStateChange) => void): SyncHandleProxy;
-  startTyping(roomId: string): Promise<void>;
-  stopTyping(roomId: string): Promise<void>;
+  /** `true` may be sent on every keystroke; repeats while one is outstanding are dropped. */
+  typingNotice(roomId: string, typing: boolean): Promise<void>;
   syncOnce(): Promise<SyncSummary>;
   rooms(): Promise<Room[]>;
   /** Joins the room's MLS group first if needed. Keyed (`SendOptions`): re-issued at a leader change with its key. */

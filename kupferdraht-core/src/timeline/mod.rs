@@ -21,7 +21,7 @@
 //! `Timeline` + `MessageHandle` types and their core accessors live
 //! here; each message type / interaction owns a sibling child module
 //! (`text`, `reaction`, `confirmation`, `delete`, `knock`,
-//! `location`, `typing`), and the read-side lookups live in
+//! `location`), and the read-side lookups live in
 //! `lookup`. Each child module holds that interaction's `Timeline`
 //! facade next to its `Client` orchestrator — the same pattern
 //! `asset_send` established.
@@ -53,7 +53,6 @@ mod send_state;
 mod subscription;
 pub(crate) mod task;
 mod text;
-mod typing;
 
 pub use asset_receive::AssetSummary;
 pub use asset_send::AssetSource;

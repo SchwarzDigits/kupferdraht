@@ -21,7 +21,7 @@ fn client_binds_session_admin() {
     let s = surface();
     assert_bound(&s, "Client", "setDisplayName");
     assert_bound(&s, "Client", "setHandle");
-    assert_bound(&s, "Client", "updateEmail");
+    assert_bound(&s, "Client", "requestEmailChange");
 }
 
 #[test]

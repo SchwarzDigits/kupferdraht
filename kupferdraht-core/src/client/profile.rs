@@ -4,7 +4,7 @@
 //! `Client` — self-profile mutators.
 //!
 //! The profile-management slice of the `Client` runtime (Step 29):
-//! `set_display_name`, `set_handle`, `update_email`, and
+//! `set_display_name`, `set_handle`, `request_email_change`, and
 //! `change_password`. Each lives on `Client` (matching the
 //! `Client::create_room` / `Client::invite_members` pattern); the
 //! matrix-rust-sdk analogs live on `Account`.
@@ -91,29 +91,33 @@ impl Client {
             .unwrap_or_else(|| super::own_account::row_of(&account)))
     }
 
-    /// `PUT /v{N}/access/self/email` — request a change of the
-    /// authenticated user's email. Wire sends a verification mail to the
-    /// new address; the change takes effect only once the user confirms
-    /// it. This therefore returns `Ok(())` on the `202`/`204`
-    /// acknowledgement **without** touching the local `Account` — call
-    /// `refresh_account` after the user has verified to pick up the new
-    /// address (Step 152). matrix-rust-sdk's closest analog is
-    /// `Account` 3PID management.
+    /// Ask the backend to change the account's email address to `email`
+    /// (Step 29, renamed in 162): `PUT /v{N}/access/self/email`. The backend
+    /// mails a confirmation link to the new address; the address changes
+    /// once the user follows it, so this returns on the `202`/`204`
+    /// acknowledgement without touching the local `Account` — call
+    /// `refresh_account` after the confirmation to read the new address
+    /// (Step 152). matrix-rust-sdk's closest analog is `Account` 3PID
+    /// management.
     ///
     /// # Errors
     /// * `InvalidInput` if `email` is empty.
-    /// * `BackendRejected` on non-2xx from Wire — notably
-    ///   `400 invalid-email` and `409 key-exists` (the address is already
-    ///   in use); the response body carries the label for the caller to
-    ///   branch on.
-    pub async fn update_email(&self, email: &str) -> Result<(), KupferdrahtError> {
+    /// * `BackendRejected` when the backend refuses the address — notably
+    ///   `400 invalid-email` and `409 key-exists` (in use by another
+    ///   account); the message carries its label.
+    pub async fn request_email_change(&self, email: &str) -> Result<(), KupferdrahtError> {
         if email.is_empty() {
             return Err(KupferdrahtError::InvalidInput(
-                "update_email: email must be non-empty".into(),
+                "request_email_change: email must be non-empty".into(),
             ));
         }
         self.http
-            .update_self_email(self.api_version, &self.current_access_token(), email)
+            .update_self_email(
+                self.api_version,
+                &self.current_access_token(),
+                &self.current_refresh_token(),
+                email,
+            )
             .await
     }
 

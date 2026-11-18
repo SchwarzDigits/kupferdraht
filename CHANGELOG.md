@@ -79,12 +79,53 @@ is no skill for it — it is this short procedure:
   Swift) ask the backend for gzip-compressed answers, as the browser's `fetch`
   always did, so sync pages and room and user lists download smaller. Nothing
   changes for a backend that does not compress.
+- **BREAKING: SSO login in matrix-rust-sdk's shape** (Step 162, ADR-0043):
+  `sso_login_url(redirect_url, provider)` and `login_with_sso_callback(callback_url)`
+  on `ClientBuilder` and `Kupferdraht` (FFI the same; browser
+  `ssoLoginUrl(apiBaseUrl, provider?)` and
+  `loginWithSsoCallback(apiBaseUrl, websocketUrl, title, message, deviceLabel?)`;
+  CLI `sso url`, `sso callback`) replace `initiate_sso`, `initiate_sso_by_email`
+  and `finalize_sso` (browser `initiateSso`, `initiateSsoByEmail`, `finalizeSso`;
+  CLI `sso initiate`, `sso finalize`). One redirect URL instead of two — its
+  scheme must begin with `wire`, as the backend requires; the CLI's default is
+  `wire-kupferdraht://sso`. `provider` is the provider's code, `None` the
+  backend's default; the email lookup is gone (under v14 it only ever found the
+  default). The callback is the URL the browser came back to — Kupferdraht reads
+  the session out of it, a refused login is `BackendRejected` with the reason;
+  in the browser it is the `data` of the SSO page's `message` event. The CLI
+  reads the callback URL from the prompt or `--callback-stdin`, never from argv.
+- **BREAKING: typing is `Room::typing_notice(typing: bool)`** (Step 162), as in
+  matrix-rust-sdk (FFI on `Room`; browser `typingNotice(roomId, typing)`; CLI
+  `typing --id <room> [--seconds N]`), replacing `Timeline::send_typing_started`
+  / `send_typing_stopped`, their `Client` twins and the browser's `startTyping` /
+  `stopTyping`. Same rules: repeats while a start is out are dropped, a stop
+  follows after 11 s natively, a `false` sends only after a `true`.
+- **BREAKING: the email change is `request_email_change(email)`** (Step 162; FFI
+  the same, browser `requestEmailChange`, CLI `email-change`), replacing
+  `update_email` / `updateEmail` / `email-update` — the call asks for the change,
+  which happens once the user follows the mail.
 
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+
+- **SSO login works against a Wire backend** (Step 162): the start URL's redirects
+  now carry the placeholder the backend fills with the session cookie, so the
+  callback brings the session back; before, the cookie had to be read out of the
+  browser by hand, the CLI's default redirect (`kupferdraht://sso/done`) was
+  refused by the backend, and the browser's `initiateSso` failed on its empty
+  WebSocket URL. An SSO login now names the home's cookie label, as a password
+  login does (ADR-0025). Live-confirmed end to end against Wire 5.38.9 with a
+  SAML identity provider (resolves open.md gap-B.36).
+- **The email change reaches a Wire backend** (Step 162):
+  `request_email_change` sends the session cookie beside the token, as Wire's
+  `PUT /access/self/email` requires; `update_email` sent only the token and was
+  refused (`403` "Missing cookie").
+- **The CLI's SSO commands trust a self-hosted backend's certificate
+  authorities** (Step 162): `sso url` and `sso callback` read the ones
+  `login --ca-file` kept and take `--ca-file` themselves.
 
 ### Security
 
