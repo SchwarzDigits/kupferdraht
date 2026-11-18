@@ -1,6 +1,10 @@
 # Step 84 — A deleted file is gone: its key and its cached ciphertext go with the message
 
-**Status: implemented** on `step/84-deleted-file-is-gone` (2026-11-17). Commissioned
+**Status: MERGED 2026-11-18** — `d271c0b` on `step/84-deleted-file-is-gone`, merged to
+`main` as PR #101 (`9725a58`); locally fmt, 0 build warnings, clippy native and wasm
+(both wasm lines), 1284 tests in 70 suites, the browser suite (18 suites, 89 tests);
+CI green on the first run. Smoke 2026-11-17 on the local `wire-server-rs` stack: 18 ok
+(see Smoke below), the stack's own 24 ok. Commissioned
 2026-09-10, rewritten 2026-11-17 (Volker). First commissioned
 as "asset deletion API + cache orphan cleanup" (open.md gap-B.3, gap-B.5, def-D.2): a
 public `delete_asset`, a cache sweep, `cache list | size | clear` and an LRU size cap.
