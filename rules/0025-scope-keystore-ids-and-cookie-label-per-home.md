@@ -33,3 +33,5 @@ home lock) and ADR-0021 (one raw key per database under its own id).
   public surface is `Kupferdraht::home_id` / `Kupferdraht::cookie_label` (FFI and
   wasm mirrors). **Don't** copy a home directory — the copy clones the
   id and shares keys and label with the original.
+- The public name `cookie_label` is Wire's term and leaves with Step 163d
+  (ADR-0009 revision 1.2); the label itself and its per-home scope stay.

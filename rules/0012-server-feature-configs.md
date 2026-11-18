@@ -9,3 +9,4 @@ Condensed from `docs/adrs/0012-server-feature-configs.md`.
 - **Treat a config-fetch failure as non-fatal** — log at warn, continue login on safe defaults (`FileSharingPolicy::Enabled`, `ReceiptMode::On`).
 - **Do not field-encrypt the feature-config or user-property tables** — configs are policy-public, properties user-public.
 - **Kupferdraht reads these; it does not write them** — no `PUT`/`DELETE` on properties in V1.
+- The public names of the generic store (`feature_configs`, `FeatureConfigEntry`, `user_properties`, `UserPropertyEntry`, `ReceiptMode`) are Wire's vocabulary and leave with Step 163e (ADR-0009 revision 1.2); **don't** add a public accessor keyed by Wire's feature or property names.
