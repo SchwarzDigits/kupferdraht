@@ -57,12 +57,15 @@ for (const kind of ['error', 'unhandledrejection']) {
  * on, keyed by tab — so a timeout shows whether the event came, and when.
  */
 const dispatched = new Map();
+/** The last `leader-changed` detail each tab dispatched — see `leaderChangeOf`. */
+const lastLeaderChange = new Map();
 const moduleDispatch = TabHost.prototype.dispatchEvent;
 TabHost.prototype.dispatchEvent = function recordDispatch(event) {
   const log = dispatched.get(this.tabId) ?? [];
   const detail = event.detail && typeof event.detail === 'object' ? ` ${short(event.detail.leaderTabId)} e${event.detail.epoch ?? '-'}` : '';
   log.push(`${now()} ${event.type}${detail}`);
   dispatched.set(this.tabId, log);
+  if (event.type === 'leader-changed') lastLeaderChange.set(this.tabId, event.detail);
   return moduleDispatch.call(this, event);
 };
 
@@ -93,10 +96,21 @@ function once(target, type, predicate = () => true, timeoutMs = 8000) {
   });
 }
 
+/**
+ * The `leader-changed` detail by which `host` follows `tabId`: the one it already
+ * dispatched, or the next. Under the test runner a tab can learn its leader inside
+ * `createTabHost`, before a scenario can listen (observations §102), so waiting
+ * for the event alone can miss it.
+ */
+async function leaderChangeOf(host, tabId) {
+  const seen = lastLeaderChange.get(host.tabId);
+  if (host.leaderTabId === tabId && seen?.leaderTabId === tabId) return seen;
+  return (await once(host, 'leader-changed', (e) => e.detail.leaderTabId === tabId)).detail;
+}
+
 /** Resolve once `host` sees `tabId` as the leader. */
 async function leaderOf(host, tabId) {
-  if (host.leaderTabId === tabId) return;
-  await once(host, 'leader-changed', (e) => e.detail.leaderTabId === tabId);
+  await leaderChangeOf(host, tabId);
 }
 
 /** Whether anyone holds `kupferdraht:instance` right now (`ifAvailable` probe). */
@@ -622,12 +636,26 @@ function within(promise, ms) {
 }
 
 export async function theLeaderNamesItsVersion() {
+  return versionAsSeenBy(async () => {});
+}
+
+/**
+ * The flake of observations §102, made certain: the second tab has already
+ * dispatched its `leader-changed` before the scenario asks for it.
+ */
+export async function theLeaderNamesItsVersionToATabThatAlreadyFollowsIt() {
+  return versionAsSeenBy((b, a) => leaderOf(b, a.tabId));
+}
+
+/** A leads; a second tab B, after `before(b, a)`, names both versions. */
+async function versionAsSeenBy(before) {
   const a = createTabHost({ worker: candidateWorker() });
   try {
     await leaderOf(a, a.tabId);
     const b = createTabHost({ worker: candidateWorker() });
     try {
-      const detail = (await once(b, 'leader-changed', (e) => e.detail.leaderTabId === a.tabId)).detail;
+      await before(b, a);
+      const detail = await leaderChangeOf(b, a.tabId);
       return {
         moduleVersion: protocol.KUPFERDRAHT_VERSION ?? null,
         own: b.version ?? null,
