@@ -73,6 +73,8 @@ extern "C" {
     fn account_refresh_through_a_tab() -> js_sys::Promise;
     #[wasm_bindgen(js_name = theLeaderNamesItsVersion)]
     fn the_leader_names_its_version_scenario() -> js_sys::Promise;
+    #[wasm_bindgen(js_name = theLeaderNamesItsVersionToATabThatAlreadyFollowsIt)]
+    fn the_leader_names_its_version_to_a_tab_that_already_follows_it_scenario() -> js_sys::Promise;
     #[wasm_bindgen(js_name = aThinTabDoesNotCallALeaderOfAnotherVersion)]
     fn a_thin_tab_does_not_call_a_leader_of_another_version_scenario() -> js_sys::Promise;
     #[wasm_bindgen(js_name = theLeaderRefusesARequestOfAnotherVersion)]
@@ -645,6 +647,19 @@ async fn the_leader_names_its_version() {
     let crate_version = Some(env!("CARGO_PKG_VERSION").to_owned());
     assert_eq!(o.module_version, crate_version);
     assert_eq!(o.own, crate_version);
+    assert_eq!(o.leader, crate_version);
+    assert_eq!(o.detail_leader_version, crate_version);
+    assert_eq!(o.relation.as_deref(), Some("same"));
+}
+
+/// The tab learned its leader before the scenario asked — inside
+/// `createTabHost`, under the test runner (observations §102): the answer is the
+/// event it already dispatched, not a timeout waiting for the next one.
+#[wasm_bindgen_test]
+async fn the_leader_names_its_version_to_a_tab_that_already_follows_it() {
+    let o: VersionOutcome =
+        outcome(the_leader_names_its_version_to_a_tab_that_already_follows_it_scenario()).await;
+    let crate_version = Some(env!("CARGO_PKG_VERSION").to_owned());
     assert_eq!(o.leader, crate_version);
     assert_eq!(o.detail_leader_version, crate_version);
     assert_eq!(o.relation.as_deref(), Some("same"));

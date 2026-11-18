@@ -2276,6 +2276,18 @@ No workaround: the scenarios' timeout now names the waiting tab's state, the eve
 it dispatched, the lease's holders and queue, and the last announcements on the
 request channel, so a future CI hit explains itself (Step 158).
 
+**2026-11-18: the report named the missed event.** On `main`'s CI (run 44271472055,
+`the_leader_names_its_version`) and twice locally, the waiting tab had dispatched its
+`leader-changed` (to the right leader, epoch 1) in the millisecond before the scenario
+began to wait — though `once(b, 'leader-changed')` is the statement right after
+`createTabHost(b)`. So the event came inside the constructor. Likely, not measured: the
+runner's `Worker` wrapper reads the worker by synchronous XHR (above), and Firefox runs
+the request channel's message during it. A real `new Worker` does not. Run 34 above was
+this. The driver now answers from the leader change a tab already dispatched
+(`leaderChangeOf`), and a scenario that lets the tab learn its leader first pins it
+(`the_leader_names_its_version_to_a_tab_that_already_follows_it`); the never-started
+worker of run 94 is a separate matter.
+
 
 ## 103) Wire's nginz compresses JSON answers on request; Kupferdraht's native builds never ask (2026-11-16)
 
