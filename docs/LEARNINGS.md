@@ -3285,3 +3285,39 @@ touched it.
 - **Only the manager persists a session for `resume`.** A test that logs in through
   `ClientBuilder` and resumes finds "no persisted session"; `Kupferdraht::login` /
   `resume` is the path an app takes and the one such a test needs.
+
+### 5.102 A flow nobody could run had rotted three ways, and a mock proved only what we sent (Step 162)
+
+- **An untested flow is not a working flow.** SSO had shipped in Step 17 with every
+  test green, and it had never worked against Wire: the CLI's redirect scheme was
+  refused, the cookie never travelled in the redirect, and the browser's
+  `initiateSso` failed on its own empty WebSocket URL. All three were invisible
+  without an identity provider. Once the reference machine had Keycloak, one live run
+  found them in minutes. A surface that cannot be smoked belongs in `open.md`'s gap
+  list *and* in the release notes' caveats, not only in an ADR's "Negative".
+- **A mock built from our own request proves our request, not the backend's
+  contract.** `update_email` had sent only the bearer since Step 22; Wire's
+  `/access/self/email` wants the `zuid` cookie too. The httpmock test matched what
+  Kupferdraht sent and stayed green for months. The fix came from Wire's route
+  definition (`Cookies` beside `Bearer`) and the smoke. For a route whose
+  authentication differs from the rest (`/access/*`), the mock should require what
+  the route definition requires.
+- **Write the red tests after the live check when one is possible.** The first red
+  tests assumed a cookie value of `test` and a `/self` with `email` and `handle`. Live,
+  the value holds `=` and `.`, and an SSO user has neither field until the address is
+  confirmed. The tests were corrected before green, but only because Volker asked
+  whether they matched what the server really sends.
+- **Measure a limit where the other side measures it.** spar counts 140 bytes after it
+  re-serializes the URL, `$` as `%24`; counting the URL as written would have let up
+  to two bytes too many through. The source said so in one line (`serializeURIRef'`).
+- **Semantics decide a CLI's shape.** `typing --stop` in a fresh process could never
+  send, because a stop only follows a start of the same client (matrix-rust-sdk's rule
+  too). One command that starts, waits and stops exercises both directions.
+- **Tooling:** the persistent gate script changes into the main checkout, so in a
+  worktree it gates the wrong tree; a copy that runs in the worktree did the job.
+  Editing sources while a background gate or the browser suite compiles makes them
+  red for nothing; finish the edits first, then run them.
+- **Left open:** an SSO user cannot delete a device through the CLI (`device-delete` and
+  `logout --purge-device` want a non-empty password); the smoke left two test devices
+  behind. The browser's popup path and a refused login were not run live. ADR-0025,
+  ADR-0026 and ADR-0035 still name the old methods where they record past decisions.
