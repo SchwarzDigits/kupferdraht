@@ -329,3 +329,4 @@ Step 93 (`docs/plan/archive/93-home-scoped-keystore-ids.md`):
   budget caps the account domain at 153 bytes, not 158. The body above
   keeps the figure it was decided with.
 - 2026-11-10: The link to the plan `93-home-scoped-keystore-ids` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.
+- 2026-11-18: Naming only, per ADR-0009 (revision 1.2): the public name `cookie_label` (`cookieLabel` in the browser) carries Wire's term for the session's label; Step 163d names it neutrally. One label per home stands.

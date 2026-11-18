@@ -84,6 +84,22 @@ where it has a term, otherwise a plain English name.
     tightens `rules/0009`.
   - The "Wire extension" rows of the mapping doc are rewritten as each sub-step
     lands.
+  - **Done 2026-11-18 (Volker):** no new ADR — the line follows from ADR-0009, so
+    it gets revision 1.2 (part 4: names, values, prose, and Wire's names only where
+    an interface to Wire binds them, approved beforehand and marked with
+    `Wire compatibility (ADR-0009)`). `rules/0009` tightened; revision entries in
+    ADR-0004 (1.1), ADR-0011 (1.4), ADR-0012 (1.4), ADR-0025; `rules/0012` and
+    `rules/0025` name their leaving names. The check:
+    `kupferdraht-core/tests/public_vocabulary.rs` — 29 words, a temporary list of
+    today's 184 occurrences (file × word) by sub-step (163b 44, 163c 12, 163d 91,
+    163e 37), an empty list of approved spots. Backticked citations of Wire's
+    interface (endpoint paths, event types, status labels) stay in prose.
+  - **Found by the recount, for the sub-steps:** `open_to_guests` /
+    `allowGuests`, `RoomType::Channel` and the parameters `code` / `key` of
+    `join_via_link` (163c); `DeviceInfo`'s `class` / `label` / `model` (163d,
+    too generic for the lexical check); `SelfUserRecord`, `WIRE_RECEIPT_MODE` and
+    the stored kind values `"knock"` / `"asset"` / `"self_room"` (163b, 163c, 163e
+    decide in phase 1 whether stored values change).
 - **163b — message kinds.**
   - `Knock` becomes a ping or nudge (`send_ping`, `TimelineItemKind::Ping{…}`), and
     `hot_knock` gets a plain flag name.

@@ -112,3 +112,4 @@ Full details in `docs/wire/mls-deviations.md` W-5.
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-04-21 | Initial ADR |
+| 1.1 | 2026-11-18 | Naming only, per ADR-0009 (revision 1.2): the public name `backend_removal_key_ecdsa_p256` carries Wire's term for what RFC 9420 calls the external sender; Step 163d gives it a neutral name. The decision stands. |
