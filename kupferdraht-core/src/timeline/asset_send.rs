@@ -47,6 +47,35 @@ use crate::timeline::{DeliveryStatus, MessageHandle, Timeline};
 use crate::wire::http::assets::AssetMultipart;
 use crate::wire::proto::{AssetMessageInput, build_asset_generic_message};
 
+/// The asset cache's subdirectory a send stages its ciphertext in until the
+/// upload is through; a client's start empties it (Step 84).
+pub(super) const STAGING_DIR: &str = "staging";
+
+/// The staged ciphertext of a send: removed when the send ends — done,
+/// failed or cancelled — unless the send moved it into the cache (Step 84).
+struct StagedCiphertext<'a>(&'a Path);
+
+impl Drop for StagedCiphertext<'_> {
+    fn drop(&mut self) {
+        remove_ciphertext_file(self.0);
+    }
+}
+
+/// Remove a ciphertext file of the asset cache. Absent is fine; any other
+/// failure is logged, and the next start removes what is left (Step 84).
+pub(super) fn remove_ciphertext_file(path: &Path) {
+    debug_assert!(
+        path.extension().is_some_and(|ext| ext == "enc"),
+        "only ciphertext files are removed: {}",
+        path.display()
+    );
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => tracing::warn!(path = %path.display(), error = %e, "ciphertext file not removed"),
+    }
+}
+
 impl Timeline {
     /// Encrypt-and-send a file as an `Asset` `GenericMessage`. Step 11f.
     ///
@@ -168,7 +197,8 @@ impl Client {
     /// MLS encrypt + send → settle the row.
     ///
     /// A `/v14/assets` failure surfaces as an `Err` with no row (an upload
-    /// failure, not a failed-message bubble). The row is written before the MLS
+    /// failure, not a failed-message bubble); the staged ciphertext goes
+    /// whichever way the send ends (Step 84). The row is written before the MLS
     /// send (Step 97a), so an MLS-send failure or a cancelled send leaves a
     /// row that reads as `Failed` and resends without a second blob upload
     /// (`encrypt_and_upload` ratchets the group *before* the HTTP call, so a
@@ -178,6 +208,7 @@ impl Client {
         encrypted: EncryptedAsset,
         send: &AssetSend<'_>,
     ) -> Result<MessageHandle, KupferdrahtError> {
+        let _staged = StagedCiphertext(&encrypted.ciphertext_path);
         let room_id = send.room_id;
         let md5_b64 = compute_md5_b64(&encrypted.ciphertext_path)?;
         let upload = self
@@ -256,7 +287,7 @@ impl Client {
     /// the `base_dir` path is the production one.
     fn asset_staging_dir(&self) -> Result<PathBuf, KupferdrahtError> {
         let dir = match self.assets_dir() {
-            Some(assets) => assets.join("staging"),
+            Some(assets) => assets.join(STAGING_DIR),
             None => dirs::cache_dir()
                 .ok_or_else(|| {
                     KupferdrahtError::Environment("no OS cache directory available".into())

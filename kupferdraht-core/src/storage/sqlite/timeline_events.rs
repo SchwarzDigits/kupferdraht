@@ -186,29 +186,67 @@ pub(super) fn apply_message_delete(
     target_message_id: &str,
     redacted_at_ms: i64,
 ) -> Result<bool, KupferdrahtError> {
-    // body cleared on delete: store the empty plaintext so the row no
-    // longer carries the original message content at rest.
-    let conn = store.lock()?;
-    // Same chain-pointer semantics as apply_message_edit: a
-    // delete targeting an already-edited row references the
-    // latest edit-event-id rather than the original.
-    let updated = conn
-        .execute(
-            "UPDATE timeline_events
-                SET body           = ?1,
-                    redacted_at_ms = ?2
-              WHERE (message_id            = ?3
-                     OR current_edit_event_id = ?3)
-                AND room_id        = ?4
-                AND (redacted_at_ms IS NULL OR redacted_at_ms < ?2)",
-            params![b"".as_slice(), redacted_at_ms, target_message_id, room_id,],
-        )
-        .map_err(|e| {
-            KupferdrahtError::Storage(format!(
-                "apply_message_delete {target_message_id}@{room_id}: {e}"
-            ))
-        })?;
+    debug_assert!(
+        !target_message_id.is_empty(),
+        "apply_message_delete: target must be non-empty"
+    );
+    let storage_err = |e: rusqlite::Error| {
+        KupferdrahtError::Storage(format!(
+            "apply_message_delete {target_message_id}@{room_id}: {e}"
+        ))
+    };
+    let mut conn = store.lock()?;
+    let tx = super::write_tx::begin(&mut conn).map_err(storage_err)?;
+    let applied =
+        tombstone_message(&tx, room_id, target_message_id, redacted_at_ms).map_err(storage_err)?;
+    if applied {
+        forget_message_files(&tx, room_id, target_message_id).map_err(storage_err)?;
+    }
+    tx.commit().map_err(storage_err)?;
+    Ok(applied)
+}
+
+/// Clear the deleted message's body, so the row no longer carries its
+/// content at rest, and stamp the delete. Same chain-pointer semantics as
+/// [`apply_message_edit`]: a delete targeting an already-edited row
+/// references the latest edit-event-id rather than the original. `false`
+/// when no row matched or a later delete is already persisted.
+fn tombstone_message(
+    conn: &rusqlite::Connection,
+    room_id: &str,
+    target_message_id: &str,
+    redacted_at_ms: i64,
+) -> rusqlite::Result<bool> {
+    let updated = conn.execute(
+        "UPDATE timeline_events
+            SET body           = ?1,
+                redacted_at_ms = ?2
+          WHERE (message_id            = ?3
+                 OR current_edit_event_id = ?3)
+            AND room_id        = ?4
+            AND (redacted_at_ms IS NULL OR redacted_at_ms < ?2)",
+        params![b"".as_slice(), redacted_at_ms, target_message_id, room_id],
+    )?;
     Ok(updated > 0)
+}
+
+/// Drop the attachment row of the deleted message — its key, token and
+/// locator (Step 84). The cached ciphertext is the client's to remove.
+fn forget_message_files(
+    conn: &rusqlite::Connection,
+    room_id: &str,
+    target_message_id: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "DELETE FROM attachments
+          WHERE room_id = ?2
+            AND message_id IN (SELECT message_id FROM timeline_events
+                                WHERE (message_id            = ?1
+                                       OR current_edit_event_id = ?1)
+                                  AND room_id = ?2)",
+        params![target_message_id, room_id],
+    )?;
+    Ok(())
 }
 
 pub(super) fn apply_message_edit(

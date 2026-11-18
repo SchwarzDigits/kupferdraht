@@ -1421,6 +1421,12 @@ The local `timeline_events` row gets `body_ct` cleared and
 `redacted_at_ms` stamped. The `timeline` printer renders
 redacted rows as `<redacted>` with `(deleted)` suffix.
 
+A file message goes entirely (Step 84): its key's row and its cached
+ciphertext on this device, and its upload at the server (best effort —
+a refusal is logged, the delete stands). A received delete does the
+same locally. `download-asset` of the message then fails with "no asset
+row … or it was deleted".
+
 Idempotence: receiving the same `MessageDelete` twice is a
 no-op — the SQL guard `redacted_at_ms IS NULL OR
 redacted_at_ms < ?` blocks redelivery from re-firing.
@@ -2176,7 +2182,8 @@ of a local asset with `302` to a pre-signed URL on its asset store; the
 command follows that one redirect without credentials (Step 141). A
 download longer than the sender's declared size (`size_bytes`) plus
 32 bytes stops with `IntegrityCheck` and leaves nothing in the cache
-(Step 160).
+(Step 160). A file deleted for everyone has no asset row any more and
+fails with `InvalidInput` (Step 84).
 
 ```bash
 kupferdraht-cli download-asset --message <id> [--id <room>] [--save-to <path>]

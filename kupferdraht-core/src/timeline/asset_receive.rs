@@ -206,7 +206,8 @@ impl AssetSummary {
     /// For larger assets use [`Self::save_to`].
     ///
     /// # Errors
-    /// * `InvalidInput` — owning Client dropped, asset uses
+    /// * `InvalidInput` — owning Client dropped, its message was deleted
+    ///   for everyone since this summary was taken (Step 84), asset uses
     ///   `AES_GCM` (warn-and-skip per ADR-0011), or no `SqliteStore`
     ///   attached (no cache directory derivable).
     /// * `IntegrityCheck` — SHA-256 mismatch over the downloaded
@@ -244,6 +245,7 @@ impl AssetSummary {
         let client = self.client.upgrade().ok_or_else(|| {
             KupferdrahtError::InvalidInput("asset download: owning Client has been dropped".into())
         })?;
+        self.ensure_not_deleted(&client).await?;
         let key = self.unpack_otr_key()?;
         let sha = sha_array(&self.sha256)?;
         let access_token = client.access_token().ok_or_else(|| {
@@ -275,6 +277,10 @@ impl AssetSummary {
     /// cache directory, update the attachment row's `cache_path`,
     /// and return the new path.
     async fn ensure_cache_populated(&self) -> Result<PathBuf, KupferdrahtError> {
+        let client = self.client.upgrade().ok_or_else(|| {
+            KupferdrahtError::InvalidInput("AssetSummary: Client dropped before download".into())
+        })?;
+        self.ensure_not_deleted(&client).await?;
         if let Some(p) = &self.cache_path {
             let path = PathBuf::from(p);
             if path.exists() {
@@ -291,10 +297,33 @@ impl AssetSummary {
                 self.asset_id
             )));
         }
-        let client = self.client.upgrade().ok_or_else(|| {
-            KupferdrahtError::InvalidInput("AssetSummary: Client dropped before download".into())
-        })?;
-        let cache_path = self.compute_cache_path(&client)?;
+        self.download_to_cache(&client).await
+    }
+
+    /// Refuse a file whose message was deleted for everyone since this
+    /// summary was taken: the delete took its row, and the summary's own copy
+    /// of the key and locator must not bring the file back (Step 84). A
+    /// client without a store has no rows to ask.
+    async fn ensure_not_deleted(&self, client: &Client) -> Result<(), KupferdrahtError> {
+        let Some(store) = client.store_handle() else {
+            return Ok(());
+        };
+        match store
+            .get_attachment(&self.message_id, &self.room_id)
+            .await?
+        {
+            Some(_) => Ok(()),
+            None => Err(KupferdrahtError::InvalidInput(format!(
+                "asset {}: its message was deleted",
+                self.message_id
+            ))),
+        }
+    }
+
+    /// Download the ciphertext into the per-account cache, record its path
+    /// on the attachment row, and return it.
+    async fn download_to_cache(&self, client: &Arc<Client>) -> Result<PathBuf, KupferdrahtError> {
+        let cache_path = self.compute_cache_path(client)?;
         let access_token = client.access_token().ok_or_else(|| {
             KupferdrahtError::InvalidInput("AssetSummary::download: no access token".into())
         })?;

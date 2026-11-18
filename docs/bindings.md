@@ -141,7 +141,9 @@ object identity)
   `send_typing_stopped` — auto-stop + dedupe), `asset(message_id) -> Asset?`,
   `subscribe(listener) -> Subscription`.
 - `Asset` — `metadata() -> AssetMeta`, `download() -> bytes`,
-  `save_to(path)`. `AssetMeta.assetToken` is the short-lived download
+  `save_to(path)`; both refuse with `InvalidInput` once the asset's message
+  was deleted for everyone, also on an `Asset` taken before the delete
+  (Step 84). `AssetMeta.assetToken` is the short-lived download
   token of the asset: the Rust `Debug` redacts it, but the Kotlin
   `toString()` and Swift `description` UniFFI generates print every
   field — **do not log `AssetMeta` as a whole** (Step 132; the threat
@@ -806,7 +808,9 @@ Since Step 110 (ADR-0035):
   message id, Step 98c), `sendKnock(roomId, hotKnock)` /
   `sendLocation(roomId, lat, lon, name?, zoom?)` (Step 98c), `sendReply`,
   `toggleReaction`, `editMessage`, `redact`, `markAsRead` (`editMessage` /
-  `redact` reject another user's message — Step 95b, ADR-0028).
+  `redact` reject another user's message — Step 95b, ADR-0028; a
+  redacted file loses its key and its upload at the server, and a later
+  download of it refuses — Step 84).
 - The two times of an item (Step 151): `sentAtMs` is when the backend took the message, the one
   to show. `arrivedAtMs` is when it entered this device's timeline, on the clock of
   `lastReadAtMs`. `messages()` is in order of arrival, so its `sentAtMs` need not rise: do not

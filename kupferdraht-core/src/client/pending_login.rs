@@ -295,6 +295,10 @@ async fn finalize_into_client(
     if replaced {
         client.mark_device_replaced();
     }
+    // Step 84: a start removes what the asset cache holds that no row names —
+    // after a replaced device, every file of the cleared history.
+    #[cfg(not(target_arch = "wasm32"))]
+    client.remove_leftover_files().await;
     Ok(client)
 }
 

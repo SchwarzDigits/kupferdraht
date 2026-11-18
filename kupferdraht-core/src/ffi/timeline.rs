@@ -771,7 +771,9 @@ impl Timeline {
         self.inner.edit(item_id, new_body).await
     }
 
-    /// Delete-for-everyone the message keyed by `item_id`.
+    /// Delete-for-everyone the message keyed by `item_id`. A file goes
+    /// entirely: its key, its cached copy and its upload at the server,
+    /// the last best effort (Step 84).
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -896,7 +898,8 @@ impl Asset {
     ///
     /// # Errors
     /// See `KupferdrahtError`; `IntegrityCheck` also for a download longer
-    /// than the declared `size_bytes` + 32 bytes (Step 160).
+    /// than the declared `size_bytes` + 32 bytes (Step 160); `InvalidInput`
+    /// once the asset's message was deleted for everyone (Step 84).
     pub async fn download(&self) -> Result<Vec<u8>, KupferdrahtError> {
         self.inner.download().await
     }
@@ -904,7 +907,8 @@ impl Asset {
     /// Download + decrypt the asset, streaming the plaintext to a path.
     ///
     /// # Errors
-    /// See `KupferdrahtError`; the same download bound as `download`.
+    /// See `KupferdrahtError`; the same download bound and refusal of a
+    /// deleted file as `download`.
     pub async fn save_to(&self, dest_path: &str) -> Result<(), KupferdrahtError> {
         self.inner.save_to(std::path::Path::new(dest_path)).await
     }

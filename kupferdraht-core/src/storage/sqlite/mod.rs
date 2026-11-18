@@ -853,6 +853,10 @@ impl Store for SqliteStore {
         let _permit = self.write_permit().await;
         attachments::delete_attachment(self, message_id, room_id)
     }
+
+    async fn attachment_message_ids(&self) -> Result<Vec<String>, KupferdrahtError> {
+        attachments::attachment_message_ids(self)
+    }
 }
 
 /// Fixed key material (a raw 32-byte key) used to open test stores.

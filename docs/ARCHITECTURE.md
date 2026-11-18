@@ -398,6 +398,16 @@ Files do **not** travel through MLS (ADR-0011,
 Integrity is layered: SHA-256 binds the reference to the blob; MLS
 authenticates the reference's sender.
 
+A delete for everyone takes the file along (Step 84): the store drops the
+`attachments` row in the transaction that tombstones the message, the
+client removes `assets/<message_id>.enc` after the commit, and an own
+delete removes the upload at the server, best effort. A download checks
+the row first, so a summary taken before the delete cannot bring the file
+back. The cache keeps only what a row names: a send removes its staged
+copy however it ends, and a client's start (`register_device`, `resume`)
+empties `assets/staging/` and removes every `.enc` file no row names
+(`timeline/asset_cache.rs`, native only — the browser caches no files).
+
 ### 5.6 Epoch self-healing
 
 When a send targets a stale MLS epoch the backend returns
@@ -696,8 +706,10 @@ and `mls.db`, `PRAGMA user_version` (1) for `global.db`. On every platform. `mls
 the same since Step 142: the openmls fork's `openmls_sqlite_storage` runs
 openmls's migrations grouped (history table
 `openmls_sqlite_storage_migrations`). The current
-schema version is **V35**
-(`V35__step_151_arrived_at.sql` — `timeline_events.arrived_at_ms`, the position
+schema version is **V36**
+(`V36__step_84_forget_deleted_files.sql` — the attachment rows of messages
+deleted for everyone before a delete took them; the next start removes their
+cached copies; `V35__step_151_arrived_at.sql` — `timeline_events.arrived_at_ms`, the position
 on this device's clock, read by the order, the unread queries and the read marker,
 while `sent_at_ms` becomes the backend's time; `V34__step_144_avatars.sql` — `avatar_thumbnail_key` and `avatar_full_key` on
 `room_members` and `self_user`, `team_avatar_key` on `self_user`: the asset keys a

@@ -707,6 +707,11 @@ impl Store for FaultyStore {
         self.inner.delete_attachment(message_id, room_id).await
     }
 
+    async fn attachment_message_ids(&self) -> Result<Vec<String>, KupferdrahtError> {
+        self.gate("attachment_message_ids").await?;
+        self.inner.attachment_message_ids().await
+    }
+
     async fn upsert_task(&self, task: &TaskRecord) -> Result<(), KupferdrahtError> {
         self.gate("upsert_task").await?;
         self.inner.upsert_task(task).await
