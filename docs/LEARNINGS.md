@@ -3321,3 +3321,23 @@ touched it.
   `logout --purge-device` want a non-empty password); the smoke left two test devices
   behind. The browser's popup path and a refused login were not run live. ADR-0025,
   ADR-0026 and ADR-0035 still name the old methods where they record past decisions.
+
+### 5.103 Let the server decide what it re-authenticates by (Step 164)
+
+- **A client-side precondition can lock out a whole kind of account.** "The password
+  must be non-empty" was right for password accounts and made deleting a device
+  impossible for SSO users, who have none. The backend already knows which account
+  needs what; an optional password and its answer (`missing-auth`) cover both kinds
+  without the library storing or guessing the account's kind — as matrix-rust-sdk's
+  `delete_devices(…, auth_data: Option<…>)` leaves it to the server.
+- **An empty answer is the natural "none".** The CLI's prompt takes Enter for an
+  account without a password; a password user who presses it by mistake gets the
+  backend's `missing-auth`, and the CLI says how to give the password.
+- **Grep for the old behaviour's tests, not only for its message.** The red phase found
+  the pins of the error text, but a unit test that asserted the refusal by its error
+  kind (`purge_device_needs_the_password`) only turned up once the implementation ran.
+- **"No route to host" to a LAN machine from macOS may be a permission, not the net.**
+  The app the session ran in lacked macOS's Local Network permission; every process it
+  started, the user's `!` commands included, failed to connect while another app's
+  session reached the machine. Ruling out the sandbox did not help; granting the
+  permission did.

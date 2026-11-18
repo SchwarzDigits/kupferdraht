@@ -72,6 +72,35 @@ pub(crate) fn read_password(from_stdin: bool) -> io::Result<String> {
     read_secret(from_stdin, "Account password: ")
 }
 
+/// The password for a device delete: `None` for an empty answer — an
+/// account without a password, an SSO user's, sends none (Step 164).
+pub(crate) fn read_device_password(from_stdin: bool) -> io::Result<Option<String>> {
+    read_secret(
+        from_stdin,
+        "Account password (empty for an account without one): ",
+    )
+    .map(optional_password)
+}
+
+/// `None` for an empty answer, else the password (Step 164).
+fn optional_password(answer: String) -> Option<String> {
+    (!answer.is_empty()).then_some(answer)
+}
+
+/// A backend's `missing-auth` for a delete without a password, explained:
+/// the account has one (Step 164). Every other error passes unchanged.
+pub(crate) fn explain_missing_password(err: KupferdrahtError) -> KupferdrahtError {
+    match err {
+        KupferdrahtError::BackendRejected(msg) if msg.contains("missing-auth") => {
+            KupferdrahtError::BackendRejected(format!(
+                "{msg} — this account has a password: enter it at the prompt or pass \
+                 --password-stdin"
+            ))
+        }
+        other => other,
+    }
+}
+
 /// A secret from stdin (its first line) or from the TTY with `prompt`,
 /// echo off — never from argv (Step 137 for the `zuid` cookie and a
 /// link's key, as for passwords).
@@ -310,6 +339,34 @@ pub(crate) fn prefix(s: &str, n: usize) -> String {
 mod tests {
     use super::*;
     use time::macros::datetime;
+
+    /// Step 164: an empty answer is no password; anything else is the password.
+    #[test]
+    fn an_empty_answer_is_no_password() {
+        assert_eq!(optional_password(String::new()), None);
+        assert_eq!(optional_password("pw".into()), Some("pw".into()));
+    }
+
+    /// Step 164: `missing-auth` says how to give the password; another
+    /// refusal stays as the backend put it.
+    #[test]
+    fn a_missing_password_is_explained() {
+        let missing = explain_missing_password(KupferdrahtError::BackendRejected(
+            "403 missing-auth: Re-authentication via password required".into(),
+        ));
+        let wrong = explain_missing_password(KupferdrahtError::BackendRejected(
+            "403 invalid-credentials: Authentication failed".into(),
+        ));
+
+        assert!(
+            matches!(&missing, KupferdrahtError::BackendRejected(msg) if msg.contains("--password-stdin")),
+            "{missing:?}"
+        );
+        assert!(
+            matches!(&wrong, KupferdrahtError::BackendRejected(msg) if msg == "403 invalid-credentials: Authentication failed"),
+            "{wrong:?}"
+        );
+    }
 
     // LOCAL_OFFSET stays unset in tests, so `local_offset()` falls
     // back to UTC — naive inputs are deterministic here.

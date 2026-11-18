@@ -15,8 +15,8 @@ use kupferdraht::{
 };
 
 use super::{
-    base64_encode, cli_keystore, kupferdraht_home, open_manager, prefix, read_password,
-    resume_active, resume_client,
+    base64_encode, cli_keystore, explain_missing_password, kupferdraht_home, open_manager, prefix,
+    read_device_password, resume_active, resume_client,
 };
 
 /// Step 156: keep the backend's own certificate authorities in the home
@@ -355,14 +355,8 @@ pub(crate) async fn logout(
     let account_id = client.account().user_id().as_str().to_owned();
     let device_id = client.device_id().unwrap_or_default().to_string();
     let password = if purge_device {
-        let pw = read_password(password_stdin)
-            .map_err(|e| KupferdrahtError::Environment(format!("read password: {e}")))?;
-        if pw.is_empty() {
-            return Err(KupferdrahtError::InvalidInput(
-                "logout: --purge-device requires a non-empty password".into(),
-            ));
-        }
-        Some(pw)
+        read_device_password(password_stdin)
+            .map_err(|e| KupferdrahtError::Environment(format!("read password: {e}")))?
     } else {
         None
     };
@@ -370,7 +364,9 @@ pub(crate) async fn logout(
         purge_device,
         purge_local,
     };
-    app.logout(&client, options, password.as_deref()).await?;
+    app.logout(&client, options, password.as_deref())
+        .await
+        .map_err(explain_missing_password)?;
     println!("logout ok");
     println!("  account_id:   {account_id}");
     println!("  device_id:    {device_id}");

@@ -527,22 +527,26 @@ and signature scheme"`.
 
 #### `DELETE /v14/clients/{client_id}`
 
-Deregister a device. Wire requires the account password for
-permanent clients (kupferdraht-cli falls into this category).
+Deregister a device. Wire re-authenticates the delete by the account's
+password (`kalium-readings.md` #31, wire-server's `reauthenticate`;
+live-confirmed on the reference machine, observations §108):
+
+- an account with a password: the password must come along —
+  `403 missing-auth` without it, `403 invalid-credentials` for a wrong one;
+- an account without a password (an SSO user's): the delete goes through
+  without one, and a password sent anyway fails `invalid-credentials`; a
+  SAML user with a password is also let through without one.
 
 **Path parameters:** `client_id`.
 
-**Request body:**
-
-```json
-{ "password": "..." }
-```
+**Request body:** `{ "password": "..." }`, or `{}` without a password.
 
 **Response 200:** empty body.
 
-**Kupferdraht usage:** not yet wired — Kupferdraht does not currently
-expose a delete-device path. Stale CLI clients are pruned via the
-Wire UI when the per-user 7-device cap is hit.
+**Kupferdraht usage:** `wire/http/clients.rs::delete_client`, from
+`Client::delete_device`, `Client::logout(purge_device)` and
+`PendingLogin::delete_device`. Since Step 164 the password is optional
+everywhere: `None` (or an empty one) sends `{}` and the backend decides.
 
 **v5 → v14:** shape unchanged.
 

@@ -252,19 +252,21 @@ async fn a_purged_client_is_closed_and_forgotten() {
     assert!(!browser.caches_client().await, "the manager forgot it");
 }
 
+/// Step 164: without a password the backend decides. An account that has
+/// one refuses the deletion, and nothing is purged.
 #[tokio::test]
-async fn purge_device_needs_the_password() {
+async fn a_purge_without_the_password_the_backend_wants_purges_nothing() {
     let browser = Browser::new();
     let client = browser.first_setup().await;
-    let deletion = browser.mount_device_deletion(200);
+    let deletion = browser.mount_device_deletion(403);
 
     let result = browser.kupferdraht.logout(&client, PURGE_BOTH, None).await;
 
     assert!(
-        matches!(result, Err(KupferdrahtError::InvalidInput(_))),
+        matches!(result, Err(KupferdrahtError::BackendRejected(_))),
         "{result:?}"
     );
-    deletion.assert_calls(0);
+    deletion.assert_calls(1);
     assert!(browser.seed().is_some(), "nothing purged");
     assert!(browser.account_dir().exists(), "nothing deleted");
     assert!(!store_is_closed(&client).await, "the client still works");

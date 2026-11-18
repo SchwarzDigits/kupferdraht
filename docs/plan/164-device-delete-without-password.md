@@ -1,6 +1,7 @@
 # Step 164 — An SSO user deletes a device without a password
 
-**Status: commissioned 2026-11-18** (Volker), from Step 162's smoke: an SSO user logged
+**Status: implemented** on `step/164-device-delete-without-password` (2026-11-18).
+Commissioned 2026-11-18 (Volker), from Step 162's smoke: an SSO user logged
 in through the CLI and could not delete the device afterwards. Before 0.6.0.
 
 ## Problem
@@ -50,6 +51,37 @@ machine for that reason.
 - The CLI's way to say "no password".
 - Live on the reference machine: an SSO user's delete without a password `200`; with a
   password `403`; a password user's without one `403 missing-auth`.
+
+## Phase 1 (2026-11-18)
+
+- **The library does not know the account's kind — decided (a).** The password becomes
+  optional; `None` or an empty one sends none, and the backend decides (`missing-auth`
+  for an account with a password). No `sso_id` kept, no migration, no new symbol — as
+  matrix-rust-sdk's `delete_devices(…, auth_data: Option<…>)`.
+- **The CLI's "no password" is an empty answer — decided (a).** The prompt reads
+  "Account password (empty for an account without one):"; `--password-stdin` takes an
+  empty line. On `missing-auth` the CLI says how to give the password.
+- **Source compatibility:** the optional parameter keeps a call with a password valid in
+  Kotlin, Swift and JavaScript; BREAKING for the Rust API only.
+
+## Smoke
+
+2026-11-18 on the reference machine (server 3), valid client flows only: 10 ok, 0 failed
+(observations §108). SSO user 2 signed in through the identity provider; a delete with
+a password refused (`invalid-credentials`); the two devices Step 162's smoke left
+deleted without one; `logout --purge-device` without one. Password user 3: the purge
+logout without a password refused (`missing-auth`, with the CLI's hint), then with it.
+
+## Retrospective
+
+- The old refusal was also pinned by a unit test that asserted the error kind
+  (`purge_device_needs_the_password`); the red phase's grep for the message missed it,
+  the implementation found it (LEARNINGS 5.103). It now asserts that the backend's
+  refusal purges nothing.
+- The first smoke runs failed with "No route to host": the app the session ran in
+  lacked macOS's Local Network permission. Granted, the smoke went through.
+- Not covered: the SAML user with a password (allowed without one, per the reading);
+  the reference machine has no such account.
 
 ## Out of scope
 

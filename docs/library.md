@@ -697,11 +697,12 @@ everything else stays — the registry entry, the databases, the keys — so
 the next `login` reuses the registered device (Step 7e) and the data.
 With a purge the client is closed afterwards (its store refuses with
 `SessionExpired`; drop it): `purge_device` deletes the device at the backend
-(the password is required), `purge_local` forgets the account on this
+(re-authenticated by the password; `None` for an account without one, an
+SSO user's — Step 164), `purge_local` forgets the account on this
 device as `forget_account` does. Both together leave a device for good.
-The backend comes first: `InvalidInput` for `purge_device` without a
-password and `BackendRejected` for a wrong one (or, without `purge_device`,
-for an already revoked session) change nothing locally, and the call can
+The backend comes first: `BackendRejected` for a wrong password, for a
+missing one the account needs (`missing-auth`) or, without `purge_device`,
+for an already revoked session changes nothing locally, and the call can
 be repeated. Storage and keystore errors of the purge surface as such.
 
 ### `Kupferdraht::forget_account(&self, account_id: &str) -> Result<(), KupferdrahtError>`
@@ -1620,7 +1621,7 @@ abandoned `Sending` row as `Failed` like every other reader.
 | `Room::leave()`                                       | `Result<(), KupferdrahtError>` | Thin Weak<Client> wrapper that delegates to `Client::leave_room`. |
 | `Client::delete_room(room_id: &str)`                  | `Result<(), KupferdrahtError>` | Delete a team conversation for **all** members (team-admin action, distinct from leaving). `DELETE /v{N}/teams/{tid}/conversations/{cid}`. The owning team id is read from the conversation's `team` field (fetched via `list_conversations`), falling back to the signed-in user's own team (`GET /self`) since Wire's conversation-list response often omits `team`. An account in no team yields `InvalidInput`. `403` surfaces as `BackendRejected`; a `404` (already gone) is idempotent success. Refreshes the cache via `sync_metadata` so the room drops out. No matrix-rust-sdk analog (Wire extension). |
 | `Room::delete()`                                      | `Result<(), KupferdrahtError>` | Thin Weak<Client> wrapper that delegates to `Client::delete_room`. |
-| `Client::logout(purge_device: bool, password: Option<&str>)` | `Result<(), KupferdrahtError>` | **Step 6e-2.** `POST /v{N}/access/logout` to revoke the `zuid` refresh cookie. If `purge_device == true`, **first** issues `DELETE /v{N}/clients/{device_id}` with the password (matches Step 1d's body schema); the trailing cookie revocation is then **best-effort** — deleting the device invalidates the session server-side, so Wire rejects the still-held token ("Invalid zauth token", live-verified 2026-07-19) and that failure is logged, not returned. Without `purge_device` a failing `/access/logout` stays an error. Caller is responsible for any local-state cleanup (the library does not own the SqliteStore lifetime via `&self`). matrix-rust-sdk analog: `Client::logout`. |
+| `Client::logout(purge_device: bool, password: Option<&str>)` | `Result<(), KupferdrahtError>` | **Step 6e-2.** `POST /v{N}/access/logout` to revoke the `zuid` refresh cookie. If `purge_device == true`, **first** issues `DELETE /v{N}/clients/{device_id}` with the password — none for `None` or an empty one, as `delete_device` (Step 164); the trailing cookie revocation is then **best-effort** — deleting the device invalidates the session server-side, so Wire rejects the still-held token ("Invalid zauth token", live-verified 2026-07-19) and that failure is logged, not returned. Without `purge_device` a failing `/access/logout` stays an error. Caller is responsible for any local-state cleanup (the library does not own the SqliteStore lifetime via `&self`). matrix-rust-sdk analog: `Client::logout`. |
 
 ### Profile mutators (Step 2g)
 
@@ -1637,7 +1638,7 @@ abandoned `Sending` row as `Failed` like every other reader.
 | Method                                                | Returns                                | Notes |
 |---|---|---|
 | `devices()`                                           | `Result<Vec<DeviceInfo>, KupferdrahtError>` | `GET /v{N}/clients`. Lists every device registered for the authenticated user (max 7). Each entry has `device_id`, `class`, `label`, `model`, `registered_at`, `last_active`, `is_self`. matrix-rust-sdk analog: `Client::devices`. |
-| `delete_device(&str device_id, &str password)`        | `Result<(), KupferdrahtError>`              | `DELETE /v{N}/clients/{id}` with `{"password": "..."}`. Wire requires the user's password — the access token alone is not sufficient. **Refuses** to delete the current device (use `Client::logout(purge_device=true)` once Step 6e ships). matrix-rust-sdk analog: `Client::delete_devices`. |
+| `delete_device(&str device_id, Option<&str> password)` | `Result<(), KupferdrahtError>`              | `DELETE /v{N}/clients/{id}`, with `{"password": "..."}` when one is given. Wire re-authenticates the delete by the account's password, and an account without one — an SSO user's — by nothing (`kalium-readings.md` #31). **Step 164:** `None` or an empty password sends none and the backend decides: an account with a password answers `BackendRejected` naming `missing-auth`, one without it `invalid-credentials` for a password sent anyway. BREAKING: the password was `&str`. **Refuses** to delete the current device (use `Client::logout(purge_device=true)` once Step 6e ships). matrix-rust-sdk analog: `Client::delete_devices`. |
 | `rename_device(&str device_id, &str label)`           | `Result<(), KupferdrahtError>`              | `PUT /v{N}/clients/{id}` with `{"label": "..."}`. Updates the user-visible device name. matrix-rust-sdk analog: `Client::rename_device`. |
 | `key_package_count()`                                 | `Result<u64, KupferdrahtError>`             | **Step 63.** Remaining unclaimed MLS key packages for this device (`GET /v{N}/mls/key-packages/self/{client}/count`). Peers claim one per invite; at zero the device can no longer be added to new conversations (existing rooms keep working). Wire extension — matrix-rust-sdk has no key-package pool. |
 | `replenish_key_packages()`                            | `Result<u32, KupferdrahtError>`             | **Step 63.** Tops the pool back up to 100 when it has fallen below 50 (the halving heuristic Wire clients use); returns the number uploaded, `0` = healthy. The sync surface runs this automatically at most once per 24 h (stamp in `sync_state`, warn-and-continue — a failing check never breaks sync); call directly to force it. |

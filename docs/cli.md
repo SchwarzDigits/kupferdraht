@@ -1057,9 +1057,11 @@ key-packages
 ### `device-delete`
 
 Revoke a registered device by its `client_id`
-(`DELETE /v{N}/clients/{id}`). Wire requires the user's password
-in the body — pass it via stdin (`--password-stdin`) or be
-prompted on the TTY.
+(`DELETE /v{N}/clients/{id}`). Wire re-authenticates the delete by
+the account's password — pass it via stdin (`--password-stdin`) or
+be prompted on the TTY. An account without a password, an SSO
+user's, answers the prompt with Enter (or pipes an empty line):
+no password goes along, and the backend decides (Step 164).
 
 The CLI **refuses** to delete the current device (Kupferdraht's own
 session would be revoked mid-call). Use `logout` once Step 6e
@@ -1068,6 +1070,7 @@ ships for that flow.
 ```bash
 kupferdraht-cli device-delete --id <client_id>
 kupferdraht-cli device-delete --id <client_id> --password-stdin < pw.txt
+echo | kupferdraht-cli device-delete --id <client_id> --password-stdin   # an SSO account
 ```
 
 | Flag                | Required | Description                                              |
@@ -1083,8 +1086,11 @@ device-delete ok
 ```
 
 Common errors:
-- `403 invalid-credentials` — password mismatch; surfaced as
-  `BackendRejected`. Re-run with the correct password.
+- `403 invalid-credentials` — password mismatch, or a password
+  given for an account without one; surfaced as `BackendRejected`.
+  Re-run with the correct password, or with none.
+- `403 missing-auth` — no password given, but the account has one;
+  the CLI adds how to enter it.
 - `404 client-not-found` — the `client_id` doesn't belong to
   this user (or already deleted). Re-run `devices` to see what
   remains.
@@ -1837,7 +1843,8 @@ signed out: it is no longer the active account, so the next command
 answers "no persisted account — run `kupferdraht-cli login` first". With
 `--purge-device`, **also** issues `DELETE /v{N}/clients/{device_id}`
 first to remove the registered device entirely (frees a 7-cap slot) —
-Wire requires the user's password for that. With `--purge-local`, the SDK
+re-authenticated by the account's password; an account without one, an
+SSO user's, answers the prompt with Enter (Step 164). With `--purge-local`, the SDK
 forgets the account on this device: its directory under
 `accounts/<id>/` (databases, locks, asset cache), its keystore entries and
 its registry row; other accounts of the home, `global.db` and `home.id`
@@ -1856,7 +1863,7 @@ pbpaste | kupferdraht-cli logout --purge-device --purge-local --password-stdin
 
 | Flag                 | Required | Description                                                                              |
 |----------------------|----------|------------------------------------------------------------------------------------------|
-| `--purge-device`     | no       | Also delete the device at the backend (password required).                               |
+| `--purge-device`     | no       | Also delete the device at the backend (the password; none — Enter — for an SSO account). |
 | `--purge-local`      | no       | Also forget the account on this device: databases, keys, registry row.                   |
 | `--password-stdin`   | no       | Read password from stdin. Only relevant with `--purge-device`. Without it, the CLI prompts. |
 
