@@ -22,6 +22,9 @@ regexes = [
   '''zuid-SECRET-101''',
   # docs/THREAT_MODEL.md: "raw-key mode: ChaCha20-Poly1305 …" names a cipher.
   '''raw-key mode: ChaCha20-Poly1305''',
+  # The upload answers the attachment tests mock (steps 79, 97a, 130a) and the
+  # store's attachment fixture: a made-up blob id after the JSON field "key".
+  '''attachment-key-(79|130a|uuid)''',
 ]
 paths = [
   # Wire's OpenAPI document was committed once in April 2026 and is fetched
