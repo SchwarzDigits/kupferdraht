@@ -1,6 +1,11 @@
 # Step 164 — An SSO user deletes a device without a password
 
-**Status: implemented** on `step/164-device-delete-without-password` (2026-11-18).
+**Status: MERGED 2026-11-18** — `ea61ac5` on `step/164-device-delete-without-password`, with
+`ea508fe` (main merged in after Step 163a), merged to `main` as PR #107 (`3e8b0ed`);
+locally fmt, 0 build warnings, clippy native and wasm (both wasm lines), 1035 tests in
+31 suites, the CLI's 34, the browser suite (18 suites, 89 tests; `step_94_leader_tab`'s
+known flake once, green on the rerun), `public_vocabulary` on the merged state; CI green
+on the first run. Smoke on the reference machine: 10 ok (see Smoke below).
 Commissioned 2026-11-18 (Volker), from Step 162's smoke: an SSO user logged
 in through the CLI and could not delete the device afterwards. Before 0.6.0.
 
