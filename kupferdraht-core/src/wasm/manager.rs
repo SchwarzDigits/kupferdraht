@@ -1454,7 +1454,8 @@ impl Client {
             .map_err(|e| to_js(&e))
     }
 
-    /// `roomId`'s access modes and roles (Step 98b), as `{modes, roles}`.
+    /// Who may join `roomId` and how (Step 98b, typed by Step 163c), as
+    /// `{ joinRules, allowed }`.
     #[wasm_bindgen(js_name = roomAccess)]
     pub async fn room_access(&self, room_id: String) -> Result<JsValue, JsValue> {
         let room = self
@@ -1463,36 +1464,34 @@ impl Client {
             .await
             .ok_or_else(|| named_error("InvalidInput", &format!("unknown room: {room_id}")))?;
         let access = room.access().await.map_err(|e| to_js(&e))?;
-        let view = RoomAccessView {
-            modes: access.modes,
-            roles: access.roles,
-        };
-        js_view::to_js(&view)
+        js_view::to_js(&access)
     }
 
-    /// Set `roomId`'s access modes and roles (Step 98b).
+    /// Set who may join `roomId` and how (Step 98b): `access` is
+    /// `{ joinRules, allowed }`, as [`Self::room_access`] answers it.
     #[wasm_bindgen(js_name = setRoomAccess)]
     pub async fn set_room_access(
         &self,
         room_id: String,
-        modes: Vec<String>,
-        roles: Vec<String>,
+        access: JsValue,
     ) -> Result<JsValue, JsValue> {
+        let access: crate::rooms::RoomAccess = serde_wasm_bindgen::from_value(access)
+            .map_err(|e| named_error("InvalidInput", &format!("room access: {e}")))?;
         let room = self
             .inner
-            .set_room_access(&room_id, &modes, &roles)
+            .set_room_access(&room_id, &access)
             .await
             .map_err(|e| to_js(&e))?;
         room_to_js(&room).await
     }
 
-    /// Open `roomId` to guest-link joins (Step 98b).
+    /// Let guests join `roomId` by its join link (Step 98b).
     ///
-    /// **The prerequisite for [`Self::create_join_link`].** A Kupferdraht-created
-    /// conversation defaults to `access=["invite"]`, against which Wire
-    /// answers `403 access-denied` to a code request. Delegates to the
-    /// core's `Room::open_to_guests` (Step 8b), the one place that owns the
-    /// canonical guest configuration.
+    /// **The prerequisite for [`Self::create_join_link`].** A room Kupferdraht
+    /// creates admits by invite only, against which the backend answers
+    /// `403 access-denied` to a join-link request. Delegates to the core's
+    /// `Room::allow_guests` (Step 8b), the one place that owns the guest
+    /// configuration.
     #[wasm_bindgen(js_name = allowGuests)]
     pub async fn allow_guests(&self, room_id: String) -> Result<JsValue, JsValue> {
         let room = self
@@ -1500,7 +1499,7 @@ impl Client {
             .room(&room_id)
             .await
             .ok_or_else(|| named_error("InvalidInput", &format!("unknown room: {room_id}")))?;
-        let room = room.open_to_guests().await.map_err(|e| to_js(&e))?;
+        let room = room.allow_guests().await.map_err(|e| to_js(&e))?;
         room_to_js(&room).await
     }
 
@@ -1536,22 +1535,21 @@ impl Client {
             .map_err(|e| to_js(&e))
     }
 
-    /// Redeem a guest link and join the conversation it names (Step 98b;
-    /// Step 122: no domain — the link names the conversation).
+    /// Redeem a join link and join the room it names (Step 98b; Step 122:
+    /// no domain — the link names the room; Step 163c: by the link's URL,
+    /// as `createJoinLink` answers it).
     ///
-    /// `code` and `key` come from the link URL's query. This is an MLS
-    /// external commit, not a REST call — which is why a browser could never
-    /// stand in for it.
+    /// The URL carries the link's secret. This is an MLS external commit,
+    /// not a REST call — which is why a browser could never stand in for it.
     #[wasm_bindgen(js_name = joinViaLink)]
     pub async fn join_via_link(
         &self,
-        code: String,
-        key: String,
+        url: String,
         password: Option<String>,
     ) -> Result<JsValue, JsValue> {
         let room = self
             .inner
-            .join_via_link(code, key, password)
+            .join_via_link(url, password)
             .await
             .map_err(|e| to_js(&e))?;
         room_to_js(&room).await
@@ -1876,14 +1874,6 @@ async fn room_to_js(room: &crate::rooms::Room) -> Result<JsValue, JsValue> {
         unread,
         Some(&state),
     ))
-}
-
-/// Plain, JS-serializable view of `RoomAccess` (Step 98b).
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct RoomAccessView {
-    modes: Vec<String>,
-    roles: Vec<String>,
 }
 
 /// Plain, JS-serializable view of `JoinLink` (Step 98b). `passwordProtected`

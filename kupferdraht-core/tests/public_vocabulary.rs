@@ -90,19 +90,6 @@ const WORDS: &[Word] = &[
 /// Today's occurrences, `(file, word, count)`. Each Step 163 sub-step removes
 /// the rows of its words; after 163e the list is empty.
 const TEMPORARY: &[(&str, &str, usize)] = &[
-    // 163c
-    ("kupferdraht-cli/src/main.rs", "access role", 3),
-    ("kupferdraht-cli/src/main.rs", "self room", 1),
-    ("kupferdraht-core/src/client/membership.rs", "self room", 2),
-    ("kupferdraht-core/src/client/rooms.rs", "access role", 2),
-    ("kupferdraht-core/src/client/self_room.rs", "self room", 2),
-    ("kupferdraht-core/src/ffi/room.rs", "access mode", 1),
-    ("kupferdraht-core/src/ffi/room.rs", "access role", 4),
-    ("kupferdraht-core/src/ffi/room.rs", "self room", 1),
-    ("kupferdraht-core/src/rooms/room.rs", "access mode", 3),
-    ("kupferdraht-core/src/rooms/room.rs", "access role", 11),
-    ("kupferdraht-core/src/rooms/room.rs", "self room", 2),
-    ("kupferdraht-core/src/storage/records.rs", "self room", 1),
     // 163d
     ("bindings/web/kupferdraht-tabs/index.d.ts", "avatar key", 2),
     (
@@ -201,7 +188,7 @@ const TEMPORARY: &[(&str, &str, usize)] = &[
     ("kupferdraht-core/src/rooms/room.rs", "full key", 1),
     ("kupferdraht-core/src/rooms/room.rs", "handle", 1),
     ("kupferdraht-core/src/rooms/room.rs", "is self", 2),
-    ("kupferdraht-core/src/rooms/room.rs", "qualified", 6),
+    ("kupferdraht-core/src/rooms/room.rs", "qualified", 5),
     ("kupferdraht-core/src/rooms/room.rs", "thumbnail key", 1),
     ("kupferdraht-core/src/storage/global.rs", "handle", 1),
     ("kupferdraht-core/src/storage/global.rs", "qualified", 1),
@@ -250,14 +237,14 @@ const TEMPORARY: &[(&str, &str, usize)] = &[
     (
         "bindings/web/kupferdraht-tabs/index.d.ts",
         "conversation",
-        3,
+        1,
     ),
     (
         "bindings/web/kupferdraht-tabs/index.d.ts",
         "feature config",
         3,
     ),
-    ("kupferdraht-cli/src/main.rs", "conversation", 20),
+    ("kupferdraht-cli/src/main.rs", "conversation", 12),
     ("kupferdraht-cli/src/main.rs", "feature config", 1),
     ("kupferdraht-cli/src/main.rs", "receipt mode", 1),
     ("kupferdraht-core/src/client/account.rs", "self user", 1),
@@ -266,16 +253,11 @@ const TEMPORARY: &[(&str, &str, usize)] = &[
     (
         "kupferdraht-core/src/client/membership.rs",
         "conversation",
-        2,
+        1,
     ),
     ("kupferdraht-core/src/client/mod.rs", "conversation", 1),
     ("kupferdraht-core/src/client/mod.rs", "receipt mode", 1),
-    ("kupferdraht-core/src/client/rooms.rs", "conversation", 26),
-    (
-        "kupferdraht-core/src/client/self_room.rs",
-        "conversation",
-        1,
-    ),
+    ("kupferdraht-core/src/client/rooms.rs", "conversation", 23),
     (
         "kupferdraht-core/src/client/server_configs.rs",
         "feature config",
@@ -296,9 +278,9 @@ const TEMPORARY: &[(&str, &str, usize)] = &[
     ("kupferdraht-core/src/ffi/admin.rs", "feature config", 3),
     ("kupferdraht-core/src/ffi/admin.rs", "receipt mode", 2),
     ("kupferdraht-core/src/ffi/admin.rs", "user property", 3),
-    ("kupferdraht-core/src/ffi/room.rs", "conversation", 10),
+    ("kupferdraht-core/src/ffi/room.rs", "conversation", 9),
     ("kupferdraht-core/src/ffi/sync.rs", "conversation", 1),
-    ("kupferdraht-core/src/rooms/room.rs", "conversation", 24),
+    ("kupferdraht-core/src/rooms/room.rs", "conversation", 16),
     (
         "kupferdraht-core/src/storage/records.rs",
         "backend mls key",
@@ -338,7 +320,7 @@ const TEMPORARY: &[(&str, &str, usize)] = &[
         "conversation",
         1,
     ),
-    ("kupferdraht-core/src/wasm/manager.rs", "conversation", 6),
+    ("kupferdraht-core/src/wasm/manager.rs", "conversation", 3),
     ("kupferdraht-core/src/wasm/manager.rs", "feature config", 2),
 ];
 

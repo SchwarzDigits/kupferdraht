@@ -183,6 +183,10 @@ const PINNED_DIGESTS: &[(&str, &str)] = &[
         "V37__step_163b_message_kind_names.sql",
         "39cb32900ec84aafc35403cbda184ba8897eee74c0ecf126542a6760be7a19d3",
     ),
+    (
+        "V38__step_163c_personal_room.sql",
+        "a43e19868182a0c593e715488f022804d1970c6ece67bc46a9c916859e5a9856",
+    ),
 ];
 
 fn migrations_dir() -> PathBuf {

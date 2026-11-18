@@ -96,3 +96,59 @@ impl HttpClient {
         self.send_no_body(req, "join_conversation_by_code").await
     }
 }
+
+/// The `key` and `code` of a guest link's URL — the `uri` the backend
+/// issues for a conversation code (`…/conversation-join/?key=…&code=…`,
+/// Step 163c). No URL, or one whose query lacks either, is `InvalidInput`;
+/// the error names neither secret.
+pub(crate) fn join_link_key_and_code(link: &str) -> Result<(String, String), KupferdrahtError> {
+    let not_a_link = || KupferdrahtError::InvalidInput("join link: not a join link URL".into());
+    let url = reqwest::Url::parse(link).map_err(|_| not_a_link())?;
+    let value = |name: &str| {
+        url.query_pairs()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.into_owned())
+            .filter(|value| !value.is_empty())
+    };
+    match (value("key"), value("code")) {
+        (Some(key), Some(code)) => Ok((key, code)),
+        _ => Err(not_a_link()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LINK: &str = "https://account.example.test/conversation-join/?key=k3y%2Bpart&code=c0de";
+
+    #[test]
+    fn a_join_link_names_its_key_and_code() {
+        assert_eq!(
+            join_link_key_and_code(LINK).expect("a join link"),
+            ("k3y+part".to_owned(), "c0de".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_url_without_both_parts_is_no_join_link() {
+        for link in [
+            "https://account.example.test/conversation-join/?key=k3y",
+            "https://account.example.test/conversation-join/?code=c0de",
+            "https://account.example.test/conversation-join/?key=&code=c0de",
+            "k3y c0de",
+            "",
+        ] {
+            let err = join_link_key_and_code(link).expect_err(link);
+            assert!(
+                matches!(err, KupferdrahtError::InvalidInput(_)),
+                "{link}: {err:?}"
+            );
+            let shown = err.to_string();
+            assert!(
+                !shown.contains("k3y") && !shown.contains("c0de"),
+                "the error names no secret: {shown}"
+            );
+        }
+    }
+}

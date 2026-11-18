@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! `Client` — the self conversation (Step 86).
+//! `Client` — the account's personal room (Step 86).
 //!
-//! Wire's per-user notes-to-self room is an ordinary MLS group whose
+//! The backend's per-user notes-to-self room is an ordinary MLS group whose
 //! only members are the user's own devices. It carries the private
 //! cross-device channel later features ride (personal task list,
 //! `LastRead` read position, draft sync). Wire lists it in the rooms
-//! snapshot from day one (`RoomType::SelfRoom`, `epoch: 0`, a
+//! snapshot from day one (`RoomType::Personal`, `epoch: 0`, a
 //! `group_id`) but serves **no `GroupInfo`** until a member has
 //! established the group — live-confirmed against a self-hosted instance,
 //! `GET …/groupinfo` answers `404 mls-missing-group-info`
@@ -26,21 +26,21 @@ use crate::rooms::{Room, RoomType};
 use super::Client;
 
 impl Client {
-    /// Local-cache lookup of the caller's self conversation
-    /// (`RoomType::SelfRoom`). Strictly local; never hits the network.
+    /// Local-cache lookup of the caller's personal room
+    /// (`RoomType::Personal`). Strictly local; never hits the network.
     /// `None` before the first `sync_once` / `load_rooms_from_store`
-    /// or when the snapshot carries no self room. Wire has exactly one
+    /// or when the snapshot carries none. The backend keeps exactly one
     /// per user; the room may still be at epoch 0 (not yet
     /// established) — `join_room` / `join_all_rooms` bring it online.
-    /// matrix-rust-sdk has no analog (Matrix has no self room).
+    /// matrix-rust-sdk has no analog (Matrix has no personal room).
     #[must_use]
-    pub fn self_room(&self) -> Option<Arc<Room>> {
-        self.rooms_filtered(|r| r.room_type() == RoomType::SelfRoom)
+    pub fn personal_room(&self) -> Option<Arc<Room>> {
+        self.rooms_filtered(|r| r.room_type() == RoomType::Personal)
             .into_iter()
             .next()
     }
 
-    /// Establish the never-established self conversation (`epoch == 0`
+    /// Establish the never-established personal room (`epoch == 0`
     /// in the snapshot): build the local group under the snapshot's
     /// `group_id`, then run the Step-31 establishing commit
     /// ([`Self::establish_group`] — own other devices Added, their
@@ -60,38 +60,41 @@ impl Client {
     ///   or the client has no MLS state.
     /// * `KupferdrahtError::BackendRejected` / `Network` from the claim
     ///   and bundle upload; `Generic` / `Storage` from openmls.
-    pub(super) async fn establish_self_room(&self, room: &Room) -> Result<(), KupferdrahtError> {
+    pub(super) async fn establish_personal_room(
+        &self,
+        room: &Room,
+    ) -> Result<(), KupferdrahtError> {
         debug_assert!(
-            room.room_type() == RoomType::SelfRoom,
-            "establish_self_room: only the self room is self-established"
+            room.room_type() == RoomType::Personal,
+            "establish_personal_room: only the personal room is self-established"
         );
         let room_id = room.id();
         let group_id = room.group_id_bytes().ok_or_else(|| {
             KupferdrahtError::InvalidInput(format!(
-                "establish_self_room: {room_id} has no group_id — run sync first"
+                "establish_personal_room: {room_id} has no group_id — run sync first"
             ))
         })?;
         // Server data must never trip an assert (recoverable-error rule).
         if group_id.is_empty() {
             return Err(KupferdrahtError::InvalidInput(format!(
-                "establish_self_room: {room_id} carries an empty group_id"
+                "establish_personal_room: {room_id} carries an empty group_id"
             )));
         }
-        let mls = self.mls_client_required("establish_self_room")?;
+        let mls = self.mls_client_required("establish_personal_room")?;
         {
             let _gate = self.mls_write_gate().await;
             let guard = crate::encryption::lock_mls(mls);
             guard.create_group(&group_id, &self.backend_removal_key_ecdsa_p256)?;
         }
         if let Err(establish_err) = self
-            .establish_group(mls, &group_id, "establish_self_room")
+            .establish_group(mls, &group_id, "establish_personal_room")
             .await
         {
             // Best-effort discard: the establish error is what the
             // caller must see, not a secondary storage failure.
             let _gate = self.mls_write_gate().await;
             if let Err(e) = crate::encryption::lock_mls(mls).discard_group(&group_id) {
-                warn!(error = %e, "establish_self_room: discard after failed establish failed");
+                warn!(error = %e, "establish_personal_room: discard after failed establish failed");
             }
             return Err(establish_err);
         }
@@ -103,9 +106,9 @@ impl Client {
         // fresh group past epoch 0 (openmls, not server data).
         assert!(
             new_epoch > 0,
-            "establish_self_room: merged establishing commit left epoch 0"
+            "establish_personal_room: merged establishing commit left epoch 0"
         );
-        info!(%room_id, epoch = new_epoch, "self room established");
+        info!(%room_id, epoch = new_epoch, "personal room established");
         self.bump_room_epoch(&room_id, new_epoch).await
     }
 }

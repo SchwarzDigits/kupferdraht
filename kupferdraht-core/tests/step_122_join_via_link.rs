@@ -36,6 +36,12 @@ fn b64(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
+/// The link's URL as the backend issues it (Step 163c): the operator's
+/// account page with the link's key and code in the query.
+fn link_url() -> String {
+    format!("https://account.{DOMAIN}/conversation-join/?key={KEY}&code={CODE}")
+}
+
 /// `GET /conversations/join?key&code`: the conversation the link names.
 fn mount_link_lookup<'a>(server: &'a MockServer, conversation: &str) -> Mock<'a> {
     let body = format!(r#"{{"id":"{conversation}","has_password":false}}"#);
@@ -168,7 +174,7 @@ async fn the_link_room_is_joined_not_the_first_room_of_its_domain() {
     let commit = mount_commit_bundle(&server);
 
     let room = client
-        .join_via_link(CODE.into(), KEY.into(), None)
+        .join_via_link(link_url(), None)
         .await
         .expect("join via link");
 
@@ -193,7 +199,7 @@ async fn a_room_joined_already_is_not_joined_again() {
 
     let room = fixture
         .client
-        .join_via_link(CODE.into(), KEY.into(), None)
+        .join_via_link(link_url(), None)
         .await
         .expect("join via link");
 
@@ -216,7 +222,7 @@ async fn a_room_missing_after_the_redeem_is_not_invalid_input() {
     mount_redeem(&server, 200);
     let other_info = mount_group_info(&server, OTHER_UUID, OTHER_GROUP);
 
-    let result = client.join_via_link(CODE.into(), KEY.into(), None).await;
+    let result = client.join_via_link(link_url(), None).await;
 
     assert!(
         matches!(result, Err(KupferdrahtError::Generic(_))),
@@ -241,12 +247,36 @@ async fn an_unknown_link_fails_before_the_redeem() {
     });
     let redeem = mount_redeem(&server, 200);
 
-    let result = client.join_via_link(CODE.into(), KEY.into(), None).await;
+    let result = client.join_via_link(link_url(), None).await;
 
     assert!(
         matches!(&result, Err(KupferdrahtError::BackendRejected(m)) if m.contains("no-conversation-code")),
         "{:?}",
         result.err()
     );
+    redeem.assert_calls(0);
+}
+
+/// Step 163c: a URL that is no join link fails as the caller's input,
+/// before any request — and the error names nothing of the URL's secret.
+#[tokio::test]
+async fn a_url_that_is_no_join_link_fails_before_any_request() {
+    let home = tempfile::tempdir().expect("tempdir");
+    let server = MockServer::start();
+    let client = client(&server, home.path()).await;
+    let lookup = mount_link_lookup(&server, LINK_UUID);
+    let redeem = mount_redeem(&server, 200);
+
+    for url in [
+        format!("https://account.{DOMAIN}/conversation-join/?key={KEY}"),
+        format!("{KEY} {CODE}"),
+    ] {
+        let result = client.join_via_link(url.clone(), None).await;
+        let Err(KupferdrahtError::InvalidInput(message)) = result else {
+            panic!("{url}: {:?}", result.err());
+        };
+        assert!(!message.contains(KEY), "the error names the key: {message}");
+    }
+    lookup.assert_calls(0);
     redeem.assert_calls(0);
 }

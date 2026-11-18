@@ -2,18 +2,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #![cfg(not(target_arch = "wasm32"))]
-//! Step 86 — self conversation: establish, join, send (TDD red phase).
+//! Step 86 — personal room: establish, join, send (TDD red phase).
 //!
 //! Pins `docs/plan/archive/86-self-conversation.md` after the live probe of
 //! 2026-09-24 against the own instance: Wire lists the user's MLS
-//! self conversation (`type: 1`, `epoch: 0`, a `group_id`) in the
+//! personal room (`type: 1`, `epoch: 0`, a `group_id`) in the
 //! rooms snapshot but serves **no `GroupInfo`** for it until a member
 //! has established the group — `GET …/groupinfo` answers
 //! `404 mls-missing-group-info`, so an external commit is impossible
-//! at epoch 0. The client therefore establishes the self room itself
+//! at epoch 0. The client therefore establishes the personal room itself
 //! (the Step-31 path: local group under the snapshot's `group_id`,
 //! own other devices Added, or a self-update commit when solo) and
-//! external-joins only once `epoch > 0`. Non-self rooms keep the
+//! external-joins only once `epoch > 0`. Non-personal rooms keep the
 //! external-commit path unchanged.
 //!
 //! The "own devices" fan-out pin uses a real second device of the
@@ -32,9 +32,9 @@ use openmls::prelude::WireFormat;
 mod common;
 
 const DOMAIN: &str = "example.test";
-/// The (server-derived) id of the user's MLS self conversation.
+/// The (server-derived) id of the user's personal room.
 const SELF_UUID: &str = "5f98a472-6364-50da-bf25-b77b0b2638e3";
-/// b64("grp-self") — the self conversation's MLS group id.
+/// b64("grp-self") — the personal room's MLS group id.
 const SELF_GROUP_ID_B64: &str = "Z3JwLXNlbGY=";
 const SELF_GROUP_ID: &[u8] = b"grp-self";
 /// A regular group conversation for the preservation test.
@@ -88,11 +88,11 @@ fn latest_capture(store: &Mutex<Vec<(String, Vec<u8>)>>, server: &MockServer) ->
         .expect("a request body was captured for this server")
 }
 
-fn self_room_id() -> String {
+fn personal_room_id() -> String {
     format!("{SELF_UUID}@{DOMAIN}")
 }
 
-/// `OwnConversation` JSON of the self conversation exactly as the
+/// `OwnConversation` JSON of the personal room exactly as the
 /// live snapshot shows it: `type: 1`, one member (self), no name.
 fn self_conv_json(epoch: u64) -> String {
     format!(
@@ -185,7 +185,7 @@ fn own_device_kp_entry(b64: &str) -> String {
 }
 
 /// The external-join surface answering exactly what the live probe
-/// saw for a never-established self conversation.
+/// saw for a never-established personal room.
 fn mount_groupinfo_missing<'a>(server: &'a MockServer, uuid: &str) -> Mock<'a> {
     server.mock(|when, then| {
         when.method(GET)
@@ -244,20 +244,20 @@ async fn logged_in_client(server: &MockServer) -> (Arc<Client>, Arc<dyn Store>) 
     common::run_login(server).await
 }
 
-async fn send_into_self_room(client: &Client, body: &str) {
+async fn send_into_personal_room(client: &Client, body: &str) {
     let room = client
-        .room(&self_room_id())
+        .room(&personal_room_id())
         .await
-        .expect("self room cached");
+        .expect("personal room cached");
     room.timeline()
         .expect("timeline")
         .send_text(body.into())
         .await
-        .expect("send into the self room");
+        .expect("send into the personal room");
 }
 
 #[tokio::test]
-async fn join_all_rooms_establishes_the_epoch_zero_self_room_and_sends() {
+async fn join_all_rooms_establishes_the_epoch_zero_personal_room_and_sends() {
     let server = MockServer::start();
     let (client, _store) = logged_in_client(&server).await;
     mount_rooms(&server, &[(SELF_UUID, self_conv_json(0))]);
@@ -274,7 +274,7 @@ async fn join_all_rooms_establishes_the_epoch_zero_self_room_and_sends() {
     assert_eq!(summary.attempted, 1);
     assert_eq!(
         summary.joined, 1,
-        "the self room counts as joined once established; failures: {:?}",
+        "the personal room counts as joined once established; failures: {:?}",
         summary.failed
     );
     assert!(summary.failed.is_empty(), "{:?}", summary.failed);
@@ -283,7 +283,7 @@ async fn join_all_rooms_establishes_the_epoch_zero_self_room_and_sends() {
     assert_eq!(
         gi.calls(),
         0,
-        "an epoch-0 self room must not be external-joined (Wire has no GroupInfo)"
+        "an epoch-0 personal room must not be external-joined (Wire has no GroupInfo)"
     );
     let segments = common::mls::bundle_segments(&latest_capture(&COMMIT_BUNDLES, &server));
     assert_eq!(
@@ -295,13 +295,15 @@ async fn join_all_rooms_establishes_the_epoch_zero_self_room_and_sends() {
 
     // The cache + store carry the established epoch (openmls is the
     // authority, Step 66), and the room is sendable right away.
-    let self_room = client.self_room().expect("self_room after establish");
+    let personal_room = client
+        .personal_room()
+        .expect("personal_room after establish");
     assert_eq!(
-        self_room.epoch(),
+        personal_room.epoch(),
         1,
         "epoch 0 → 1 by the establishing commit"
     );
-    send_into_self_room(&client, "note to self").await;
+    send_into_personal_room(&client, "note to self").await;
     assert_eq!(send.calls(), 1);
 
     // Idempotent: the local group exists now — no second upload.
@@ -312,7 +314,7 @@ async fn join_all_rooms_establishes_the_epoch_zero_self_room_and_sends() {
 }
 
 #[tokio::test]
-async fn join_room_on_the_epoch_zero_self_room_establishes_instead_of_fetching_groupinfo() {
+async fn join_room_on_the_epoch_zero_personal_room_establishes_instead_of_fetching_groupinfo() {
     // The exact live failure of the probe (`room-join` → 404
     // mls-missing-group-info) — `join_room` itself must branch, so
     // `Room::join`, `room-join`, `send_text_auto_join` all heal it.
@@ -329,18 +331,18 @@ async fn join_room_on_the_epoch_zero_self_room_establishes_instead_of_fetching_g
         .await
         .expect("sync");
     client
-        .join_room(&self_room_id())
+        .join_room(&personal_room_id())
         .await
-        .expect("join_room establishes the epoch-0 self room");
+        .expect("join_room establishes the epoch-0 personal room");
     assert_eq!(gi.calls(), 0);
     assert_eq!(commit.calls(), 1);
-    send_into_self_room(&client, "via room-join").await;
+    send_into_personal_room(&client, "via room-join").await;
     assert_eq!(send.calls(), 1);
 }
 
 #[tokio::test]
-async fn join_all_rooms_external_joins_an_established_self_room() {
-    // Another own device established the self room first (epoch 3):
+async fn join_all_rooms_external_joins_an_established_personal_room() {
+    // Another own device established the personal room first (epoch 3):
     // this device takes the unchanged external-commit path.
     let server = MockServer::start();
     let (client, _store) = logged_in_client(&server).await;
@@ -363,7 +365,7 @@ async fn join_all_rooms_external_joins_an_established_self_room() {
     assert_eq!(gi.calls(), 1, "epoch > 0 → external commit");
     assert_eq!(commit.calls(), 1);
     assert_eq!(claim.calls(), 0, "joining claims nothing");
-    send_into_self_room(&client, "joined late").await;
+    send_into_personal_room(&client, "joined late").await;
     assert_eq!(send.calls(), 1);
 }
 
@@ -411,7 +413,7 @@ async fn rejected_establishing_commit_discards_the_local_group_so_the_retry_re_e
 }
 
 #[tokio::test]
-async fn non_self_rooms_keep_the_external_commit_path() {
+async fn non_personal_rooms_keep_the_external_commit_path() {
     // Preservation: a regular group at epoch 0 in the snapshot is
     // never self-established — it goes through /groupinfo as before
     // (a real epoch-0 group would 404 there; the mock serves a
@@ -433,12 +435,12 @@ async fn non_self_rooms_keep_the_external_commit_path() {
         .expect("sync");
     let summary = client.join_all_rooms().await.expect("join_all_rooms");
     assert_eq!(summary.joined, 1, "{:?}", summary.failed);
-    assert_eq!(gi.calls(), 1, "non-self rooms still fetch GroupInfo");
+    assert_eq!(gi.calls(), 1, "non-personal rooms still fetch GroupInfo");
     assert_eq!(commit.calls(), 1);
-    assert_eq!(claim.calls(), 0, "non-self rooms never self-claim");
+    assert_eq!(claim.calls(), 0, "non-personal rooms never self-claim");
     assert!(
-        client.self_room().is_none(),
-        "no self room in this snapshot"
+        client.personal_room().is_none(),
+        "no personal room in this snapshot"
     );
 }
 
@@ -484,12 +486,12 @@ async fn establishing_adds_the_users_other_device_which_reads_the_first_message(
         "the Welcome lands the device at epoch 1"
     );
     assert_eq!(
-        client.self_room().expect("self room").epoch(),
+        client.personal_room().expect("personal room").epoch(),
         1,
         "the client's snapshot agrees with the device"
     );
 
-    send_into_self_room(&client, "hello other me").await;
+    send_into_personal_room(&client, "hello other me").await;
     assert_eq!(send.calls(), 1);
     let plaintext =
         other_device.decrypt_application_message(&latest_capture(&MLS_MESSAGES, &server));
@@ -497,12 +499,12 @@ async fn establishing_adds_the_users_other_device_which_reads_the_first_message(
         plaintext
             .windows(b"hello other me".len())
             .any(|w| w == b"hello other me"),
-        "the other device reads the first message sent into the self room"
+        "the other device reads the first message sent into the personal room"
     );
 }
 
 #[tokio::test]
-async fn self_room_is_a_local_cache_lookup() {
+async fn personal_room_is_a_local_cache_lookup() {
     let server = MockServer::start();
     let (client, _store) = logged_in_client(&server).await;
     mount_rooms(
@@ -513,7 +515,7 @@ async fn self_room_is_a_local_cache_lookup() {
         ],
     );
     assert!(
-        client.self_room().is_none(),
+        client.personal_room().is_none(),
         "nothing cached before the first sync / hydrate"
     );
     client
@@ -522,18 +524,18 @@ async fn self_room_is_a_local_cache_lookup() {
         .expect("sync");
     // Sync method, no network: the snapshot is the source.
     let room = client
-        .self_room()
-        .expect("the self room is in the snapshot");
-    assert_eq!(room.id(), self_room_id());
-    assert_eq!(room.room_type(), RoomType::SelfRoom);
+        .personal_room()
+        .expect("the personal room is in the snapshot");
+    assert_eq!(room.id(), personal_room_id());
+    assert_eq!(room.room_type(), RoomType::Personal);
     assert_eq!(
         room.epoch(),
         0,
         "not established yet — lookup does not join"
     );
-    let by_id = client.room(&self_room_id()).await.expect("room by id");
+    let by_id = client.room(&personal_room_id()).await.expect("room by id");
     assert!(
         Arc::ptr_eq(&room, &by_id),
-        "self_room and room(id) share the cache slot"
+        "personal_room and room(id) share the cache slot"
     );
 }

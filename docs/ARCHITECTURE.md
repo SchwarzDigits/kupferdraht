@@ -366,15 +366,15 @@ transport (see `docs/library.md`, "Choosing the receive transport").
 - **Create** advances a fresh group from epoch 0 → 1 with a
   self-establishing commit so the room is sendable immediately
   (Step 31), rather than inert until the first invite.
-- **The self conversation** (`RoomType::SelfRoom` — Wire's notes-to-self
-  room, one MLS group of the user's own devices) is listed by Wire at
+- **The personal room** (`RoomType::Personal` — the notes-to-self room,
+  one MLS group of the user's own devices) is listed by the backend at
   epoch 0 with no `GroupInfo` on file, so an external join is impossible
   until a member commits (`404 mls-missing-group-info`, live 2026-09-24).
   `Client::join_room` establishes it from the first device (the Step-31
   commit: own other devices Added, self-update when solo) and
   external-joins from every later one; `join_all_rooms` inherits the
-  branch, `Client::self_room` is the lookup (Step 86,
-  `client/self_room.rs`).
+  branch, `Client::personal_room` is the lookup (Step 86,
+  `client/personal_room.rs`).
 
 ### 5.5 File attachments — the two-channel flow
 
@@ -707,8 +707,11 @@ and `mls.db`, `PRAGMA user_version` (1) for `global.db`. On every platform. `mls
 the same since Step 142: the openmls fork's `openmls_sqlite_storage` runs
 openmls's migrations grouped (history table
 `openmls_sqlite_storage_migrations`). The current
-schema version is **V37**
-(`V37__step_163b_message_kind_names.sql` — the stored kinds of pings and
+schema version is **V38**
+(`V38__step_163c_personal_room.sql` — the stored type of the account's
+personal room takes the library's own name, `self_room` → `personal`,
+every other room type as it is; `V37__step_163b_message_kind_names.sql` —
+the stored kinds of pings and
 attachments take the library's own names, `knock` → `ping` and `asset` →
 `attachment`, every other kind as it is; `V36__step_84_forget_deleted_files.sql` — the attachment rows of messages
 deleted for everyone before a delete took them; the next start removes their

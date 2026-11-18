@@ -82,16 +82,10 @@ impl Room {
         self.inner.group_id_b64().map(str::to_owned)
     }
 
-    /// Wire's `access` array (which join modes the room permits).
+    /// Who may join and how, as of the last room-list sync; no network.
     #[must_use]
-    pub fn access_modes(&self) -> Vec<String> {
-        self.inner.access_modes()
-    }
-
-    /// Wire's `access_role` array (which user classes may join).
-    #[must_use]
-    pub fn access_roles(&self) -> Vec<String> {
-        self.inner.access_roles()
+    pub fn cached_access(&self) -> RoomAccess {
+        self.inner.cached_access()
     }
 
     /// A fresh timeline handle for this room.
@@ -273,7 +267,7 @@ impl Room {
         Ok(super::timeline::map_items(self.inner.failed_sends().await?))
     }
 
-    /// The room's `(access, access_role)` policy.
+    /// Who may join the room and how, as the backend reports it now.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -316,29 +310,21 @@ impl Room {
         self.inner.is_marked_unread().await
     }
 
-    /// Set the room's `access` + `access_role`; returns the refreshed
-    /// handle.
+    /// Set who may join the room and how; returns the refreshed handle.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn set_access(
-        &self,
-        access: Vec<String>,
-        access_role: Vec<String>,
-    ) -> Result<Arc<Room>, KupferdrahtError> {
-        self.inner
-            .set_access(access, access_role)
-            .await
-            .map(Room::wrap)
+    pub async fn set_access(&self, access: RoomAccess) -> Result<Arc<Room>, KupferdrahtError> {
+        self.inner.set_access(access).await.map(Room::wrap)
     }
 
-    /// Convenience: open the room to guest-link joins; returns the
+    /// Convenience: let guests join by the room's join link; returns the
     /// refreshed handle.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn open_to_guests(&self) -> Result<Arc<Room>, KupferdrahtError> {
-        self.inner.open_to_guests().await.map(Room::wrap)
+    pub async fn allow_guests(&self) -> Result<Arc<Room>, KupferdrahtError> {
+        self.inner.allow_guests().await.map(Room::wrap)
     }
 
     /// Create a guest join link (optionally password-protected).
@@ -389,10 +375,10 @@ impl Client {
         self.inner.dm_room(peer).map(Room::wrap)
     }
 
-    /// Local-cache lookup of the caller's self conversation; no network.
+    /// Local-cache lookup of the caller's personal room; no network.
     #[must_use]
-    pub fn self_room(&self) -> Option<Arc<Room>> {
-        self.inner.self_room().map(Room::wrap)
+    pub fn personal_room(&self) -> Option<Arc<Room>> {
+        self.inner.personal_room().map(Room::wrap)
     }
 }
 

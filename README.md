@@ -53,7 +53,7 @@ end-to-end encrypted with MLS (RFC 9420):
   - 1:1 DMs with idempotent lookup-or-create
   - invite / kick members
   - join via MLS external commit (one room, all rooms, or re-join after a device switch)
-  - self conversation (notes-to-self, one MLS group of the user's own devices): established by the first device, joined by the others, looked up via `self_room`
+  - personal room (notes-to-self, one MLS group of the user's own devices): established by the first device, joined by the others, looked up via `personal_room`
   - leave, rename, team-admin delete for everyone
   - member lists derived from the MLS leaves
   - backend-mediated administration via the External Senders extension

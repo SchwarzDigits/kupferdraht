@@ -237,19 +237,19 @@ pub(crate) async fn dm_with(peer: String) -> Result<(), KupferdrahtError> {
     Ok(())
 }
 
-pub(crate) async fn self_room() -> Result<(), KupferdrahtError> {
+pub(crate) async fn personal_room() -> Result<(), KupferdrahtError> {
     let client = resume_client().await?;
-    // `Client::self_room` reads the in-memory rooms cache — hydrate
+    // `Client::personal_room` reads the in-memory rooms cache — hydrate
     // it from the persisted snapshot first (no network), exactly like
     // `dm-show`. `kupferdraht-cli sync` populates the snapshot.
     client.load_rooms_from_store().await?;
-    let Some(room) = client.self_room() else {
+    let Some(room) = client.personal_room() else {
         eprintln!(
-            "self-room: no self conversation in the cache — run `kupferdraht-cli sync` first"
+            "personal-room: no personal room in the cache — run `kupferdraht-cli sync` first"
         );
         std::process::exit(2);
     };
-    println!("self-room ok");
+    println!("personal-room ok");
     println!("  room_id: {}", room.id());
     println!("  epoch:   {}", room.epoch());
     if room.epoch() == 0 {

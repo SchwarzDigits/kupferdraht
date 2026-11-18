@@ -222,7 +222,10 @@ async fn client_join_via_link_posts_code_key_password_to_join_endpoint() {
     // What we assert is that the redeem POST happened with the
     // correct body shape.
     let _ = client
-        .join_via_link("c4".into(), "k4".into(), Some("secret-pw".into()))
+        .join_via_link(
+            "https://account.example.test/conversation-join/?key=k4&code=c4".into(),
+            Some("secret-pw".into()),
+        )
         .await;
     join_mock.assert();
 }

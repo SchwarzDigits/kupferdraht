@@ -3341,3 +3341,26 @@ touched it.
   started, the user's `!` commands included, failed to connect while another app's
   session reached the machine. Ruling out the sandbox did not help; granting the
   permission did.
+
+### 5.104 A rename is not done when it compiles (Steps 163b, 163c)
+
+- **A renamed persisted place keeps its old content where nothing reaches it.**
+  Moving the attachment cache from `assets/` to `attachments/` compiled and passed;
+  the review asked what still reaches the old directory — neither the start's sweep
+  nor a delete for everyone did, so copies of files deleted for everyone would have
+  stayed. For every renamed column value, directory or key, ask that question; the
+  answer is a migration (V37, V38) or a removal at start.
+- **A rename can turn a fixture into a "secret".** `asset-key-130a` stayed under
+  gitleaks' entropy threshold, `attachment-key-130a` did not. The scan reads the whole
+  history, so a later change of the value does not clear the hit; the allowlist with
+  its reason does.
+- **Scripts rename identifiers; prose and strings need eyes.** The identifier pass
+  with the compiler as the net was safe; the prose pass needed a full review of its
+  diff — a byte string it misread flipped strings and code for the rest of a file, and
+  "ephemeral" also meant "transient" in places. Wire's names bound by an interface
+  (Protobuf fields, `wire::` types) are what the compiler finds; SQL in strings it
+  does not.
+- **A test filter applies to every target.** `cargo test --test a --test b --lib x`
+  filters `a` and `b` by `x` too: they reported 0 tests, and the gate still said
+  green. The same slip as 5.92; a target that should run something and ran nothing
+  is a failure, not a pass.
