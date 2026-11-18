@@ -57,10 +57,10 @@ impl Client {
         &self,
         access_token: &str,
         client_id: &str,
-        password: &str,
+        password: Option<&str>,
     ) -> Result<(), KupferdrahtError> {
         self.http
-            .delete_client(self.api_version, access_token, client_id, Some(password))
+            .delete_client(self.api_version, access_token, client_id, password)
             .await
     }
 

@@ -2455,3 +2455,24 @@ no handle), `status` (the session's label is the home's), `room-create`,
 `typing --seconds 2`, `room-leave`, `email-change` to the user's own address,
 `logout --purge-local`. The device stays at the backend: the CLI deletes a device
 only with a password, and an SSO user has none.
+
+## 108) A device delete without a password, live on the reference machine (2026-11-18)
+
+Live-confirmed for Step 164 on the reference machine (a Haskell wire-server with a
+SAML identity provider, observations §103), valid client flows only. It confirms
+wire-server's `reauthenticate` as read (`kalium-readings.md` #31).
+
+- **An SSO user's account (no password):** `DELETE /v14/clients/{id}` without a password
+  deletes (two devices, `200`), and so does `logout --purge-device` without one. A
+  password sent anyway — the user's password at the identity provider — is refused:
+  `403 {"label":"invalid-credentials","message":"Authentication failed"}`.
+- **An account with a password:** the delete without one is refused,
+  `403 {"label":"missing-auth","message":"Re-authentication via password required"}`;
+  with the password it goes through.
+- **Aside, not probed:** one device listed `last_active` as the start of the next day
+  (`2026-11-19T00:00:00Z` at 14:00 UTC on 2026-11-18).
+
+Smoke `smoke164.sh` (outside the repository): 10 ok, 0 failed. Running it from this
+Mac first failed with "No route to host" for every address of the machine: the app the
+session ran in lacked macOS's Local Network permission, which holds back every process
+it starts; granted, the smoke went through.

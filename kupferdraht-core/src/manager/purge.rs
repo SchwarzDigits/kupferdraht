@@ -25,7 +25,8 @@ use crate::storage::delete_account_databases;
 /// next login.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, uniffi::Record)]
 pub struct PurgeOptions {
-    /// Delete the device at the backend (needs the password) and, in the
+    /// Delete the device at the backend (re-authenticated by the account's
+    /// password, none for an account without one — Step 164) and, in the
     /// browser's server mode, its databases on the storage server.
     pub purge_device: bool,
     /// Forget the account on this device: seed, keys, local databases,
@@ -45,9 +46,9 @@ impl Kupferdraht {
     /// account here as [`Kupferdraht::forget_account`] does.
     ///
     /// # Errors
-    /// `InvalidInput` for `purge_device` without a password; the backend's
-    /// (`BackendRejected` for a wrong password, or for an already revoked
-    /// session without `purge_device`) — then nothing local has changed;
+    /// The backend's (`BackendRejected` for a wrong or a missing password —
+    /// `missing-auth` —, or for an already revoked session without
+    /// `purge_device`) — then nothing local has changed;
     /// storage and keystore errors of the purge.
     pub async fn logout(
         &self,

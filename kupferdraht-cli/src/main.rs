@@ -664,8 +664,9 @@ enum Command {
         replenish: bool,
     },
     /// Revoke a registered device by its `client_id` (Step 1d).
-    /// Wire requires the user's password; pass it via stdin
-    /// (`--password-stdin`) or be prompted interactively.
+    /// Wire re-authenticates by the account's password; pass it via
+    /// stdin (`--password-stdin`) or be prompted interactively — an
+    /// account without one (SSO) answers with an empty line.
     /// Refuses to delete the *current* device — use `logout` for
     /// that once Step 6e ships.
     DeviceDelete {
@@ -916,7 +917,8 @@ enum Command {
     /// `login` reuses the existing device via the Step 7e reuse path.
     Logout {
         /// Also delete this device from Wire's clients list.
-        /// Requires the user's password (prompt or `--password-stdin`).
+        /// Re-authenticated by the account's password (prompt or
+        /// `--password-stdin`); an empty answer for an account without one.
         #[arg(long)]
         purge_device: bool,
         /// Also forget the account on this device (databases, keys,

@@ -6,7 +6,7 @@
 
 use kupferdraht::KupferdrahtError;
 
-use super::{read_password, resume_client};
+use super::{explain_missing_password, read_device_password, resume_client};
 
 pub(crate) async fn devices() -> Result<(), KupferdrahtError> {
     let client = resume_client().await?;
@@ -31,14 +31,12 @@ pub(crate) async fn device_delete(
     password_stdin: bool,
 ) -> Result<(), KupferdrahtError> {
     let client = resume_client().await?;
-    let password = read_password(password_stdin)
+    let password = read_device_password(password_stdin)
         .map_err(|e| KupferdrahtError::Environment(format!("read password: {e}")))?;
-    if password.is_empty() {
-        return Err(KupferdrahtError::InvalidInput(
-            "device-delete: password must be non-empty".into(),
-        ));
-    }
-    client.delete_device(&device_id, &password).await?;
+    client
+        .delete_device(&device_id, password.as_deref())
+        .await
+        .map_err(explain_missing_password)?;
     println!("device-delete ok");
     println!("  device_id: {device_id}");
     Ok(())

@@ -108,6 +108,8 @@ object identity)
   `find_message_room`, `find_message_by_id`, `resync_room`,
   `resync_existing_rooms`, …); admin (`logout`,
   `set_display_name`, `set_handle`, `request_email_change`, `change_password`, `devices`,
+  `delete_device(device_id, password?)` — `None` for an account without a password, an
+  SSO user's (Step 164),
   `feature_configs`, `file_sharing`, `receipt_mode`, …); avatars (Step 144:
   `avatar(user_id, size) -> Avatar?`, `avatar_key(user_id)`, `team_avatar()`,
   `upload_avatar(image)`, `remove_avatar()`; the rules are in
@@ -583,7 +585,8 @@ calls throw `InvalidInput`.
   Since Step 78 the account is signed out as well: `activeAccount` is
   cleared and the manager drops the client — the app learns at its next
   start that nobody is signed in instead of resuming into a dead session.
-- **`purgeDevice`** (with the password, as natively) — deletes this device
+- **`purgeDevice`** (with the password as natively; none for an account
+  without one, Step 164) — deletes this device
   at the backend and, in the server mode, the account's databases on the
   storage server (with the VFS's cache). Another browser that holds the
   account's keys shares that device (a restore brings the recorded device
@@ -885,7 +888,8 @@ Since Step 110 (ADR-0035):
   Step 152 the `displayName` / `handle` getters answer it right after the
   call, under tabs in the calling tab.
 - Devices (Step 98a): `devices() -> DeviceInfo[]`, `deleteDevice(deviceId,
-  password)`. `DeviceInfo` is the core record field for field —
+  password?)` — no password (or an empty one) for an account without one, an
+  SSO user's; an account with a password rejects `missing-auth` (Step 164). `DeviceInfo` is the core record field for field —
   `{deviceId, class, label, model, registeredAt, lastActive, isSelf}`.
 - `recovery() -> Recovery` (Step 112) — the account's recovery data.
 - `serviceToken(audience) -> { token, expiresIn }` (async, Step 139) — a

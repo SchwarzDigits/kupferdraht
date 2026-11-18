@@ -338,8 +338,8 @@ export class ClientProxy {
   /** The backend mails a confirmation link; the address changes once confirmed. */
   requestEmailChange(email: string): Promise<void>;
   devices(): Promise<DeviceInfo[]>;
-  /** Wire requires the account password to re-authenticate. */
-  deleteDevice(deviceId: string, password: string): Promise<void>;
+  /** The account password re-authenticates; none for an account without one (an SSO user's). */
+  deleteDevice(deviceId: string, password?: string | null): Promise<void>;
   renameRoom(roomId: string, name: string): Promise<Room>;
   /** Team-admin delete for everyone; an already-gone room counts as success. */
   deleteRoom(roomId: string): Promise<void>;

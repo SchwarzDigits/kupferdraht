@@ -77,9 +77,12 @@ impl Client {
     }
 
     /// `DELETE /v14/clients/{device_id}` — revoke a registered
-    /// device. Wire requires the user's password for this call;
-    /// the CLI prompts via `--password-stdin` (consistent with
-    /// `logout --purge-device`).
+    /// device. Wire re-authenticates the delete by the account's
+    /// password, and an account without one — an SSO user's — by
+    /// nothing (Step 164, `kalium-readings.md` #31): `None` or an
+    /// empty password sends none, and the backend decides. An
+    /// account with a password that sends none gets
+    /// `BackendRejected` naming `missing-auth`.
     ///
     /// Caller is responsible for not deleting the *current* device
     /// — that's a logout flow (Step 6e), and revoking your own
@@ -91,21 +94,17 @@ impl Client {
     ///
     /// # Errors
     /// * `InvalidInput` if `device_id` matches the current device.
-    /// * `BackendRejected` from Wire (wrong password, unknown id, …).
+    /// * `BackendRejected` from Wire (`missing-auth`, a wrong or an
+    ///   unwanted password as `invalid-credentials`, unknown id, …).
     /// * Network / encoding failures bubble up untyped.
     pub async fn delete_device(
         &self,
         device_id: &str,
-        password: &str,
+        password: Option<&str>,
     ) -> Result<(), KupferdrahtError> {
         if device_id.is_empty() {
             return Err(KupferdrahtError::InvalidInput(
                 "delete_device: device_id must be non-empty".into(),
-            ));
-        }
-        if password.is_empty() {
-            return Err(KupferdrahtError::InvalidInput(
-                "delete_device: password must be non-empty".into(),
             ));
         }
         if Some(device_id) == self.device_id() {
@@ -115,8 +114,12 @@ impl Client {
                     .into(),
             ));
         }
-        self.http_delete_client(&self.current_access_token(), device_id, password)
-            .await
+        self.http_delete_client(
+            &self.current_access_token(),
+            device_id,
+            given_password(password),
+        )
+        .await
     }
 
     /// `PUT /v14/clients/{device_id}` with a `label` body — rename
@@ -144,4 +147,11 @@ impl Client {
         self.http_update_client_label(&self.current_access_token(), device_id, label)
             .await
     }
+}
+
+/// The password a device delete sends: an empty one is none, so a caller's
+/// empty answer for an account without a password (Step 164) is not refused
+/// as a wrong password.
+pub(crate) fn given_password(password: Option<&str>) -> Option<&str> {
+    password.filter(|p| !p.is_empty())
 }

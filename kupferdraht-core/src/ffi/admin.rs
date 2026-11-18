@@ -98,7 +98,8 @@ impl Client {
 #[uniffi::export(async_runtime = "tokio")]
 impl Client {
     /// Revoke the session; `purge_device` also deletes the device
-    /// server-side (requires `password`).
+    /// server-side, re-authenticated by `password` as `delete_device` is
+    /// (`None` for an account without one, Step 164).
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -163,16 +164,21 @@ impl Client {
         self.inner.devices().await
     }
 
-    /// Delete a device (not the current one); requires the password.
+    /// Delete a device (not the current one). The account's password
+    /// re-authenticates it; `None` or an empty one sends none, for an
+    /// account without a password — an SSO user's (Step 164).
     ///
     /// # Errors
-    /// See `KupferdrahtError`.
+    /// See `KupferdrahtError`; `BackendRejected` naming `missing-auth` when
+    /// the account has a password and none was given.
     pub async fn delete_device(
         &self,
         device_id: &str,
-        password: &str,
+        password: Option<String>,
     ) -> Result<(), KupferdrahtError> {
-        self.inner.delete_device(device_id, password).await
+        self.inner
+            .delete_device(device_id, password.as_deref())
+            .await
     }
 
     /// Rename a device's user-visible label.

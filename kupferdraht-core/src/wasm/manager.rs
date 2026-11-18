@@ -175,8 +175,9 @@ struct TakeOverOptions {
 #[derive(Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 struct LogoutOptions {
-    /// Delete this device at the backend too (needs the password) and, in
-    /// the server mode, its databases there.
+    /// Delete this device at the backend too (re-authenticated by the
+    /// password, none for an account without one — Step 164) and, in the
+    /// server mode, its databases there.
     purge_device: bool,
     password: Option<String>,
     /// Forget the account in this browser (Step 114).
@@ -1604,12 +1605,18 @@ impl Client {
         devices_to_js(self.inner.devices().await.map_err(|e| to_js(&e))?)
     }
 
-    /// Delete a device that is not this one (Step 98a); Wire requires the
-    /// account password to re-authenticate.
+    /// Delete a device that is not this one (Step 98a). The account's
+    /// password re-authenticates it; none (or an empty one) for an account
+    /// without a password, an SSO user's (Step 164).
     #[wasm_bindgen(js_name = deleteDevice)]
-    pub async fn delete_device(&self, device_id: String, password: String) -> Result<(), JsValue> {
+    pub async fn delete_device(
+        &self,
+        device_id: String,
+        password: Option<String>,
+    ) -> Result<(), JsValue> {
+        let password = password.map(Zeroizing::new);
         self.inner
-            .delete_device(&device_id, &password)
+            .delete_device(&device_id, password.as_ref().map(|p| p.as_str()))
             .await
             .map_err(|e| to_js(&e))
     }
@@ -1678,7 +1685,8 @@ impl Client {
     /// (ADR-0035): without options the account's keys and data stay, so the
     /// next login needs no recovery data — only `activeAccount` is cleared
     /// and the manager drops the client (Step 78); `purgeDevice` also deletes this
-    /// device at the backend (the password is required) and, in the server
+    /// device at the backend (re-authenticated by `password`, none for an
+    /// account without one — Step 164) and, in the server
     /// mode, its databases there; `purgeLocal` forgets the account in this
     /// browser — its keys, local databases and registry entry (recovery data
     /// still restores it). Both together leave a browser for good. The

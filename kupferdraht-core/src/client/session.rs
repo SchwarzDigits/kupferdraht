@@ -73,14 +73,14 @@ impl Client {
     /// for "logout but next login on the same machine should be
     /// fast and not eat a 7-cap slot".
     ///
-    /// `password` is required iff `purge_device == true`. Empty
-    /// password with `purge_device == true` returns `InvalidInput`.
+    /// `password` re-authenticates the device deletion of
+    /// `purge_device == true`, as for [`Self::delete_device`]: `None`
+    /// or an empty one sends none, for an account without a password
+    /// (Step 164); the backend decides.
     ///
     /// # Errors
-    /// * `InvalidInput` if `purge_device` is true and `password` is
-    ///   `None` / empty.
     /// * `BackendRejected` on non-2xx from the device deletion
-    ///   (wrong password, missing client), or — without
+    ///   (`missing-auth`, a wrong password, missing client), or — without
     ///   `purge_device` — from `/access/logout` (already-revoked
     ///   cookie). **With** `purge_device`, a failing trailing
     ///   `/access/logout` is NOT an error: deleting the device
@@ -94,20 +94,12 @@ impl Client {
         password: Option<&str>,
     ) -> Result<(), KupferdrahtError> {
         if purge_device {
-            let pw = password.unwrap_or("");
-            if pw.is_empty() {
-                return Err(KupferdrahtError::InvalidInput(
-                    "logout: --purge-device requires a non-empty password".into(),
-                ));
-            }
-            self.http
-                .delete_client(
-                    self.api_version,
-                    &self.current_access_token(),
-                    &self.device_id,
-                    Some(pw),
-                )
-                .await?;
+            self.http_delete_client(
+                &self.current_access_token(),
+                &self.device_id,
+                super::device::given_password(password),
+            )
+            .await?;
             // Best-effort from here: the deletion above already killed
             // this session server-side, so the cookie revocation can
             // only fail because it is no longer needed.

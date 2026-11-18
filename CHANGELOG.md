@@ -105,6 +105,17 @@ is no skill for it — it is this short procedure:
   `update_email` / `updateEmail` / `email-update` — the call asks for the change,
   which happens once the user follows the mail.
 
+- **BREAKING: an SSO user deletes a device without a password** (Step 164):
+  `Client::delete_device(device_id, password: Option<&str>)` — the password was
+  `&str` — and `Client::logout` / `Kupferdraht::logout` with `purge_device` no longer
+  refuse a missing password. `None` or an empty one sends none, and the backend
+  decides: an account without a password (an SSO user's) deletes, one with a password
+  rejects `BackendRejected` naming `missing-auth`. FFI
+  `Client.delete_device(device_id, password: String?)`, browser
+  `deleteDevice(deviceId, password?)`; a call with a password stays valid in Kotlin,
+  Swift and JavaScript. The CLI's `device-delete` and `logout --purge-device` take an
+  empty answer as no password and say how to give one on `missing-auth`.
+
 ### Deprecated
 
 ### Removed
