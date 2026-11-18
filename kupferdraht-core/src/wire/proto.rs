@@ -221,7 +221,7 @@ pub(crate) fn encode_location_generic_message(
 ///
 /// `expire_after_ms` is the TTL the sender chose, in milliseconds
 /// (`Ephemeral.expire_after_millis`); range validation is the
-/// caller's job (`timeline/ephemeral.rs`). The wrapper carries no
+/// caller's job (`timeline/disappearing.rs`). The wrapper carries no
 /// mentions and no quote (the OTP-shaped case).
 ///
 /// # Errors

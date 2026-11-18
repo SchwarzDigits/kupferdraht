@@ -53,7 +53,7 @@ impl AvatarSize {
     }
 }
 
-/// The two asset keys a profile names.
+/// The two image keys a profile names.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AvatarKeys {
     pub thumbnail: Option<String>,
@@ -61,7 +61,7 @@ pub struct AvatarKeys {
 }
 
 impl AvatarKeys {
-    /// The keys a profile's `assets` name. An asset of another type, of an
+    /// The keys a profile's `assets` name. An image of another type, of an
     /// unknown size or without a key is no avatar.
     pub(crate) fn from_assets(assets: &[UserAsset]) -> Self {
         let key_of = |size: &str| {

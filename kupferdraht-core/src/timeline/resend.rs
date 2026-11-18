@@ -53,9 +53,9 @@ pub struct ResendSummary {
 
 impl Timeline {
     /// Re-drive one failed send from its persisted row under the same
-    /// `message_id`: text (reply and mentions included), ephemeral text
+    /// `message_id`: text (reply and mentions included), disappearing text
     /// (re-wrapped with the original TTL, timer armed on success),
-    /// knock, location, and asset (the blob already sits on the
+    /// ping, location, and attachment (the blob already sits on the
     /// backend — only the MLS reference is re-sent). Re-encrypts at the
     /// current epoch, uploads once (the stale-epoch self-heal applies),
     /// flips the row to `Submitted`, re-stamps `sent_at_ms`, and emits
@@ -234,7 +234,7 @@ impl Client {
     }
 
     /// The resend spine: rebuild the plaintext under the persisted id,
-    /// encrypt + upload once, flip the row, re-arm an ephemeral timer,
+    /// encrypt + upload once, flip the row, re-arm a disappearing timer,
     /// tell subscribers. A failed upload leaves the row untouched. Also the
     /// answer to a known idempotency key whose send failed (Step 130a).
     pub(super) async fn resend_row(
@@ -267,7 +267,7 @@ impl Client {
         };
         self.flip_resent_row(room_id, message_id, &times).await?;
         if let Some(at) = expires_at_ms {
-            self.arm_ephemeral_timer(at);
+            self.arm_disappearing_timer(at);
         }
         self.emit_message_update_at(room_id, message_id).await?;
         debug!(room_id, message_id, kind = %row.kind, "failed send re-driven");

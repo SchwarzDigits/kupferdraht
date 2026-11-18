@@ -92,9 +92,9 @@ The real layout, by responsibility:
 | `lib.rs`, `error.rs` | crate root + re-exports; `KupferdrahtError` |
 | `client/` | authentication, session lifecycle, **login pipeline**, `Client`, `ClientBuilder`, `Account` (live since Step 152: `own_account.rs` writes the `self_user` row, then swaps it); `token_refresh.rs` is the in-session access-token refresh and its cross-process critical section (Steps 39 + 85); `input.rs` checks the app's arguments at the public entry points (Step 95c) |
 | `rooms/` | room state and membership (`Room`); `rooms/devices.rs` the device verification surface (`RoomDevice`, `RoomDevicesChange`, the diff — Step 95d); `rooms/typing.rs` `Room::typing_notice`, whose send side (dedupe, 11-s auto-stop) is `client/typing.rs` (Step 162) |
-| `timeline/` | message send/receive, the `Timeline` read/send surface, per-interaction send files (text, reaction, confirmation, delete, knock, location, asset, ephemeral — the latter also owns the local expiry sweep + timers, Step 89; `keyed.rs` — `send_keyed`, the one entry for retryable sends, Step 130a); `timeline/task/` is the task vertical slice split by responsibility (`types` / `fold` / `order` / `views` / `cache` / `encode` / `send`) |
+| `timeline/` | message send/receive, the `Timeline` read/send surface, per-interaction send files (text, reaction, confirmation, delete, ping, location, attachment, disappearing — the latter also owns the local expiry sweep + timers, Step 89; `keyed.rs` — `send_keyed`, the one entry for retryable sends, Step 130a); `timeline/task/` is the task vertical slice split by responsibility (`types` / `fold` / `order` / `views` / `cache` / `encode` / `send`) |
 | `sync/` + `sync/dispatch/` | the event-stream loop and the inbound dispatcher (one handler per interaction; `room_event` turns four backend events into timeline items, Step 145, through `wire/room_event.rs` and `timeline/room_event.rs`) |
-| `encryption/` | MLS client wrapper over openmls (`MlsClient`), the openmls storage `provider`, **asset crypto** (AES-256-CBC), **Proteus prekeys**; `mls_lock.rs` locks the shared `MlsClient` and recovers a poisoned mutex (Step 95c) |
+| `encryption/` | MLS client wrapper over openmls (`MlsClient`), the openmls storage `provider`, **attachment crypto** (AES-256-CBC), **Proteus prekeys**; `mls_lock.rs` locks the shared `MlsClient` and recovers a poisoned mutex (Step 95c) |
 | `keystore/` | the `SecureKeyStore` abstraction — a raw secret store (`get`/`set`/`delete_secret`, no KEK envelope). Four in-tree impls (`KeyringStore`, `FileKeyStore`, `InMemoryKeyStore`, wasm `IndexedDbKeyStore`); mobile embedders implement the trait via the UniFFI callback |
 | `storage/` + `storage/sqlite/` | persistence: the `Store` + `GlobalStore` traits (`MaybeSendSync`-bounded), record types, `db_key.rs`, `engine.rs`, `home.rs` (the layout + the resolved home id), `home_id.rs` (`base/home.id`: read once, created under the home lock — Step 93), `atomic_file.rs` (temp → fsync → rename), `lock.rs` (native: the advisory per-directory `ProcessLock`, Step 85); ONE backend on every target since Step 91 (ADR-0022) = whole-DB-encrypted SQLite (SQLite3MC / ChaCha20-Poly1305 — `sqlite/`, `migrations/`); the browser adds `browser.rs` (wasm32-only: the OPFS `sahpool` VFS install + cipher wrap that puts the same files into the origin's private file system) |
 | `identity/` | the `UserId` type (`localpart@domain`) |
@@ -104,7 +104,7 @@ The real layout, by responsibility:
 | `wasm/` | hand-written wasm-bindgen binding layer (`Kupferdraht`/`PendingLogin`/`Client` classes, `live_sync` polling loop) — parallel to `ffi/`, wasm32 only (Steps 44–59); driven from a **dedicated Web Worker** since Step 91 (OPFS); every view crosses through `js_view::to_js`, a missing value as `null` (Step 130c) |
 | `avatar/` | Step 144: every avatar written anew: format crates decode under limits (`decode`), EXIF orientation (`exif`), scaling (`pixels`), a new JPEG or PNG (`encode`), the per-client image cache (`cache`); `#![forbid(unsafe_code)]` |
 | `time.rs` | wall-clock shim (`now_ms`): `SystemTime` on native, `js_sys::Date` on wasm (W8, Step 48) |
-| `answer_bound.rs` | Step 159: every answer read into memory — Wire's API, the PIN service, the token exchange, the storage server — goes through a bound of 16 MiB decoded bytes (`read_answer` / `read_text` / `read_json`; the avatar passes its own bound to `read_bounded`, the browser's asset download the sender's declared size + 32 bytes, Step 160); the read stops at the first chunk past the bound, natively and in the browser |
+| `answer_bound.rs` | Step 159: every answer read into memory — Wire's API, the PIN service, the token exchange, the storage server — goes through a bound of 16 MiB decoded bytes (`read_answer` / `read_text` / `read_json`; the avatar passes its own bound to `read_bounded`, the browser's attachment download the sender's declared size + 32 bytes, Step 160); the read stops at the first chunk past the bound, natively and in the browser |
 | `logging.rs` | Step 117: `init_logging` installs Kupferdraht's `tracing` subscriber that hands Kupferdraht's own events (`kupferdraht::…`) to the app's `LogListener` — Kupferdraht writes nowhere itself; UniFFI-annotated in place, `wasm/logging.rs` adapts the browser's `onLog` |
 
 Module organisation is **feature-based** (matrix-rust-sdk style), not
@@ -179,12 +179,12 @@ The result is a ready `Client` bound to an encrypted local store.
 All sends funnel through one chokepoint, `Client::encrypt_and_upload`,
 which gives every message type **epoch self-healing** for free (§5.6).
 
-`Timeline::send_ephemeral_text` (Step 89) is the same pipeline with
+`Timeline::send_disappearing_text` (Step 89) is the same pipeline with
 the `Text` wrapped in Wire's `Ephemeral` (field 18) and the own row
 stamped `expires_at_ms = sent_at_ms + ttl` once the upload succeeded;
 a native `tokio` timer is armed for the stamp. Expiry is **local
 self-redaction** on every client (Wire's timer is purely client-side):
-`Client::expire_due_ephemeral_messages` tombstones elapsed rows via
+`Client::expire_due_disappearing_messages` tombstones elapsed rows via
 the `MessageDelete` mechanics, emits `TimelineDiff::UpdateAt`, and for
 inbound rows broadcasts one `MessageDelete` into the room
 (`Client::upload_message_delete`, the network half of
@@ -204,12 +204,12 @@ network observer — `docs/library.md` "Reconnect contract"). The
 consumer re-drives it explicitly: `Timeline::resend` (`timeline/
 resend.rs`) rebuilds the `GenericMessage` from the persisted row under
 the **same `message_id`** (`timeline/resend_payload.rs`: text with
-mentions + quote re-read from the store, an ephemeral row re-wrapped
-with its persisted TTL, knock, location, and the asset reference from
+mentions + quote re-read from the store, a disappearing row re-wrapped
+with its persisted TTL, ping, location, and the attachment reference from
 the `attachments` row — the blob is already uploaded), runs steps 2–3
 through the same `encrypt_and_upload` funnel, and flips the row to
 `submitted` with `Store::mark_message_resent` (`sent_at_ms` re-stamped,
-ephemeral timer armed). Task / case / marker rows are refused — they
+disappearing timer armed). Task / case / marker rows are refused — they
 are full-state snapshots and a stale replay could regress every
 receiver's fold. `Timeline::resend_failed` runs the room oldest-first
 and stops at the first hard error so a stuck message is never
@@ -316,8 +316,8 @@ since typing is live-only and a drain can never return it. The pull path:
    then the cursor advances — at-least-once processing; a replay skips
    what MLS already processed (older epoch, consumed key).
 2. For each event, the dispatcher (`sync/dispatch/`, one handler per
-   interaction — text, reaction, edit, delete, confirmation, knock,
-   location, asset, ephemeral, config) decodes the envelope; the
+   interaction — text, reaction, edit, delete, confirmation, ping,
+   location, attachment, disappearing, config) decodes the envelope; the
    transient `conversation.typing` events are handled inline in
    `sync/service.rs` (no persist, no decrypt). An inbound
    `Ephemeral(Text)` (Step 89) reuses the text handler's tail with an
@@ -334,14 +334,14 @@ since typing is live-only and a drain can never return it. The pull path:
    under the MLS sender), an X.509 signer drops the message until
    X.509 parsing is verified (Step 135), a malformed Basic signer
    drops it too. Every handler (text, reaction, receipt,
-   task creator, the ADR-0018 case gate, marker, asset, ephemeral)
+   task creator, the ADR-0018 case gate, marker, attachment, disappearing)
    sees only the attributed sender. `conversation.typing` is not an
    MLS message and stays envelope-attributed by design. An inbound
    `MessageEdit` / `MessageDelete` is then **authorized against that
    sender** (Step 95b, ADR-0028, `sync/dispatch/authorize.rs`): the
    target is resolved in the same room (`Store::load_timeline_event_in_room`);
    an edit needs the target's original user, a delete the original
-   user — or, for an ephemeral target, the self user (another own
+   user — or, for a disappearing target, the self user (another own
    device) or a self-sent target (receiver-enforced expiry). Anything else is dropped with a
    `warn!` — no row change, no diff, no task / case fold change.
 
@@ -383,16 +383,16 @@ Files do **not** travel through MLS (ADR-0011,
 
 1. Generate a fresh AES-256 key + 16-byte IV; stream-encrypt the file to
    a tempfile as `iv(16) || aes-cbc-pkcs7(plaintext)`
-   (`encryption/asset_crypto.rs`), computing SHA-256 over the blob.
+   (`encryption/attachment_crypto.rs`), computing SHA-256 over the blob.
 2. Upload the ciphertext to `POST /v14/assets` (multipart/mixed),
-   receiving an `(asset_id, asset_token, asset_domain)` triple.
+   receiving the server's locator: an id, a token and a domain.
 3. Send an MLS `GenericMessage { Asset }` carrying the key, the SHA-256,
    the mime/size, and the locator — the small **reference** rides
    through MLS; the bytes do not.
 4. The receiver decrypts the reference, downloads the ciphertext — at
    most the declared `Original.size` + 32 bytes (Step 160) —,
    verifies SHA-256, decrypts, and surfaces it. Plaintext is never
-   persisted; only ciphertext may be cached. Inbound AES-GCM assets are
+   persisted; only ciphertext may be cached. Inbound AES-GCM attachments are
    warn-and-skipped as "unsupported".
 
 Integrity is layered: SHA-256 binds the reference to the blob; MLS
@@ -400,13 +400,14 @@ authenticates the reference's sender.
 
 A delete for everyone takes the file along (Step 84): the store drops the
 `attachments` row in the transaction that tombstones the message, the
-client removes `assets/<message_id>.enc` after the commit, and an own
+client removes `attachments/<message_id>.enc` after the commit, and an own
 delete removes the upload at the server, best effort. A download checks
 the row first, so a summary taken before the delete cannot bring the file
 back. The cache keeps only what a row names: a send removes its staged
 copy however it ends, and a client's start (`register_device`, `resume`)
-empties `assets/staging/` and removes every `.enc` file no row names
-(`timeline/asset_cache.rs`, native only — the browser caches no files).
+empties `attachments/staging/`, removes every `.enc` file no row names and
+removes the cache directory of a release before Step 163b, `assets/`
+(`timeline/attachment_cache.rs`, native only — the browser caches no files).
 
 ### 5.6 Epoch self-healing
 
@@ -706,13 +707,15 @@ and `mls.db`, `PRAGMA user_version` (1) for `global.db`. On every platform. `mls
 the same since Step 142: the openmls fork's `openmls_sqlite_storage` runs
 openmls's migrations grouped (history table
 `openmls_sqlite_storage_migrations`). The current
-schema version is **V36**
-(`V36__step_84_forget_deleted_files.sql` — the attachment rows of messages
+schema version is **V37**
+(`V37__step_163b_message_kind_names.sql` — the stored kinds of pings and
+attachments take the library's own names, `knock` → `ping` and `asset` →
+`attachment`, every other kind as it is; `V36__step_84_forget_deleted_files.sql` — the attachment rows of messages
 deleted for everyone before a delete took them; the next start removes their
 cached copies; `V35__step_151_arrived_at.sql` — `timeline_events.arrived_at_ms`, the position
 on this device's clock, read by the order, the unread queries and the read marker,
 while `sent_at_ms` becomes the backend's time; `V34__step_144_avatars.sql` — `avatar_thumbnail_key` and `avatar_full_key` on
-`room_members` and `self_user`, `team_avatar_key` on `self_user`: the asset keys a
+`room_members` and `self_user`, `team_avatar_key` on `self_user`: the image keys a
 profile names and the team's icon; `V33__step_143_own_team.sql` — `team_id` and `team_name` on `self_user`, the
 own team as of the last login, read back by `build_resume_account`;
 `V32__step_130a_send_keys.sql` — `send_keys`, see "Idempotency keys"
@@ -725,11 +728,11 @@ last observed per room: the baseline Step 95d diffs a room's MLS leaves
 against on every epoch change (`client/device_watch.rs`), persisted so a
 change made while no client ran is still reported; cleared by the
 Step-40 new-device wipe; V28
-`V28__step_79_ephemeral_ttl.sql` — `timeline_events.ephemeral_ttl_ms`,
-the TTL an own ephemeral send chose, so a `failed` row can be resent
-under the same timer; V27 `timeline_events.expires_at_ms`,
-the ephemeral timer stamp, plus a partial index over live ephemeral
-rows for the sweep; V26 `room_members.role`, the neutral
+`V28__step_79_ephemeral_ttl.sql` — `timeline_events.ephemeral_ttl_ms`
+(the record's `ttl_ms`), the TTL an own disappearing send chose, so a
+`failed` row can be resent under the same timer; V27
+`timeline_events.expires_at_ms`, the disappearing timer stamp, plus a
+partial index over live disappearing rows for the sweep; V26 `room_members.role`, the neutral
 `administrator`/`member` vocabulary behind `RoomMemberRole`;
 V24 key-package check, V25 device-local read markers). Per ADR-0012,
 feature-config and user-property tables are intentionally **not**

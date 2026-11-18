@@ -109,6 +109,40 @@ where it has a term, otherwise a plain English name.
     `FileSource`, `downloadFile`, `kind: "file"`.
   - Wire's locator and key fields leave the public records behind an opaque
     handle, as the browser already does.
+  - **Done 2026-11-18 (Volker's names):**
+    - Knock → **Ping**: `send_ping(repeated)`, `Ping { repeated }` in
+      `MessageBody`, `TimelineItemKind` and `OutgoingContent`; browser
+      `sendPing`, the item's `repeated`; CLI `ping --repeated`.
+    - Asset → **Attachment** (matrix-rust-sdk's word): `Timeline::attachment`,
+      `AttachmentSummary`, `AttachmentSource`, `MessageBody::Attachment` /
+      `TimelineItemKind::Attachment`, FFI `Attachment` / `AttachmentMeta`,
+      browser `downloadAttachment` and `kind: "attachment"`, CLI
+      `download-attachment`; `send_file` / `send_file_stream` / `sendFile` stay.
+      `AttachmentSummary` and `AttachmentMeta` drop the locator, the token and the
+      cipher (`AttachmentSummary` keeps them `pub(crate)` for the download).
+    - Ephemeral → **disappearing**: `send_disappearing_text`, CLI `send --ttl`,
+      `Store::expire_disappearing_messages` / `pending_disappearing_expiries`.
+    - The store contract: `TimelineEventRecord.ttl_ms`; `AttachmentRecord`
+      `key_ct`, `attachment_id` / `attachment_token` / `attachment_domain`,
+      `cipher` — serde names follow, BREAKING. The SQL columns stay.
+    - The stored kinds `"knock"` / `"asset"` become `"ping"` / `"attachment"`:
+      migration V37, the only place besides its test that still names the old
+      values.
+    - The module files follow (`timeline/ping.rs`, `disappearing.rs`,
+      `attachment_*.rs`, `encryption/attachment_crypto.rs`,
+      `sync/dispatch/{ping,attachment,disappearing}.rs`, `cli/attachments.rs`),
+      the tests too. The words inside `wire/` and the Protobuf schema are Wire's,
+      by rule; an avatar's keys are image keys (their names: 163d).
+    - Pins: `tests/step_163b_message_kinds.rs` (the description's fields), the V37
+      test in `storage/schema.rs`, the renamed browser pins of Steps 98c, 130a and
+      130c; Step 132's token warning went with the token.
+    - The account's cache directory is `attachments/` (Volker: no step moves an
+      existing `assets/` — Kupferdraht is not in production use yet). Raised in
+      review: nothing would reach the old directory any more, copies of files
+      deleted for everyone included; so a client's start removes it whole
+      (`a_start_removes_the_cache_directory_of_an_earlier_release` in
+      `tests/step_84_deleted_file_is_gone.rs`).
+    - Left: `docs/THREAT_MODEL.md` keeps "asset" in L6 and the trust model.
 - **163c — rooms.**
   - Room access is typed: a join rule (invite only, by link, …) and who may join
     (team members, guests, services). Wire's strings are mapped in `wire/`.

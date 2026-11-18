@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #![cfg(not(target_arch = "wasm32"))]
-//! Step 89 — ephemeral messages: send + receive toleration (TDD red).
+//! Step 89 — disappearing messages: send + receive toleration (TDD red).
 //!
-//! Send side: `Timeline::send_ephemeral_text(body, ttl)` wraps the
+//! Send side: `Timeline::send_disappearing_text(body, ttl)` wraps the
 //! `Text` in Wire's `Ephemeral` content variant (`GenericMessage`
 //! field 18, `expire_after_millis` + inner `Text`), persists the row
 //! with `expires_at_ms = arrived_at_ms + ttl`, and self-redacts the own
@@ -41,9 +41,9 @@ mod common;
 
 const ROOM_UUID: &str = "5c0f1a2e-7d3b-4e6a-9f10-2b8c4d6e8f01";
 const DOMAIN: &str = "example.test";
-/// b64("grp-ephemeral")
-const GROUP_ID_B64: &str = "Z3JwLWVwaGVtZXJhbA==";
-const GROUP_ID: &[u8] = b"grp-ephemeral";
+/// b64("grp-disappearing")
+const GROUP_ID_B64: &str = "Z3JwLWRpc2FwcGVhcmluZw==";
+const GROUP_ID: &[u8] = b"grp-disappearing";
 const BOB: &str = "bob-uuid";
 const BOB_IDENTITY: &[u8] = b"bob-uuid:bobdev01@example.test";
 
@@ -99,7 +99,7 @@ fn text_generic_message(message_id: &str, body: &str) -> Vec<u8> {
 /// `GenericMessage { message_id = 1, content.ephemeral = 18 }` with
 /// `Ephemeral { expire_after_millis = 1, content.text = 2 }` — the
 /// shape an official Wire client emits for a timed text.
-fn ephemeral_text_generic_message(message_id: &str, body: &str, ttl_ms: u64) -> Vec<u8> {
+fn disappearing_text_generic_message(message_id: &str, body: &str, ttl_ms: u64) -> Vec<u8> {
     let mut eph = Vec::new();
     put_uint(1, ttl_ms, &mut eph);
     put_len_delimited(2, &text_payload(body), &mut eph);
@@ -112,12 +112,12 @@ fn ephemeral_text_generic_message(message_id: &str, body: &str, ttl_ms: u64) -> 
 /// `Ephemeral { expire_after_millis = 1, content.knock = 4 }` with
 /// `Knock { hot_knock = 1 }` — an inner arm Kupferdraht does not declare
 /// in V1; must decode to the tolerated-unknown path.
-fn ephemeral_knock_generic_message(message_id: &str, ttl_ms: u64) -> Vec<u8> {
-    let mut knock = Vec::new();
-    put_uint(1, 0, &mut knock);
+fn disappearing_ping_generic_message(message_id: &str, ttl_ms: u64) -> Vec<u8> {
+    let mut ping = Vec::new();
+    put_uint(1, 0, &mut ping);
     let mut eph = Vec::new();
     put_uint(1, ttl_ms, &mut eph);
-    put_len_delimited(4, &knock, &mut eph);
+    put_len_delimited(4, &ping, &mut eph);
     let mut m = Vec::new();
     put_len_delimited(1, message_id.as_bytes(), &mut m);
     put_len_delimited(18, &eph, &mut m);
@@ -182,7 +182,7 @@ fn mount_room(server: &MockServer) {
                 r#"{{"found":[{{
                      "qualified_id":{{"id":"{ROOM_UUID}","domain":"{DOMAIN}"}},
                      "type":0,"protocol":"mls","epoch":1,"group_id":"{GROUP_ID_B64}",
-                     "name":"Ephemeral",
+                     "name":"Disappearing",
                      "members":{{
                        "self":{{"qualified_id":{{"id":"user-uuid","domain":"{DOMAIN}"}},
                                "conversation_role":"wire_member"}},
@@ -245,7 +245,7 @@ fn mount_message_send(server: &MockServer) -> Mock<'_> {
 }
 
 /// Records every consumer-facing signal: `on_message`, `on_sync_error`,
-/// and every `TimelineDiff` — the ephemeral contract is visible on all
+/// and every `TimelineDiff` — the disappearing contract is visible on all
 /// three (TTL metadata on the message and the Append, the tombstone
 /// on an UpdateAt, silence on the tolerated arm).
 #[derive(Default)]
@@ -364,7 +364,7 @@ fn text_body(kind: &TimelineItemKind) -> Option<&str> {
 // ---- send side ----
 
 #[tokio::test]
-async fn send_ephemeral_text_uploads_once_and_persists_the_expiry() {
+async fn send_disappearing_text_uploads_once_and_persists_the_expiry() {
     let server = MockServer::start();
     let (client, _store, room, recorder, _sub) = welcomed_client(&server, &[]).await;
     let send = mount_message_send(&server);
@@ -372,12 +372,12 @@ async fn send_ephemeral_text_uploads_once_and_persists_the_expiry() {
     let handle = room
         .timeline()
         .expect("timeline")
-        .send_ephemeral_text(
+        .send_disappearing_text(
             "Your one-time code: 123456".into(),
             Duration::from_secs(300),
         )
         .await
-        .expect("send ephemeral text");
+        .expect("send disappearing text");
     assert_eq!(send.calls(), 1, "exactly one MLS upload");
 
     let all = items(&client).await;
@@ -423,7 +423,7 @@ async fn send_ephemeral_text_uploads_once_and_persists_the_expiry() {
 }
 
 #[tokio::test]
-async fn send_ephemeral_text_rejects_ttl_outside_the_wire_range() {
+async fn send_disappearing_text_rejects_ttl_outside_the_wire_range() {
     // Official clients bound the timer to 1 s … 1 year; a zero TTL
     // would be a message that is deleted before it is read, and an
     // over-long one is not renderable. Both fail client-side before
@@ -435,7 +435,7 @@ async fn send_ephemeral_text_rejects_ttl_outside_the_wire_range() {
 
     for ttl in [Duration::ZERO, Duration::from_secs(366 * 24 * 60 * 60)] {
         let err = timeline
-            .send_ephemeral_text("x".into(), ttl)
+            .send_disappearing_text("x".into(), ttl)
             .await
             .expect_err("out-of-range ttl must be rejected");
         assert!(
@@ -447,7 +447,7 @@ async fn send_ephemeral_text_rejects_ttl_outside_the_wire_range() {
 }
 
 #[tokio::test]
-async fn sent_ephemeral_text_self_redacts_after_ttl() {
+async fn sent_disappearing_text_self_redacts_after_ttl() {
     // The sender's own copy expires on the local timer too (an
     // official sender obfuscates its copy at TTL; Kupferdraht tombstones
     // it — the same local-only redaction as the receive side).
@@ -458,9 +458,9 @@ async fn sent_ephemeral_text_self_redacts_after_ttl() {
     let handle = room
         .timeline()
         .expect("timeline")
-        .send_ephemeral_text("gone soon".into(), Duration::from_secs(1))
+        .send_disappearing_text("gone soon".into(), Duration::from_secs(1))
         .await
-        .expect("send ephemeral text");
+        .expect("send disappearing text");
     tokio::time::sleep(Duration::from_millis(1_700)).await;
 
     let all = items(&client).await;
@@ -468,7 +468,10 @@ async fn sent_ephemeral_text_self_redacts_after_ttl() {
         .iter()
         .find(|i| i.item_id == handle.message_id)
         .expect("row stays as a tombstone");
-    assert!(item.redacted, "own ephemeral row is redacted after the TTL");
+    assert!(
+        item.redacted,
+        "own disappearing row is redacted after the TTL"
+    );
     assert!(matches!(item.kind, TimelineItemKind::Redacted));
     assert_eq!(
         item.expires_at_ms,
@@ -495,7 +498,7 @@ fn mount_message_send_failing(server: &MockServer) -> Mock<'_> {
 }
 
 #[tokio::test]
-async fn failed_ephemeral_send_keeps_the_body_without_a_timer() {
+async fn failed_disappearing_send_keeps_the_body_without_a_timer() {
     // An official sender starts its own countdown only once the send
     // reached the backend. A failed upload therefore persists the
     // usual `Failed` row (Step 25a) WITHOUT an expiry stamp — the body
@@ -508,7 +511,7 @@ async fn failed_ephemeral_send_keeps_the_body_without_a_timer() {
     let err = room
         .timeline()
         .expect("timeline")
-        .send_ephemeral_text("never left".into(), Duration::from_secs(1))
+        .send_disappearing_text("never left".into(), Duration::from_secs(1))
         .await
         .expect_err("a 500 must surface");
     assert!(
@@ -537,11 +540,11 @@ async fn failed_ephemeral_send_keeps_the_body_without_a_timer() {
 // ---- receive side ----
 
 #[tokio::test]
-async fn inbound_ephemeral_text_surfaces_with_expiry_and_notifies() {
+async fn inbound_disappearing_text_surfaces_with_expiry_and_notifies() {
     let server = MockServer::start();
     let (client, store, _room, recorder, _sub) = welcomed_client(
         &server,
-        &[ephemeral_text_generic_message(
+        &[disappearing_text_generic_message(
             "eph-m1",
             "Your one-time code: 654321",
             60_000,
@@ -551,13 +554,17 @@ async fn inbound_ephemeral_text_surfaces_with_expiry_and_notifies() {
 
     // on_message fires exactly once, as a Text body with TTL metadata.
     let messages = recorder.messages();
-    assert_eq!(messages.len(), 1, "one on_message for the ephemeral text");
+    assert_eq!(
+        messages.len(),
+        1,
+        "one on_message for the disappearing text"
+    );
     let message = &messages[0];
     assert_eq!(message.message_id, "eph-m1");
     assert_eq!(
         message.body,
         MessageBody::Text("Your one-time code: 654321".into()),
-        "an ephemeral text is still a Text body — the TTL is a decoration"
+        "a disappearing text is still a Text body — the TTL is a decoration"
     );
     assert_eq!(
         message.expires_at_ms,
@@ -600,7 +607,7 @@ async fn inbound_ephemeral_text_surfaces_with_expiry_and_notifies() {
 }
 
 #[tokio::test]
-async fn inbound_ephemeral_unknown_arm_is_tolerated_without_losing_the_frame() {
+async fn inbound_disappearing_unknown_arm_is_tolerated_without_losing_the_frame() {
     // An `Ephemeral(Knock)` (inner arm 4, undeclared in V1) must be
     // logged and discarded at the content layer — never an error, and
     // never at the envelope layer: the plain text behind it in the
@@ -609,7 +616,7 @@ async fn inbound_ephemeral_unknown_arm_is_tolerated_without_losing_the_frame() {
     let (client, _store, _room, recorder, _sub) = welcomed_client(
         &server,
         &[
-            ephemeral_knock_generic_message("eph-knock", 30_000),
+            disappearing_ping_generic_message("eph-ping", 30_000),
             text_generic_message("plain-after", "still here"),
         ],
     )
@@ -622,7 +629,7 @@ async fn inbound_ephemeral_unknown_arm_is_tolerated_without_losing_the_frame() {
     );
     let all = items(&client).await;
     assert!(
-        !all.iter().any(|i| i.item_id == "eph-knock"),
+        !all.iter().any(|i| i.item_id == "eph-ping"),
         "the undeclared inner arm produces no row"
     );
     let plain = all
@@ -635,11 +642,11 @@ async fn inbound_ephemeral_unknown_arm_is_tolerated_without_losing_the_frame() {
 }
 
 #[tokio::test]
-async fn inbound_ephemeral_text_self_redacts_after_ttl() {
+async fn inbound_disappearing_text_self_redacts_after_ttl() {
     let server = MockServer::start();
     let (client, _store, _room, recorder, _sub) = welcomed_client(
         &server,
-        &[ephemeral_text_generic_message("eph-short", "blink", 400)],
+        &[disappearing_text_generic_message("eph-short", "blink", 400)],
     )
     .await;
 
@@ -676,7 +683,7 @@ async fn inbound_ephemeral_text_self_redacts_after_ttl() {
 }
 
 #[tokio::test]
-async fn overdue_ephemerals_are_swept_on_resume() {
+async fn overdue_disappearing_messages_are_swept_on_resume() {
     // Restart safety: a row whose TTL elapsed while the process was
     // down has no timer — the resume path (`load_rooms_from_store`)
     // must sweep it before any consumer can read the body. A row
@@ -731,7 +738,7 @@ async fn overdue_ephemerals_are_swept_on_resume() {
 // ---- V1b: the receiver broadcasts the expiry as a delete-for-everyone ----
 
 #[tokio::test]
-async fn expired_inbound_ephemeral_broadcasts_a_delete_for_everyone() {
+async fn expired_inbound_disappearing_broadcasts_a_delete_for_everyone() {
     // Official clients: the RECEIVER enforces expiry network-wide by
     // sending a `MessageDelete` for the expired message (the sender
     // only marks its own copy and waits for exactly this delete to
@@ -740,7 +747,7 @@ async fn expired_inbound_ephemeral_broadcasts_a_delete_for_everyone() {
     let server = MockServer::start();
     let (client, _store, _room, recorder, _sub) = welcomed_client(
         &server,
-        &[ephemeral_text_generic_message(
+        &[disappearing_text_generic_message(
             "eph-v1b",
             "gone for everyone",
             400,
@@ -771,7 +778,7 @@ async fn expired_inbound_ephemeral_broadcasts_a_delete_for_everyone() {
 }
 
 #[tokio::test]
-async fn expired_own_ephemeral_sends_no_delete() {
+async fn expired_own_disappearing_sends_no_delete() {
     // The SENDER side stays local-only (official senders wait for the
     // receiver's delete): the only upload is the original send.
     let server = MockServer::start();
@@ -781,16 +788,16 @@ async fn expired_own_ephemeral_sends_no_delete() {
     let handle = room
         .timeline()
         .expect("timeline")
-        .send_ephemeral_text("own copy".into(), Duration::from_secs(1))
+        .send_disappearing_text("own copy".into(), Duration::from_secs(1))
         .await
-        .expect("send ephemeral text");
+        .expect("send disappearing text");
     assert_eq!(send.calls(), 1);
     tokio::time::sleep(Duration::from_millis(1_700)).await;
 
     assert_eq!(
         send.calls(),
         1,
-        "an expired OWN ephemeral must not broadcast a delete"
+        "an expired OWN disappearing message must not broadcast a delete"
     );
     let all = items(&client).await;
     let item = all
@@ -809,7 +816,7 @@ async fn failed_expiry_delete_keeps_the_local_tombstone() {
     let server = MockServer::start();
     let (client, _store, _room, recorder, _sub) = welcomed_client(
         &server,
-        &[ephemeral_text_generic_message(
+        &[disappearing_text_generic_message(
             "eph-v1b-fail",
             "still gone locally",
             400,

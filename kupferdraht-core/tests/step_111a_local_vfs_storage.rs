@@ -106,7 +106,7 @@ fn sample_session(account: &str) -> SessionRecord {
     }
 }
 
-fn ephemeral_event(message_id: &str, expires_at_ms: Option<i64>) -> TimelineEventRecord {
+fn disappearing_event(message_id: &str, expires_at_ms: Option<i64>) -> TimelineEventRecord {
     TimelineEventRecord {
         message_id: message_id.into(),
         room_id: "room-step111a@example.test".into(),
@@ -121,7 +121,7 @@ fn ephemeral_event(message_id: &str, expires_at_ms: Option<i64>) -> TimelineEven
         edited_at_ms: None,
         redacted_at_ms: None,
         expires_at_ms,
-        ephemeral_ttl_ms: None,
+        ttl_ms: None,
     }
 }
 
@@ -235,24 +235,27 @@ async fn a_store_survives_its_connection_and_refuses_the_wrong_key() {
 
 /// The expiry sweep tombstones a due row and is idempotent (Step 89).
 #[wasm_bindgen_test]
-async fn ephemeral_sweep_tombstones_due_rows() {
+async fn disappearing_sweep_tombstones_due_rows() {
     let store = open_account("sweep@example.test", KEY_A)
         .await
         .expect("open");
     store
-        .insert_timeline_event(&ephemeral_event("due", Some(5_000)))
+        .insert_timeline_event(&disappearing_event("due", Some(5_000)))
         .await
         .expect("insert due");
     store
-        .insert_timeline_event(&ephemeral_event("future", Some(9_000)))
+        .insert_timeline_event(&disappearing_event("future", Some(9_000)))
         .await
         .expect("insert future");
-    let retired = store.expire_ephemeral_messages(6_000).await.expect("sweep");
+    let retired = store
+        .expire_disappearing_messages(6_000)
+        .await
+        .expect("sweep");
     assert_eq!(retired.len(), 1);
     assert_eq!(retired[0].message_id, "due");
     assert!(
         store
-            .expire_ephemeral_messages(6_000)
+            .expire_disappearing_messages(6_000)
             .await
             .expect("second sweep")
             .is_empty(),

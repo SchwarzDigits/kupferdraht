@@ -8,7 +8,7 @@
 //! - an edit applies only when its sender's user is the target's sender
 //!   (any device of that user);
 //! - a delete applies when its sender's user is the target's sender, or
-//!   the target is ephemeral and either its sender is the self user
+//!   the target is disappearing and either its sender is the self user
 //!   (another own device syncing a receiver-side expiry) or the target
 //!   is the self user's own message (receivers enforce the sender's
 //!   timer by deleting it) — observations §74, §91. A self-sent delete
@@ -38,9 +38,9 @@ fn may_delete(
     self_user_id: Option<&str>,
 ) -> bool {
     let is_self = |user: &str| self_user_id == Some(user);
-    let is_ephemeral = target.expires_at_ms.is_some() || target.ephemeral_ttl_ms.is_some();
+    let is_disappearing = target.expires_at_ms.is_some() || target.ttl_ms.is_some();
     target.sender_user_id == sender_user_id
-        || (is_ephemeral && (is_self(sender_user_id) || is_self(&target.sender_user_id)))
+        || (is_disappearing && (is_self(sender_user_id) || is_self(&target.sender_user_id)))
 }
 
 /// The operation an inbound message performs on an earlier one.
@@ -113,10 +113,10 @@ mod tests {
     const CAROL: &str = "carol@example.test";
     const ME: &str = "me@example.test";
 
-    fn row(sender: &str, ephemeral: bool) -> TimelineEventRecord {
+    fn row(sender: &str, disappearing: bool) -> TimelineEventRecord {
         TimelineEventRecord {
             sender_user_id: sender.into(),
-            expires_at_ms: ephemeral.then_some(1_000),
+            expires_at_ms: disappearing.then_some(1_000),
             ..TimelineEventRecord::default()
         }
     }
@@ -138,12 +138,12 @@ mod tests {
         assert!(!may_delete(&row(BOB, false), CAROL, Some(ME)));
         assert!(
             !may_delete(&row(BOB, true), CAROL, Some(ME)),
-            "not someone else's ephemeral either"
+            "not someone else's disappearing message either"
         );
     }
 
     #[test]
-    fn the_self_user_may_delete_a_foreign_ephemeral_only() {
+    fn the_self_user_may_delete_a_foreign_disappearing_only() {
         assert!(
             may_delete(&row(BOB, true), ME, Some(ME)),
             "own-device sync of a receiver-side expiry"
@@ -155,19 +155,19 @@ mod tests {
     }
 
     #[test]
-    fn anyone_may_delete_the_self_users_own_ephemeral() {
+    fn anyone_may_delete_the_self_users_own_disappearing() {
         assert!(may_delete(&row(ME, true), CAROL, Some(ME)));
         assert!(
             !may_delete(&row(ME, false), CAROL, Some(ME)),
-            "a non-ephemeral own message stays protected"
+            "a non-disappearing own message stays protected"
         );
     }
 
     #[test]
-    fn an_own_ephemeral_is_recognised_by_its_ttl_alone() {
+    fn an_own_disappearing_is_recognised_by_its_ttl_alone() {
         // A failed own send stamps no `expires_at_ms`, only the TTL.
         let mut failed_own = row(ME, false);
-        failed_own.ephemeral_ttl_ms = Some(60_000);
+        failed_own.ttl_ms = Some(60_000);
         assert!(may_delete(&failed_own, CAROL, Some(ME)));
     }
 

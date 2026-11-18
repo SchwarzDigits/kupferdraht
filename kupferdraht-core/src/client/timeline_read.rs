@@ -94,11 +94,11 @@ fn apply_timeline_overlays(
     }
 }
 
-// Step 65: the asset-kind reconstruction (Step 35) moved to
+// Step 65: the attachment-kind reconstruction (Step 35) moved to
 // `timeline::items` so the dispatch Append path and
 // `emit_message_update_at` share it — this module (and its tests
 // below) use the shared implementation.
-use crate::timeline::reconstruct_asset_kind;
+use crate::timeline::reconstruct_attachment_kind;
 
 impl Client {
     /// Per-room unread counts in one grouped query (Step 67) — the
@@ -211,9 +211,9 @@ impl Client {
         let receipt_rows = store.load_read_receipts_for_room(room_id).await?;
         let delivery_rows = store.load_delivery_receipts_for_room(room_id).await?;
         let mention_rows = store.load_mentions_for_room(room_id).await?;
-        // Asset rows persist `kind = "asset"` + a row in the separate
+        // Attachment rows persist `kind = "attachment"` + a row in the separate
         // `attachments` table; `from_record` (pure) cannot reach it and degrades
-        // them to Text. Reconstruct the Asset kind here from the attachment,
+        // them to Text. Reconstruct the Attachment kind here from the attachment,
         // mirroring how the other overlays hydrate the item. Step 35.
         let attachment_rows = store.list_attachments_for_room(room_id).await?;
         let weak = self.weak();
@@ -225,7 +225,7 @@ impl Client {
                 &delivery_rows,
                 &mention_rows,
             );
-            reconstruct_asset_kind(item, &attachment_rows, &weak);
+            reconstruct_attachment_kind(item, &attachment_rows, &weak);
         }
         // Step 97a: an abandoned `Sending` row reads as `Failed`.
         self.settle_items(&mut items);
@@ -316,7 +316,7 @@ mod paginate_timeline_rows_tests {
                 edited_at_ms: None,
                 redacted_at_ms: None,
                 expires_at_ms: None,
-                ephemeral_ttl_ms: None,
+                ttl_ms: None,
             })
             .collect()
     }
@@ -356,19 +356,19 @@ mod paginate_timeline_rows_tests {
 }
 
 #[cfg(test)]
-mod reconstruct_asset_kind_tests {
-    use super::reconstruct_asset_kind;
+mod reconstruct_attachment_kind_tests {
+    use super::reconstruct_attachment_kind;
     use crate::storage::{AttachmentRecord, TimelineEventRecord};
     use crate::timeline::{TimelineItem, TimelineItemKind};
     use std::sync::Weak;
 
-    fn asset_record(message_id: &str) -> TimelineEventRecord {
+    fn attachment_record(message_id: &str) -> TimelineEventRecord {
         TimelineEventRecord {
             message_id: message_id.into(),
             room_id: "room@example.test".into(),
             sender_user_id: "alice@example.test".into(),
             sender_device_id: "deviceA".into(),
-            kind: "asset".into(),
+            kind: "attachment".into(),
             body: String::new(),
             sent_at_ms: 0,
             arrived_at_ms: 0,
@@ -377,7 +377,7 @@ mod reconstruct_asset_kind_tests {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: None,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         }
     }
 
@@ -389,40 +389,40 @@ mod reconstruct_asset_kind_tests {
             filename: Some("cat.png".into()),
             size_bytes: 1234,
             sha256: vec![1, 2, 3],
-            otr_key_ct: vec![4, 5, 6],
-            asset_id: "asset-abc".into(),
-            asset_token: Some("tok".into()),
-            asset_domain: "example.test".into(),
-            encryption_algo: "AES_GCM".into(),
+            key_ct: vec![4, 5, 6],
+            attachment_id: "attachment-abc".into(),
+            attachment_token: Some("tok".into()),
+            attachment_domain: "example.test".into(),
+            cipher: "AES_GCM".into(),
             cache_path: None,
             created_at_ms: 0,
         }
     }
 
     #[test]
-    fn asset_row_with_attachment_becomes_asset_kind() {
-        let mut item = TimelineItem::from_record(asset_record("m-asset"));
-        // from_record degrades an asset row to Text (the fallback).
+    fn attachment_row_with_attachment_becomes_attachment_kind() {
+        let mut item = TimelineItem::from_record(attachment_record("m-attachment"));
+        // from_record degrades an attachment row to Text (the fallback).
         assert!(matches!(item.kind, TimelineItemKind::Text { .. }));
-        reconstruct_asset_kind(&mut item, &[attachment("m-asset")], &Weak::new());
+        reconstruct_attachment_kind(&mut item, &[attachment("m-attachment")], &Weak::new());
         match &item.kind {
-            TimelineItemKind::Asset(summary) => {
+            TimelineItemKind::Attachment(summary) => {
                 assert_eq!(summary.mime_type, "image/png");
                 assert_eq!(summary.filename.as_deref(), Some("cat.png"));
                 assert_eq!(summary.size_bytes, 1234);
-                assert_eq!(summary.asset_id, "asset-abc");
+                assert_eq!(summary.attachment_id, "attachment-abc");
             }
-            other => panic!("expected Asset, got {other:?}"),
+            other => panic!("expected Attachment, got {other:?}"),
         }
     }
 
     #[test]
     fn text_row_without_attachment_stays_text() {
-        let mut rec = asset_record("m-text");
+        let mut rec = attachment_record("m-text");
         rec.kind = "text".into();
         rec.body = "hello".into();
         let mut item = TimelineItem::from_record(rec);
-        reconstruct_asset_kind(&mut item, &[], &Weak::new());
+        reconstruct_attachment_kind(&mut item, &[], &Weak::new());
         match &item.kind {
             TimelineItemKind::Text { body, .. } => assert_eq!(body, "hello"),
             other => panic!("expected Text, got {other:?}"),
@@ -430,13 +430,13 @@ mod reconstruct_asset_kind_tests {
     }
 
     #[test]
-    fn redacted_asset_row_stays_redacted() {
-        let mut rec = asset_record("m-redacted");
+    fn redacted_attachment_row_stays_redacted() {
+        let mut rec = attachment_record("m-redacted");
         rec.redacted_at_ms = Some(99);
         let mut item = TimelineItem::from_record(rec);
         assert!(matches!(item.kind, TimelineItemKind::Redacted));
         // A redacted row must not resurrect even with a matching attachment.
-        reconstruct_asset_kind(&mut item, &[attachment("m-redacted")], &Weak::new());
+        reconstruct_attachment_kind(&mut item, &[attachment("m-redacted")], &Weak::new());
         assert!(matches!(item.kind, TimelineItemKind::Redacted));
     }
 }

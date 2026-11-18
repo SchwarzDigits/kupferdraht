@@ -7,9 +7,9 @@
 //! Companion of `super::resend`, which owns the orchestration.
 //!
 //! Text rows re-read their mentions from the `mentions` table and the
-//! quote from the persisted parent; an ephemeral row (V28
-//! `ephemeral_ttl_ms`) is re-wrapped in Wire's `Ephemeral` envelope so
-//! it never leaves as a permanent text; an asset row rebuilds the
+//! quote from the persisted parent; a disappearing row (V28
+//! `ttl_ms`) is re-wrapped in Wire's `Ephemeral` envelope so
+//! it never leaves as a permanent text; an attachment row rebuilds the
 //! reference from its `attachments` row (the blob already sits on
 //! `/v14/assets`). Task / case / marker rows are refused: they are
 //! full-state LWW snapshots and replaying a stale one can regress every
@@ -28,10 +28,10 @@ use crate::wire::proto::{
 };
 
 /// The rebuilt plaintext plus the timer to re-arm once it is delivered.
-/// Zeroized on drop: an asset reference carries the raw content key.
+/// Zeroized on drop: an attachment reference carries the raw content key.
 pub(super) struct ResendPayload {
     pub plaintext: Zeroizing<Vec<u8>>,
-    /// `Some(ttl)` for an ephemeral row — the resend stamps
+    /// `Some(ttl)` for a disappearing row — the resend stamps
     /// `expires_at_ms = sent_at_ms + ttl` on success.
     pub ttl_ms: Option<i64>,
 }
@@ -74,12 +74,12 @@ impl Client {
         }
         match row.kind.as_str() {
             "text" => self.rebuild_text_payload(row).await,
-            "knock" => Ok(ResendPayload::plain(encode_knock_generic_message(
+            "ping" => Ok(ResendPayload::plain(encode_knock_generic_message(
                 &row.message_id,
                 row.body == "true",
             )?)),
             "location" => rebuild_location_payload(row),
-            "asset" => self.rebuild_asset_payload(row).await,
+            "attachment" => self.rebuild_attachment_payload(row).await,
             other => Err(KupferdrahtError::InvalidInput(format!(
                 "resend: {} has kind {other:?}, which resend does not cover",
                 row.message_id
@@ -88,13 +88,13 @@ impl Client {
     }
 
     /// Plain / reply / mention text, or — when the row carries a TTL —
-    /// the ephemeral envelope (ephemerals carry neither quote nor
+    /// the disappearing envelope (disappearing messages carry neither quote nor
     /// mentions, Step 89).
     async fn rebuild_text_payload(
         &self,
         row: &TimelineEventRecord,
     ) -> Result<ResendPayload, KupferdrahtError> {
-        if let Some(ttl_ms) = row.ephemeral_ttl_ms {
+        if let Some(ttl_ms) = row.ttl_ms {
             let plaintext =
                 encode_ephemeral_text_generic_message(&row.message_id, &row.body, ttl_ms)?;
             return Ok(ResendPayload {
@@ -121,7 +121,7 @@ impl Client {
     /// The `Asset` reference from the persisted `attachments` row — the
     /// blob upload succeeded before the row existed, so only the MLS
     /// message travels again. The raw content key is wiped after use.
-    async fn rebuild_asset_payload(
+    async fn rebuild_attachment_payload(
         &self,
         row: &TimelineEventRecord,
     ) -> Result<ResendPayload, KupferdrahtError> {
@@ -133,7 +133,7 @@ impl Client {
             .await?
             .ok_or_else(|| {
                 KupferdrahtError::InvalidInput(format!(
-                    "resend: {} is an asset row without an attachment record",
+                    "resend: {} is an attachment row without an attachment record",
                     row.message_id
                 ))
             })?;
@@ -143,14 +143,14 @@ impl Client {
                 mime_type: &attachment.mime_type,
                 size: attachment.size_bytes,
                 filename: attachment.filename.as_deref(),
-                otr_key: &attachment.otr_key_ct,
+                otr_key: &attachment.key_ct,
                 sha256: &attachment.sha256,
-                asset_id: &attachment.asset_id,
-                asset_token: attachment.asset_token.as_deref(),
-                asset_domain: &attachment.asset_domain,
+                asset_id: &attachment.attachment_id,
+                asset_token: attachment.attachment_token.as_deref(),
+                asset_domain: &attachment.attachment_domain,
             },
         );
-        attachment.otr_key_ct.zeroize();
+        attachment.key_ct.zeroize();
         Ok(ResendPayload::plain(encoded?))
     }
 }
@@ -190,7 +190,7 @@ mod tests {
             snapshot_recovery_hint("task_list_marker"),
             Some("set_task_list")
         );
-        for kind in ["text", "knock", "location", "asset", ""] {
+        for kind in ["text", "ping", "location", "attachment", ""] {
             assert_eq!(snapshot_recovery_hint(kind), None, "{kind:?} is resendable");
         }
     }

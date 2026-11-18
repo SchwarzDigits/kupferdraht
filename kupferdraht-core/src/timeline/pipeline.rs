@@ -54,7 +54,7 @@ impl Client {
 
     /// Encrypt `plaintext` under the room's MLS group state and upload the
     /// ciphertext via `POST /v14/mls/messages`. The funnel every message send
-    /// goes through (text / file / reply / reaction / knock / location / redact
+    /// goes through (text / file / reply / reaction / ping / location / redact
     /// / edit / receipts).
     ///
     /// Self-heals a stale epoch (Step 37): if Wire rejects with
@@ -251,14 +251,14 @@ impl Client {
             .await?;
         let mut item = TimelineItem::from_record(record);
         item.delivery_status = self.settled_status(item.delivery_status, &item.item_id);
-        // Step 65 (review S5): an asset row degrades to Text in
+        // Step 65 (review S5): an attachment row degrades to Text in
         // from_record — reconstruct before the Text-only mention
         // overlay below, or a reaction on a file emits an UpdateAt
         // whose item is Text with the filename.
         if let Some(store) = self.store_handle()
             && let Some(attachment) = store.get_attachment(canonical_id, room_id).await?
         {
-            crate::timeline::reconstruct_asset_kind(&mut item, &[attachment], &self.weak());
+            crate::timeline::reconstruct_attachment_kind(&mut item, &[attachment], &self.weak());
         }
         item.reactions = reactions;
         item.read_by = read_by;
@@ -305,8 +305,8 @@ impl Client {
                 }
             }
             other @ (crate::timeline::TimelineItemKind::Redacted
-            | crate::timeline::TimelineItemKind::Asset(_)
-            | crate::timeline::TimelineItemKind::Knock { .. }
+            | crate::timeline::TimelineItemKind::Attachment(_)
+            | crate::timeline::TimelineItemKind::Ping { .. }
             | crate::timeline::TimelineItemKind::Location { .. }
             | crate::timeline::TimelineItemKind::Task(_)
             | crate::timeline::TimelineItemKind::Case(_)
@@ -322,8 +322,8 @@ impl Client {
     /// local user as sender, `kind` / `body` as the packed
     /// representation, no edit / delete / expiry stamps. Callers set
     /// the path-specific decorations (`reply_to_id`, `expires_at_ms`)
-    /// before inserting. Shared by the text, content (knock /
-    /// location), and ephemeral send paths. Step 89.
+    /// before inserting. Shared by the text, content (ping /
+    /// location), and disappearing send paths. Step 89.
     pub(super) fn outgoing_record(
         &self,
         message_id: &str,
@@ -351,7 +351,7 @@ impl Client {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: None,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         }
     }
 
@@ -385,7 +385,7 @@ impl Client {
         Ok(())
     }
 
-    /// Persist + emit an outbound non-text content row (Knock / Location /
+    /// Persist + emit an outbound non-text content row (Ping / Location /
     /// case / marker). `kind` / `body` are the packed representation
     /// `from_record` decodes back into the structured `TimelineItemKind`;
     /// there is no reply or mention rewrite (those are Text-only). A keyed

@@ -51,8 +51,8 @@ fn ffi_timeline_tracks_core_parity_surface() {
     // which the https-only FFI manager cannot provide offline.
     let _room_id: fn(&kupferdraht::ffi::Timeline) -> String = kupferdraht::ffi::Timeline::room_id;
     let _auto_join = kupferdraht::ffi::Timeline::send_text_auto_join;
-    // Step 26: the Knock / Location send methods must exist on the FFI wrapper.
-    let _send_knock = kupferdraht::ffi::Timeline::send_knock;
+    // Step 26: the Ping / Location send methods must exist on the FFI wrapper.
+    let _send_ping = kupferdraht::ffi::Timeline::send_ping;
     let _send_location = kupferdraht::ffi::Timeline::send_location;
     // Step 86: the self-room lookup (sync, local cache) must exist on
     // the FFI `Client` next to `dm_room`.

@@ -725,16 +725,19 @@ impl Store for SqliteStore {
         timeline_events::apply_message_delete(self, room_id, target_message_id, redacted_at_ms)
     }
 
-    async fn expire_ephemeral_messages(
+    async fn expire_disappearing_messages(
         &self,
         now_ms: i64,
     ) -> Result<Vec<ExpiredMessageRecord>, KupferdrahtError> {
         let _permit = self.write_permit().await;
-        timeline_events::expire_ephemeral_messages(self, now_ms)
+        timeline_events::expire_disappearing_messages(self, now_ms)
     }
 
-    async fn pending_ephemeral_expiries(&self, now_ms: i64) -> Result<Vec<i64>, KupferdrahtError> {
-        timeline_events::pending_ephemeral_expiries(self, now_ms)
+    async fn pending_disappearing_expiries(
+        &self,
+        now_ms: i64,
+    ) -> Result<Vec<i64>, KupferdrahtError> {
+        timeline_events::pending_disappearing_expiries(self, now_ms)
     }
 
     async fn apply_message_edit(

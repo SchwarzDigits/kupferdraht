@@ -20,30 +20,30 @@
 //! Step 30 decomposes the per-room surface by **interaction**: the
 //! `Timeline` + `MessageHandle` types and their core accessors live
 //! here; each message type / interaction owns a sibling child module
-//! (`text`, `reaction`, `confirmation`, `delete`, `knock`,
+//! (`text`, `reaction`, `confirmation`, `delete`, `ping`,
 //! `location`), and the read-side lookups live in
 //! `lookup`. Each child module holds that interaction's `Timeline`
 //! facade next to its `Client` orchestrator — the same pattern
-//! `asset_send` established.
+//! `attachment_send` established.
 
 use std::sync::Arc;
 
 use crate::client::Client;
 
 #[cfg(not(target_arch = "wasm32"))]
-mod asset_cache;
-mod asset_receive;
-pub(crate) mod asset_send;
+mod attachment_cache;
+mod attachment_receive;
+pub(crate) mod attachment_send;
 pub(crate) mod case;
 mod confirmation;
 mod delete;
-pub(crate) mod ephemeral;
+pub(crate) mod disappearing;
 mod items;
 mod keyed;
-mod knock;
 mod location;
 mod lookup;
 mod own_target;
+mod ping;
 mod pipeline;
 mod reaction;
 mod resend;
@@ -54,14 +54,14 @@ mod subscription;
 pub(crate) mod task;
 mod text;
 
-pub use asset_receive::AssetSummary;
-pub use asset_send::AssetSource;
+pub use attachment_receive::AttachmentSummary;
+pub use attachment_send::AttachmentSource;
 pub use case::{CasePatch, CasePriority, CaseSnapshot, CaseState};
 pub use confirmation::ReceiptType;
 pub(crate) use items::group_reactions_by_emoji;
 pub(crate) use items::location_body;
 pub(crate) use items::location_kind_from_body;
-pub(crate) use items::reconstruct_asset_kind;
+pub(crate) use items::reconstruct_attachment_kind;
 pub use items::{
     DeliveryStatus, Mention, MessagesOptions, ReactionGroup, TimelineDiff, TimelineItem,
     TimelineItemKind, TimelineListener,

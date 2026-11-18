@@ -70,6 +70,6 @@ pub use storage::{AccountEntry, GlobalStore, StorageProvider};
 pub use sync::{EventHandler, Message, MessageBody, SyncSettings, SyncSummary, SyncTransport};
 pub use time::now_ms;
 pub use timeline::{
-    AssetSummary, MessageHandle, OutgoingContent, ReceiptType, ResendSummary, Subscription,
+    AttachmentSummary, MessageHandle, OutgoingContent, ReceiptType, ResendSummary, Subscription,
     Timeline,
 };

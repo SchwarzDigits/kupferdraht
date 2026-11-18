@@ -41,7 +41,7 @@ pub use sync::{
     TypingEvent,
 };
 pub use timeline::{
-    Asset, AssetMeta, FailedResend, ResendSummary, Timeline, TimelineDiff, TimelineItem,
+    Attachment, AttachmentMeta, FailedResend, ResendSummary, Timeline, TimelineDiff, TimelineItem,
     TimelineItemKind,
 };
 

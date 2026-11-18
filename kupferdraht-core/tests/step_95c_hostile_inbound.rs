@@ -94,13 +94,13 @@ fn task_message(message_id: &str, task_id: &str, title: &str) -> Vec<u8> {
 
 /// `GenericMessage { message_id = 1, ephemeral = 18 { expire_after_millis = 1, text = 2 } }`
 /// with a raw varint TTL (an `int64` field: `i64::MAX` fits a varint).
-fn ephemeral_text_message(message_id: &str, content: &str, ttl_raw: u64) -> Vec<u8> {
-    let mut ephemeral = Vec::new();
-    put_uint(1, ttl_raw, &mut ephemeral);
-    put_len_delimited(2, &text_payload(content), &mut ephemeral);
+fn disappearing_text_message(message_id: &str, content: &str, ttl_raw: u64) -> Vec<u8> {
+    let mut disappearing = Vec::new();
+    put_uint(1, ttl_raw, &mut disappearing);
+    put_len_delimited(2, &text_payload(content), &mut disappearing);
     let mut m = Vec::new();
     put_len_delimited(1, message_id.as_bytes(), &mut m);
-    put_len_delimited(18, &ephemeral, &mut m);
+    put_len_delimited(18, &disappearing, &mut m);
     m
 }
 
@@ -372,11 +372,11 @@ async fn an_empty_task_id_is_dropped_and_the_drain_continues() {
 /// `received_at_ms + ttl` (a panic in debug builds, a wrapped past
 /// stamp in release). The timer is clamped to Wire's range (≤ 1 year).
 #[tokio::test]
-async fn an_ephemeral_ttl_of_i64_max_is_clamped_not_overflowed() {
+async fn an_disappearing_ttl_of_i64_max_is_clamped_not_overflowed() {
     let (_server, _client, store) = sync_hostile_page(|bob| {
         vec![message_event(
             BOB,
-            &bob.application_message(&ephemeral_text_message(
+            &bob.application_message(&disappearing_text_message(
                 "eph-max",
                 "forever?",
                 u64::try_from(i64::MAX).expect("fits"),
@@ -391,7 +391,7 @@ async fn an_ephemeral_ttl_of_i64_max_is_clamped_not_overflowed() {
         .expect("load rows")
         .into_iter()
         .find(|r| r.message_id == "eph-max")
-        .expect("the ephemeral message is stored");
+        .expect("the disappearing message is stored");
     let expires = row.expires_at_ms.expect("an expiry stamp");
     let year_ms = 365 * 24 * 60 * 60 * 1000_i64;
     assert!(

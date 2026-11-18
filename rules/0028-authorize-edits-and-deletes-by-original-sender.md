@@ -11,11 +11,11 @@ Accepted 2026-09-26 (Step 95b implements it). Builds on
   sender user id (any device of that user).
 - **Delete:** only when (a) the delete's sender user is the target's
   sender, (b) the delete's sender is the self user and the target is
-  **ephemeral** (own-device sync of a receiver-side expiry — revised
+  **disappearing** (own-device sync of a receiver-side expiry — revised
   2026-09-28, observations §91), or (c) the target is the self user's
-  own ephemeral message (from any member — receivers enforce expiry for
+  own disappearing message (from any member — receivers enforce expiry for
   the sender). **Don't** accept a third party's delete of someone
-  else's ephemeral message, nor a self-sent delete of another member's
+  else's disappearing message, nor a self-sent delete of another member's
   ordinary message.
 - **No admin override.** A rejected edit/delete is dropped with a
   `warn!` — no row change, no timeline diff, no task/case fold change.

@@ -524,3 +524,4 @@ For Step 130a (`docs/plan/archive/130-wasm-idempotency-keys.md`):
 - 2026-11-10: The link to the plan `130-wasm-idempotency-keys` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.
 - 2026-11-10: Implementation Notes amended (Step 157): tabs of different releases do not mix — the announced and carried `KUPFERDRAHT_VERSION`, the `VersionMismatch` refusal on both sides, `relation`, a candidate that stops on `IncompatibleStore`; takeover and reload stay the embedder's. Not a supersession: the election, the transport and the failover classes stand; the release check sits on top of them.
 - 2026-11-11: The link to the plan `157-code-and-data-match` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.
+- 2026-11-18: Naming only (Step 163b, ADR-0009 revision 1.2): the keyed send `sendKnock` is `sendPing`; `rules/0026` follows. No change of decision.

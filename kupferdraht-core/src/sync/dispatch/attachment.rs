@@ -20,23 +20,23 @@ use super::InboundOrigin;
 impl SyncService {
     /// Step 11g: dispatch an inbound `GenericMessage::Asset`
     /// content variant. Replaces the warn-and-skip stub added in
-    /// 11a (sync/service.rs `dispatch_event` Asset arm).
+    /// 11a (sync/service.rs `dispatch_event` Attachment arm).
     ///
     /// Flow:
     /// 1. AES_GCM gate: log warn, skip persist + callbacks (the
-    ///    asset is unconsumable per ADR-0011 §AES-GCM toleration).
+    ///    attachment is unconsumable per ADR-0011 §AES-GCM toleration).
     /// 2. `Asset.NotUploaded` (Cancelled / Failed): silently
     ///    discard — the sender's upload never completed.
     /// 3. `Asset.Uploaded(RemoteData)` with `AES_CBC`: pack the
     ///    raw `otr_key` via the per-account DEK envelope; insert
     ///    `timeline_events` + `attachments` rows; notify event
-    ///    handlers with `MessageBody::Asset(AssetSummary)`; emit
-    ///    `TimelineDiff::Append { kind: Asset(...) }`.
-    pub(crate) async fn dispatch_inbound_asset(
+    ///    handlers with `MessageBody::Attachment(AttachmentSummary)`; emit
+    ///    `TimelineDiff::Append { kind: Attachment(...) }`.
+    pub(crate) async fn dispatch_inbound_attachment(
         &self,
         client: &Arc<Client>,
         origin: InboundOrigin<'_>,
-        asset: crate::wire::proto::Asset,
+        attachment: crate::wire::proto::Asset,
     ) -> Result<(), KupferdrahtError> {
         let InboundOrigin {
             room_id,
@@ -45,22 +45,22 @@ impl SyncService {
             message_id,
             sent_at_ms,
         } = origin;
-        let Some(decoded) = decode_inbound_asset(message_id, asset)? else {
+        let Some(decoded) = decode_inbound_attachment(message_id, attachment)? else {
             // NotUploaded / AES_GCM / no-status — log was done
             // inside the decoder; skip silently here.
             return Ok(());
         };
         let Some(store) = client.store_handle().cloned() else {
-            debug!(message_id, "no store attached — skip Asset persist");
+            debug!(message_id, "no store attached — skip attachment persist");
             return Ok(());
         };
         let received_at_ms = now_ms();
         let Some((attachment, timeline_record)) =
-            persist_inbound_asset(&store, client, origin, decoded, received_at_ms).await?
+            persist_inbound_attachment(&store, client, origin, decoded, received_at_ms).await?
         else {
             return Ok(());
         };
-        let summary = crate::timeline::AssetSummary::from_attachment(
+        let summary = crate::timeline::AttachmentSummary::from_attachment(
             attachment,
             sender_user_id.to_string(),
             Arc::downgrade(client),
@@ -69,7 +69,7 @@ impl SyncService {
             room_id: room_id.to_string(),
             sender_user_id: sender_user_id.to_string(),
             sender_device_id: sender_device_id.map(str::to_string),
-            body: MessageBody::Asset(Box::new(summary.clone())),
+            body: MessageBody::Attachment(Box::new(summary.clone())),
             sent_at_ms,
             received_at_ms,
             message_id: message_id.to_string(),
@@ -79,13 +79,13 @@ impl SyncService {
         self.notify_message(&message);
         client.dispatch_timeline_diff(&crate::timeline::TimelineDiff::Append {
             room_id: room_id.to_string(),
-            item: asset_timeline_item(&summary, &timeline_record),
+            item: attachment_timeline_item(&summary, &timeline_record),
         });
         // 25b: auto-acknowledge delivery (1:1 only, best-effort). Reaching
         // here means the row was newly inserted (a self-sent round-trip
         // returns `None` above and never gets here).
         self.queue_delivery_confirmation(room_id, message_id);
-        info!(message_id, "inbound Asset dispatched + persisted");
+        info!(message_id, "inbound attachment dispatched + persisted");
         Ok(())
     }
 }
@@ -94,27 +94,27 @@ impl SyncService {
 /// receive-path persist step. `None` means "logged + skip"
 /// (NotUploaded, AES_GCM, missing status — all surface as
 /// drain-continuing no-ops).
-struct DecodedAsset {
+struct DecodedAttachment {
     original: crate::wire::proto::asset::Original,
     remote: crate::wire::proto::asset::RemoteData,
-    asset_id: String,
-    encryption_algo: &'static str,
-    otr_key_raw: [u8; 32],
+    attachment_id: String,
+    cipher: &'static str,
+    raw_key: [u8; 32],
 }
 
-fn decode_inbound_asset(
+fn decode_inbound_attachment(
     message_id: &str,
-    asset: crate::wire::proto::Asset,
-) -> Result<Option<DecodedAsset>, KupferdrahtError> {
-    let original = asset.original.ok_or_else(|| {
+    attachment: crate::wire::proto::Asset,
+) -> Result<Option<DecodedAttachment>, KupferdrahtError> {
+    let original = attachment.original.ok_or_else(|| {
         KupferdrahtError::Encoding(format!(
-            "inbound Asset {message_id} missing Original metadata"
+            "inbound attachment {message_id} missing Original metadata"
         ))
     })?;
-    let Some(status) = asset.status else {
+    let Some(status) = attachment.status else {
         debug!(
             message_id,
-            "inbound Asset has no status — skip (NotUploaded or schema drift)"
+            "inbound attachment has no status — skip (NotUploaded or schema drift)"
         );
         return Ok(None);
     };
@@ -128,51 +128,51 @@ fn decode_inbound_asset(
             return Ok(None);
         }
     };
-    let encryption_algo = match remote.encryption.unwrap_or(0) {
+    let cipher = match remote.encryption.unwrap_or(0) {
         0 => "AES_CBC",
         1 => "AES_GCM",
         other => {
             warn!(
                 message_id,
                 encryption = other,
-                "inbound Asset has unknown EncryptionAlgorithm; skip"
+                "inbound attachment has unknown EncryptionAlgorithm; skip"
             );
             return Ok(None);
         }
     };
-    if encryption_algo == "AES_GCM" {
+    if cipher == "AES_GCM" {
         warn!(
             message_id,
-            asset_id = ?remote.asset_id,
-            "inbound Asset uses AES_GCM — unsupported in V1 (ADR-0011), skip"
+            attachment_id = ?remote.asset_id,
+            "inbound attachment uses AES_GCM — unsupported in V1 (ADR-0011), skip"
         );
         return Ok(None);
     }
-    let asset_id = remote.asset_id.clone().ok_or_else(|| {
+    let attachment_id = remote.asset_id.clone().ok_or_else(|| {
         KupferdrahtError::Encoding(format!(
-            "inbound Asset {message_id} missing RemoteData.asset_id"
+            "inbound attachment {message_id} missing RemoteData.asset_id"
         ))
     })?;
-    let otr_key_raw: [u8; 32] = remote.otr_key.as_slice().try_into().map_err(|_| {
+    let raw_key: [u8; 32] = remote.otr_key.as_slice().try_into().map_err(|_| {
         KupferdrahtError::Encoding(format!(
-            "inbound Asset {message_id} otr_key not 32 bytes (got {})",
+            "inbound attachment {message_id}: the content key is not 32 bytes (got {})",
             remote.otr_key.len()
         ))
     })?;
-    Ok(Some(DecodedAsset {
+    Ok(Some(DecodedAttachment {
         original,
         remote,
-        asset_id,
-        encryption_algo,
-        otr_key_raw,
+        attachment_id,
+        cipher,
+        raw_key,
     }))
 }
 
-async fn persist_inbound_asset(
+async fn persist_inbound_attachment(
     store: &Arc<dyn crate::storage::Store>,
     _client: &Arc<Client>,
     origin: InboundOrigin<'_>,
-    decoded: DecodedAsset,
+    decoded: DecodedAttachment,
     received_at_ms: i64,
 ) -> Result<Option<(crate::storage::AttachmentRecord, TimelineEventRecord)>, KupferdrahtError> {
     let InboundOrigin {
@@ -182,16 +182,16 @@ async fn persist_inbound_asset(
         message_id,
         sent_at_ms,
     } = origin;
-    // The otr_key is stored verbatim in the whole-DB-encrypted
-    // `attachments.otr_key` column (the asset content is separately
+    // The content key is stored verbatim in the whole-DB-encrypted
+    // `attachments.otr_key` column (the attachment content is separately
     // E2E-encrypted under it for Wire).
-    let otr_key_ct = decoded.otr_key_raw.to_vec();
+    let key_ct = decoded.raw_key.to_vec();
     let timeline_record = TimelineEventRecord {
         message_id: message_id.to_string(),
         room_id: room_id.to_string(),
         sender_user_id: sender_user_id.to_string(),
         sender_device_id: sender_device_id.map(str::to_string).unwrap_or_default(),
-        kind: "asset".into(),
+        kind: "attachment".into(),
         body: decoded.original.name.clone().unwrap_or_default(),
         sent_at_ms,
         arrived_at_ms: received_at_ms,
@@ -200,7 +200,7 @@ async fn persist_inbound_asset(
         edited_at_ms: None,
         redacted_at_ms: None,
         expires_at_ms: None,
-        ephemeral_ttl_ms: None,
+        ttl_ms: None,
     };
     let attachment = crate::storage::AttachmentRecord {
         message_id: message_id.to_string(),
@@ -209,11 +209,11 @@ async fn persist_inbound_asset(
         filename: decoded.original.name,
         size_bytes: decoded.original.size,
         sha256: decoded.remote.sha256,
-        otr_key_ct,
-        asset_id: decoded.asset_id,
-        asset_token: decoded.remote.asset_token,
-        asset_domain: decoded.remote.asset_domain.unwrap_or_default(),
-        encryption_algo: decoded.encryption_algo.to_string(),
+        key_ct,
+        attachment_id: decoded.attachment_id,
+        attachment_token: decoded.remote.asset_token,
+        attachment_domain: decoded.remote.asset_domain.unwrap_or_default(),
+        cipher: decoded.cipher.to_string(),
         cache_path: None,
         created_at_ms: received_at_ms,
     };
@@ -222,24 +222,24 @@ async fn persist_inbound_asset(
         .insert_timeline_event_with_attachment(&timeline_record, &attachment)
         .await?
     {
-        // Self-sent asset round-trip (or a replay) — the rows exist.
+        // Self-sent attachment round-trip (or a replay) — the rows exist.
         debug!(
             message_id,
-            "inbound Asset already in timeline_events (self-sent round-trip); skip"
+            "inbound attachment already in timeline_events (self-sent round-trip); skip"
         );
         return Ok(None);
     }
     Ok(Some((attachment, timeline_record)))
 }
 
-/// Build a `TimelineItem { kind: Asset(summary) }` from the
+/// Build a `TimelineItem { kind: Attachment(summary) }` from the
 /// just-persisted record. Crate-private helper for
-/// `dispatch_inbound_asset`.
-fn asset_timeline_item(
-    summary: &crate::timeline::AssetSummary,
+/// `dispatch_inbound_attachment`.
+fn attachment_timeline_item(
+    summary: &crate::timeline::AttachmentSummary,
     record: &TimelineEventRecord,
 ) -> crate::timeline::TimelineItem {
     let mut item = crate::timeline::TimelineItem::from_record(record.clone());
-    item.kind = crate::timeline::TimelineItemKind::Asset(Box::new(summary.clone()));
+    item.kind = crate::timeline::TimelineItemKind::Attachment(Box::new(summary.clone()));
     item
 }

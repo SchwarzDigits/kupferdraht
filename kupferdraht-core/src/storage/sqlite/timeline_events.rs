@@ -68,7 +68,7 @@ fn insert_timeline_event_on(
             event.delivery_status,
             event.reply_to_id,
             event.expires_at_ms,
-            event.ephemeral_ttl_ms,
+            event.ttl_ms,
             event.arrived_at_ms,
         ],
     )?;
@@ -285,8 +285,8 @@ pub(super) fn apply_message_edit_on(
     // than any persisted edit on the row.
     //
     // `kind = 'text'` guard: Wire's `MessageEdit` only ever carries
-    // `Text`, so an edit targeting a non-text row (knock / location /
-    // asset) is malformed. Without this guard such an edit would
+    // `Text`, so an edit targeting a non-text row (ping / location /
+    // attachment) is malformed. Without this guard such an edit would
     // overwrite the packed `body` while leaving `kind` intact,
     // silently corrupting the row on the next `from_record`.
     let updated = conn
@@ -355,7 +355,7 @@ pub(super) fn assemble_timeline_event(
         edited_at_ms: raw.edited_at_ms,
         redacted_at_ms: raw.redacted_at_ms,
         expires_at_ms: raw.expires_at_ms,
-        ephemeral_ttl_ms: raw.ephemeral_ttl_ms,
+        ttl_ms: raw.ttl_ms,
     })
 }
 
@@ -372,7 +372,7 @@ pub(super) struct RawTimelineRow {
     edited_at_ms: Option<i64>,
     redacted_at_ms: Option<i64>,
     expires_at_ms: Option<i64>,
-    ephemeral_ttl_ms: Option<i64>,
+    ttl_ms: Option<i64>,
     arrived_at_ms: i64,
 }
 
@@ -390,15 +390,15 @@ pub(super) fn read_raw_timeline_row(row: &rusqlite::Row<'_>) -> rusqlite::Result
         edited_at_ms: row.get(9)?,
         redacted_at_ms: row.get(10)?,
         expires_at_ms: row.get(11)?,
-        ephemeral_ttl_ms: row.get(12)?,
+        ttl_ms: row.get(12)?,
         arrived_at_ms: row.get(13)?,
     })
 }
 
-/// Step 89: tombstone every live row whose ephemeral timer elapsed
+/// Step 89: tombstone every live row whose disappearing timer elapsed
 /// (`expires_at_ms <= now_ms AND redacted_at_ms IS NULL`) — body
 /// cleared, `redacted_at_ms = now_ms` — and return the retired keys.
-pub(super) fn expire_ephemeral_messages(
+pub(super) fn expire_disappearing_messages(
     store: &SqliteStore,
     now_ms: i64,
 ) -> Result<Vec<ExpiredMessageRecord>, KupferdrahtError> {
@@ -409,9 +409,10 @@ pub(super) fn expire_ephemeral_messages(
     // `IMMEDIATE` like every writing transaction of the store (Step 97d):
     // a `DEFERRED` read-then-write fails at once, not after
     // `busy_timeout`, when another process commits in between.
-    let tx = super::write_tx::begin(&mut conn)
-        .map_err(|e| KupferdrahtError::Storage(format!("expire_ephemeral_messages begin: {e}")))?;
-    let due = select_due_ephemeral_rows(&tx, now_ms)?;
+    let tx = super::write_tx::begin(&mut conn).map_err(|e| {
+        KupferdrahtError::Storage(format!("expire_disappearing_messages begin: {e}"))
+    })?;
+    let due = select_due_disappearing_rows(&tx, now_ms)?;
     let updated = tx
         .execute(
             "UPDATE timeline_events
@@ -422,20 +423,23 @@ pub(super) fn expire_ephemeral_messages(
                 AND redacted_at_ms IS NULL",
             params![b"".as_slice(), now_ms],
         )
-        .map_err(|e| KupferdrahtError::Storage(format!("expire_ephemeral_messages update: {e}")))?;
-    tx.commit()
-        .map_err(|e| KupferdrahtError::Storage(format!("expire_ephemeral_messages commit: {e}")))?;
+        .map_err(|e| {
+            KupferdrahtError::Storage(format!("expire_disappearing_messages update: {e}"))
+        })?;
+    tx.commit().map_err(|e| {
+        KupferdrahtError::Storage(format!("expire_disappearing_messages commit: {e}"))
+    })?;
     assert_eq!(
         updated,
         due.len(),
-        "expire_ephemeral_messages: the tombstone UPDATE must retire exactly the selected rows"
+        "expire_disappearing_messages: the tombstone UPDATE must retire exactly the selected rows"
     );
     Ok(due)
 }
 
-/// The keys of every live ephemeral row whose timer elapsed at
+/// The keys of every live disappearing row whose timer elapsed at
 /// `now_ms` — the same predicate the tombstone UPDATE applies.
-fn select_due_ephemeral_rows(
+fn select_due_disappearing_rows(
     conn: &rusqlite::Connection,
     now_ms: i64,
 ) -> Result<Vec<ExpiredMessageRecord>, KupferdrahtError> {
@@ -447,7 +451,7 @@ fn select_due_ephemeral_rows(
                 AND redacted_at_ms IS NULL",
         )
         .map_err(|e| {
-            KupferdrahtError::Storage(format!("expire_ephemeral_messages prepare: {e}"))
+            KupferdrahtError::Storage(format!("expire_disappearing_messages prepare: {e}"))
         })?;
     stmt.query_map(params![now_ms], |row| {
         Ok(ExpiredMessageRecord {
@@ -456,14 +460,14 @@ fn select_due_ephemeral_rows(
             sender_user_id: row.get(2)?,
         })
     })
-    .map_err(|e| KupferdrahtError::Storage(format!("expire_ephemeral_messages query: {e}")))?
+    .map_err(|e| KupferdrahtError::Storage(format!("expire_disappearing_messages query: {e}")))?
     .collect::<rusqlite::Result<Vec<_>>>()
-    .map_err(|e| KupferdrahtError::Storage(format!("expire_ephemeral_messages row: {e}")))
+    .map_err(|e| KupferdrahtError::Storage(format!("expire_disappearing_messages row: {e}")))
 }
 
-/// Step 89: distinct future expiry instants of live ephemeral rows,
+/// Step 89: distinct future expiry instants of live disappearing rows,
 /// ascending — the resume path re-arms one timer per instant.
-pub(super) fn pending_ephemeral_expiries(
+pub(super) fn pending_disappearing_expiries(
     store: &SqliteStore,
     now_ms: i64,
 ) -> Result<Vec<i64>, KupferdrahtError> {
@@ -477,12 +481,14 @@ pub(super) fn pending_ephemeral_expiries(
               ORDER BY expires_at_ms ASC",
         )
         .map_err(|e| {
-            KupferdrahtError::Storage(format!("pending_ephemeral_expiries prepare: {e}"))
+            KupferdrahtError::Storage(format!("pending_disappearing_expiries prepare: {e}"))
         })?;
     stmt.query_map(params![now_ms], |row| row.get::<_, i64>(0))
-        .map_err(|e| KupferdrahtError::Storage(format!("pending_ephemeral_expiries query: {e}")))?
+        .map_err(|e| {
+            KupferdrahtError::Storage(format!("pending_disappearing_expiries query: {e}"))
+        })?
         .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(|e| KupferdrahtError::Storage(format!("pending_ephemeral_expiries row: {e}")))
+        .map_err(|e| KupferdrahtError::Storage(format!("pending_disappearing_expiries row: {e}")))
 }
 
 /// Step 65 (review S12): upgrade a `submitted` row to `received` when
@@ -619,7 +625,7 @@ mod tests {
         let (_dir, store) = fresh_store();
         let room_id = "room@wire.test";
         let failed = TimelineEventRecord {
-            ephemeral_ttl_ms: Some(5_000),
+            ttl_ms: Some(5_000),
             ..text_row("m-failed", "failed", "stuck")
         };
         store.insert_timeline_event(&failed).await.expect("insert");
@@ -656,7 +662,7 @@ mod tests {
         assert_eq!(row.sent_at_ms, 2000, "the backend's time of the resend");
         assert_eq!(row.arrived_at_ms, 2500, "to the tail of the timeline");
         assert_eq!(row.expires_at_ms, Some(7_000), "timer armed");
-        assert_eq!(row.ephemeral_ttl_ms, Some(5_000), "the ttl survives (V28)");
+        assert_eq!(row.ttl_ms, Some(5_000), "the ttl survives (V28)");
         assert_eq!(row.body, "stuck");
 
         let later = ResentTimes {
@@ -765,7 +771,7 @@ mod tests {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: None,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         };
         store.insert_timeline_event(&base).await.expect("insert");
         store
@@ -809,24 +815,24 @@ mod tests {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: None,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         }
     }
 
     /// Wire's `MessageEdit` only carries `Text`; an edit targeting a
-    /// non-text row (a Step-26 knock here) must be a no-op so the packed
+    /// non-text row (a Step-26 ping here) must be a no-op so the packed
     /// `body` is never overwritten while `kind` stays put. Step 26.
     #[tokio::test]
     async fn apply_message_edit_skips_non_text_rows() {
         let (_dir, store) = fresh_store();
         let room_id = "room@wire.test";
-        let mut knock = sample_event("m-knock", room_id);
-        knock.kind = "knock".into();
-        knock.body = "true".into();
-        store.insert_timeline_event(&knock).await.expect("insert");
+        let mut ping = sample_event("m-ping", room_id);
+        ping.kind = "ping".into();
+        ping.body = "true".into();
+        store.insert_timeline_event(&ping).await.expect("insert");
 
         let applied = store
-            .apply_message_edit(room_id, "m-knock", "edit-1", "evil text", 2000)
+            .apply_message_edit(room_id, "m-ping", "edit-1", "evil text", 2000)
             .await
             .expect("edit call");
         assert!(!applied, "edit on a non-text row must be a no-op");
@@ -837,9 +843,9 @@ mod tests {
             .expect("load events");
         let row = rows
             .iter()
-            .find(|r| r.message_id == "m-knock")
-            .expect("knock row present");
-        assert_eq!(row.body, "true", "knock body must be unchanged");
+            .find(|r| r.message_id == "m-ping")
+            .expect("ping row present");
+        assert_eq!(row.body, "true", "ping body must be unchanged");
         assert!(row.edited_at_ms.is_none(), "edited_at_ms must stay None");
     }
 
@@ -966,9 +972,9 @@ mod tests {
         assert_eq!(got.edited_at_ms, Some(2000));
     }
 
-    // ---- Step 89: ephemeral expiry sweep ----------------------------
+    // ---- Step 89: disappearing expiry sweep ----------------------------
 
-    fn ephemeral_event(
+    fn disappearing_event(
         message_id: &str,
         room_id: &str,
         expires_at_ms: Option<i64>,
@@ -983,11 +989,11 @@ mod tests {
         let (_dir, store) = fresh_store();
         let room_id = "room-e@wire.test";
         store
-            .insert_timeline_event(&ephemeral_event("m-eph", room_id, Some(9_000)))
+            .insert_timeline_event(&disappearing_event("m-eph", room_id, Some(9_000)))
             .await
-            .expect("insert ephemeral");
+            .expect("insert disappearing");
         store
-            .insert_timeline_event(&ephemeral_event("m-plain", room_id, None))
+            .insert_timeline_event(&disappearing_event("m-plain", room_id, None))
             .await
             .expect("insert plain");
         let rows = store.load_timeline_events(room_id).await.expect("load");
@@ -1006,8 +1012,17 @@ mod tests {
         );
     }
 
+    /// The record a sweep reports for a row of `disappearing_event`.
+    fn expired(room_id: &str, message_id: &str) -> ExpiredMessageRecord {
+        ExpiredMessageRecord {
+            room_id: room_id.into(),
+            message_id: message_id.into(),
+            sender_user_id: "u@wire.test".into(),
+        }
+    }
+
     #[tokio::test]
-    async fn expire_ephemeral_messages_tombstones_only_due_rows_and_is_idempotent() {
+    async fn expire_disappearing_messages_tombstones_only_due_rows_and_is_idempotent() {
         let (_dir, store) = fresh_store();
         let room_id = "room-e@wire.test";
         for (id, expires_at_ms) in [
@@ -1017,27 +1032,19 @@ mod tests {
             ("plain", None),
         ] {
             store
-                .insert_timeline_event(&ephemeral_event(id, room_id, expires_at_ms))
+                .insert_timeline_event(&disappearing_event(id, room_id, expires_at_ms))
                 .await
                 .expect(id);
         }
 
-        let mut retired = store.expire_ephemeral_messages(6_000).await.expect("sweep");
+        let mut retired = store
+            .expire_disappearing_messages(6_000)
+            .await
+            .expect("sweep");
         retired.sort_by(|a, b| a.message_id.cmp(&b.message_id));
         assert_eq!(
             retired,
-            vec![
-                ExpiredMessageRecord {
-                    room_id: room_id.into(),
-                    message_id: "due".into(),
-                    sender_user_id: "u@wire.test".into(),
-                },
-                ExpiredMessageRecord {
-                    room_id: room_id.into(),
-                    message_id: "exact".into(),
-                    sender_user_id: "u@wire.test".into(),
-                },
-            ],
+            vec![expired(room_id, "due"), expired(room_id, "exact")],
             "rows at or before now are retired (<=), the future and plain rows are not"
         );
 
@@ -1064,7 +1071,7 @@ mod tests {
         }
 
         let again = store
-            .expire_ephemeral_messages(6_000)
+            .expire_disappearing_messages(6_000)
             .await
             .expect("second sweep");
         assert!(
@@ -1074,13 +1081,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn expire_ephemeral_messages_skips_rows_already_deleted() {
+    async fn expire_disappearing_messages_skips_rows_already_deleted() {
         // A row the peer already deleted for everyone keeps its
         // original redaction stamp — the sweep must not rewrite it.
         let (_dir, store) = fresh_store();
         let room_id = "room-e@wire.test";
         store
-            .insert_timeline_event(&ephemeral_event("deleted", room_id, Some(5_000)))
+            .insert_timeline_event(&disappearing_event("deleted", room_id, Some(5_000)))
             .await
             .expect("insert");
         assert!(
@@ -1089,7 +1096,10 @@ mod tests {
                 .await
                 .expect("delete")
         );
-        let retired = store.expire_ephemeral_messages(6_000).await.expect("sweep");
+        let retired = store
+            .expire_disappearing_messages(6_000)
+            .await
+            .expect("sweep");
         assert!(retired.is_empty());
         let row = store
             .load_timeline_event("deleted")
@@ -1104,21 +1114,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pending_ephemeral_expiries_lists_distinct_future_instants_ascending() {
+    async fn pending_disappearing_expiries_lists_distinct_future_instants_ascending() {
         let (_dir, store) = fresh_store();
         let room_id = "room-e@wire.test";
         for (id, at) in [("a", 9_000), ("b", 7_000), ("c", 9_000), ("past", 1_000)] {
             store
-                .insert_timeline_event(&ephemeral_event(id, room_id, Some(at)))
+                .insert_timeline_event(&disappearing_event(id, room_id, Some(at)))
                 .await
                 .expect("insert");
         }
         store
-            .insert_timeline_event(&ephemeral_event("plain", room_id, None))
+            .insert_timeline_event(&disappearing_event("plain", room_id, None))
             .await
             .expect("insert plain");
         let pending = store
-            .pending_ephemeral_expiries(5_000)
+            .pending_disappearing_expiries(5_000)
             .await
             .expect("pending");
         assert_eq!(
@@ -1128,14 +1138,14 @@ mod tests {
         );
         assert!(
             store
-                .expire_ephemeral_messages(1_000)
+                .expire_disappearing_messages(1_000)
                 .await
                 .expect("sweep")
                 .iter()
                 .any(|r| r.message_id == "past")
         );
         let after = store
-            .pending_ephemeral_expiries(9_500)
+            .pending_disappearing_expiries(9_500)
             .await
             .expect("pending");
         assert!(

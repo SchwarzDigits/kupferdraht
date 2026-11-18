@@ -8,14 +8,14 @@
 //! ```text
 //! send_file(path, mime_type):
 //!   1. file_sharing_check()             // Step 10e policy gate
-//!   2. encrypt_file(plaintext_path)     // Step 11b → EncryptedAsset
+//!   2. encrypt_file(plaintext_path)     // Step 11b → EncryptedAttachment
 //!   3. compute_md5_b64(ciphertext_path) // Wire's Content-MD5 hdr
-//!   4. http.upload_asset(...)           // Step 11c → AssetUploadResponse
+//!   4. http.upload_attachment(...)           // Step 11c → AssetUploadResponse
 //!   5. build_asset_generic_message(...) // Step 11a proto
 //!   6. encrypt_and_upload(plaintext)    // existing MLS encrypt + POST /v14/mls/messages
 //!   7. pack DEK envelope over otr_key
 //!   8. insert_timeline_event + insert_attachment
-//!   9. move tempfile to per-account cache (~/.kupferdraht/<acct>/assets/<msg>.enc)
+//!   9. move tempfile to per-account cache (~/.kupferdraht/<acct>/attachments/<msg>.enc)
 //!  10. return MessageHandle
 //! ```
 //!
@@ -24,9 +24,9 @@
 //! exists for.
 //!
 //! Failure mode after partial progress: if MLS-send fails AFTER the
-//! /v14/assets upload succeeded, the asset blob is leaked on Wire's
+//! /v14/assets upload succeeded, the attachment blob is leaked on Wire's
 //! storage (`retention=persistent`, no auto-cleanup). Kupferdraht accepts
-//! this — a defensive `delete_asset` on failure is a future
+//! this — a defensive `delete_attachment` on failure is a future
 //! enhancement; the cost of the leak is one Wire blob.
 
 #![cfg_attr(not(test), allow(dead_code))]
@@ -39,7 +39,9 @@ use base64::Engine as _;
 use md5::{Digest as _, Md5};
 
 use crate::client::{Client, FileSharingPolicy};
-use crate::encryption::asset_crypto::{EncryptedAsset, STREAM_CHUNK, encrypt_file, encrypt_reader};
+use crate::encryption::attachment_crypto::{
+    EncryptedAttachment, STREAM_CHUNK, encrypt_file, encrypt_reader,
+};
 use crate::error::KupferdrahtError;
 use crate::storage::{AttachmentRecord, TimelineEventRecord};
 use crate::timeline::keyed::{SendKey, insert_outgoing_row};
@@ -47,7 +49,7 @@ use crate::timeline::{DeliveryStatus, MessageHandle, Timeline};
 use crate::wire::http::assets::AssetMultipart;
 use crate::wire::proto::{AssetMessageInput, build_asset_generic_message};
 
-/// The asset cache's subdirectory a send stages its ciphertext in until the
+/// The attachment cache's subdirectory a send stages its ciphertext in until the
 /// upload is through; a client's start empties it (Step 84).
 pub(super) const STAGING_DIR: &str = "staging";
 
@@ -61,7 +63,7 @@ impl Drop for StagedCiphertext<'_> {
     }
 }
 
-/// Remove a ciphertext file of the asset cache. Absent is fine; any other
+/// Remove a ciphertext file of the attachment cache. Absent is fine; any other
 /// failure is logged, and the next start removes what is left (Step 84).
 pub(super) fn remove_ciphertext_file(path: &Path) {
     debug_assert!(
@@ -77,11 +79,11 @@ pub(super) fn remove_ciphertext_file(path: &Path) {
 }
 
 impl Timeline {
-    /// Encrypt-and-send a file as an `Asset` `GenericMessage`. Step 11f.
+    /// Encrypt and send a file as an attachment. Step 11f.
     ///
     /// Pipeline: AES-256-CBC encrypt to a tempfile (Step 11b) →
     /// upload via `POST /v14/assets` (Step 11c) → build the MLS
-    /// reference via `build_asset_generic_message` (Step 11a) →
+    /// reference (Step 11a) →
     /// encrypt+send through the same MLS pipeline `send_text` uses →
     /// persist `timeline_events` + `attachments` rows (Step 11d).
     ///
@@ -108,17 +110,17 @@ impl Timeline {
     }
 
     /// Streaming counterpart of [`Self::send_file`]: send a file from an
-    /// [`AssetSource`] byte stream rather than a filesystem path (no temp copy
+    /// [`AttachmentSource`] byte stream rather than a filesystem path (no temp copy
     /// of the plaintext; e.g. an Android `content://` `InputStream`).
     /// `filename` is the display name — the stream carries no path to derive
     /// it from.
     ///
     /// # Errors
-    /// Same as [`Self::send_file`], plus any `KupferdrahtError` the `AssetSource`
+    /// Same as [`Self::send_file`], plus any `KupferdrahtError` the `AttachmentSource`
     /// returns while reading.
     pub async fn send_file_stream(
         &self,
-        source: Arc<dyn AssetSource>,
+        source: Arc<dyn AttachmentSource>,
         filename: &str,
         mime_type: &str,
     ) -> Result<MessageHandle, KupferdrahtError> {
@@ -143,11 +145,11 @@ impl Client {
         //    crypto work that would otherwise be wasted.
         let group_id = self.resolve_room_group_id(room_id, "send_file").await?;
         // 3. Encrypt the plaintext (streamed) to a tempfile under base_dir.
-        let ciphertext_dir = self.asset_staging_dir()?;
+        let ciphertext_dir = self.attachment_staging_dir()?;
         let encrypted = encrypt_file(path, &ciphertext_dir)?;
         let filename = path.file_name().and_then(|s| s.to_str());
         // 4-8: Content-MD5 → upload → MLS reference → MLS send → persist → emit.
-        let send = AssetSend {
+        let send = AttachmentSend {
             room_id,
             group_id: &group_id,
             mime_type,
@@ -155,18 +157,18 @@ impl Client {
             op: "send_file",
             key: None,
         };
-        self.finish_asset_send(encrypted, &send).await
+        self.finish_attachment_send(encrypted, &send).await
     }
 
     /// Streaming variant of [`Self::send_file`]: encrypt + send a file from a
-    /// foreign [`AssetSource`] byte stream instead of a filesystem path, so the
+    /// foreign [`AttachmentSource`] byte stream instead of a filesystem path, so the
     /// caller need not materialise the plaintext on disk (e.g. an Android
     /// `content://` `InputStream`). Same memory profile — the plaintext is read
     /// chunk-by-chunk, never fully buffered.
     pub(crate) async fn send_file_stream(
         &self,
         room_id: &str,
-        source: Arc<dyn AssetSource>,
+        source: Arc<dyn AttachmentSource>,
         filename: &str,
         mime_type: &str,
     ) -> Result<MessageHandle, KupferdrahtError> {
@@ -178,9 +180,9 @@ impl Client {
         let group_id = self
             .resolve_room_group_id(room_id, "send_file_stream")
             .await?;
-        let ciphertext_dir = self.asset_staging_dir()?;
-        let encrypted = encrypt_reader(AssetSourceReader::new(source), &ciphertext_dir)?;
-        let send = AssetSend {
+        let ciphertext_dir = self.attachment_staging_dir()?;
+        let encrypted = encrypt_reader(AttachmentSourceReader::new(source), &ciphertext_dir)?;
+        let send = AttachmentSend {
             room_id,
             group_id: &group_id,
             mime_type,
@@ -188,7 +190,7 @@ impl Client {
             op: "send_file_stream",
             key: None,
         };
-        self.finish_asset_send(encrypted, &send).await
+        self.finish_attachment_send(encrypted, &send).await
     }
 
     /// Shared tail of both send-file paths (Steps 4-8): Content-MD5 → upload to
@@ -203,21 +205,21 @@ impl Client {
     /// row that reads as `Failed` and resends without a second blob upload
     /// (`encrypt_and_upload` ratchets the group *before* the HTTP call, so a
     /// resend re-encrypts a fresh `GenericMessage`). Step 25a.
-    async fn finish_asset_send(
+    async fn finish_attachment_send(
         &self,
-        encrypted: EncryptedAsset,
-        send: &AssetSend<'_>,
+        encrypted: EncryptedAttachment,
+        send: &AttachmentSend<'_>,
     ) -> Result<MessageHandle, KupferdrahtError> {
         let _staged = StagedCiphertext(&encrypted.ciphertext_path);
         let room_id = send.room_id;
         let md5_b64 = compute_md5_b64(&encrypted.ciphertext_path)?;
         let upload = self
-            .upload_asset_blob(room_id, &encrypted, send.mime_type, send.filename, &md5_b64)
+            .upload_attachment_blob(room_id, &encrypted, send.mime_type, send.filename, &md5_b64)
             .await?;
-        let asset_domain = upload
+        let attachment_domain = upload
             .domain
             .clone()
-            .unwrap_or_else(|| default_asset_domain(self));
+            .unwrap_or_else(|| default_attachment_domain(self));
         let (message_id, plaintext_pb) = build_asset_generic_message(AssetMessageInput {
             mime_type: send.mime_type,
             size: encrypted.plaintext_size,
@@ -226,12 +228,12 @@ impl Client {
             sha256: &encrypted.sha256,
             asset_id: &upload.key,
             asset_token: upload.token.as_deref(),
-            asset_domain: &asset_domain,
+            asset_domain: &attachment_domain,
         })?;
         let _in_flight = self.begin_send(&message_id);
         let sent_at_ms = crate::time::now_ms();
         if let Some(persisted) = self
-            .persist_outgoing_asset(
+            .persist_outgoing_attachment(
                 send,
                 &message_id,
                 &encrypted,
@@ -242,7 +244,7 @@ impl Client {
             .await?
         {
             log_tempfile_cache_move(&encrypted.ciphertext_path, persisted.cache_path.as_deref());
-            self.emit_outgoing_asset_append(persisted.attachment, persisted.timeline, room_id);
+            self.emit_outgoing_attachment_append(persisted.attachment, persisted.timeline, room_id);
         }
         let mls_upload = self
             .encrypt_and_upload(send.group_id, send.op, &plaintext_pb)
@@ -255,23 +257,23 @@ impl Client {
         })
     }
 
-    /// Build the asset `TimelineItem` from the just-persisted rows and emit a
+    /// Build the attachment `TimelineItem` from the just-persisted rows and emit a
     /// live `TimelineDiff::Append`, mirroring `emit_outgoing_text_append` —
-    /// so the sender's own outbound asset (success or `Failed`) surfaces
+    /// so the sender's own outbound attachment (success or `Failed`) surfaces
     /// immediately instead of only on the next timeline read. Step 25a.
-    fn emit_outgoing_asset_append(
+    fn emit_outgoing_attachment_append(
         &self,
         attachment: AttachmentRecord,
         timeline: TimelineEventRecord,
         room_id: &str,
     ) {
-        let summary = crate::timeline::AssetSummary::from_attachment(
+        let summary = crate::timeline::AttachmentSummary::from_attachment(
             attachment,
             self.own_qualified_user_id(),
             self.weak(),
         );
         let mut item = crate::timeline::TimelineItem::from_record(timeline);
-        item.kind = crate::timeline::TimelineItemKind::Asset(Box::new(summary));
+        item.kind = crate::timeline::TimelineItemKind::Attachment(Box::new(summary));
         self.dispatch_timeline_diff(&crate::timeline::TimelineDiff::Append {
             room_id: room_id.to_string(),
             item,
@@ -279,24 +281,27 @@ impl Client {
     }
 
     /// Directory the encrypt step stages the ciphertext tempfile in. Prefer the
-    /// per-account asset dir under `base_dir` — always present in production,
-    /// disk-backed, and the same filesystem as the final asset cache (so the
+    /// per-account attachment dir under `base_dir` — always present in production,
+    /// disk-backed, and the same filesystem as the final attachment cache (so the
     /// post-upload move is a cheap rename). Fall back to the OS cache dir only
     /// for an in-memory client built without `base_dir`. That OS-cache fallback
     /// is unavailable on Android (`dirs::cache_dir()` → `None`), which is why
     /// the `base_dir` path is the production one.
-    fn asset_staging_dir(&self) -> Result<PathBuf, KupferdrahtError> {
-        let dir = match self.assets_dir() {
-            Some(assets) => assets.join(STAGING_DIR),
+    fn attachment_staging_dir(&self) -> Result<PathBuf, KupferdrahtError> {
+        let dir = match self.attachments_dir() {
+            Some(attachments) => attachments.join(STAGING_DIR),
             None => dirs::cache_dir()
                 .ok_or_else(|| {
                     KupferdrahtError::Environment("no OS cache directory available".into())
                 })?
                 .join("kupferdraht")
-                .join("asset-encrypt"),
+                .join("attachment-encrypt"),
         };
         std::fs::create_dir_all(&dir).map_err(|e| {
-            KupferdrahtError::Storage(format!("mkdir asset staging dir {}: {e}", dir.display()))
+            KupferdrahtError::Storage(format!(
+                "mkdir attachment staging dir {}: {e}",
+                dir.display()
+            ))
         })?;
         Ok(dir)
     }
@@ -313,15 +318,15 @@ impl Client {
         }
     }
 
-    /// Thin wrapper over `HttpClient::upload_asset` that forwards the
-    /// `EncryptedAsset` size + the caller's mime/filename. `conv_id` is derived
+    /// Thin wrapper over `HttpClient::upload_attachment` that forwards the
+    /// `EncryptedAttachment` size + the caller's mime/filename. `conv_id` is derived
     /// from the qualified `room_id` (`<uuid>@<domain>`) — Wire requires it in the
-    /// audit metadata when the team has asset audit logging enabled
+    /// audit metadata when the team has attachment audit logging enabled
     /// (`400 missing-audit-metadata` otherwise).
-    async fn upload_asset_blob(
+    async fn upload_attachment_blob(
         &self,
         room_id: &str,
-        encrypted: &EncryptedAsset,
+        encrypted: &EncryptedAttachment,
         mime_type: &str,
         filename: Option<&str>,
         md5_b64: &str,
@@ -329,7 +334,7 @@ impl Client {
         let access_token = self.access_token().ok_or_else(|| {
             KupferdrahtError::InvalidInput("send_file: no access token (locked client?)".into())
         })?;
-        self.http_upload_asset(
+        self.http_upload_attachment(
             &access_token,
             AssetMultipart {
                 conv_id: room_id.split_once('@'),
@@ -347,23 +352,23 @@ impl Client {
     /// and move the encrypted tempfile into the per-account cache.
     /// Returns the final cache path (when caching is enabled). A keyed
     /// send's key is written with the two rows (Step 130a).
-    async fn persist_outgoing_asset(
+    async fn persist_outgoing_attachment(
         &self,
-        send: &AssetSend<'_>,
+        send: &AttachmentSend<'_>,
         message_id: &str,
-        encrypted: &EncryptedAsset,
+        encrypted: &EncryptedAttachment,
         upload: &crate::wire::http::assets::AssetUploadResponse,
         sent_at_ms: i64,
         status: DeliveryStatus,
-    ) -> Result<Option<OutgoingAsset>, KupferdrahtError> {
+    ) -> Result<Option<OutgoingAttachment>, KupferdrahtError> {
         debug_assert!(
             !message_id.is_empty(),
-            "persist_outgoing_asset: message_id required"
+            "persist_outgoing_attachment: message_id required"
         );
         let Some(store) = self.store_handle().cloned() else {
             return Ok(None);
         };
-        let timeline = self.outgoing_asset_row(send, message_id, sent_at_ms, status)?;
+        let timeline = self.outgoing_attachment_row(send, message_id, sent_at_ms, status)?;
         // 8c. Move the encrypted tempfile to the per-account cache
         // so a future `download` on this same device hits a local
         // file. Cache directory creation is best-effort; failure
@@ -387,21 +392,21 @@ impl Client {
         {
             return Err(crate::timeline::pipeline::outgoing_row_exists(message_id));
         }
-        Ok(Some(OutgoingAsset {
+        Ok(Some(OutgoingAttachment {
             cache_path,
             attachment,
             timeline,
         }))
     }
 
-    /// 8a. The outbound asset's `timeline_events` row — inserted before the
+    /// 8a. The outbound attachment's `timeline_events` row — inserted before the
     /// attachment, whose foreign key depends on it.
     ///
     /// # Errors
     /// `KupferdrahtError::InvalidInput` when the client has no device id.
-    fn outgoing_asset_row(
+    fn outgoing_attachment_row(
         &self,
-        send: &AssetSend<'_>,
+        send: &AttachmentSend<'_>,
         message_id: &str,
         sent_at_ms: i64,
         status: DeliveryStatus,
@@ -417,7 +422,7 @@ impl Client {
             room_id: send.room_id.to_string(),
             sender_user_id: self.own_qualified_user_id(),
             sender_device_id: device_id,
-            kind: "asset".into(),
+            kind: "attachment".into(),
             body: send.filename.unwrap_or_default().to_string(),
             sent_at_ms,
             arrived_at_ms: sent_at_ms,
@@ -426,19 +431,19 @@ impl Client {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: None,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         })
     }
 
-    /// 8b. The outbound asset's `attachments` row. The `otr_key` is stored
+    /// 8b. The outbound attachment's `attachments` row. The `otr_key` is stored
     /// verbatim: the column lives in the whole-DB-encrypted `kupferdraht.db`,
-    /// and the asset *content* is separately E2E-encrypted under this key
-    /// for Wire (`asset_crypto`), so no extra wrapping is needed here.
+    /// and the attachment *content* is separately E2E-encrypted under this key
+    /// for Wire (`attachment_crypto`), so no extra wrapping is needed here.
     fn outgoing_attachment(
         &self,
-        send: &AssetSend<'_>,
+        send: &AttachmentSend<'_>,
         message_id: &str,
-        encrypted: &EncryptedAsset,
+        encrypted: &EncryptedAttachment,
         upload: &crate::wire::http::assets::AssetUploadResponse,
         sent_at_ms: i64,
         cache_path: Option<String>,
@@ -450,20 +455,20 @@ impl Client {
             filename: send.filename.map(str::to_string),
             size_bytes: encrypted.plaintext_size,
             sha256: encrypted.sha256.to_vec(),
-            otr_key_ct: encrypted.key_material().to_vec(),
-            asset_id: upload.key.clone(),
-            asset_token: upload.token.clone(),
-            asset_domain: upload
+            key_ct: encrypted.key_material().to_vec(),
+            attachment_id: upload.key.clone(),
+            attachment_token: upload.token.clone(),
+            attachment_domain: upload
                 .domain
                 .clone()
-                .unwrap_or_else(|| default_asset_domain(self)),
-            encryption_algo: "AES_CBC".into(),
+                .unwrap_or_else(|| default_attachment_domain(self)),
+            cipher: "AES_CBC".into(),
             cache_path,
             created_at_ms: sent_at_ms,
         }
     }
 
-    /// `<kupferdraht_home>/<account_id>/assets/<message_id>.enc`. `None`
+    /// `<kupferdraht_home>/<account_id>/attachments/<message_id>.enc`. `None`
     /// when no `base_dir` is configured (in-memory test path).
     /// Side-effect: creates the directory if missing.
     fn move_tempfile_to_cache(
@@ -471,14 +476,16 @@ impl Client {
         ciphertext_path: &Path,
         message_id: &str,
     ) -> Result<Option<PathBuf>, KupferdrahtError> {
-        let Some(dir) = self.assets_dir() else {
+        let Some(dir) = self.attachments_dir() else {
             return Ok(None);
         };
         std::fs::create_dir_all(&dir)
             .map_err(|e| KupferdrahtError::Storage(format!("mkdir {}: {e}", dir.display())))?;
         // Step 80: our own ids are UUIDs, but the derivation shares
         // the guarded helper so no future caller can regress this.
-        let dest = dir.join(super::asset_receive::asset_cache_file_name(message_id)?);
+        let dest = dir.join(super::attachment_receive::attachment_cache_file_name(
+            message_id,
+        )?);
         std::fs::rename(ciphertext_path, &dest).map_err(|e| {
             KupferdrahtError::Storage(format!(
                 "move {} -> {}: {e}",
@@ -492,7 +499,7 @@ impl Client {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Client {
-    /// Send `bytes` as an encrypted `Asset` message — the native flavor of
+    /// Send `bytes` as an encrypted attachment — the native flavor of
     /// the browser's in-memory send behind `OutgoingContent::File`: the
     /// bytes are encrypted to a staging file and take the `send_file` path.
     /// `key` is stored with the `Sending` rows (Step 130a).
@@ -507,9 +514,9 @@ impl Client {
         debug_assert!(!room_id.is_empty(), "send_bytes: room_id must be non-empty");
         self.file_sharing_check().await?;
         let group_id = self.resolve_room_group_id(room_id, "send_bytes").await?;
-        let ciphertext_dir = self.asset_staging_dir()?;
+        let ciphertext_dir = self.attachment_staging_dir()?;
         let encrypted = encrypt_reader(std::io::Cursor::new(bytes), &ciphertext_dir)?;
-        let send = AssetSend {
+        let send = AttachmentSend {
             room_id,
             group_id: &group_id,
             mime_type,
@@ -517,14 +524,14 @@ impl Client {
             op: "send_bytes",
             key,
         };
-        self.finish_asset_send(encrypted, &send).await
+        self.finish_attachment_send(encrypted, &send).await
     }
 }
 
-// ── wasm: in-memory asset send (W7) ─────────────────────────────────────────
+// ── wasm: in-memory attachment send (W7) ─────────────────────────────────────────
 #[cfg(target_arch = "wasm32")]
 impl Client {
-    /// Send `bytes` as an encrypted `Asset` message, entirely in memory — the
+    /// Send `bytes` as an encrypted attachment, entirely in memory — the
     /// browser flavor of [`Self::send_file`] (no tempfile staging, no cache
     /// move). Encrypt → upload buffer → build the MLS reference → MLS send →
     /// persist `timeline_events` + `attachments` rows (`cache_path = None`).
@@ -541,12 +548,12 @@ impl Client {
         debug_assert!(!room_id.is_empty(), "send_bytes: room_id must be non-empty");
         self.file_sharing_check().await?;
         let group_id = self.resolve_room_group_id(room_id, "send_bytes").await?;
-        let enc = crate::encryption::asset_crypto::encrypt_bytes(bytes)?;
+        let enc = crate::encryption::attachment_crypto::encrypt_bytes(bytes)?;
         let upload = self
             .upload_bytes_blob(room_id, &enc, filename, mime_type)
             .await?;
         let (message_id, plaintext_pb) =
-            self.bytes_asset_message(&enc, &upload, filename, mime_type)?;
+            self.bytes_attachment_message(&enc, &upload, filename, mime_type)?;
         // Step 97a: the rows are written as `Sending` before the MLS send.
         let _in_flight = self.begin_send(&message_id);
         let out = OutgoingBytes {
@@ -576,13 +583,13 @@ impl Client {
 impl Client {
     /// `POST /v14/assets` with the in-memory ciphertext and its
     /// `Content-MD5`; an empty `filename` is sent as none. Wire requires the
-    /// conversation reference in the audit metadata when the team has asset
+    /// conversation reference in the audit metadata when the team has attachment
     /// audit logging enabled (`400 missing-audit-metadata` otherwise);
     /// `room_id` is the qualified `<uuid>@<domain>`.
     async fn upload_bytes_blob(
         &self,
         room_id: &str,
-        enc: &crate::encryption::asset_crypto::EncryptedBytes,
+        enc: &crate::encryption::attachment_crypto::EncryptedBytes,
         filename: &str,
         mime_type: &str,
     ) -> Result<crate::wire::http::assets::AssetUploadResponse, KupferdrahtError> {
@@ -594,7 +601,7 @@ impl Client {
         let access_token = self.access_token().ok_or_else(|| {
             KupferdrahtError::InvalidInput("send_bytes: no access token (locked client?)".into())
         })?;
-        self.http_upload_asset_bytes(
+        self.http_upload_attachment_bytes(
             &access_token,
             room_id.split_once('@'),
             (!filename.is_empty()).then_some(filename),
@@ -607,17 +614,17 @@ impl Client {
 
     /// The MLS `Asset` reference to an uploaded in-memory blob:
     /// `(message_id, plaintext)`; an empty `filename` is referenced as none.
-    fn bytes_asset_message(
+    fn bytes_attachment_message(
         &self,
-        enc: &crate::encryption::asset_crypto::EncryptedBytes,
+        enc: &crate::encryption::attachment_crypto::EncryptedBytes,
         upload: &crate::wire::http::assets::AssetUploadResponse,
         filename: &str,
         mime_type: &str,
     ) -> Result<(String, Vec<u8>), KupferdrahtError> {
-        let asset_domain = upload
+        let attachment_domain = upload
             .domain
             .clone()
-            .unwrap_or_else(|| default_asset_domain(self));
+            .unwrap_or_else(|| default_attachment_domain(self));
         build_asset_generic_message(AssetMessageInput {
             mime_type,
             size: enc.plaintext_size,
@@ -626,31 +633,31 @@ impl Client {
             sha256: &enc.sha256,
             asset_id: &upload.key,
             asset_token: upload.token.as_deref(),
-            asset_domain: &asset_domain,
+            asset_domain: &attachment_domain,
         })
     }
 
-    /// Persist the `Sending` rows of an in-memory asset send and show them
+    /// Persist the `Sending` rows of an in-memory attachment send and show them
     /// to the sender at once, like `send_file`'s.
     async fn persist_and_emit_outgoing_bytes(
         &self,
         out: &OutgoingBytes<'_>,
     ) -> Result<(), KupferdrahtError> {
-        if let Some((attachment, timeline)) = self.persist_outgoing_bytes_asset(out).await? {
-            self.emit_outgoing_asset_append(attachment, timeline, out.room_id);
+        if let Some((attachment, timeline)) = self.persist_outgoing_bytes_attachment(out).await? {
+            self.emit_outgoing_attachment_append(attachment, timeline, out.room_id);
         }
         Ok(())
     }
 }
 
-/// One in-memory asset send for [`Client::persist_outgoing_bytes_asset`].
+/// One in-memory attachment send for [`Client::persist_outgoing_bytes_attachment`].
 #[cfg(target_arch = "wasm32")]
 struct OutgoingBytes<'a> {
     room_id: &'a str,
     message_id: &'a str,
     filename: &'a str,
     mime_type: &'a str,
-    enc: &'a crate::encryption::asset_crypto::EncryptedBytes,
+    enc: &'a crate::encryption::attachment_crypto::EncryptedBytes,
     upload: &'a crate::wire::http::assets::AssetUploadResponse,
     sent_at_ms: i64,
     /// The idempotency key of a keyed send (Step 130a).
@@ -659,16 +666,16 @@ struct OutgoingBytes<'a> {
 
 #[cfg(target_arch = "wasm32")]
 impl Client {
-    /// Persist the outbound in-memory asset as `Sending` (Step 97a):
+    /// Persist the outbound in-memory attachment as `Sending` (Step 97a):
     /// `timeline_events` + `attachments` (`cache_path = None`). A no-op
     /// without a store.
     ///
     /// # Errors
     /// `InvalidInput` without a device id; storage errors.
-    /// Persist the `Sending` rows of an in-memory asset send; returns the
+    /// Persist the `Sending` rows of an in-memory attachment send; returns the
     /// two records for the consumer's `TimelineDiff::Append` (Step 132
     /// item 7, as `send_file` does), `None` without a store.
-    async fn persist_outgoing_bytes_asset(
+    async fn persist_outgoing_bytes_attachment(
         &self,
         out: &OutgoingBytes<'_>,
     ) -> Result<Option<(AttachmentRecord, TimelineEventRecord)>, KupferdrahtError> {
@@ -686,7 +693,7 @@ impl Client {
             room_id: out.room_id.to_string(),
             sender_user_id: self.own_qualified_user_id(),
             sender_device_id: device_id,
-            kind: "asset".into(),
+            kind: "attachment".into(),
             body: out.filename.to_string(),
             sent_at_ms: out.sent_at_ms,
             arrived_at_ms: out.sent_at_ms,
@@ -695,7 +702,7 @@ impl Client {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: None,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         };
         // Step 105: the row and its attachment are one write.
         let attachment = self.bytes_attachment_record(out);
@@ -708,7 +715,7 @@ impl Client {
         }
     }
 
-    /// The `attachments` row of an in-memory asset send.
+    /// The `attachments` row of an in-memory attachment send.
     fn bytes_attachment_record(&self, out: &OutgoingBytes<'_>) -> AttachmentRecord {
         AttachmentRecord {
             message_id: out.message_id.to_string(),
@@ -717,25 +724,25 @@ impl Client {
             filename: (!out.filename.is_empty()).then(|| out.filename.to_string()),
             size_bytes: out.enc.plaintext_size,
             sha256: out.enc.sha256.to_vec(),
-            otr_key_ct: out.enc.key_material().to_vec(),
-            asset_id: out.upload.key.clone(),
-            asset_token: out.upload.token.clone(),
-            asset_domain: out
+            key_ct: out.enc.key_material().to_vec(),
+            attachment_id: out.upload.key.clone(),
+            attachment_token: out.upload.token.clone(),
+            attachment_domain: out
                 .upload
                 .domain
                 .clone()
-                .unwrap_or_else(|| default_asset_domain(self)),
-            encryption_algo: "AES_CBC".into(),
+                .unwrap_or_else(|| default_attachment_domain(self)),
+            cipher: "AES_CBC".into(),
             cache_path: None,
             created_at_ms: out.sent_at_ms,
         }
     }
 }
 
-/// One outbound asset for [`Client::finish_asset_send`]: its room and
+/// One outbound attachment for [`Client::finish_attachment_send`]: its room and
 /// group, how it is labelled, the operation that sends it, and the
 /// idempotency key of a keyed send (Step 130a).
-struct AssetSend<'a> {
+struct AttachmentSend<'a> {
     room_id: &'a str,
     group_id: &'a [u8],
     mime_type: &'a str,
@@ -744,10 +751,10 @@ struct AssetSend<'a> {
     key: Option<SendKey<'a>>,
 }
 
-/// The persisted outbound-asset state `send_file` needs to emit a live
+/// The persisted outbound-attachment state `send_file` needs to emit a live
 /// `TimelineDiff::Append` (mirroring text): the cache path (for logging) plus
-/// the attachment + timeline rows that build the asset `TimelineItem`.
-struct OutgoingAsset {
+/// the attachment + timeline rows that build the attachment `TimelineItem`.
+struct OutgoingAttachment {
     cache_path: Option<PathBuf>,
     attachment: AttachmentRecord,
     timeline: TimelineEventRecord,
@@ -781,7 +788,7 @@ fn compute_md5_b64(path: &Path) -> Result<String, KupferdrahtError> {
 /// feeds the plaintext in chunks (e.g. from an Android `content://`
 /// `InputStream`), so no filesystem path / temp copy is needed.
 #[uniffi::export(with_foreign)]
-pub trait AssetSource: Send + Sync {
+pub trait AttachmentSource: Send + Sync {
     /// Read up to `max_len` bytes from the source. Return an **empty** `Vec`
     /// at end of input. `max_len` is Kupferdraht's encrypt chunk size
     /// (`STREAM_CHUNK`, 64 KiB).
@@ -791,18 +798,18 @@ pub trait AssetSource: Send + Sync {
     fn read_chunk(&self, max_len: u32) -> Result<Vec<u8>, KupferdrahtError>;
 }
 
-/// `std::io::Read` adapter over an [`AssetSource`] callback: buffers one
+/// `std::io::Read` adapter over an [`AttachmentSource`] callback: buffers one
 /// foreign chunk at a time and treats an empty chunk as EOF, so the existing
 /// `encrypt_reader` pipeline streams straight from the foreign source.
-struct AssetSourceReader {
-    source: Arc<dyn AssetSource>,
+struct AttachmentSourceReader {
+    source: Arc<dyn AttachmentSource>,
     buf: Vec<u8>,
     pos: usize,
     eof: bool,
 }
 
-impl AssetSourceReader {
-    fn new(source: Arc<dyn AssetSource>) -> Self {
+impl AttachmentSourceReader {
+    fn new(source: Arc<dyn AttachmentSource>) -> Self {
         Self {
             source,
             buf: Vec::new(),
@@ -812,7 +819,7 @@ impl AssetSourceReader {
     }
 }
 
-impl Read for AssetSourceReader {
+impl Read for AttachmentSourceReader {
     fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
         if self.pos >= self.buf.len() {
             if self.eof {
@@ -845,18 +852,18 @@ fn log_tempfile_cache_move(_temp: &Path, _dest: Option<&Path>) {
     // metrics. Kept as a no-op so the call site stays simple.
 }
 
-/// Fallback `asset_domain` for an upload response that omits
+/// Fallback attachment domain for an upload response that omits
 /// `domain`: the user's home backend domain, i.e. the backend that
 /// stored the blob. Pre-federation Wire servers omitted the field;
 /// a federated Wire v14 backend sets it, so the fallback only fires
 /// against older deployments.
-fn default_asset_domain(client: &Client) -> String {
+fn default_attachment_domain(client: &Client) -> String {
     client.account().domain().to_owned()
 }
 
 #[cfg(test)]
-mod asset_source_reader_tests {
-    use super::{AssetSource, AssetSourceReader};
+mod attachment_source_reader_tests {
+    use super::{AttachmentSource, AttachmentSourceReader};
     use crate::error::KupferdrahtError;
     use std::collections::VecDeque;
     use std::io::Read;
@@ -874,7 +881,7 @@ mod asset_source_reader_tests {
         }
     }
 
-    impl AssetSource for VecSource {
+    impl AttachmentSource for VecSource {
         fn read_chunk(&self, _max_len: u32) -> Result<Vec<u8>, KupferdrahtError> {
             Ok(self
                 .chunks
@@ -892,7 +899,7 @@ mod asset_source_reader_tests {
             b"streamed ".to_vec(),
             b"world".to_vec(),
         ]);
-        let mut reader = AssetSourceReader::new(source);
+        let mut reader = AttachmentSourceReader::new(source);
         let mut out = Vec::new();
         reader.read_to_end(&mut out).expect("read");
         assert_eq!(out, b"hello streamed world");
@@ -900,7 +907,7 @@ mod asset_source_reader_tests {
 
     struct ErrSource;
 
-    impl AssetSource for ErrSource {
+    impl AttachmentSource for ErrSource {
         fn read_chunk(&self, _max_len: u32) -> Result<Vec<u8>, KupferdrahtError> {
             Err(KupferdrahtError::Storage("boom".into()))
         }
@@ -908,7 +915,7 @@ mod asset_source_reader_tests {
 
     #[test]
     fn source_error_surfaces() {
-        let mut reader = AssetSourceReader::new(Arc::new(ErrSource));
+        let mut reader = AttachmentSourceReader::new(Arc::new(ErrSource));
         let mut out = Vec::new();
         let err = reader.read_to_end(&mut out).expect_err("must error");
         assert!(err.to_string().contains("boom"));

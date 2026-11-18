@@ -64,34 +64,34 @@ fn rename_event_at(time: &str) -> String {
 }
 
 /// `GenericMessage { message_id = 1, knock = 4 { hot_knock = 1 } }`.
-fn knock_message(message_id: &str) -> Vec<u8> {
-    let mut knock = Vec::new();
-    put_varint(1 << 3, &mut knock);
-    put_varint(0, &mut knock);
+fn ping_message(message_id: &str) -> Vec<u8> {
+    let mut ping = Vec::new();
+    put_varint(1 << 3, &mut ping);
+    put_varint(0, &mut ping);
     let mut m = Vec::new();
     put_len_delimited(1, message_id.as_bytes(), &mut m);
-    put_len_delimited(4, &knock, &mut m);
+    put_len_delimited(4, &ping, &mut m);
     m
 }
 
 /// `GenericMessage { message_id = 1, ephemeral = 18 { expire_after_millis = 1,
 /// text = 2 { content = 1 } } }`.
-fn ephemeral_message(message_id: &str, content: &str) -> Vec<u8> {
+fn disappearing_message(message_id: &str, content: &str) -> Vec<u8> {
     let mut text = Vec::new();
     put_len_delimited(1, content.as_bytes(), &mut text);
-    let mut ephemeral = Vec::new();
-    put_varint(1 << 3, &mut ephemeral);
-    put_varint(60_000, &mut ephemeral);
-    put_len_delimited(2, &text, &mut ephemeral);
+    let mut disappearing = Vec::new();
+    put_varint(1 << 3, &mut disappearing);
+    put_varint(60_000, &mut disappearing);
+    put_len_delimited(2, &text, &mut disappearing);
     let mut m = Vec::new();
     put_len_delimited(1, message_id.as_bytes(), &mut m);
-    put_len_delimited(18, &ephemeral, &mut m);
+    put_len_delimited(18, &disappearing, &mut m);
     m
 }
 
 /// `GenericMessage { message_id = 1, asset = 11 { original = 1 { mime_type = 1,
 /// size = 2 }, uploaded = 4 { otr_key = 1, sha256 = 2, asset_id = 3 } } }`.
-fn asset_message(message_id: &str) -> Vec<u8> {
+fn attachment_message(message_id: &str) -> Vec<u8> {
     let mut original = Vec::new();
     put_len_delimited(1, b"text/plain", &mut original);
     put_varint(2 << 3, &mut original);
@@ -99,13 +99,13 @@ fn asset_message(message_id: &str) -> Vec<u8> {
     let mut uploaded = Vec::new();
     put_len_delimited(1, &[7_u8; 32], &mut uploaded);
     put_len_delimited(2, &[8_u8; 32], &mut uploaded);
-    put_len_delimited(3, b"3-1-asset", &mut uploaded);
-    let mut asset = Vec::new();
-    put_len_delimited(1, &original, &mut asset);
-    put_len_delimited(4, &uploaded, &mut asset);
+    put_len_delimited(3, b"3-1-attachment", &mut uploaded);
+    let mut attachment = Vec::new();
+    put_len_delimited(1, &original, &mut attachment);
+    put_len_delimited(4, &uploaded, &mut attachment);
     let mut m = Vec::new();
     put_len_delimited(1, message_id.as_bytes(), &mut m);
-    put_len_delimited(11, &asset, &mut m);
+    put_len_delimited(11, &attachment, &mut m);
     m
 }
 
@@ -159,9 +159,12 @@ async fn every_inbound_row_carries_the_events_time() {
     let before = now_ms();
     let messages = [
         ("text", text_message("text", "a text")),
-        ("knock", knock_message("knock")),
-        ("ephemeral", ephemeral_message("ephemeral", "gone soon")),
-        ("asset", asset_message("asset")),
+        ("ping", ping_message("ping")),
+        (
+            "disappearing",
+            disappearing_message("disappearing", "gone soon"),
+        ),
+        ("attachment", attachment_message("attachment")),
     ];
     let events = messages
         .iter()
@@ -414,15 +417,15 @@ async fn every_own_send_takes_the_time_of_the_answer() {
 
     let handles = [
         ("text", timeline.send_text("a text".into()).await),
-        ("knock", timeline.send_knock(false).await),
+        ("ping", timeline.send_ping(false).await),
         (
             "location",
             timeline.send_location(52.5, 13.4, None, None).await,
         ),
         (
-            "ephemeral",
+            "disappearing",
             timeline
-                .send_ephemeral_text("gone soon".into(), Duration::from_secs(60))
+                .send_disappearing_text("gone soon".into(), Duration::from_secs(60))
                 .await,
         ),
     ];
@@ -445,7 +448,7 @@ async fn an_own_file_takes_the_time_of_the_answer() {
         when.method(POST).path("/v14/assets");
         then.status(201)
             .header("content-type", "application/json")
-            .body(r#"{"key":"3-1-asset","token":"token"}"#);
+            .body(r#"{"key":"3-1-attachment","token":"token"}"#);
     });
     let fx = joined_client(&server).await;
     let room = fx.client.room(&room_id()).await.expect("room");

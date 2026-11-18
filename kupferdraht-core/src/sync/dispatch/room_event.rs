@@ -82,7 +82,7 @@ fn record_of(event_type: &str, event: &RoomEvent) -> Option<TimelineEventRecord>
         edited_at_ms: None,
         redacted_at_ms: None,
         expires_at_ms: None,
-        ephemeral_ttl_ms: None,
+        ttl_ms: None,
     })
 }
 

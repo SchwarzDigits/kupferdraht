@@ -38,7 +38,7 @@ fn wasm_sources() -> Vec<(String, String)> {
 /// that kind has to name its declaration here.
 const VIEW_DECLARATIONS: [(&str, &str); 12] = [
     ("AccountView", "AccountEntry"),
-    ("AssetMeta", "AssetMeta"),
+    ("AttachmentMeta", "AttachmentMeta"),
     ("DeviceInfoView", "DeviceInfo"),
     ("DeviceView", "RoomDevice"),
     ("FeatureConfigView", "FeatureConfig"),

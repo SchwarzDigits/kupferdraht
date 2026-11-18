@@ -131,3 +131,4 @@ Option H. Both operations require the target in the same room.
 - 2026-11-02: The negative consequence inherited from ADR-0027 decision 2 (X.509 senders attributed through the envelope) is void since Step 135 amended that decision — such a message is dropped before dispatch. Recorded under Neutral; decision unchanged.
 - 2026-09-28: Context, Option H and Decision 2(b) amended to the narrowed clause (same decision as the entry above, current truth — not a supersession); Implementation Notes now name the room-scoped lookup and the `authorize.rs` home the 2026-09-26 entry corrected. Review of PR #62 (Volker): the body had kept "self user — any target" while `rules/0028` and the code carried the narrowing, and the ADR wins over its rule.
 
+- 2026-11-18: Naming only (Step 163b, ADR-0009 revision 1.2): an ephemeral message is a disappearing message; `rules/0028` follows. No change of decision.

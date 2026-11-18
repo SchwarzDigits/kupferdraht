@@ -108,7 +108,7 @@ pub struct RoomMember {
     pub display_name: Option<String>,
     pub handle: Option<String>,
     pub role: RoomMemberRole,
-    /// The asset keys of this member's avatar from the last `list-users`
+    /// The image keys of this member's avatar from the last `list-users`
     /// (Step 144): Wire's `preview` and `complete`.
     pub avatar_thumbnail_key: Option<String>,
     pub avatar_full_key: Option<String>,

@@ -24,7 +24,7 @@ const FIXTURE_MESSAGES = {
   'room-1': [1, 2, 3].map((n) => ({
     itemId: `m-${n}`, senderUserId: 'peer@example.test', sentAtMs: n, kind: 'text',
     body: `message ${n}`, replyTo: null, reactions: [], edited: false, redacted: false,
-    asset: null, expiresAtMs: null,
+    attachment: null, expiresAtMs: null,
   })),
 };
 /// Reads and mutations take this long, so a call can be in flight while

@@ -27,7 +27,7 @@ there stays in force; this file adds the multi-tab layer on top.
   table in `bindings/web/kupferdraht-tabs/README.md`, pinned against
   it): `idempotent` calls (reads, and mutations a repeat converges)
   re-issue to the new leader; `keyed` calls (`sendText`, `sendReply`,
-  `sendKnock`, `sendLocation`, `sendFile`, `toggleReaction`) re-issue
+  `sendPing`, `sendLocation`, `sendFile`, `toggleReaction`) re-issue
   with their idempotency key — the proxy adds one when the caller gave
   none — and the leader's `send_keyed` answers a key already used from
   the store; **every other mutation in flight rejects typed

@@ -895,7 +895,7 @@ and settles it to `'submitted'` (or `'failed'`) after (Step 97a).
 
 ```bash
 kupferdraht-cli send --id <room>@<domain> -m "hello"
-kupferdraht-cli send --id <room>@<domain> -m "Your one-time code: 123456" --ephemeral 300
+kupferdraht-cli send --id <room>@<domain> -m "Your one-time code: 123456" --ttl 300
 # Retry-safe: the same key prints the first send's handle, nothing is sent twice
 kupferdraht-cli send --id <room>@<domain> -m "hello" --idempotency-key order-4711
 ```
@@ -904,8 +904,8 @@ kupferdraht-cli send --id <room>@<domain> -m "hello" --idempotency-key order-471
 |-------------------|----------|---------------------------------------------------|
 | `--id`            | yes      | Qualified room id.                                |
 | `-m`, `--message` | yes      | UTF-8 message body.                               |
-| `--ephemeral <SECS>` | no    | **Step 89.** Send as a self-deleting message with this timer (1 … 31536000 s): the body rides Wire's `Ephemeral` wrapper, official clients show a countdown and delete their copy, Kupferdraht's own row self-redacts too (`Timeline::send_ephemeral_text`). `@handle` mentions are not parsed in this mode (V1 carries none inside the wrapper). |
-| `--idempotency-key <KEY>` | no | **Step 130a.** Send under this key (1–128 characters) through `Timeline::send_keyed`: a repeat with the same key prints the first send's handle instead of sending again — or resends a failed send under the same `message_id`; a key used in another room or for a reaction, or still in flight, fails `InvalidInput`. Keys are kept 28 days. Joins the room's MLS group first when it is missing; `@handle` mentions are parsed as without the flag. Conflicts with `--ephemeral`. |
+| `--ttl <SECS>`   | no       | **Step 89.** Send as a disappearing message with this timer (1 … 31536000 s): official clients show a countdown and delete their copy, Kupferdraht's own row self-redacts too (`Timeline::send_disappearing_text`). `@handle` mentions are not parsed in this mode (a disappearing message carries none). |
+| `--idempotency-key <KEY>` | no | **Step 130a.** Send under this key (1–128 characters) through `Timeline::send_keyed`: a repeat with the same key prints the first send's handle instead of sending again — or resends a failed send under the same `message_id`; a key used in another room or for a reaction, or still in flight, fails `InvalidInput`. Keys are kept 28 days. Joins the room's MLS group first when it is missing; `@handle` mentions are parsed as without the flag. Conflicts with `--ttl`. |
 
 Output:
 
@@ -916,10 +916,10 @@ send ok
   sent_at:    <rfc3339, local offset>
 ```
 
-With `--ephemeral`, two more lines follow:
+With `--ttl`, two more lines follow:
 
 ```
-  ephemeral:  300s
+  ttl:        300s
   expires_at: <rfc3339, local offset>
 ```
 
@@ -956,8 +956,8 @@ failed-sends ok
 ### `resend` (Step 79)
 
 Re-drive a failed send from its persisted row under the **same
-message_id** — text incl. reply / mentions, ephemeral text (re-wrapped
-with its timer), knock, location, and files (the blob is already on
+message_id** — text incl. reply / mentions, disappearing text (re-wrapped
+with its timer), ping, location, and files (the blob is already on
 `/v14/assets`; only the MLS reference travels again). A task / case /
 marker snapshot is refused with a pointer at the state-sending command
 (`task edit` / `case-set` / `task mark`) — re-sending a stale snapshot
@@ -1461,7 +1461,7 @@ redacted rows as `<redacted>` with `(deleted)` suffix.
 A file message goes entirely (Step 84): its key's row and its cached
 ciphertext on this device, and its upload at the server (best effort —
 a refusal is logged, the delete stands). A received delete does the
-same locally. `download-asset` of the message then fails with "no asset
+same locally. `download-attachment` of the message then fails with "no attachment
 row … or it was deleted".
 
 Idempotence: receiving the same `MessageDelete` twice is a
@@ -1538,35 +1538,34 @@ reply ok
 The `timeline` printer renders replies with a `↳ in reply to
 <parent>` decoration above the body.
 
-### `knock`
+### `ping`
 
-Send a `Knock` (nudge / "ping") to a room (Step 26). Wire-side this is a
-`GenericMessage { knock { hot_knock } }`; receivers surface it as a poke
-with no body.
+Send a ping to a room (Step 26): a message without content that draws
+the room's attention; receivers show it with no body.
 
 ```bash
-kupferdraht-cli knock --id <room>@<domain>
-# A "hot" (double-tap) knock:
-kupferdraht-cli knock --id <room>@<domain> --hot
+kupferdraht-cli ping --id <room>@<domain>
+# A repeated ping, sent again to insist:
+kupferdraht-cli ping --id <room>@<domain> --repeated
 ```
 
-| Flag    | Required | Description                                       |
-|---------|----------|---------------------------------------------------|
-| `--id`  | yes      | Qualified room id.                                |
-| `--hot` | no       | Send a hot (repeat) knock instead of a plain one. |
+| Flag         | Required | Description                                       |
+|--------------|----------|---------------------------------------------------|
+| `--id`       | yes      | Qualified room id.                                |
+| `--repeated` | no       | Send a repeated ping instead of a plain one.      |
 
 Output:
 
 ```
-knock ok
+ping ok
   room_id:    <room>@<domain>
-  hot_knock:  false
+  repeated:   false
   message_id: <fresh uuid>
   sent_at:    <rfc3339, local offset>
 ```
 
-The `timeline` printer renders an inbound knock as `<knock>` or
-`<knock (hot)>`.
+The `timeline` printer renders an inbound ping as `<ping>` or
+`<ping (repeated)>`.
 
 ### `location`
 
@@ -1645,13 +1644,13 @@ outbound send whose upload failed (Step 25a) — `resend` re-drives it
 
 The CLI implementation drains pending notifications **before**
 reading so users get the expected "show me what's new" behaviour
-in one shot. Non-text rows render as previews: `<asset …>`,
-`<knock>`, `<location …>`, `<task …>` and — since Step 72b —
+in one shot. Non-text rows render as previews: `<attachment …>`,
+`<ping>`, `<location …>`, `<task …>` and — since Step 72b —
 `<case <case_ref> rev <n> <title>>` (the folded room state comes
 from `case-show`, landing in 72c). A room event (Step 145) prints as
 a system line: `* alice@d added bob@d, carol@d`, `* bob@d joined`,
 `* bob@d left`, `* alice@d removed bob@d`, `* alice@d renamed the room
-to "…"`, `* alice@d created the room "…"`. Since Step 89 a live ephemeral
+to "…"`, `* alice@d created the room "…"`. Since Step 89 a live disappearing
 row carries a `⏱ until <ts>` suffix and an elapsed one prints
 `(expired)` in place of `(deleted)` — the pre-read drain also runs
 the expiry sweep, so a row whose timer passed while the CLI was not
@@ -1846,7 +1845,7 @@ first to remove the registered device entirely (frees a 7-cap slot) —
 re-authenticated by the account's password; an account without one, an
 SSO user's, answers the prompt with Enter (Step 164). With `--purge-local`, the SDK
 forgets the account on this device: its directory under
-`accounts/<id>/` (databases, locks, asset cache), its keystore entries and
+`accounts/<id>/` (databases, locks, attachment cache), its keystore entries and
 its registry row; other accounts of the home, `global.db` and `home.id`
 are untouched. The CLI itself deletes no file and no keystore entry.
 
@@ -2169,7 +2168,7 @@ new value up via the `user.properties-set` event (Step 10d).
 
 ### send-file (Step 11h)
 
-Encrypt + upload + MLS-send a file as an `Asset` content variant
+Encrypt + upload + MLS-send a file as an attachment
 (Step 11, ADR-0011). The team's `fileSharing` policy (Step 10e)
 gates the call before any Wire network traffic — `Disabled`
 rejects with `InvalidInput`, `Enabled` proceeds (the common case per
@@ -2183,7 +2182,7 @@ kupferdraht-cli send-file --id <room>@<domain> --path <path> --mime <mime>
 |------------|----------|---------------------------------------------------------------------|
 | `--id`     | yes      | Qualified room id.                                                  |
 | `--path`   | yes      | Plaintext file path. Streamed through AES-256-CBC + SHA-256.        |
-| `--mime`   | yes      | Mime type (e.g. `image/png`). Embedded into `Asset.Original.mime_type`. |
+| `--mime`   | yes      | Mime type (e.g. `image/png`), carried in the attachment reference.  |
 
 Output:
 
@@ -2197,8 +2196,8 @@ send-file ok
 ```
 
 **Cache:** the encrypted ciphertext tempfile is moved into
-`~/.kupferdraht/<account_id>/assets/<message_id>.enc` after a
-successful send so a future `download-asset` on the same device
+`~/.kupferdraht/<account_id>/attachments/<message_id>.enc` after a
+successful send so a future `download-attachment` on the same device
 hits the local file. Plaintext is never persisted by Kupferdraht
 (ADR-0011 §Plaintext persistence).
 
@@ -2206,68 +2205,66 @@ hits the local file. Plaintext is never persisted by Kupferdraht
 - `InvalidInput` — `fileSharing` policy rejected (disabled or
   mime not in allow-list), or `--path` unreadable.
 - `BackendRejected` — `/v14/assets` returned 4xx/5xx (413 =
-  asset exceeds Wire's per-message cap; 403 =
+  attachment exceeds Wire's per-message cap; 403 =
   `not-allowed-by-team-feature-config` if Wire-server enforces
   the policy server-side too).
 
-### download-asset (Step 11h)
+### download-attachment (Step 11h)
 
-Download + decrypt an inbound asset that has been dispatched
-into the local store. Verifies SHA-256 against the value carried
-inside the MLS-protected `Asset.RemoteData.sha256`; rejects
+Download + decrypt an inbound attachment that has been dispatched
+into the local store. Verifies SHA-256 against the value the
+MLS-protected attachment reference carries; rejects
 tampered ciphertext with `IntegrityCheck`. Wire answers the download
-of a local asset with `302` to a pre-signed URL on its asset store; the
+of a local attachment with `302` to a pre-signed URL on its attachment store; the
 command follows that one redirect without credentials (Step 141). A
 download longer than the sender's declared size (`size_bytes`) plus
 32 bytes stops with `IntegrityCheck` and leaves nothing in the cache
-(Step 160). A file deleted for everyone has no asset row any more and
+(Step 160). A file deleted for everyone has no attachment row any more and
 fails with `InvalidInput` (Step 84).
 
 ```bash
-kupferdraht-cli download-asset --message <id> [--id <room>] [--save-to <path>]
+kupferdraht-cli download-attachment --message <id> [--id <room>] [--save-to <path>]
 ```
 
 | Flag         | Required | Description                                                                       |
 |--------------|----------|-----------------------------------------------------------------------------------|
-| `--message`  | yes      | `message_id` of the asset message.                                                |
+| `--message`  | yes      | `message_id` of the attachment message.                                           |
 | `--id`       | no       | Qualified room id. Auto-resolved from `--message` against the local timeline cache when omitted (same resolver as `mark-read`). |
-| `--save-to`  | no       | Filesystem path to write the decrypted plaintext to. Without this flag, prints metadata only — useful for inspecting multi-megabyte assets before deciding to decrypt. |
+| `--save-to`  | no       | Filesystem path to write the decrypted plaintext to. Without this flag, prints metadata only — useful for inspecting multi-megabyte attachments before deciding to decrypt. |
 
 Output (metadata only — no `--save-to`):
 
 ```
-download-asset (metadata only — pass --save-to <path> to decrypt)
-  message_id:  <id>
-  room_id:     <room>@<domain>
-  filename:    <Asset.Original.name or —>
-  mime:        <Asset.Original.mime_type>
-  size_bytes:  <Asset.Original.size>
-  sender:      <qualified-user-id>
-  asset_id:    <Wire asset key>
-  asset_dom:   <Wire asset domain>
-  encryption:  AES_CBC | AES_GCM
+download-attachment (metadata only — pass --save-to <path> to decrypt)
+  message_id: <id>
+  room_id:    <room>@<domain>
+  filename:   <the sender's filename or —>
+  mime:       <mime type>
+  size_bytes: <plaintext size>
+  sender:     <qualified-user-id>
+  cached:     <path of the cached ciphertext or —>
 ```
 
 Output (`--save-to <path>` supplied):
 
 ```
-download-asset ok
+download-attachment ok
   message_id: <id>
   room_id:    <room>@<domain>
-  filename:   <Asset.Original.name>
-  mime:       <Asset.Original.mime_type>
-  size_bytes: <Asset.Original.size>
+  filename:   <the sender's filename or —>
+  mime:       <mime type>
+  size_bytes: <plaintext size>
   sender:     <qualified-user-id>
   saved_to:   <path>
 ```
 
 **Cache:** the encrypted ciphertext is downloaded once and cached
-at `~/.kupferdraht/<account_id>/assets/<message_id>.enc`; subsequent
+at `~/.kupferdraht/<account_id>/attachments/<message_id>.enc`; subsequent
 calls re-decrypt from the cache without re-hitting Wire.
 
 **Errors:**
-- `InvalidInput` — `encryption_algo = "AES_GCM"` (unsupported in
-  V1 per ADR-0011 §AES-GCM toleration); asset not in local
+- `InvalidInput` — the sender used AES-GCM (unsupported in
+  V1 per ADR-0011 §AES-GCM toleration); attachment not in local
   store; no store available (client built without `base_dir`).
 - `IntegrityCheck` — SHA-256 mismatch over the downloaded
   ciphertext. Suggests a tampered Wire `/v14/assets` response.
@@ -2277,15 +2274,15 @@ calls re-decrypt from the cache without re-hitting Wire.
 
 Step-10 learnings carryover §D + §E (see
 `docs/plan/archive/11-asset-content.md` §11e) flag two pre-flight tasks
-before exercising the asset pipeline against a live backend:
+before exercising the attachment pipeline against a live backend:
 
 1. **Counterpart sender available** — for the inbound round-trip
-   you need a second account that can emit an asset from an official Wire client
+   you need a second account that can emit an attachment from an official Wire client
    into a shared room. Without this you cannot validate the
    decrypt path end-to-end; outbound-only smoke is fine but
    doesn't pin the receive side.
 2. **Wire-Web still emits `AES_CBC`** — open Wire-Web DevTools →
-   Network → inspect a Wire-Web asset upload's MLS payload →
+   Network → inspect a Wire-Web attachment upload's MLS payload →
    confirm `Asset.RemoteData.encryption = 0` (AES_CBC). If it
    shows `1` (AES_GCM), Wire's deployed format has changed
    during Step 11's implementation window — stop and open a

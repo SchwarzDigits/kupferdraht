@@ -161,7 +161,7 @@ pub struct Client {
     /// is sufficient — registration is rare, every dispatch holds
     /// the lock just long enough to clone the `Vec`.
     event_handlers: Arc<StdMutex<Vec<Arc<dyn crate::sync::EventHandler>>>>,
-    /// Written avatar images by asset key and size (Step 144).
+    /// Written avatar images by image key and size (Step 144).
     avatar_cache: StdMutex<crate::avatar::cache::AvatarCache>,
     /// Registered timeline listeners (Step 6-II-a). Distinct from
     /// `event_handlers`: listeners observe `TimelineDiff`s after a
@@ -411,14 +411,24 @@ impl Client {
         self.cookie_label.as_deref()
     }
 
-    /// The per-account asset-cache directory
-    /// (`base/accounts/<id>/assets`) — the single source of the asset
+    /// The per-account attachment-cache directory
+    /// (`base/accounts/<id>/attachments`) — the single source of the attachment
     /// path, via [`KupferdrahtHome`]. `None` when the client was built
     /// without `base_dir` (in-memory test path).
-    pub(crate) fn assets_dir(&self) -> Option<std::path::PathBuf> {
+    pub(crate) fn attachments_dir(&self) -> Option<std::path::PathBuf> {
         self.kupferdraht_home
             .as_ref()
-            .map(|home| home.account_assets(self.user_id.as_str()))
+            .map(|home| home.account_attachments(self.user_id.as_str()))
+    }
+
+    /// Where this account's attachment cache was before Step 163b; `None`
+    /// without `base_dir`, like [`Self::attachments_dir`]. Native only, like
+    /// the start's sweep that removes it.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn former_attachments_dir(&self) -> Option<std::path::PathBuf> {
+        self.kupferdraht_home
+            .as_ref()
+            .map(|home| home.account_former_attachments(self.user_id.as_str()))
     }
 
     /// Crate-scoped accessor for the held `MlsClient` mutex. Returns

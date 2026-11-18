@@ -179,6 +179,10 @@ const PINNED_DIGESTS: &[(&str, &str)] = &[
         "V36__step_84_forget_deleted_files.sql",
         "f24197866578e1ac9b0569005d9ed4b725ab1ef0f900d3f1914a53fb20eeddbc",
     ),
+    (
+        "V37__step_163b_message_kind_names.sql",
+        "39cb32900ec84aafc35403cbda184ba8897eee74c0ecf126542a6760be7a19d3",
+    ),
 ];
 
 fn migrations_dir() -> PathBuf {

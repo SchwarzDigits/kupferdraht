@@ -20,7 +20,7 @@ use httpmock::Method::{DELETE, GET, POST};
 use httpmock::{Mock, MockServer};
 use kupferdraht::keystore::{InMemoryKeyStore, SecureKeyStore};
 use kupferdraht::storage::{AttachmentRecord, Store, TimelineEventRecord};
-use kupferdraht::{AssetSummary, Client, Kupferdraht, KupferdrahtError};
+use kupferdraht::{AttachmentSummary, Client, Kupferdraht, KupferdrahtError};
 
 mod common;
 
@@ -30,8 +30,8 @@ use common::drain_fixture::{self, BOB, DOMAIN, Fixture, Notif, room_id};
 const SELF: &str = "user-uuid@example.test";
 const SELF_DEVICE: &str = "new-client-id";
 const FILE_ID: &str = "msg-84-file";
-const ASSET_ID: &str = "3-2-asset-84";
-const ASSET_TOKEN: &str = "asset-token-84";
+const ATTACHMENT_ID: &str = "3-2-attachment-84";
+const ATTACHMENT_TOKEN: &str = "asset-token-84";
 
 fn bob() -> String {
     format!("{BOB}@{DOMAIN}")
@@ -45,7 +45,7 @@ fn file_row(message_id: &str, room_id: &str, sender: &str, device: &str) -> Time
         room_id: room_id.into(),
         sender_user_id: sender.into(),
         sender_device_id: device.into(),
-        kind: "asset".into(),
+        kind: "attachment".into(),
         body: "notes.txt".into(),
         sent_at_ms: 1,
         arrived_at_ms: 1,
@@ -62,11 +62,11 @@ fn attachment(message_id: &str, room_id: &str) -> AttachmentRecord {
         filename: Some("notes.txt".into()),
         size_bytes: 16,
         sha256: vec![0x84; 32],
-        otr_key_ct: vec![0x48; 32],
-        asset_id: ASSET_ID.into(),
-        asset_token: Some(ASSET_TOKEN.into()),
-        asset_domain: DOMAIN.into(),
-        encryption_algo: "AES_CBC".into(),
+        key_ct: vec![0x48; 32],
+        attachment_id: ATTACHMENT_ID.into(),
+        attachment_token: Some(ATTACHMENT_TOKEN.into()),
+        attachment_domain: DOMAIN.into(),
+        cipher: "AES_CBC".into(),
         cache_path: None,
         created_at_ms: 1,
     }
@@ -84,15 +84,15 @@ async fn seed_file(store: &dyn Store, message_id: &str, room_id: &str, sender: &
         .expect("seed the file row");
 }
 
-/// `<home>/accounts/<self>/assets` — the account's asset cache.
-fn assets_dir(home: &Path) -> PathBuf {
-    home.join("accounts").join(SELF).join("assets")
+/// `<home>/accounts/<self>/attachments` — the account's attachment cache.
+fn attachments_dir(home: &Path) -> PathBuf {
+    home.join("accounts").join(SELF).join("attachments")
 }
 
 /// A cached ciphertext of the fixture's file, recorded on its row.
 async fn cache_file(store: &dyn Store, home: &Path) -> PathBuf {
-    let dir = assets_dir(home);
-    std::fs::create_dir_all(&dir).expect("assets dir");
+    let dir = attachments_dir(home);
+    std::fs::create_dir_all(&dir).expect("attachments dir");
     let path = dir.join(format!("{FILE_ID}.enc"));
     std::fs::write(&path, b"ciphertext").expect("cache file");
     store
@@ -109,13 +109,13 @@ async fn file_row_of(fx: &Fixture) -> Option<AttachmentRecord> {
         .expect("attachment lookup")
 }
 
-async fn file_handle(fx: &Fixture) -> Option<AssetSummary> {
+async fn file_handle(fx: &Fixture) -> Option<AttachmentSummary> {
     let room = fx.client.room(&room_id()).await.expect("room joined");
     room.timeline()
         .expect("timeline")
-        .asset(FILE_ID)
+        .attachment(FILE_ID)
         .await
-        .expect("asset lookup")
+        .expect("attachment lookup")
 }
 
 // ---- the server ----
@@ -124,7 +124,7 @@ async fn file_handle(fx: &Fixture) -> Option<AssetSummary> {
 fn mount_server_delete(api: &MockServer, status: u16) -> Mock<'_> {
     api.mock(|when, then| {
         when.method(DELETE)
-            .path(format!("/v14/assets/{DOMAIN}/{ASSET_ID}"));
+            .path(format!("/v14/assets/{DOMAIN}/{ATTACHMENT_ID}"));
         then.status(status);
     })
 }
@@ -133,7 +133,7 @@ fn mount_server_delete(api: &MockServer, status: u16) -> Mock<'_> {
 fn mount_download(api: &MockServer) -> Mock<'_> {
     api.mock(|when, then| {
         when.method(GET)
-            .path(format!("/v14/assets/{DOMAIN}/{ASSET_ID}"));
+            .path(format!("/v14/assets/{DOMAIN}/{ATTACHMENT_ID}"));
         then.status(200)
             .header("content-type", "application/octet-stream")
             .body(vec![0u8; 48]);
@@ -240,7 +240,7 @@ async fn a_cached_copy_that_cannot_be_removed_does_not_fail_the_delete() {
     drain_fixture::mount_message_upload(&api);
     mount_server_delete(&api, 200);
     seed_file(fx.store.as_ref(), FILE_ID, &room_id(), SELF, SELF_DEVICE).await;
-    let blocked = assets_dir(fx._home.path()).join(format!("{FILE_ID}.enc"));
+    let blocked = attachments_dir(fx._home.path()).join(format!("{FILE_ID}.enc"));
     std::fs::create_dir_all(&blocked).expect("a directory where the file would be");
     std::fs::write(blocked.join("inside"), b"x").expect("not empty");
 
@@ -313,7 +313,7 @@ async fn a_handle_from_before_the_delete_refuses_to_download() {
         "got {err:?}"
     );
     download.assert_calls(0);
-    let cached = assets_dir(fx._home.path()).join(format!("{FILE_ID}.enc"));
+    let cached = attachments_dir(fx._home.path()).join(format!("{FILE_ID}.enc"));
     assert!(!cached.exists(), "nothing is cached again");
 }
 
@@ -341,7 +341,7 @@ async fn a_handle_from_before_the_delete_refuses_to_save() {
 // ---- a failed upload ----
 
 fn staged_files(home: &Path) -> Vec<PathBuf> {
-    std::fs::read_dir(assets_dir(home).join("staging"))
+    std::fs::read_dir(attachments_dir(home).join("staging"))
         .map(|dir| dir.map(|entry| entry.expect("entry").path()).collect())
         .unwrap_or_default()
 }
@@ -395,15 +395,15 @@ async fn login(app: &Kupferdraht, api: &MockServer) -> Arc<Client> {
     .expect("register device")
 }
 
-/// `(kept, orphan, staged)` in the account's asset cache: a file its row
+/// `(kept, orphan, staged)` in the account's attachment cache: a file its row
 /// names, one no row names, and a staged copy of an interrupted send.
 fn leftovers(home: &Path) -> (PathBuf, PathBuf, PathBuf) {
-    let dir = assets_dir(home);
-    std::fs::create_dir_all(dir.join("staging")).expect("assets dir");
+    let dir = attachments_dir(home);
+    std::fs::create_dir_all(dir.join("staging")).expect("attachments dir");
     let files = (
         dir.join("kept-file.enc"),
         dir.join("orphan-file.enc"),
-        dir.join("staging").join("asset-0123.enc"),
+        dir.join("staging").join("attachment-0123.enc"),
     );
     for path in [&files.0, &files.1, &files.2] {
         std::fs::write(path, b"ciphertext").expect("a cached file");
@@ -438,6 +438,36 @@ async fn a_start_removes_what_no_row_names_and_keeps_the_rest() {
     assert!(
         !staged.exists(),
         "a staged copy of an interrupted send goes"
+    );
+}
+
+/// The cache directory an account had before Step 163b, beside today's: no
+/// sweep and no delete for everyone reaches its files any more, so a start
+/// removes it whole, staged copies included. A row that still names a file
+/// there downloads it again when asked.
+#[tokio::test]
+async fn a_start_removes_the_cache_directory_of_an_earlier_release() {
+    let api = MockServer::start();
+    common::mount_full_login_flow(&api);
+    let home = tempfile::tempdir().expect("home");
+    let app = open_app(home.path());
+    let client = login(&app, &api).await;
+    let former = home.path().join("accounts").join(SELF).join("assets");
+    std::fs::create_dir_all(former.join("staging")).expect("the former cache");
+    for path in [
+        former.join("kept-file.enc"),
+        former.join("staging").join("0123.enc"),
+    ] {
+        std::fs::write(path, b"ciphertext").expect("a formerly cached file");
+    }
+    drop(client);
+
+    let _resumed = app.resume(SELF).await.expect("resume");
+
+    assert!(!former.exists(), "the former cache directory goes");
+    assert!(
+        home.path().join("accounts").join(SELF).exists(),
+        "the account's directory stays"
     );
 }
 

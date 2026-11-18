@@ -5,13 +5,13 @@
 //! Step 80 — inbound-id path hardening.
 //!
 //! The envelope `message_id` is PEER-controlled and reaches the
-//! filesystem (asset cache `<id>.enc`, `asset_receive.rs`). The
+//! filesystem (attachment cache `<id>.enc`, `attachment_receive.rs`). The
 //! dispatch boundary must discard a path-unsafe id like any other
 //! malformed envelope (log-and-discard — never a hard error that
 //! aborts the drain, never an assert: runtime data). Path-site
 //! guards and the `UserId::parse` charset are pinned as unit tests
 //! next to their code (`storage/home.rs`, `identity/mod.rs`,
-//! `timeline/asset_receive.rs`).
+//! `timeline/attachment_receive.rs`).
 //!
 //! Fixtures mirror `step_72b_case_fold.rs`: the client is welcomed
 //! into a fixture peer's group; inbound payloads are hand-emitted
@@ -314,7 +314,7 @@ async fn open_default_store_refuses_path_unsafe_account_ids() {
 /// hostile id ALREADY persisted (a row predating the boundary check,
 /// or a future dispatch path that forgets it), the download path
 /// refuses before any filesystem write — nothing appears outside the
-/// account layout, no `assets/` directory is even created.
+/// account layout, no `attachments/` directory is even created.
 #[tokio::test]
 async fn download_with_persisted_hostile_id_writes_nothing() {
     let server = MockServer::start();
@@ -354,7 +354,7 @@ async fn download_with_persisted_hostile_id_writes_nothing() {
             room_id: room_id.clone(),
             sender_user_id: format!("{BOB}@{DOMAIN}"),
             sender_device_id: "bobdev01".into(),
-            kind: "asset".into(),
+            kind: "attachment".into(),
             body: "x.bin".into(),
             sent_at_ms: 1,
             arrived_at_ms: 1,
@@ -363,7 +363,7 @@ async fn download_with_persisted_hostile_id_writes_nothing() {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: None,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         })
         .await
         .expect("seed hostile timeline row");
@@ -375,11 +375,11 @@ async fn download_with_persisted_hostile_id_writes_nothing() {
             filename: Some("x.bin".into()),
             size_bytes: 4,
             sha256: vec![0u8; 32],
-            otr_key_ct: vec![0u8; 32],
-            asset_id: "asset-1".into(),
-            asset_token: None,
-            asset_domain: DOMAIN.into(),
-            encryption_algo: "AES_CBC".into(),
+            key_ct: vec![0u8; 32],
+            attachment_id: "attachment-1".into(),
+            attachment_token: None,
+            attachment_domain: DOMAIN.into(),
+            cipher: "AES_CBC".into(),
             cache_path: None,
             created_at_ms: 1,
         })
@@ -389,9 +389,9 @@ async fn download_with_persisted_hostile_id_writes_nothing() {
     let room = client.room(&room_id).await.expect("room cached");
     let timeline = room.timeline().expect("timeline");
     let summary = timeline
-        .asset(hostile_id)
+        .attachment(hostile_id)
         .await
-        .expect("asset lookup")
+        .expect("attachment lookup")
         .expect("seeded row found");
     let err = summary
         .download()
@@ -401,7 +401,7 @@ async fn download_with_persisted_hostile_id_writes_nothing() {
         matches!(err, kupferdraht::KupferdrahtError::InvalidInput(_)),
         "expected InvalidInput, got {err:?}"
     );
-    // Nothing was written: no assets/ dir, no artifact anywhere in
+    // Nothing was written: no attachments/ dir, no artifact anywhere in
     // the home carrying the hostile name.
     let mut pending = vec![dir.path().to_path_buf()];
     while let Some(p) = pending.pop() {
@@ -409,7 +409,7 @@ async fn download_with_persisted_hostile_id_writes_nothing() {
             let path = entry.expect("entry").path();
             let name = path.file_name().unwrap_or_default().to_string_lossy();
             assert!(
-                !name.contains("hostile") && name != "assets",
+                !name.contains("hostile") && name != "attachments",
                 "unexpected artifact {path:?}"
             );
             if path.is_dir() {

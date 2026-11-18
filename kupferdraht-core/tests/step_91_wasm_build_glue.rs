@@ -322,14 +322,14 @@ fn fixture_event(message_id: &str, body: &str, expires_at_ms: Option<i64>) -> Ti
         edited_at_ms: None,
         redacted_at_ms: None,
         expires_at_ms,
-        ephemeral_ttl_ms: None,
+        ttl_ms: None,
     }
 }
 
 /// One-time fixture generation (`cargo test -p kupferdraht-core --test
 /// step_91_wasm_build_glue generate_step_91_fixture -- --ignored`): the
 /// production store writes a session and two timeline rows — one plain,
-/// one ephemeral whose timer elapsed long ago (the browser's Step-89 sweep
+/// one disappearing message whose timer elapsed long ago (the browser's Step-89 sweep
 /// retires it) — then switches to a rollback journal and closes cleanly.
 /// Regenerating changes the bytes (random per-page nonces); commit once.
 #[tokio::test]
@@ -349,12 +349,12 @@ async fn generate_step_91_fixture() {
         .expect("insert plain row");
     store
         .insert_timeline_event(&fixture_event(
-            "m-ephemeral",
+            "m-disappearing",
             "vanishes in the browser",
             Some(1_700_000_060_000),
         ))
         .await
-        .expect("insert ephemeral row");
+        .expect("insert disappearing row");
     let mode: String = store
         .lock()
         .expect("lock")

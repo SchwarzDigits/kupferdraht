@@ -134,9 +134,9 @@ pub struct TimelineItem {
     pub delivered_to: Vec<String>,
     /// Whether the item was sent locally or arrived via sync.
     pub delivery_status: DeliveryStatus,
-    /// Wall-clock at which this item's ephemeral timer elapses
-    /// (Wire's `Ephemeral` wrapper, field 18) — `Some` only for a
-    /// self-deleting message; `None` for every ordinary item. The
+    /// Wall-clock at which this item's disappearing timer elapses —
+    /// `Some` only for a disappearing message; `None` for every ordinary
+    /// item. The
     /// timer starts at dispatch/send (`sent_at_ms + ttl`); the
     /// row self-redacts locally once it passes (`kind` becomes
     /// [`TimelineItemKind::Redacted`], the stamp stays so an expiry
@@ -161,10 +161,10 @@ pub enum TimelineItemKind {
     /// / `summary.save_to(path)` to materialise plaintext bytes.
     /// Step 11g (ADR-0011). Boxed to keep the enum's stack-size
     /// compact next to the cheap `Text { ... }` variant.
-    Asset(Box<crate::timeline::AssetSummary>),
-    /// A nudge / "ping" (`Knock`). `hot_knock` marks a repeat nudge.
+    Attachment(Box<crate::timeline::AttachmentSummary>),
+    /// A ping; `repeated` marks one sent again to insist.
     /// Step 26.
-    Knock { hot_knock: bool },
+    Ping { repeated: bool },
     /// A shared map point (`Location`). Step 26.
     Location {
         latitude: f32,
@@ -176,7 +176,7 @@ pub enum TimelineItemKind {
     /// message (Step 72b, ADR-0018). Consumers render a "case
     /// updated" line or hide it; the folded room state comes from
     /// `Room::case()`, not from summing timeline items. Boxed like
-    /// `Asset`/`Task` to keep the enum compact.
+    /// `Attachment`/`Task` to keep the enum compact.
     Case(Box<crate::timeline::CaseSnapshot>),
     /// Full state of one task (`TaskPayload`, ADR-0014). Boxed to keep
     /// the enum stack-compact next to the cheap `Text` variant. Step 60a.
@@ -198,14 +198,14 @@ pub enum TimelineItemKind {
     RoomCreated { name: Option<String> },
 }
 
-/// Swap a `kind = "asset"` item's degraded Text placeholder for the
-/// real [`TimelineItemKind::Asset`] when its attachments-table row is
-/// available — the record alone cannot carry the asset metadata.
+/// Swap a `kind = "attachment"` item's degraded Text placeholder for the
+/// real [`TimelineItemKind::Attachment`] when its attachments-table row is
+/// available — the record alone cannot carry the attachment metadata.
 /// Redacted items keep their tombstone. Shared by `Client::messages`,
 /// the dispatch Append path, and `emit_message_update_at` (Step 65,
 /// review S5 — previously only `Client::messages` reconstructed, so
-/// live diffs degraded assets to Text).
-pub(crate) fn reconstruct_asset_kind(
+/// live diffs degraded attachments to Text).
+pub(crate) fn reconstruct_attachment_kind(
     item: &mut TimelineItem,
     attachment_rows: &[crate::storage::AttachmentRecord],
     client: &std::sync::Weak<crate::client::Client>,
@@ -217,12 +217,12 @@ pub(crate) fn reconstruct_asset_kind(
         .iter()
         .find(|a| a.message_id == item.item_id)
     {
-        let summary = crate::timeline::AssetSummary::from_attachment(
+        let summary = crate::timeline::AttachmentSummary::from_attachment(
             attachment.clone(),
             item.sender_user_id.clone(),
             client.clone(),
         );
-        item.kind = TimelineItemKind::Asset(Box::new(summary));
+        item.kind = TimelineItemKind::Attachment(Box::new(summary));
     }
 }
 
@@ -345,12 +345,12 @@ impl TimelineItem {
     /// only the plain-text happy path; later sub-steps will read
     /// additional columns / aggregates.
     /// Build a fully-hydrated item from a record plus its overlay
-    /// rows: mentions land in the `Text` kind, `kind = "asset"` rows
-    /// are reconstructed into [`TimelineItemKind::Asset`] from the
+    /// rows: mentions land in the `Text` kind, `kind = "attachment"` rows
+    /// are reconstructed into [`TimelineItemKind::Attachment`] from the
     /// attachments table (Step 65, review S5/S10 — previously only
     /// `Client::messages` applied these overlays, so live
-    /// `TimelineDiff`s degraded assets to Text and dropped mentions).
-    /// `client` backs the asset summary's lazy download handle; tests
+    /// `TimelineDiff`s degraded attachments to Text and dropped mentions).
+    /// `client` backs the attachment summary's lazy download handle; tests
     /// pass `Weak::new()`.
     pub(crate) fn hydrated(
         record: TimelineEventRecord,
@@ -359,10 +359,10 @@ impl TimelineItem {
         client: &std::sync::Weak<crate::client::Client>,
     ) -> Self {
         let mut item = Self::from_record(record);
-        // Asset reconstruction first: a `kind = "asset"` record
+        // Attachment reconstruction first: a `kind = "attachment"` record
         // degrades to Text in `from_record`, and the mention overlay
         // below must not touch that placeholder.
-        reconstruct_asset_kind(&mut item, attachments, client);
+        reconstruct_attachment_kind(&mut item, attachments, client);
         if let TimelineItemKind::Text { mentions: slot, .. } = &mut item.kind {
             *slot = mentions
                 .iter()
@@ -408,9 +408,9 @@ fn kind_from_record(record: &TimelineEventRecord) -> TimelineItemKind {
         return TimelineItemKind::Redacted;
     }
     let decoded = match record.kind.as_str() {
-        // Step 26: the packed body is the `hot_knock` flag.
-        "knock" => Some(TimelineItemKind::Knock {
-            hot_knock: record.body == "true",
+        // Step 26: the packed body is the `repeated` flag.
+        "ping" => Some(TimelineItemKind::Ping {
+            repeated: record.body == "true",
         }),
         // Step 26: the JSON coordinates.
         "location" => location_kind_from_body(&record.body),
@@ -481,7 +481,7 @@ mod tests {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: None,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         }
     }
 
@@ -523,7 +523,7 @@ mod tests {
 
     #[test]
     fn from_record_carries_expires_at_ms_through_live_and_tombstoned_rows() {
-        // Step 89: the ephemeral stamp is a decoration on the item,
+        // Step 89: the disappearing stamp is a decoration on the item,
         // present on the live Text and on the tombstone alike.
         let mut live = sample_record("msg-eph", "blink", 1000);
         live.expires_at_ms = Some(61_000);
@@ -590,14 +590,14 @@ mod tests {
     }
 
     #[test]
-    fn from_record_parses_knock_body_into_knock_kind() {
+    fn from_record_parses_ping_body_into_ping_kind() {
         for (raw, hot) in [("true", true), ("false", false)] {
-            let mut rec = sample_record("msg-knock", raw, 1000);
-            rec.kind = "knock".into();
+            let mut rec = sample_record("msg-ping", raw, 1000);
+            rec.kind = "ping".into();
             let item = TimelineItem::from_record(rec);
             match item.kind {
-                TimelineItemKind::Knock { hot_knock } => assert_eq!(hot_knock, hot),
-                other => panic!("knock record must produce Knock, got {other:?}"),
+                TimelineItemKind::Ping { repeated } => assert_eq!(repeated, hot),
+                other => panic!("ping record must produce Ping, got {other:?}"),
             }
         }
     }
@@ -719,15 +719,15 @@ mod tests {
     }
 
     #[test]
-    fn hydrated_reconstructs_asset_kind_from_attachment_rows() {
-        // Step 65 (review S5): a `kind = "asset"` row must come back
-        // as an Asset item when its attachment row is supplied — the
+    fn hydrated_reconstructs_attachment_kind_from_attachment_rows() {
+        // Step 65 (review S5): a `kind = "attachment"` row must come back
+        // as an Attachment item when its attachment row is supplied — the
         // live-diff paths previously degraded it to Text.
         let record = TimelineEventRecord {
             message_id: "m1".into(),
             room_id: "r1".into(),
             sender_user_id: "alice@example.test".into(),
-            kind: "asset".into(),
+            kind: "attachment".into(),
             body: "file.pdf".into(),
             delivery_status: "received".into(),
             ..TimelineEventRecord::default()
@@ -746,8 +746,8 @@ mod tests {
             &[attachment],
             &std::sync::Weak::<crate::client::Client>::new(),
         );
-        let TimelineItemKind::Asset(summary) = item.kind else {
-            panic!("expected Asset kind, got {:?}", item.kind);
+        let TimelineItemKind::Attachment(summary) = item.kind else {
+            panic!("expected Attachment kind, got {:?}", item.kind);
         };
         assert_eq!(summary.mime_type, "application/pdf");
     }

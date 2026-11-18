@@ -41,7 +41,7 @@ pub enum TaskPriority {
 
 /// The folded, consumer-facing state of one task — carried by
 /// [`TimelineItemKind::Task`] (boxed to keep the enum stack-compact
-/// next to the cheap `Text` variant, like `Asset`).
+/// next to the cheap `Text` variant, like `Attachment`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskItem {
     /// Stable identity (UUID) — deliberately NOT the `message_id`.

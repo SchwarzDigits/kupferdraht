@@ -312,7 +312,7 @@ impl HttpClient {
     ///
     /// Returns the byte count actually written to `sink_path`.
     /// Caller is responsible for verifying SHA-256 over the file
-    /// before decrypting (see [`crate::encryption::asset_crypto`]).
+    /// before decrypting (see [`crate::encryption::attachment_crypto`]).
     ///
     /// # Errors
     /// * `BackendRejected` on non-2xx (`404 not-found` when the

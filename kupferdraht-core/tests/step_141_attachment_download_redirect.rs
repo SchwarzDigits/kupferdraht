@@ -5,11 +5,11 @@
 //! Step 141 — a received file downloads through the backend's redirect.
 //!
 //! Wire answers `GET /v14/assets/{domain}/{id}` with `302` to a pre-signed
-//! URL on the asset store; the bytes never come from the API host. These
-//! tests take the consumer's path (`Timeline::asset` → `download` /
+//! URL on the attachment store; the bytes never come from the API host. These
+//! tests take the consumer's path (`Timeline::attachment` → `download` /
 //! `save_to`) against an API mock that redirects to a second mock server.
 //! The transport rules of the hop (one hop, no credentials, the scheme
-//! check) are unit tests next to the code (`wire/http/asset_redirect*.rs`).
+//! check) are unit tests next to the code (`wire/http/attachment_redirect*.rs`).
 //! Integrity stays with the digest in the MLS message (ADR-0011): a hop
 //! that serves other bytes fails `IntegrityCheck`, it never substitutes.
 
@@ -27,8 +27,8 @@ mod common;
 use common::drain_fixture::{self, BOB, DOMAIN, room_id};
 
 const MESSAGE_ID: &str = "msg-141-file";
-const ASSET_ID: &str = "3-2-asset-141";
-const ASSET_TOKEN: &str = "asset-token-141";
+const ATTACHMENT_ID: &str = "3-2-attachment-141";
+const ATTACHMENT_TOKEN: &str = "asset-token-141";
 const KEY: [u8; 32] = [0x41; 32];
 const IV: [u8; 16] = [0x14; 16];
 const PLAINTEXT: &[u8] = b"the file bob sent, fetched from the asset store";
@@ -53,7 +53,7 @@ async fn seed_received_file(store: &dyn kupferdraht::storage::Store, blob: &[u8]
             room_id: room_id(),
             sender_user_id: format!("{BOB}@{DOMAIN}"),
             sender_device_id: "bobdev01".into(),
-            kind: "asset".into(),
+            kind: "attachment".into(),
             body: "notes.txt".into(),
             sent_at_ms: 1,
             arrived_at_ms: 1,
@@ -70,11 +70,11 @@ async fn seed_received_file(store: &dyn kupferdraht::storage::Store, blob: &[u8]
             filename: Some("notes.txt".into()),
             size_bytes: PLAINTEXT.len() as u64,
             sha256: Sha256::digest(blob).to_vec(),
-            otr_key_ct: KEY.to_vec(),
-            asset_id: ASSET_ID.into(),
-            asset_token: Some(ASSET_TOKEN.into()),
-            asset_domain: DOMAIN.into(),
-            encryption_algo: "AES_CBC".into(),
+            key_ct: KEY.to_vec(),
+            attachment_id: ATTACHMENT_ID.into(),
+            attachment_token: Some(ATTACHMENT_TOKEN.into()),
+            attachment_domain: DOMAIN.into(),
+            cipher: "AES_CBC".into(),
             cache_path: None,
             created_at_ms: 1,
         })
@@ -82,25 +82,25 @@ async fn seed_received_file(store: &dyn kupferdraht::storage::Store, blob: &[u8]
         .expect("seed the attachment row");
 }
 
-/// The API host answers the download with `302` to `asset_store`.
+/// The API host answers the download with `302` to `attachment_store`.
 fn mount_redirecting_download<'a>(
     api: &'a MockServer,
-    asset_store: &MockServer,
+    attachment_store: &MockServer,
 ) -> httpmock::Mock<'a> {
-    let location = asset_store.url(format!("/wire-assets/v3/otr/{ASSET_ID}?{SIGNATURE}"));
+    let location = attachment_store.url(format!("/bucket/{ATTACHMENT_ID}?{SIGNATURE}"));
     api.mock(|when, then| {
         when.method(GET)
-            .path(format!("/v14/assets/{DOMAIN}/{ASSET_ID}"))
-            .header("asset-token", ASSET_TOKEN);
+            .path(format!("/v14/assets/{DOMAIN}/{ATTACHMENT_ID}"))
+            .header("asset-token", ATTACHMENT_TOKEN);
         then.status(302).header("location", location);
     })
 }
 
-/// The asset store serves `blob` at the pre-signed path.
-fn mount_asset_store<'a>(asset_store: &'a MockServer, blob: &[u8]) -> httpmock::Mock<'a> {
-    asset_store.mock(|when, then| {
+/// The attachment store serves `blob` at the pre-signed path.
+fn mount_attachment_store<'a>(attachment_store: &'a MockServer, blob: &[u8]) -> httpmock::Mock<'a> {
+    attachment_store.mock(|when, then| {
         when.method(GET)
-            .path(format!("/wire-assets/v3/otr/{ASSET_ID}"))
+            .path(format!("/bucket/{ATTACHMENT_ID}"))
             .query_param("X-Amz-Signature", "sig141");
         then.status(200)
             .header("content-type", "application/octet-stream")
@@ -108,25 +108,25 @@ fn mount_asset_store<'a>(asset_store: &'a MockServer, blob: &[u8]) -> httpmock::
     })
 }
 
-async fn received_file(fx: &drain_fixture::Fixture) -> kupferdraht::AssetSummary {
+async fn received_file(fx: &drain_fixture::Fixture) -> kupferdraht::AttachmentSummary {
     let room = fx.client.room(&room_id()).await.expect("room joined");
     room.timeline()
         .expect("timeline")
-        .asset(MESSAGE_ID)
+        .attachment(MESSAGE_ID)
         .await
-        .expect("asset lookup")
+        .expect("attachment lookup")
         .expect("the seeded file")
 }
 
 #[tokio::test]
 async fn a_received_file_downloads_through_the_redirect() {
     let api = MockServer::start();
-    let asset_store = MockServer::start();
+    let attachment_store = MockServer::start();
     let fx = drain_fixture::joined_client(&api).await;
     let blob = encrypt(PLAINTEXT);
     seed_received_file(fx.store.as_ref(), &blob).await;
-    let redirect = mount_redirecting_download(&api, &asset_store);
-    let bytes = mount_asset_store(&asset_store, &blob);
+    let redirect = mount_redirecting_download(&api, &attachment_store);
+    let bytes = mount_attachment_store(&attachment_store, &blob);
 
     let plaintext = received_file(&fx)
         .await
@@ -142,12 +142,12 @@ async fn a_received_file_downloads_through_the_redirect() {
 #[tokio::test]
 async fn a_received_file_saves_through_the_redirect() {
     let api = MockServer::start();
-    let asset_store = MockServer::start();
+    let attachment_store = MockServer::start();
     let fx = drain_fixture::joined_client(&api).await;
     let blob = encrypt(PLAINTEXT);
     seed_received_file(fx.store.as_ref(), &blob).await;
-    mount_redirecting_download(&api, &asset_store);
-    mount_asset_store(&asset_store, &blob);
+    mount_redirecting_download(&api, &attachment_store);
+    mount_attachment_store(&attachment_store, &blob);
     let dest = tempfile::tempdir().expect("tempdir");
     let path = dest.path().join("notes.txt");
 
@@ -165,12 +165,12 @@ async fn a_received_file_saves_through_the_redirect() {
 #[tokio::test]
 async fn other_bytes_behind_the_redirect_fail_the_digest() {
     let api = MockServer::start();
-    let asset_store = MockServer::start();
+    let attachment_store = MockServer::start();
     let fx = drain_fixture::joined_client(&api).await;
     seed_received_file(fx.store.as_ref(), &encrypt(PLAINTEXT)).await;
-    mount_redirecting_download(&api, &asset_store);
+    mount_redirecting_download(&api, &attachment_store);
     let substitute = encrypt(b"a file the sender never sent");
-    let bytes = mount_asset_store(&asset_store, &substitute);
+    let bytes = mount_attachment_store(&attachment_store, &substitute);
 
     let err = received_file(&fx)
         .await

@@ -127,7 +127,7 @@ mod tests {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: None,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         }
     }
 
@@ -149,11 +149,11 @@ mod tests {
             filename: Some("cat.png".into()),
             size_bytes: 3,
             sha256: vec![1; 32],
-            otr_key_ct: vec![2; 32],
-            asset_id: "3-1-asset".into(),
-            asset_token: None,
-            asset_domain: "wire.test".into(),
-            encryption_algo: "AES_CBC".into(),
+            key_ct: vec![2; 32],
+            attachment_id: "3-1-attachment".into(),
+            attachment_token: None,
+            attachment_domain: "wire.test".into(),
+            cipher: "AES_CBC".into(),
             cache_path: None,
             created_at_ms: 1_000,
         }
@@ -244,30 +244,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_asset_row_and_its_attachment_are_one_write() {
+    async fn an_attachment_event_and_its_attachment_row_are_one_write() {
         let (_dir, store) = fresh_store();
-        let asset = row("m-asset", "asset", "cat.png");
+        let event = row("m-attachment", "attachment", "cat.png");
         fail_inserts_into(&store, "attachments");
 
         let failed = store
-            .insert_timeline_event_with_attachment(&asset, &attachment("m-asset"))
+            .insert_timeline_event_with_attachment(&event, &attachment("m-attachment"))
             .await;
         assert!(failed.is_err(), "the injected failure surfaces: {failed:?}");
         assert!(
-            !row_exists(&store, "m-asset").await,
+            !row_exists(&store, "m-attachment").await,
             "the row is rolled back"
         );
 
         heal(&store, "attachments");
         assert!(
             store
-                .insert_timeline_event_with_attachment(&asset, &attachment("m-asset"))
+                .insert_timeline_event_with_attachment(&event, &attachment("m-attachment"))
                 .await
                 .expect("retry")
         );
         assert!(
             store
-                .get_attachment("m-asset", ROOM)
+                .get_attachment("m-attachment", ROOM)
                 .await
                 .expect("load")
                 .is_some(),

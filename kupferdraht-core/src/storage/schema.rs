@@ -314,4 +314,38 @@ mod tests {
             .expect("ids");
         assert_eq!(left, ["live"], "the deleted message's file is forgotten");
     }
+
+    /// Step 163b: a database written before the rename stores Wire's names as
+    /// the kinds of pings and attachments; migrating it rewrites them to the
+    /// current names, and every other kind stays as it is.
+    #[test]
+    fn the_migration_renames_the_stored_kinds_of_pings_and_attachments() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        embedded::migrations::runner()
+            .set_grouped(true)
+            .set_target(refinery::Target::Version(36))
+            .run(&mut conn)
+            .expect("the schema before Step 163b");
+        for (message_id, stored_kind) in [("a", "asset"), ("p", "knock"), ("t", "text")] {
+            conn.execute(
+                "INSERT INTO timeline_events (message_id, room_id, sender_user_id, \
+                 sender_device_id, kind, body, sent_at_ms, delivery_status) \
+                 VALUES (?1, 'r@example.test', 'u@example.test', 'dev', ?2, '', 1000, \
+                 'received')",
+                [message_id, stored_kind],
+            )
+            .expect("a stored message");
+        }
+
+        run_migrations(&mut conn).expect("migrated forward");
+
+        let kinds: Vec<String> = conn
+            .prepare("SELECT message_id || '=' || kind FROM timeline_events ORDER BY message_id")
+            .expect("query")
+            .query_map([], |row| row.get(0))
+            .expect("rows")
+            .collect::<Result<_, _>>()
+            .expect("kinds");
+        assert_eq!(kinds, ["a=attachment", "p=ping", "t=text"]);
+    }
 }

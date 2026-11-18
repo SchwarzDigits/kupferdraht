@@ -1177,21 +1177,21 @@ impl Client {
         js_view::to_js(&resend::summary_view(&summary, stop_name))
     }
 
-    /// Send a knock ("ping") to `roomId` (Step 98c). `hotKnock` marks a
-    /// repeat nudge. `options` is `{ idempotencyKey?: string }`
+    /// Send a ping to `roomId` (Step 98c). `repeated` marks a ping sent
+    /// again to insist. `options` is `{ idempotencyKey?: string }`
     /// (`SendOptions`, Step 130a): the same key answers the first call's
     /// outcome. Returns `{ messageId, sentAtMs, idempotencyKey }`.
-    #[wasm_bindgen(js_name = sendKnock)]
-    pub async fn send_knock(
+    #[wasm_bindgen(js_name = sendPing)]
+    pub async fn send_ping(
         &self,
         room_id: String,
-        hot_knock: bool,
+        repeated: bool,
         options: JsValue,
     ) -> Result<JsValue, JsValue> {
         let key = idempotency_key(&options)?;
         let timeline = self.timeline_for(&room_id).await?;
         let handle = timeline
-            .send_keyed(key.clone(), OutgoingContent::Knock { hot_knock })
+            .send_keyed(key.clone(), OutgoingContent::Ping { repeated })
             .await
             .map_err(|e| to_js(&e))?;
         keyed_handle_to_js(&handle, &key)
@@ -1706,7 +1706,7 @@ impl Client {
             .map_err(|e| to_js(&e))
     }
 
-    /// Send `bytes` as an encrypted file/image asset to `roomId` (W7, in-memory).
+    /// Send `bytes` as an encrypted file/image attachment to `roomId` (W7, in-memory).
     /// `options` is `{ idempotencyKey?: string }` (`SendOptions`, Step
     /// 130a): one key per file; the same key answers the first call's
     /// outcome without a second upload. Returns `{ messageId, sentAtMs,
@@ -1734,10 +1734,10 @@ impl Client {
         keyed_handle_to_js(&handle, &key)
     }
 
-    /// Download + decrypt the asset attached to `itemId` in `roomId`, returning
+    /// Download + decrypt the attachment of `itemId` in `roomId`, returning
     /// the plaintext bytes (W7). Verifies SHA-256 before returning.
-    #[wasm_bindgen(js_name = downloadAsset)]
-    pub async fn download_asset(
+    #[wasm_bindgen(js_name = downloadAttachment)]
+    pub async fn download_attachment(
         &self,
         room_id: String,
         item_id: String,
@@ -1754,12 +1754,14 @@ impl Client {
         let summary = items
             .iter()
             .find_map(|it| match &it.kind {
-                crate::timeline::TimelineItemKind::Asset(s) if it.item_id == item_id => {
+                crate::timeline::TimelineItemKind::Attachment(s) if it.item_id == item_id => {
                     Some(s.as_ref())
                 }
                 _ => None,
             })
-            .ok_or_else(|| named_error("InvalidInput", &format!("no asset for item {item_id}")))?;
+            .ok_or_else(|| {
+                named_error("InvalidInput", &format!("no attachment for item {item_id}"))
+            })?;
         summary.download().await.map_err(|e| to_js(&e))
     }
 }
@@ -1969,7 +1971,7 @@ struct KeyedMessageHandleView {
 }
 
 /// Plain, JS-serializable projection of a `TimelineItem` — like `ffi`'s twin,
-/// this strips the non-serializable boxed asset payload. Text bodies come
+/// this strips the non-serializable boxed attachment payload. Text bodies come
 /// through directly; other kinds carry `body: None` + a `kind` label.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1986,17 +1988,17 @@ struct TimelineItemView {
     reactions: Vec<ReactionView>,
     edited: bool,
     redacted: bool,
-    /// Present for `kind == "asset"` — the file metadata; download the bytes via
-    /// `Client.downloadAsset(roomId, itemId)`.
-    asset: Option<AssetMeta>,
-    /// Step 89: set only for a self-deleting message (ms since Unix epoch).
+    /// Present for `kind == "attachment"` — the file metadata; download the bytes via
+    /// `Client.downloadAttachment(roomId, itemId)`.
+    attachment: Option<AttachmentMeta>,
+    /// Step 89: set only for a disappearing message (ms since Unix epoch).
     expires_at_ms: Option<i64>,
     /// Step 98c: `"sending" | "submitted" | "received" | "failed"` — whether
     /// the item was sent locally and how far it got, or arrived via sync.
     /// Without it a UI cannot tell a sent message from a failed one.
     delivery_status: &'static str,
-    /// Present for `kind == "knock"` — whether it was a repeat nudge.
-    hot_knock: Option<bool>,
+    /// Present for `kind == "ping"` — whether the ping was repeated.
+    repeated: Option<bool>,
     /// Present for `kind == "location"` — the shared map point.
     location: Option<LocationView>,
     /// Present for `kind == "membership_change"` (Step 145): `"joined" |
@@ -2032,10 +2034,10 @@ struct ReactionView {
     is_self: bool,
 }
 
-/// File metadata for an asset timeline item.
+/// File metadata for an attachment timeline item.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct AssetMeta {
+struct AttachmentMeta {
     filename: Option<String>,
     mime: String,
     size: f64,
@@ -2048,19 +2050,19 @@ impl TimelineItemView {
     #[allow(clippy::cast_precision_loss)]
     fn project(it: &crate::timeline::TimelineItem, me: Option<&str>) -> Self {
         use crate::timeline::TimelineItemKind as K;
-        let mut asset = None;
+        let mut attachment = None;
         let (kind, body, reply_to) = match &it.kind {
             K::Text { body, reply_to, .. } => ("text", Some(body.clone()), reply_to.clone()),
             K::Redacted => ("redacted", None, None),
-            K::Asset(s) => {
-                asset = Some(AssetMeta {
+            K::Attachment(s) => {
+                attachment = Some(AttachmentMeta {
                     filename: s.filename.clone(),
                     mime: s.mime_type.clone(),
                     size: s.size_bytes as f64,
                 });
-                ("asset", None, None)
+                ("attachment", None, None)
             }
-            K::Knock { .. } => ("knock", None, None),
+            K::Ping { .. } => ("ping", None, None),
             K::Location { .. } => ("location", None, None),
             // Task (Step 60a) and Case (Step 72b) render as bare kind
             // markers in the JS view for now — the in-flight WASM
@@ -2078,7 +2080,7 @@ impl TimelineItemView {
             K::RoomCreated { .. } => ("room_created", None, None),
         };
         // Step 98c: the two variants the projection used to flatten away.
-        let (hot_knock, location) = knock_and_location(&it.kind);
+        let (repeated, location) = ping_and_location(&it.kind);
         let room_event = room_event_fields(&it.kind);
         let reactions = it
             .reactions
@@ -2100,9 +2102,9 @@ impl TimelineItemView {
             reactions,
             edited: it.edited_at_ms.is_some(),
             redacted: it.redacted,
-            asset,
+            attachment,
             expires_at_ms: it.expires_at_ms,
-            hot_knock,
+            repeated,
             location,
             change: room_event.change,
             actor: room_event.actor,
@@ -2144,14 +2146,14 @@ fn room_event_fields(kind: &crate::timeline::TimelineItemKind) -> RoomEventField
     }
 }
 
-/// The payload of a knock or a location item (Step 98c); `(None, None)`
+/// The payload of a ping or a location item (Step 98c); `(None, None)`
 /// for every other kind.
-fn knock_and_location(
+fn ping_and_location(
     kind: &crate::timeline::TimelineItemKind,
 ) -> (Option<bool>, Option<LocationView>) {
     use crate::timeline::TimelineItemKind as K;
     match kind {
-        K::Knock { hot_knock } => (Some(*hot_knock), None),
+        K::Ping { repeated } => (Some(*repeated), None),
         K::Location {
             latitude,
             longitude,

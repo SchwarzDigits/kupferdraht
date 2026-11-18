@@ -6,7 +6,7 @@
 //! The thin `self.http` forwarding slice of the `Client` runtime
 //! (Step 29): crate-private helpers that wrap a single Wire endpoint
 //! each (`http_send`, `http_list_clients`, `http_fetch_notifications`,
-//! `http_upload_asset`, …) so the timeline / device / sync modules do
+//! `http_upload_attachment`, …) so the timeline / device / sync modules do
 //! not reach into `self.http` / `self.api_version` directly.
 
 #![allow(clippy::doc_markdown)]
@@ -122,7 +122,7 @@ impl Client {
 
     /// wasm (W7): `POST /v14/assets` with the ciphertext held in memory.
     #[cfg(target_arch = "wasm32")]
-    pub(crate) async fn http_upload_asset_bytes(
+    pub(crate) async fn http_upload_attachment_bytes(
         &self,
         access_token: &str,
         conv_id: Option<(&str, &str)>,
@@ -146,7 +146,7 @@ impl Client {
 
     /// wasm (W7): `GET /v14/assets/{domain}/{key}` buffered into memory.
     #[cfg(target_arch = "wasm32")]
-    pub(crate) async fn http_download_asset_bytes(
+    pub(crate) async fn http_download_attachment_bytes(
         &self,
         access_token: &str,
         download: crate::wire::http::assets::AssetDownload<'_>,
@@ -157,9 +157,9 @@ impl Client {
     }
 
     /// Crate-scoped wrapper for `POST /v14/assets` driven from
-    /// Step 11f's `timeline::asset_send` orchestrator. Streams the
+    /// Step 11f's `timeline::attachment_send` orchestrator. Streams the
     /// ciphertext tempfile as the multipart body's second part.
-    pub(crate) async fn http_upload_asset(
+    pub(crate) async fn http_upload_attachment(
         &self,
         access_token: &str,
         params: crate::wire::http::assets::AssetMultipart<'_>,
@@ -170,10 +170,10 @@ impl Client {
     }
 
     /// Crate-scoped wrapper for `GET /v14/assets/{domain}/{key}`
-    /// driven from Step 11g's `AssetSummary::download` /
-    /// `AssetSummary::save_to`. Streams the response body into the
+    /// driven from Step 11g's `AttachmentSummary::download` /
+    /// `AttachmentSummary::save_to`. Streams the response body into the
     /// caller-supplied sink path.
-    pub(crate) async fn http_download_asset(
+    pub(crate) async fn http_download_attachment(
         &self,
         access_token: &str,
         download: crate::wire::http::assets::AssetDownload<'_>,
@@ -186,14 +186,19 @@ impl Client {
 
     /// Crate-scoped wrapper for `DELETE /v14/assets/{domain}/{key}`: an own
     /// upload whose message was deleted for everyone (Step 84).
-    pub(crate) async fn http_delete_asset(
+    pub(crate) async fn http_delete_attachment(
         &self,
         access_token: &str,
-        asset_domain: &str,
-        asset_id: &str,
+        attachment_domain: &str,
+        attachment_id: &str,
     ) -> Result<(), KupferdrahtError> {
         self.http
-            .delete_asset(self.api_version, access_token, asset_domain, asset_id)
+            .delete_asset(
+                self.api_version,
+                access_token,
+                attachment_domain,
+                attachment_id,
+            )
             .await
     }
 }

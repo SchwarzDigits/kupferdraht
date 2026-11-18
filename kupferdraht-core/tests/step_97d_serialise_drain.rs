@@ -621,7 +621,7 @@ async fn a_read_then_write_transaction_waits_for_another_writer() {
 
     let started = Instant::now();
     sweeping_store
-        .expire_ephemeral_messages(1)
+        .expire_disappearing_messages(1)
         .await
         .expect("the read-then-write sweep waits instead of failing `database is locked`");
     assert!(

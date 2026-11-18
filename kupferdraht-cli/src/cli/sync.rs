@@ -59,8 +59,8 @@ impl EventHandler for CliEventHandler {
     fn on_message(&self, message: Message) {
         let body: String = match &message.body {
             MessageBody::Text(b) => b.clone(),
-            MessageBody::Asset(a) => format!(
-                "<asset {} ({} bytes, mime={}){}>",
+            MessageBody::Attachment(a) => format!(
+                "<attachment {} ({} bytes, mime={}){}>",
                 a.message_id,
                 a.size_bytes,
                 a.mime_type,
@@ -69,8 +69,8 @@ impl EventHandler for CliEventHandler {
                     .map(|n| format!(", filename={n}"))
                     .unwrap_or_default(),
             ),
-            MessageBody::Knock { hot_knock } => {
-                format!("<knock{}>", if *hot_knock { " (hot)" } else { "" })
+            MessageBody::Ping { repeated } => {
+                format!("<ping{}>", if *repeated { " (repeated)" } else { "" })
             }
             MessageBody::Location {
                 latitude,

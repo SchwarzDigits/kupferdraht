@@ -18,7 +18,7 @@
 //!
 //! Step-by-step unit coverage of the orchestrator's building blocks:
 //! the policy-gate matrix is covered here; `encrypt_file` round-trips
-//! by Step 11b inline tests; `upload_asset` multipart shape by Step
+//! by Step 11b inline tests; `upload_attachment` multipart shape by Step
 //! 11c httpmock tests; `insert_attachment` by Step 11d inline tests;
 //! MLS encrypt + `POST /v14/mls/messages` by Step 4's send_text tests
 //! (same `encrypt_and_upload` helper). The orchestrator wiring all of
@@ -148,7 +148,7 @@ async fn run_login_setup_and_join(server: &MockServer) -> (Arc<Client>, Arc<dyn 
     //
     // The 11f orchestrator tests don't actually need to drive the
     // MLS encrypt step end-to-end — they're testing the pre-MLS
-    // pipeline (policy gate, encrypt_file, upload_asset) and the
+    // pipeline (policy gate, encrypt_file, upload_attachment) and the
     // post-MLS persistence. We can't easily mock openmls. So the
     // 11f integration tests focus on the steps that DON'T require
     // openmls state, and the happy-path test that DOES drive the

@@ -1,19 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Ephemeral (self-deleting) text — Wire's `Ephemeral` wrapper
+//! Disappearing (self-deleting) text — Wire's `Ephemeral` wrapper
 //! (`GenericMessage` field 18) around a `Text`. Step 89.
 //!
 //! Three responsibilities of one feature, kept together because they
 //! share the timer contract:
 //!
-//! 1. **Send** — `Timeline::send_ephemeral_text` wraps the body with
+//! 1. **Send** — `Timeline::send_disappearing_text` wraps the body with
 //!    `expire_after_millis = ttl` and persists the own copy with
 //!    `expires_at_ms = arrived_at_ms + ttl`, on this device's clock. The stamp is set only when
 //!    the upload reached the backend (an official sender starts its
 //!    countdown on the backend ack; a `Failed` row keeps its body
 //!    and gets no timer).
-//! 2. **Expiry** — the sweep [`Client::expire_due_ephemeral_messages`]
+//! 2. **Expiry** — the sweep [`Client::expire_due_disappearing_messages`]
 //!    tombstones every row whose stamp passed (body cleared,
 //!    `redacted_at_ms` set — the `MessageDelete` tombstone, so reply
 //!    chains keep resolving) and emits one `TimelineDiff::UpdateAt`
@@ -26,10 +26,10 @@
 //!    mirror yet is the `DeleteForMe` into the self-conversation for
 //!    the receiver's other devices (Step 86).
 //! 3. **Timers** — a native `tokio` task per stamp
-//!    ([`Client::arm_ephemeral_timer`]) fires the sweep on time for
+//!    ([`Client::arm_disappearing_timer`]) fires the sweep on time for
 //!    long-running consumers (push transport has no periodic drain);
 //!    every dispatch cycle and every resume
-//!    ([`Client::restore_ephemeral_timers`]) sweep as well, so a
+//!    ([`Client::restore_disappearing_timers`]) sweep as well, so a
 //!    restart or a lost task never leaves an expired body readable.
 //!    On wasm32 there is no task spawner — only the cycle sweeps run.
 //!
@@ -56,37 +56,37 @@ use crate::wire::proto::build_ephemeral_text_generic_message;
 /// clients bound the conversation timer to the same range
 /// (1 s … 1 year, observations §74); a zero TTL would be a message
 /// deleted before it can be read.
-pub(crate) const EPHEMERAL_TTL_MIN: Duration = Duration::from_secs(1);
+pub(crate) const DISAPPEARING_TTL_MIN: Duration = Duration::from_secs(1);
 /// Largest TTL Kupferdraht accepts on the send side (365 days).
-pub(crate) const EPHEMERAL_TTL_MAX: Duration = Duration::from_hours(365 * 24);
-/// [`EPHEMERAL_TTL_MAX`] in milliseconds — the receive-side clamp for a
+pub(crate) const DISAPPEARING_TTL_MAX: Duration = Duration::from_hours(365 * 24);
+/// [`DISAPPEARING_TTL_MAX`] in milliseconds — the receive-side clamp for a
 /// peer-chosen `expire_after_millis` (Step 95c).
-pub(crate) const EPHEMERAL_TTL_MAX_MS: i64 = 365 * 24 * 60 * 60 * 1_000;
+pub(crate) const DISAPPEARING_TTL_MAX_MS: i64 = 365 * 24 * 60 * 60 * 1_000;
 
 /// Range-check a caller-supplied TTL and convert it to Wire's
 /// `expire_after_millis`.
 ///
 /// # Errors
-/// `KupferdrahtError::InvalidInput` outside [`EPHEMERAL_TTL_MIN`] ..=
-/// [`EPHEMERAL_TTL_MAX`].
-fn validate_ephemeral_ttl(ttl: Duration) -> Result<i64, KupferdrahtError> {
-    if ttl < EPHEMERAL_TTL_MIN || ttl > EPHEMERAL_TTL_MAX {
+/// `KupferdrahtError::InvalidInput` outside [`DISAPPEARING_TTL_MIN`] ..=
+/// [`DISAPPEARING_TTL_MAX`].
+fn validate_disappearing_ttl(ttl: Duration) -> Result<i64, KupferdrahtError> {
+    if ttl < DISAPPEARING_TTL_MIN || ttl > DISAPPEARING_TTL_MAX {
         return Err(KupferdrahtError::InvalidInput(format!(
-            "send_ephemeral_text: ttl must be between {}s and {} days, got {ttl:?}",
-            EPHEMERAL_TTL_MIN.as_secs(),
-            EPHEMERAL_TTL_MAX.as_secs() / 86_400
+            "send_disappearing_text: ttl must be between {}s and {} days, got {ttl:?}",
+            DISAPPEARING_TTL_MIN.as_secs(),
+            DISAPPEARING_TTL_MAX.as_secs() / 86_400
         )));
     }
     i64::try_from(ttl.as_millis()).map_err(|_| {
-        KupferdrahtError::InvalidInput("send_ephemeral_text: ttl does not fit i64 millis".into())
+        KupferdrahtError::InvalidInput("send_disappearing_text: ttl does not fit i64 millis".into())
     })
 }
 
 impl Timeline {
-    /// Send a self-deleting text: the body travels inside Wire's
-    /// `Ephemeral` wrapper with `ttl` as `expire_after_millis`, so
-    /// official clients render a countdown and delete their copy
-    /// locally; Kupferdraht's own copy self-redacts after `ttl` as well.
+    /// Send a disappearing text: the body travels with `ttl` as its
+    /// timer, so official clients render a countdown and delete their
+    /// copy locally; Kupferdraht's own copy self-redacts after `ttl` as
+    /// well.
     /// `send_text` stays untouched — a plain text never expires.
     /// Step 89.
     ///
@@ -98,21 +98,21 @@ impl Timeline {
     ///   (group resolve, encode, MLS encrypt, transport, storage). On
     ///   an upload failure the row is persisted as `Failed` WITHOUT
     ///   an expiry stamp (the timer starts on the backend ack only).
-    pub async fn send_ephemeral_text(
+    pub async fn send_disappearing_text(
         &self,
         body: String,
         ttl: Duration,
     ) -> Result<MessageHandle, KupferdrahtError> {
         self.client
-            .send_ephemeral_text(&self.room_id, body, ttl)
+            .send_disappearing_text(&self.room_id, body, ttl)
             .await
     }
 }
 
 impl Client {
-    /// See [`Timeline::send_ephemeral_text`] for the caller-facing
+    /// See [`Timeline::send_disappearing_text`] for the caller-facing
     /// contract. Step 89.
-    pub(crate) async fn send_ephemeral_text(
+    pub(crate) async fn send_disappearing_text(
         &self,
         room_id: &str,
         body: String,
@@ -120,11 +120,11 @@ impl Client {
     ) -> Result<MessageHandle, KupferdrahtError> {
         debug_assert!(
             !room_id.is_empty(),
-            "send_ephemeral_text: room_id must be non-empty"
+            "send_disappearing_text: room_id must be non-empty"
         );
-        let ttl_ms = validate_ephemeral_ttl(ttl)?;
+        let ttl_ms = validate_disappearing_ttl(ttl)?;
         let group_id = self
-            .resolve_room_group_id(room_id, "send_ephemeral_text")
+            .resolve_room_group_id(room_id, "send_disappearing_text")
             .await?;
         let (message_id, plaintext) = build_ephemeral_text_generic_message(&body, ttl_ms)?;
         // Step 97a: the row is written as `Sending` before the upload; the
@@ -133,7 +133,7 @@ impl Client {
         let _in_flight = self.begin_send(&message_id);
         let sent_at_ms = now_ms();
         let persisted = self
-            .persist_and_emit_outgoing_ephemeral_text(
+            .persist_and_emit_outgoing_disappearing_text(
                 &message_id,
                 room_id,
                 &body,
@@ -142,7 +142,7 @@ impl Client {
             )
             .await?;
         let upload = self
-            .encrypt_and_upload(&group_id, "send_ephemeral_text", &plaintext)
+            .encrypt_and_upload(&group_id, "send_disappearing_text", &plaintext)
             .await;
         // The timer counts from the send on this device's clock, not from
         // the backend's answer (Step 151): expires_at = arrived_at + ttl.
@@ -151,7 +151,7 @@ impl Client {
         self.finish_send(room_id, &message_id, &upload, expires_at_ms)
             .await;
         if persisted && let Some(at) = expires_at_ms {
-            self.arm_ephemeral_timer(at);
+            self.arm_disappearing_timer(at);
         }
         Ok(MessageHandle {
             message_id,
@@ -159,13 +159,13 @@ impl Client {
         })
     }
 
-    /// Persist the own copy of an ephemeral text as `Sending`
+    /// Persist the own copy of a disappearing text as `Sending`
     /// (`kind = 'text'`, the chosen TTL, no expiry stamp yet — the timer
     /// starts on the backend ack; the persisted TTL lets
     /// `Timeline::resend` re-wrap the row later, Step 79) and emit its
     /// `TimelineDiff::Append`. `false` without a store (metadata-only
     /// resume mode). Step 97a.
-    async fn persist_and_emit_outgoing_ephemeral_text(
+    async fn persist_and_emit_outgoing_disappearing_text(
         &self,
         message_id: &str,
         room_id: &str,
@@ -184,13 +184,13 @@ impl Client {
             sent_at_ms,
             DeliveryStatus::Sending,
         );
-        event.ephemeral_ttl_ms = Some(ttl_ms);
+        event.ttl_ms = Some(ttl_ms);
         store.insert_timeline_event(&event).await?;
         self.emit_outgoing_text_append(event, &[]);
         Ok(true)
     }
 
-    /// Tombstone every ephemeral row whose timer elapsed, surface each
+    /// Tombstone every disappearing row whose timer elapsed, surface each
     /// as a `TimelineDiff::UpdateAt` carrying the tombstone, and — for
     /// inbound rows — broadcast the expiry as a delete-for-everyone
     /// (V1b, best-effort). Idempotent and cheap (one indexed query;
@@ -203,7 +203,7 @@ impl Client {
     /// `KupferdrahtError::Storage` on the sweep or the re-read. A failed
     /// broadcast is logged, never propagated (the local tombstone is
     /// the contract, the network delete the courtesy toward the sender).
-    pub(crate) async fn expire_due_ephemeral_messages(&self) -> Result<u32, KupferdrahtError> {
+    pub(crate) async fn expire_due_disappearing_messages(&self) -> Result<u32, KupferdrahtError> {
         let Some(store) = self.store_handle() else {
             return Ok(0);
         };
@@ -211,13 +211,13 @@ impl Client {
         // Step 95c: the device clock is environment data — a clock
         // before the epoch skips the sweep instead of asserting.
         if now <= 0 {
-            tracing::warn!("ephemeral sweep skipped: the wall clock is before the epoch");
+            tracing::warn!("disappearing sweep skipped: the wall clock is before the epoch");
             return Ok(0);
         }
-        let retired = store.expire_ephemeral_messages(now).await?;
+        let retired = store.expire_disappearing_messages(now).await?;
         let own_user_id = self.own_qualified_user_id();
         for row in &retired {
-            debug!(room_id = %row.room_id, message_id = %row.message_id, "ephemeral expired");
+            debug!(room_id = %row.room_id, message_id = %row.message_id, "disappearing expired");
             self.emit_message_update_at(&row.room_id, &row.message_id)
                 .await?;
             if row.sender_user_id != own_user_id {
@@ -229,7 +229,7 @@ impl Client {
     }
 
     /// V1b: tell the sender (and everyone else in the room) that this
-    /// inbound ephemeral message expired here — the `MessageDelete`
+    /// inbound disappearing message expired here — the `MessageDelete`
     /// official senders wait for before purging their own copy. Same
     /// envelope as `Timeline::redact`, minus the local apply (the row
     /// is already tombstoned). Best-effort like the Step-25b delivery
@@ -266,14 +266,14 @@ impl Client {
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` on the sweep or the pending scan.
-    pub(crate) async fn restore_ephemeral_timers(&self) -> Result<(), KupferdrahtError> {
+    pub(crate) async fn restore_disappearing_timers(&self) -> Result<(), KupferdrahtError> {
         let Some(store) = self.store_handle() else {
             return Ok(());
         };
-        self.expire_due_ephemeral_messages().await?;
-        let pending = store.pending_ephemeral_expiries(now_ms()).await?;
+        self.expire_due_disappearing_messages().await?;
+        let pending = store.pending_disappearing_expiries(now_ms()).await?;
         for at in pending {
-            self.arm_ephemeral_timer(at);
+            self.arm_disappearing_timer(at);
         }
         Ok(())
     }
@@ -284,11 +284,11 @@ impl Client {
     /// tokio runtime on the current thread the timer is skipped — the
     /// dispatch-cycle and resume sweeps remain. Step 89.
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn arm_ephemeral_timer(&self, expires_at_ms: i64) {
+    pub(crate) fn arm_disappearing_timer(&self, expires_at_ms: i64) {
         let Ok(handle) = tokio::runtime::Handle::try_current() else {
             debug!(
                 expires_at_ms,
-                "no tokio runtime — ephemeral timer not armed"
+                "no tokio runtime — disappearing timer not armed"
             );
             return;
         };
@@ -299,8 +299,8 @@ impl Client {
             let Some(client) = weak.upgrade() else {
                 return;
             };
-            if let Err(e) = client.expire_due_ephemeral_messages().await {
-                warn!(error = %e, "ephemeral expiry sweep failed");
+            if let Err(e) = client.expire_due_disappearing_messages().await {
+                warn!(error = %e, "disappearing expiry sweep failed");
             }
         });
     }
@@ -310,8 +310,11 @@ impl Client {
     // `&self` mirrors the native twin's signature (call sites are identical).
     #[cfg(target_arch = "wasm32")]
     #[allow(clippy::unused_self)]
-    pub(crate) fn arm_ephemeral_timer(&self, expires_at_ms: i64) {
-        debug!(expires_at_ms, "ephemeral timers are sweep-only on wasm32");
+    pub(crate) fn arm_disappearing_timer(&self, expires_at_ms: i64) {
+        debug!(
+            expires_at_ms,
+            "disappearing timers are sweep-only on wasm32"
+        );
     }
 }
 
@@ -320,17 +323,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn validate_ephemeral_ttl_accepts_the_wire_range_inclusive() {
+    fn validate_disappearing_ttl_accepts_the_wire_range_inclusive() {
         assert_eq!(
-            validate_ephemeral_ttl(EPHEMERAL_TTL_MIN).expect("min"),
+            validate_disappearing_ttl(DISAPPEARING_TTL_MIN).expect("min"),
             1_000
         );
         assert_eq!(
-            validate_ephemeral_ttl(EPHEMERAL_TTL_MAX).expect("max"),
+            validate_disappearing_ttl(DISAPPEARING_TTL_MAX).expect("max"),
             365 * 24 * 60 * 60 * 1_000
         );
         assert_eq!(
-            validate_ephemeral_ttl(Duration::from_secs(300)).expect("5 min"),
+            validate_disappearing_ttl(Duration::from_secs(300)).expect("5 min"),
             300_000
         );
     }
@@ -338,19 +341,19 @@ mod tests {
     #[test]
     fn the_millisecond_bound_matches_the_duration_bound() {
         assert_eq!(
-            u128::try_from(EPHEMERAL_TTL_MAX_MS).expect("positive"),
-            EPHEMERAL_TTL_MAX.as_millis()
+            u128::try_from(DISAPPEARING_TTL_MAX_MS).expect("positive"),
+            DISAPPEARING_TTL_MAX.as_millis()
         );
     }
 
     #[test]
-    fn validate_ephemeral_ttl_rejects_outside_the_range() {
+    fn validate_disappearing_ttl_rejects_outside_the_range() {
         for ttl in [
             Duration::ZERO,
             Duration::from_millis(999),
-            EPHEMERAL_TTL_MAX + Duration::from_secs(1),
+            DISAPPEARING_TTL_MAX + Duration::from_secs(1),
         ] {
-            let err = validate_ephemeral_ttl(ttl).expect_err("out of range");
+            let err = validate_disappearing_ttl(ttl).expect_err("out of range");
             assert!(
                 matches!(&err, KupferdrahtError::InvalidInput(msg) if msg.contains("ttl")),
                 "{ttl:?}: {err:?}"

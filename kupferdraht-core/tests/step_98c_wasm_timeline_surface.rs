@@ -12,8 +12,8 @@
 //!   to `{emoji, count}`. A consumer could therefore not tell a sent message
 //!   from a failed one, nor which reaction was its own — both of which the
 //!   core carries and every other binding surfaces.
-//! - `send_knock` / `send_location` were unbound, so two of Wire's nine
-//!   content variants could be received but never sent from a browser.
+//! - `send_ping` / `send_location` were unbound, so two of the nine content
+//!   variants could be received but never sent from a browser.
 //!
 //! Source-level pins — see `wasm_surface/mod.rs`.
 
@@ -22,9 +22,9 @@ mod wasm_surface;
 use wasm_surface::{assert_bound, surface};
 
 #[test]
-fn client_binds_knock_and_location_sends() {
+fn client_binds_ping_and_location_sends() {
     let s = surface();
-    assert_bound(&s, "Client", "sendKnock");
+    assert_bound(&s, "Client", "sendPing");
     assert_bound(&s, "Client", "sendLocation");
 }
 
@@ -66,15 +66,15 @@ fn reaction_view_carries_is_self() {
 }
 
 /// Sending a location a consumer can never read back is half a feature: the
-/// view flattened both variants to a bare kind label, dropping `hot_knock`
-/// and the coordinates the core carries.
+/// view flattened both variants to a bare kind label, dropping whether a ping
+/// was repeated and the coordinates the core carries.
 #[test]
-fn knock_and_location_survive_the_projection() {
+fn ping_and_location_survive_the_projection() {
     let src = wasm_surface::manager_source();
     let view = view_struct(&src, "TimelineItemView");
     assert!(
-        view.contains("hot_knock"),
-        "TimelineItemView carries hot_knock"
+        view.contains("repeated"),
+        "TimelineItemView carries repeated"
     );
     assert!(
         view.contains("location"),

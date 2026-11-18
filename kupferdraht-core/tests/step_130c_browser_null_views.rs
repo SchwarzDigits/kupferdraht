@@ -20,7 +20,7 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct AssetFixture {
+struct AttachmentFixture {
     file_name: Option<String>,
 }
 
@@ -29,8 +29,8 @@ struct AssetFixture {
 struct ItemFixture {
     body: Option<String>,
     expires_at_ms: Option<i64>,
-    asset: Option<AssetFixture>,
-    attachments: Vec<AssetFixture>,
+    attachment: Option<AttachmentFixture>,
+    attachments: Vec<AttachmentFixture>,
     #[serde(skip_serializing_if = "Option::is_none")]
     exported_at: Option<i64>,
 }
@@ -39,7 +39,7 @@ fn empty_item() -> ItemFixture {
     ItemFixture {
         body: None,
         expires_at_ms: None,
-        asset: None,
+        attachment: None,
         attachments: Vec::new(),
         exported_at: None,
     }
@@ -58,20 +58,23 @@ fn a_missing_field_crosses_as_null() {
         property(&item, "expiresAtMs").is_null(),
         "expiresAtMs is null"
     );
-    assert!(property(&item, "asset").is_null(), "asset is null");
+    assert!(
+        property(&item, "attachment").is_null(),
+        "attachment is null"
+    );
 }
 
 #[wasm_bindgen_test]
 fn a_missing_field_inside_a_present_object_or_a_list_crosses_as_null() {
     let item = to_js(&ItemFixture {
-        asset: Some(AssetFixture { file_name: None }),
-        attachments: vec![AssetFixture { file_name: None }],
+        attachment: Some(AttachmentFixture { file_name: None }),
+        attachments: vec![AttachmentFixture { file_name: None }],
         ..empty_item()
     })
     .expect("item crosses");
 
     assert!(
-        property(&property(&item, "asset"), "fileName").is_null(),
+        property(&property(&item, "attachment"), "fileName").is_null(),
         "a nested field is null"
     );
     let first = js_sys::Reflect::get_u32(&property(&item, "attachments"), 0).expect("list row");
@@ -83,7 +86,7 @@ fn a_missing_field_inside_a_present_object_or_a_list_crosses_as_null() {
 
 #[wasm_bindgen_test]
 fn a_missing_view_crosses_as_null() {
-    let none: Option<AssetFixture> = None;
+    let none: Option<AttachmentFixture> = None;
 
     assert!(to_js(&none).expect("no view crosses").is_null());
 }
@@ -93,7 +96,7 @@ fn a_present_value_crosses_unchanged() {
     let item = to_js(&ItemFixture {
         body: Some("hello".to_owned()),
         expires_at_ms: Some(1_500),
-        asset: Some(AssetFixture {
+        attachment: Some(AttachmentFixture {
             file_name: Some("a.txt".to_owned()),
         }),
         ..empty_item()
@@ -106,7 +109,7 @@ fn a_present_value_crosses_unchanged() {
     );
     assert_eq!(property(&item, "expiresAtMs").as_f64(), Some(1_500.0));
     assert_eq!(
-        property(&property(&item, "asset"), "fileName")
+        property(&property(&item, "attachment"), "fileName")
             .as_string()
             .as_deref(),
         Some("a.txt")

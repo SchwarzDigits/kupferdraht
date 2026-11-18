@@ -54,7 +54,7 @@ impl Client {
     ) -> Result<MessageHandle, KupferdrahtError> {
         // Step 95b (ADR-0028): delete-for-everyone of another user's
         // message is rejected by every receiver — refuse it here. The
-        // receiver-side ephemeral expiry calls `upload_message_delete`
+        // receiver-side disappearing expiry calls `upload_message_delete`
         // directly and is not affected.
         self.ensure_own_target(room_id, target_message_id, "delete")
             .await?;
@@ -135,16 +135,20 @@ impl Client {
     async fn delete_own_upload(&self, upload: &AttachmentRecord) {
         let Some(access_token) = self.access_token() else {
             warn!(
-                asset_id = upload.asset_id,
+                attachment_id = upload.attachment_id,
                 "own upload kept: no access token"
             );
             return;
         };
         if let Err(e) = self
-            .http_delete_asset(&access_token, &upload.asset_domain, &upload.asset_id)
+            .http_delete_attachment(
+                &access_token,
+                &upload.attachment_domain,
+                &upload.attachment_id,
+            )
             .await
         {
-            warn!(asset_id = upload.asset_id, error = %e, "own upload not deleted at the server");
+            warn!(attachment_id = upload.attachment_id, error = %e, "own upload not deleted at the server");
         }
     }
 

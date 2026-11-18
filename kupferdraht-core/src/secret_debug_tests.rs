@@ -4,15 +4,15 @@
 //! Step 101 — `Debug` never prints a secret (review finding H6). TDD red.
 //!
 //! Every type that carries a token, a password, a join or activation
-//! code or an asset key is built with a sentinel in each secret field;
+//! code or an attachment key is built with a sentinel in each secret field;
 //! its `Debug` output — what a `?value` log field or an `{:?}` in an
 //! error would print — must not contain it.
 
 use std::sync::Weak;
 
-use crate::encryption::asset_crypto::encrypt_reader;
+use crate::encryption::attachment_crypto::encrypt_reader;
 use crate::storage::{AttachmentRecord, SessionRecord};
-use crate::timeline::AssetSummary;
+use crate::timeline::AttachmentSummary;
 use crate::wire::dto::{
     ActivateRequest, ConversationCodeInfo, CreateConversationCodeRequest, JoinConversationByCode,
     LoginOutcome, LoginResponse, NewUserRequest,
@@ -63,10 +63,10 @@ fn session_and_login_tokens_are_hidden() {
 }
 
 #[test]
-fn asset_keys_and_tokens_are_hidden() {
+fn attachment_keys_and_tokens_are_hidden() {
     let attachment = AttachmentRecord {
-        otr_key_ct: SECRET.as_bytes().to_vec(),
-        asset_token: Some(format!("{SECRET}-token")),
+        key_ct: SECRET.as_bytes().to_vec(),
+        attachment_token: Some(format!("{SECRET}-token")),
         ..AttachmentRecord::default()
     };
     // Bytes print as numbers in a derived Debug — check those too.
@@ -77,30 +77,30 @@ fn asset_keys_and_tokens_are_hidden() {
         !debug.contains(&key_bytes[1..key_bytes.len() - 1]),
         "AttachmentRecord prints the key bytes: {debug}"
     );
-    let summary = AssetSummary {
+    let summary = AttachmentSummary {
         message_id: "m".into(),
         mime_type: "image/png".into(),
         filename: None,
         size_bytes: 1,
         sender_user_id: "u@example.test".into(),
         room_id: "r@example.test".into(),
-        asset_id: "a".into(),
-        asset_token: Some(format!("{SECRET}-token")),
-        asset_domain: "example.test".into(),
-        encryption_algo: "AES_CBC".into(),
+        attachment_id: "a".into(),
+        attachment_token: Some(format!("{SECRET}-token")),
+        attachment_domain: "example.test".into(),
+        cipher: "AES_CBC".into(),
         cache_path: None,
         sha256: Vec::new(),
-        otr_key_ct: SECRET.as_bytes().to_vec(),
+        key_ct: SECRET.as_bytes().to_vec(),
         client: Weak::new(),
     };
     let debug = format!("{summary:?}");
-    assert_hidden("AssetSummary", &debug);
+    assert_hidden("AttachmentSummary", &debug);
     assert!(
         !debug.contains(&key_bytes[1..key_bytes.len() - 1]),
-        "AssetSummary prints the key bytes: {debug}"
+        "AttachmentSummary prints the key bytes: {debug}"
     );
-    let meta = crate::ffi::AssetMeta::from(&summary);
-    assert_hidden("AssetMeta", &format!("{meta:?}"));
+    let meta = crate::ffi::AttachmentMeta::from(&summary);
+    assert_hidden("AttachmentMeta", &format!("{meta:?}"));
     let input = AssetMessageInput {
         mime_type: "image/png",
         size: 1,
@@ -118,7 +118,7 @@ fn asset_keys_and_tokens_are_hidden() {
         "AssetMessageInput prints the key bytes: {debug}"
     );
     let upload = AssetUploadResponse {
-        key: "3-1-asset".into(),
+        key: "3-1-attachment".into(),
         token: Some(format!("{SECRET}-token")),
         domain: None,
         expires: None,
@@ -126,17 +126,17 @@ fn asset_keys_and_tokens_are_hidden() {
     assert_hidden("AssetUploadResponse", &format!("{upload:?}"));
 }
 
-/// The send-side asset key lives in a `Zeroizing<[u8; 32]>` whose own
+/// The send-side attachment key lives in a `Zeroizing<[u8; 32]>` whose own
 /// derived `Debug` prints the bytes — the holder must redact it.
 #[test]
-fn send_side_asset_key_is_hidden() {
+fn send_side_attachment_key_is_hidden() {
     let dir = tempfile::tempdir().expect("tempdir");
     let encrypted = encrypt_reader(&b"asset plaintext"[..], dir.path()).expect("encrypt");
     let key_bytes = format!("{:?}", &encrypted.key_material()[..]);
     let debug = format!("{encrypted:?}");
     assert!(
         !debug.contains(&key_bytes[1..key_bytes.len() - 1]),
-        "EncryptedAsset prints the key bytes: {debug}"
+        "EncryptedAttachment prints the key bytes: {debug}"
     );
     assert!(
         debug.contains("<32 bytes>"),

@@ -33,7 +33,7 @@ struct MessageView {
     /// When it was sent, as the backend knows it (Step 151).
     sent_at_ms: i64,
     received_at_ms: i64,
-    /// Step 89: set only for a self-deleting message.
+    /// Step 89: set only for a disappearing message.
     expires_at_ms: Option<i64>,
 }
 

@@ -36,7 +36,7 @@ impl Client {
         }
     }
 
-    /// The version marker of a user's avatar: the thumbnail's asset key, the
+    /// The version marker of a user's avatar: the thumbnail's image key, the
     /// full image's when the profile has only that. A changed avatar has a new
     /// key, so an embedder keys its own store by it. A method, not a snapshot:
     /// the own key changes with [`Self::upload_avatar`].
@@ -67,7 +67,7 @@ impl Client {
 
     /// Set the own avatar from one image: Kupferdraht decodes it, writes both
     /// sizes anew, uploads them and names them on the profile. The replaced
-    /// assets stay on the server. Cropping is the embedder's.
+    /// images stay on the server. Cropping is the embedder's.
     ///
     /// # Errors
     /// `InvalidInput` for what is no accepted image or exceeds the limits,
@@ -92,7 +92,7 @@ impl Client {
         .await
     }
 
-    /// Remove the own avatar. The asset stays on the server.
+    /// Remove the own avatar. The images stay on the server.
     ///
     /// # Errors
     /// `BackendRejected` and `Network` for a failed profile update.

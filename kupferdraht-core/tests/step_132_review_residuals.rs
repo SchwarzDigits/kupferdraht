@@ -8,7 +8,7 @@
 //! The pins with a consumer-visible surface live here; the ones on
 //! crate-private functions sit beside them (`wire/websocket.rs`,
 //! `sync/push/legacy.rs`, `storage/home.rs`, `wire/dto.rs`,
-//! `rooms/room.rs`, `encryption/asset_crypto.rs`), the removal-flush
+//! `rooms/room.rs`, `encryption/attachment_crypto.rs`), the removal-flush
 //! restart in `step_74_removal_batching.rs` and the cold room cache in
 //! `step_14g_auto_hydration.rs`.
 //!
@@ -19,8 +19,8 @@
 //!   (former gap-B.26).
 //! * A backend whose `defaultCipherSuite` is not ours is a typed error at
 //!   login and at resume (NG-25, measured live: observations §94).
-//! * `docs/bindings.md` states the threading contract and the
-//!   `assetToken` line; the `Store` trait names its atomicity expectation.
+//! * `docs/bindings.md` states the threading contract; the `Store` trait
+//!   names its atomicity expectation.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -258,23 +258,6 @@ fn bindings_doc_states_the_threading_contract() {
             "the threading contract must say '{needle}'"
         );
     }
-}
-
-/// `docs/bindings.md` tells the consumer not to log `AssetMeta` as a
-/// whole: the generated `toString` / `description` prints `assetToken`
-/// although the Rust `Debug` redacts it (H6 residual).
-#[test]
-fn bindings_doc_warns_about_the_asset_token_in_generated_to_string() {
-    let doc = workspace_file("docs/bindings.md");
-    assert!(
-        doc.contains("assetToken"),
-        "docs/bindings.md must name assetToken (Step 132 item 6)"
-    );
-    let lower = doc.to_lowercase();
-    assert!(
-        lower.contains("do not log") || lower.contains("never log"),
-        "the assetToken line must tell the consumer not to log AssetMeta"
-    );
 }
 
 /// The `Store` trait's documentation names the atomicity expectation a

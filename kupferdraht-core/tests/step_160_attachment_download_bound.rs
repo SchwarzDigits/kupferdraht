@@ -10,9 +10,9 @@
 //! `IntegrityCheck` before the digest is reached, so a hostile server cannot
 //! fill the disk or memory, and a sender that declares less than it uploads
 //! has its file refused. These tests take the consumer's path
-//! (`Timeline::asset` → `download` / `save_to`); the transport's own bound
+//! (`Timeline::attachment` → `download` / `save_to`); the transport's own bound
 //! and the browser's ceiling are unit tests beside the code
-//! (`wire/http/asset_bound_tests.rs`).
+//! (`wire/http/attachment_bound_tests.rs`).
 
 use aes::Aes256;
 use aes::cipher::block_padding::Pkcs7;
@@ -28,8 +28,8 @@ mod common;
 use common::drain_fixture::{self, BOB, DOMAIN, room_id};
 
 const MESSAGE_ID: &str = "msg-160-file";
-const ASSET_ID: &str = "3-2-asset-160";
-const ASSET_TOKEN: &str = "asset-token-160";
+const ATTACHMENT_ID: &str = "3-2-attachment-160";
+const ATTACHMENT_TOKEN: &str = "asset-token-160";
 const KEY: [u8; 32] = [0x60; 32];
 const IV: [u8; 16] = [0x16; 16];
 /// Three whole blocks: its ciphertext is the bound exactly, 48 + 32 bytes.
@@ -56,7 +56,7 @@ async fn seed_received_file(
             room_id: room_id(),
             sender_user_id: format!("{BOB}@{DOMAIN}"),
             sender_device_id: "bobdev01".into(),
-            kind: "asset".into(),
+            kind: "attachment".into(),
             body: "notes.txt".into(),
             sent_at_ms: 1,
             arrived_at_ms: 1,
@@ -73,11 +73,11 @@ async fn seed_received_file(
             filename: Some("notes.txt".into()),
             size_bytes: declared_size,
             sha256: Sha256::digest(blob).to_vec(),
-            otr_key_ct: KEY.to_vec(),
-            asset_id: ASSET_ID.into(),
-            asset_token: Some(ASSET_TOKEN.into()),
-            asset_domain: DOMAIN.into(),
-            encryption_algo: "AES_CBC".into(),
+            key_ct: KEY.to_vec(),
+            attachment_id: ATTACHMENT_ID.into(),
+            attachment_token: Some(ATTACHMENT_TOKEN.into()),
+            attachment_domain: DOMAIN.into(),
+            cipher: "AES_CBC".into(),
             cache_path: None,
             created_at_ms: 1,
         })
@@ -89,21 +89,21 @@ async fn seed_received_file(
 fn mount_download<'a>(api: &'a MockServer, blob: &[u8]) -> httpmock::Mock<'a> {
     api.mock(|when, then| {
         when.method(GET)
-            .path(format!("/v14/assets/{DOMAIN}/{ASSET_ID}"))
-            .header("asset-token", ASSET_TOKEN);
+            .path(format!("/v14/assets/{DOMAIN}/{ATTACHMENT_ID}"))
+            .header("asset-token", ATTACHMENT_TOKEN);
         then.status(200)
             .header("content-type", "application/octet-stream")
             .body(blob);
     })
 }
 
-async fn received_file(fx: &drain_fixture::Fixture) -> kupferdraht::AssetSummary {
+async fn received_file(fx: &drain_fixture::Fixture) -> kupferdraht::AttachmentSummary {
     let room = fx.client.room(&room_id()).await.expect("room joined");
     room.timeline()
         .expect("timeline")
-        .asset(MESSAGE_ID)
+        .attachment(MESSAGE_ID)
         .await
-        .expect("asset lookup")
+        .expect("attachment lookup")
         .expect("the seeded file")
 }
 
