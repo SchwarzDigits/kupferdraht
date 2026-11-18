@@ -441,6 +441,36 @@ async fn a_start_removes_what_no_row_names_and_keeps_the_rest() {
     );
 }
 
+/// The cache directory an account had before Step 163b, beside today's: no
+/// sweep and no delete for everyone reaches its files any more, so a start
+/// removes it whole, staged copies included. A row that still names a file
+/// there downloads it again when asked.
+#[tokio::test]
+async fn a_start_removes_the_cache_directory_of_an_earlier_release() {
+    let api = MockServer::start();
+    common::mount_full_login_flow(&api);
+    let home = tempfile::tempdir().expect("home");
+    let app = open_app(home.path());
+    let client = login(&app, &api).await;
+    let former = home.path().join("accounts").join(SELF).join("assets");
+    std::fs::create_dir_all(former.join("staging")).expect("the former cache");
+    for path in [
+        former.join("kept-file.enc"),
+        former.join("staging").join("0123.enc"),
+    ] {
+        std::fs::write(path, b"ciphertext").expect("a formerly cached file");
+    }
+    drop(client);
+
+    let _resumed = app.resume(SELF).await.expect("resume");
+
+    assert!(!former.exists(), "the former cache directory goes");
+    assert!(
+        home.path().join("accounts").join(SELF).exists(),
+        "the account's directory stays"
+    );
+}
+
 /// A login starts a client too — and a device that replaced a vanished one
 /// has just cleared every row.
 #[tokio::test]

@@ -149,10 +149,8 @@ is no skill for it — it is this short procedure:
     `"attachment"`: the shipped store rewrites its rows on open (migration V37),
     a custom store rewrites its own.
   - An account's attachment cache is `accounts/<id>/attachments/`, no longer
-    `assets/`. An existing `assets/` is not moved: a file cached there is still
-    read through its row's `cache_path`, but a client's start and a delete for
-    everyone clear only `attachments/` — delete the old directory (its
-    attachments download again when asked for).
+    `assets/`. A client's start removes an existing `assets/` whole; what was
+    cached there downloads again when asked for.
 
 ### Deprecated
 

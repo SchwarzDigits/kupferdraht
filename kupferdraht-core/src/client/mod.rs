@@ -421,6 +421,16 @@ impl Client {
             .map(|home| home.account_attachments(self.user_id.as_str()))
     }
 
+    /// Where this account's attachment cache was before Step 163b; `None`
+    /// without `base_dir`, like [`Self::attachments_dir`]. Native only, like
+    /// the start's sweep that removes it.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn former_attachments_dir(&self) -> Option<std::path::PathBuf> {
+        self.kupferdraht_home
+            .as_ref()
+            .map(|home| home.account_former_attachments(self.user_id.as_str()))
+    }
+
     /// Crate-scoped accessor for the held `MlsClient` mutex. Returns
     /// a clear `InvalidInput` if the client was built without a
     /// `base_dir` (and therefore has no MLS state). The label

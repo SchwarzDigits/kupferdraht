@@ -137,8 +137,11 @@ where it has a term, otherwise a plain English name.
       test in `storage/schema.rs`, the renamed browser pins of Steps 98c, 130a and
       130c; Step 132's token warning went with the token.
     - The account's cache directory is `attachments/` (Volker: no step moves an
-      existing `assets/` — Kupferdraht is not in production use yet, and the apps
-      using it can take the rewrite; the CHANGELOG says what is left behind).
+      existing `assets/` — Kupferdraht is not in production use yet). Raised in
+      review: nothing would reach the old directory any more, copies of files
+      deleted for everyone included; so a client's start removes it whole
+      (`a_start_removes_the_cache_directory_of_an_earlier_release` in
+      `tests/step_84_deleted_file_is_gone.rs`).
     - Left: `docs/THREAT_MODEL.md` keeps "asset" in L6 and the trust model.
 - **163c — rooms.**
   - Room access is typed: a join rule (invite only, by link, …) and who may join

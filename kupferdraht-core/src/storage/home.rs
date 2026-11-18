@@ -121,6 +121,14 @@ impl KupferdrahtHome {
         self.account_dir(account_id).join("attachments")
     }
 
+    /// `base/accounts/<id>/assets` — where the attachment cache was before
+    /// Step 163b; a client's start removes it. The one place the former
+    /// name stays, as migration V37 keeps the former kind names.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn account_former_attachments(&self, account_id: &str) -> PathBuf {
+        self.account_dir(account_id).join("assets")
+    }
+
     /// `base/kupferdraht.lock` — the home-level advisory lock (Step 85): guards
     /// the first-time creation of the device-registry key and (Step 93)
     /// of the home id. Native only: the browser has one instance per

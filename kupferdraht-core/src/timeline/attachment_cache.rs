@@ -7,8 +7,9 @@
 //! store took the file's row. A client's start removes what is left over: the
 //! staged copies of sends — at a start none can be running — and every cached
 //! file no attachment row names (a crash between a delete's commit and its
-//! removal, a removal that failed, a history cleared at login). A failure is
-//! logged, never raised: the next start tries again.
+//! removal, a removal that failed, a history cleared at login), and the cache
+//! directory of a release before Step 163b, which nothing else reaches any
+//! more. A failure is logged, never raised: the next start tries again.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -33,9 +34,29 @@ impl Client {
         }
     }
 
+    /// Remove the cache directory a release before Step 163b kept. A row that
+    /// still names a file there downloads it again when asked.
+    fn remove_former_cache_dir(&self) {
+        let (Some(former), Some(dir)) = (self.former_attachments_dir(), self.attachments_dir())
+        else {
+            return;
+        };
+        debug_assert!(
+            former.parent() == dir.parent() && former != dir,
+            "the former cache sits beside today's"
+        );
+        match std::fs::remove_dir_all(&former) {
+            Ok(()) => tracing::info!("the former attachment cache directory removed"),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => warn!(error = %e, "the former attachment cache directory kept"),
+        }
+    }
+
     /// Remove what the account's attachment cache holds that no message names:
-    /// every staged copy and every cached file no attachment row names.
+    /// every staged copy, every cached file no attachment row names and the
+    /// former cache directory.
     pub(crate) async fn remove_leftover_files(&self) {
+        self.remove_former_cache_dir();
         let (Some(dir), Some(store)) = (self.attachments_dir(), self.store_handle()) else {
             return;
         };

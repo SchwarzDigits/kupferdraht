@@ -405,7 +405,8 @@ delete removes the upload at the server, best effort. A download checks
 the row first, so a summary taken before the delete cannot bring the file
 back. The cache keeps only what a row names: a send removes its staged
 copy however it ends, and a client's start (`register_device`, `resume`)
-empties `attachments/staging/` and removes every `.enc` file no row names
+empties `attachments/staging/`, removes every `.enc` file no row names and
+removes the cache directory of a release before Step 163b, `assets/`
 (`timeline/attachment_cache.rs`, native only — the browser caches no files).
 
 ### 5.6 Epoch self-healing
