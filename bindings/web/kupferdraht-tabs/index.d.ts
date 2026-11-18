@@ -239,8 +239,12 @@ export interface TypingEvent_ { roomId: string; typingUsers: string[] }
 export interface FeatureConfig { name: string; status: string | null; configJson: string; lastSyncedAtMs: number }
 /** The team's file-sharing policy (Step 98d). */
 export interface FileSharing { policy: 'disabled' | 'enabled' }
-/** A conversation's access modes and roles (Step 98b). */
-export interface RoomAccess { modes: string[]; roles: string[] }
+/** How a user can join a room (Step 163c): `joinLink` by the room's join link (`createJoinLink`); `link` by one the backend defines. */
+export type JoinRule = 'private' | 'invite' | 'link' | 'joinLink';
+/** Which users may join a room (Step 163c): `guests` have no account. */
+export type Joiner = 'teamMembers' | 'nonTeamMembers' | 'guests' | 'services';
+/** Who may join a room and how (Step 98b, typed by Step 163c). */
+export interface RoomAccess { joinRules: JoinRule[]; allowed: Joiner[] }
 /** A conversation's reusable guest link (Step 98b). */
 export interface JoinLink { url: string; passwordProtected: boolean }
 /** A registered device, field for field `core::DeviceInfo` (Step 98a). */
@@ -344,13 +348,13 @@ export class ClientProxy {
   /** Team-admin delete for everyone; an already-gone room counts as success. */
   deleteRoom(roomId: string): Promise<void>;
   roomAccess(roomId: string): Promise<RoomAccess>;
-  setRoomAccess(roomId: string, modes: string[], roles: string[]): Promise<Room>;
-  /** Prerequisite for `createJoinLink` — a fresh room permits no codes. */
+  setRoomAccess(roomId: string, access: RoomAccess): Promise<Room>;
+  /** Prerequisite for `createJoinLink` — a fresh room admits by invite only. */
   allowGuests(roomId: string): Promise<Room>;
   createJoinLink(roomId: string, password?: string): Promise<JoinLink>;
   revokeJoinLink(roomId: string): Promise<void>;
-  /** An MLS external commit — `code`/`key` come from the link's query; the link names the conversation. */
-  joinViaLink(code: string, key: string, password?: string): Promise<Room>;
+  /** An MLS external commit — `url` is the link as `createJoinLink` answers it, secret included; the link names the room. */
+  joinViaLink(url: string, password?: string): Promise<Room>;
   /** A subscription to the leader's one sync loop; callbacks run in this tab. */
   startSync(onMessage: (m: MessageEvent_) => void, onTyping?: (t: TypingEvent_) => void, onExpired?: () => void, onSync?: (s: SyncSummary) => void, onDevicesChanged?: (c: DevicesChange) => void, onStorage?: (state: 'online' | 'reconnecting') => void, onRoomsChanged?: (c: ReadStateChange) => void): SyncHandleProxy;
   /** `true` may be sent on every keystroke; repeats while one is outstanding are dropped. */

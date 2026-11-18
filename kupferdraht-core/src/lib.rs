@@ -63,7 +63,7 @@ pub use error::KupferdrahtError;
 pub use identity::UserId;
 pub use manager::{Kupferdraht, KupferdrahtBuilder, PendingAccount, PendingLogin, PurgeOptions};
 pub use rooms::{
-    DeviceCredential, JoinLink, Room, RoomAccess, RoomDevice, RoomDevicesChange,
+    DeviceCredential, JoinLink, JoinRule, Joiner, Room, RoomAccess, RoomDevice, RoomDevicesChange,
     RoomDevicesListener, RoomMember, RoomMemberRole, RoomType,
 };
 pub use storage::{AccountEntry, GlobalStore, StorageProvider};

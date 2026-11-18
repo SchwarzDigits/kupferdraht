@@ -40,7 +40,7 @@ use std::sync::Arc;
 
 use httpmock::Method::{POST, PUT};
 use httpmock::MockServer;
-use kupferdraht::{Client, SyncSettings};
+use kupferdraht::{Client, JoinRule, Joiner, RoomAccess, SyncSettings};
 
 mod common;
 
@@ -177,8 +177,7 @@ async fn rename_room_returns_arc_room_with_new_name() {
 async fn set_room_access_returns_arc_room_with_new_access_fields() {
     let server = MockServer::start();
     let client = logged_in_client(&server).await;
-    let new_modes = vec!["invite".to_string(), "code".to_string()];
-    let new_roles = vec!["team_member".to_string(), "guest".to_string()];
+    let new_access = guest_link_access();
     // The mock pretends the room already has the new access shape, so
     // post-mutation refresh reflects what set_room_access just pushed.
     mount_sync_with_single_room(
@@ -207,21 +206,16 @@ async fn set_room_access_returns_arc_room_with_new_access_fields() {
         .expect("initial sync");
 
     let room = client
-        .set_room_access(&room_id_str(), &new_modes, &new_roles)
+        .set_room_access(&room_id_str(), &new_access)
         .await
         .expect("set_room_access must succeed and return Arc<Room>");
 
     put_access.assert_calls(1);
     assert_eq!(room.id(), room_id_str());
     assert_eq!(
-        room.access_modes(),
-        new_modes,
-        "returned room must carry the new access modes"
-    );
-    assert_eq!(
-        room.access_roles(),
-        new_roles,
-        "returned room must carry the new access roles"
+        room.cached_access(),
+        new_access,
+        "returned room must carry the new access"
     );
 
     let looked_up = client
@@ -279,8 +273,7 @@ async fn room_set_name_delegator_returns_arc_room() {
 async fn room_set_access_delegator_returns_arc_room() {
     let server = MockServer::start();
     let client = logged_in_client(&server).await;
-    let new_modes = vec!["invite".to_string(), "code".to_string()];
-    let new_roles = vec!["team_member".to_string(), "guest".to_string()];
+    let new_access = guest_link_access();
     mount_sync_with_single_room(
         &server,
         "Engineering",
@@ -306,12 +299,11 @@ async fn room_set_access_delegator_returns_arc_room() {
         .expect("cached room before set_access");
 
     let updated = room
-        .set_access(new_modes.clone(), new_roles.clone())
+        .set_access(new_access.clone())
         .await
         .expect("Room::set_access must succeed and return Arc<Room>");
 
-    assert_eq!(updated.access_modes(), new_modes);
-    assert_eq!(updated.access_roles(), new_roles);
+    assert_eq!(updated.cached_access(), new_access);
     let looked_up = client
         .room(&room_id_str())
         .await
@@ -351,11 +343,7 @@ async fn _mutation_signatures_compile(client: Arc<Client>, room: Arc<kupferdraht
         .await
         .expect("never reached");
     let _: Arc<kupferdraht::Room> = client
-        .set_room_access(
-            "room@dom",
-            &["invite".to_string()],
-            &["team_member".to_string()],
-        )
+        .set_room_access("room@dom", &RoomAccess::default())
         .await
         .expect("never reached");
 
@@ -369,9 +357,18 @@ async fn _mutation_signatures_compile(client: Arc<Client>, room: Arc<kupferdraht
         .expect("never reached");
     let _: Arc<kupferdraht::Room> = room.set_name("n").await.expect("never reached");
     let _: Arc<kupferdraht::Room> = room
-        .set_access(vec!["invite".to_string()], vec!["team_member".to_string()])
+        .set_access(RoomAccess::default())
         .await
         .expect("never reached");
+}
+
+/// What `Room::allow_guests` sets, less `NonTeamMembers` — the access the
+/// mutation tests push and read back.
+fn guest_link_access() -> RoomAccess {
+    RoomAccess {
+        join_rules: vec![JoinRule::Invite, JoinRule::JoinLink],
+        allowed: vec![Joiner::TeamMembers, Joiner::Guests],
+    }
 }
 
 /// Existing call-sites that discarded the unit return with `?;`
@@ -389,10 +386,6 @@ async fn _existing_discard_pattern_still_compiles(client: Arc<Client>) {
         .await;
     let _ = client.rename_room("room@dom", "n").await;
     let _ = client
-        .set_room_access(
-            "room@dom",
-            &["invite".to_string()],
-            &["team_member".to_string()],
-        )
+        .set_room_access("room@dom", &RoomAccess::default())
         .await;
 }

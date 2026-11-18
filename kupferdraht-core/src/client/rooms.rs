@@ -235,36 +235,33 @@ impl Client {
             .await
     }
 
-    /// `PUT /v{N}/conversations/{domain}/{cnv}/access` — Step 8b.
-    /// Replaces the conversation's access modes + roles. Common
-    /// flow: open up an invite-only group for guest links via
-    /// `access=["invite","code"]`,
-    /// `access_role=["team_member","non_team_member","guest"]`.
-    /// `Room::open_to_guests` is the convenience wrapper around
-    /// that canonical configuration.
+    /// `PUT /v{N}/conversations/{domain}/{cnv}/access` — Step 8b, typed
+    /// by Step 163c. Sets who may join the room and how. Common flow:
+    /// open an invite-only group for guests by its join link —
+    /// `Room::allow_guests` is the convenience wrapper around that
+    /// configuration.
     ///
     /// Step 14e: after the PUT succeeds, the local rooms cache is
     /// refreshed via `sync_metadata` and the freshly-cached
-    /// `Arc<Room>` (now carrying the new `access` / `access_role`
-    /// fields) is returned.
+    /// `Arc<Room>` (now carrying the new access) is returned.
     ///
     /// # Errors
-    /// * `InvalidInput` when `room_id` is unqualified, either list
+    /// * `InvalidInput` when `room_id` is unqualified, either set
     ///   is empty, or the room is not in the cache after refresh.
     /// * `BackendRejected` / `Network` from the HTTP layer.
     pub async fn set_room_access(
         &self,
         room_id: &str,
-        access: &[String],
-        access_role: &[String],
+        access: &RoomAccess,
     ) -> Result<Arc<Room>, KupferdrahtError> {
+        let (join_rules, joiners) = access.to_wire();
         self.http
             .set_conversation_access(
                 self.api_version,
                 &self.current_access_token(),
                 room_id,
-                access,
-                access_role,
+                &join_rules,
+                &joiners,
             )
             .await?;
         self.sync_metadata().await?;
@@ -306,27 +303,29 @@ impl Client {
                 "list_room_access: Wire did not return a conversation for {room_id}"
             ))
         })?;
-        Ok(RoomAccess {
-            modes: conv.access,
-            roles: conv.access_role,
-        })
+        Ok(RoomAccess::from_wire(&conv.access, &conv.access_role))
     }
 
-    /// Redeem a guest link and join the conversation it names. Step 8;
-    /// Step 122 finds the room by the link instead of by a domain:
+    /// Redeem a join link and join the room it names. Step 8; Step 122
+    /// finds the room by the link instead of by a domain; Step 163c takes
+    /// the link's URL — the [`JoinLink::url`](crate::rooms::JoinLink)
+    /// `Room::create_join_link` hands out:
     ///
-    /// 1. `GET /v{N}/conversations/join?key&code` — the conversation the
-    ///    link names (its id). A redeem only ever reaches the own
-    ///    backend's conversations (`open.md` §74).
-    /// 2. `POST /v{N}/conversations/join` with `{key, code, password?}`
-    ///    — Wire adds the caller to the conversation member list (`204`:
-    ///    a member already).
+    /// 1. `GET /v{N}/conversations/join` — the conversation the link names
+    ///    (its id). A redeem only ever reaches the own backend's
+    ///    conversations (`open.md` §74).
+    /// 2. `POST /v{N}/conversations/join` with the link and the password —
+    ///    the backend adds the caller to the room's members (`204`: a
+    ///    member already).
     /// 3. `Client::sync_metadata` — the room list now holds the room.
     /// 4. `Client::join_room` (Step 3 external commit) — unless the room's
     ///    group is joined already.
     ///
+    /// The URL carries the link's secret: keep it out of logs.
+    ///
     /// # Errors
-    /// * `InvalidInput` if `code` or `key` is empty.
+    /// * `InvalidInput` if `url` is no join link (no URL, or no link in
+    ///   its query) — before any request.
     /// * `BackendRejected` (`404 no-conversation-code` for a link the
     ///   backend does not know, `403 invalid-conversation-password`,
     ///   `409 guest-links-disabled`, …) from the lookup or the redeem.
@@ -335,15 +334,10 @@ impl Client {
     /// * Anything `sync_metadata` / `join_room` can return.
     pub async fn join_via_link(
         &self,
-        code: String,
-        key: String,
+        url: String,
         password: Option<String>,
     ) -> Result<Arc<crate::rooms::Room>, KupferdrahtError> {
-        if code.is_empty() || key.is_empty() {
-            return Err(KupferdrahtError::InvalidInput(
-                "join_via_link: code and key must be non-empty".into(),
-            ));
-        }
+        let (key, code) = crate::wire::http::join_link_key_and_code(&url)?;
         let conversation = self.redeem_link(&code, &key, password.as_deref()).await?;
         self.sync_metadata().await?;
         let missing = || {
@@ -606,7 +600,7 @@ impl Client {
             .decode(group_id_b64)
             .map_err(|e| KupferdrahtError::Encoding(format!("create_room group_id b64: {e}")))?;
         // Step 95c: backend data — an empty group id is a malformed
-        // response, as in `create_dm` / `establish_self_room`.
+        // response, as in `create_dm` / `establish_personal_room`.
         if group_id.is_empty() {
             return Err(KupferdrahtError::Encoding(
                 "create_room: server response carries an empty group_id".into(),
@@ -642,8 +636,8 @@ impl Client {
     /// success. On rejection the pending commit is cleared and the error
     /// surfaces — the room is left at epoch 0 (the prior inert state).
     /// `op` labels the calling operation in error messages
-    /// (`"create_room"`, `"establish_self_room"` — Step 86 reuses this
-    /// path for the never-established self conversation).
+    /// (`"create_room"`, `"establish_personal_room"` — Step 86 reuses this
+    /// path for the never-established personal room).
     pub(super) async fn establish_group(
         &self,
         mls: &Arc<StdMutex<crate::encryption::MlsClient>>,

@@ -103,7 +103,7 @@ object identity)
   `own_device_thumbprint()` and `subscribe_device_changes(listener:
   RoomDevicesListener) -> Subscription` (Step 95d — this device's MLS
   thumbprint; one callback per room whose device set changed);
-  rooms (`rooms`, `room`, `create_dm`, `dm_with`, `self_room`, `join_room`,
+  rooms (`rooms`, `room`, `create_dm`, `dm_with`, `personal_room`, `join_room`,
   `leave_room`, `delete_room`, `rename_room`, `join_via_link`,
   `find_message_room`, `find_message_by_id`, `resync_room`,
   `resync_existing_rooms`, …); admin (`logout`,
@@ -118,7 +118,7 @@ object identity)
   …), membership (`join`, `leave`, `delete` — team-admin, `invite`, `kick`,
   `set_name`), `typing_notice(typing)` (Step 162 — auto-stop + dedupe; a
   `false` sends only after a `true`), access /
-  guest links (`access`, `set_access`, `create_join_link`, …),
+  join links (`cached_access`, `access`, `set_access(RoomAccess)`, `allow_guests`, `create_join_link`, …),
   `timeline() -> Timeline`, `messages(limit?, before?)` (`limit`
   `null`/`nil` = everything), `failed_sends()` (the room's `Failed`
   rows, oldest first — Step 79), `devices() -> [RoomDevice]` (Step 95d —
@@ -155,7 +155,7 @@ object identity)
 version marker is the first of them, else the second),
 `RoomDevice`, `DeviceCredential`, `RoomDevicesChange` (Step 95d; the
 foreign-implemented `RoomDevicesListener` sits with the other observers),
-`RoomType`, `RoomAccess`, `JoinLink`, `TimelineItem`, `TimelineItemKind` (with
+`RoomType`, `RoomAccess` (`JoinRule`, `Joiner`), `JoinLink`, `TimelineItem`, `TimelineItemKind` (with
 `MembershipChange`, `RoomNameChange` and `RoomCreated`, Step 145, carrying the records
 `RoomMembershipChange` and `MembershipChange`; the rules are in
 [library.md](library.md)),
@@ -784,14 +784,18 @@ Since Step 110 (ADR-0035):
   `createDm(peer)`, `members(roomId)`, `invite(roomId, userIds)`,
   `kick(roomId, userIds)`, `leave(roomId)`, and since Step 98b
   `renameRoom(roomId, name)`, `deleteRoom(roomId)` (team-admin),
-  `allowGuests(roomId)` (the **prerequisite** for a guest link — a
-  Kupferdraht-created room defaults to `access=["invite"]`, against which Wire
+  `allowGuests(roomId)` (the **prerequisite** for a join link — a room
+  Kupferdraht creates admits by invite only, against which the backend
   answers `403 access-denied`), `roomAccess(roomId)` /
-  `setRoomAccess(roomId, modes, roles)`,
+  `setRoomAccess(roomId, access)` with `access` as
+  `{ joinRules, allowed }` (Step 163c: `JoinRule` is `'private' | 'invite' |
+  'link' | 'joinLink'`, `Joiner` is `'teamMembers' | 'nonTeamMembers' |
+  'guests' | 'services'`),
   `createJoinLink(roomId, password?) -> {url, passwordProtected}`,
-  `revokeJoinLink(roomId)`, `joinViaLink(code, key, password?)` (an MLS
-  external commit — `code`/`key` come from the link's query, and the link
-  names the conversation; Step 122 dropped `domain`, BREAKING).
+  `revokeJoinLink(roomId)`, `joinViaLink(url, password?)` (an MLS
+  external commit — `url` is the link as `createJoinLink` answers it,
+  secret included, and the link names the room; Step 122 dropped `domain`,
+  Step 163c the `code`/`key` pair, both BREAKING).
 - Read state (Step 138): `markAsRead(roomId, itemId, options?)` moves the
   device-local read position to `itemId` and clears the room's unread
   flag; `options.sendReceipt` (default `true`) tells the room, `false` is

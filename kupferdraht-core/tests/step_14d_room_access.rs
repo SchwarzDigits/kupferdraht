@@ -14,11 +14,10 @@
 //!   `grep -n 'pub async fn fetch_' kupferdraht-core/src/` returning zero
 //!   hits, recorded as a separate manual check in the landing
 //!   commit message).
-//! * `RoomAccess` is a public struct with two fields, `modes:
-//!   Vec<String>` (Wire's `access` array — `"invite"`, `"code"`,
-//!   `"link"`, `"private"`) and `roles: Vec<String>` (Wire's
-//!   `access_role` array — `"team_member"`, `"non_team_member"`,
-//!   `"guest"`, `"service"`). Re-exported from `kupferdraht::RoomAccess`.
+//! * `RoomAccess` is a public struct with two fields, typed by Step
+//!   163c: `join_rules: Vec<JoinRule>` (how a user can join) and
+//!   `allowed: Vec<Joiner>` (who may). Re-exported from
+//!   `kupferdraht::RoomAccess`; the backend's strings stay in `wire/`.
 //! * Under the hood `Room::access()` issues the same single-id
 //!   `POST /v{N}/conversations/list` that today's
 //!   `Client::fetch_room_access` drives — same HTTP call, method
@@ -43,7 +42,7 @@ use std::sync::Arc;
 
 use httpmock::Method::POST;
 use httpmock::MockServer;
-use kupferdraht::{Client, RoomAccess, SyncSettings};
+use kupferdraht::{Client, JoinRule, Joiner, RoomAccess, SyncSettings};
 
 mod common;
 
@@ -154,14 +153,14 @@ async fn room_access_returns_room_access_struct_with_modes_and_roles() {
     let access: RoomAccess = room.access().await.expect("Room::access must succeed");
 
     assert_eq!(
-        access.modes,
-        vec!["invite".to_string(), "code".to_string()],
-        "RoomAccess.modes must mirror Wire's `access` array",
+        access.join_rules,
+        [JoinRule::Invite, JoinRule::JoinLink],
+        "the join rules are the backend's access, typed",
     );
     assert_eq!(
-        access.roles,
-        vec!["team_member".to_string(), "guest".to_string()],
-        "RoomAccess.roles must mirror Wire's `access_role` array",
+        access.allowed,
+        [Joiner::TeamMembers, Joiner::Guests],
+        "the joiners are the backend's access roles, typed",
     );
 }
 
@@ -213,6 +212,6 @@ async fn room_access_re_fetches_via_conversations_list_endpoint() {
 #[allow(dead_code)]
 async fn _room_access_signature_compile(room: Arc<kupferdraht::Room>) {
     let access: RoomAccess = room.access().await.expect("never reached");
-    let _: Vec<String> = access.modes;
-    let _: Vec<String> = access.roles;
+    let _: Vec<JoinRule> = access.join_rules;
+    let _: Vec<Joiner> = access.allowed;
 }

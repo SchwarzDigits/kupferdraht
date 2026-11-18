@@ -639,15 +639,14 @@ enum Command {
         #[arg(long)]
         peer: String,
     },
-    /// Look up the caller's self conversation — Wire's notes-to-self
-    /// room, an MLS group of the user's own devices (Step 86). Strict
-    /// local-cache lookup: no network, no authentication. Prints
-    /// `room_id` + `epoch` when the last sync's snapshot carries it,
-    /// exits with status 2 otherwise (run `sync` first). Epoch 0 means
-    /// nobody established the group yet — `rooms-join-all` (or
-    /// `room-join --id <room_id>`) establishes it from this device.
-    /// No matrix-rust-sdk analog.
-    SelfRoom,
+    /// Look up the caller's personal room — the notes-to-self room, an
+    /// MLS group of the user's own devices (Step 86). Strict local-cache
+    /// lookup: no network, no authentication. Prints `room_id` + `epoch`
+    /// when the last sync's snapshot carries it, exits with status 2
+    /// otherwise (run `sync` first). Epoch 0 means nobody established the
+    /// group yet — `rooms-join-all` (or `room-join --id <room_id>`)
+    /// establishes it from this device. No matrix-rust-sdk analog.
+    PersonalRoom,
     /// List every device registered for the authenticated user
     /// (Step 1d). Wire enforces a 7-device cap; this is the
     /// CLI-driven escape hatch when the cap is hit and
@@ -965,60 +964,50 @@ enum Command {
         #[arg(long)]
         id: String,
     },
-    /// Display the current `access` + `access_role` arrays for a
-    /// conversation (Step 8b). Re-fetches via
-    /// `POST /v{N}/conversations/list` so the output reflects
-    /// Wire's live state, not the local sync snapshot.
+    /// Show who may join a room and how (Step 8b): its join rules and the
+    /// users allowed. Asks the backend, so the output is the live state,
+    /// not the local sync snapshot.
     RoomAccessShow {
         /// Qualified room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
-    /// Replace `access` + `access_role` for a conversation
-    /// (Step 8b). `--modes` is comma-separated (`invite`, `code`,
-    /// `link`, `private`); `--roles` is comma-separated
-    /// (`team_member`, `non_team_member`, `guest`, `service`).
+    /// Set who may join a room and how (Step 8b, typed by Step 163c).
     RoomAccessSet {
         /// Qualified room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
-        /// Comma-separated access modes (`invite,code` is the
-        /// canonical guest-link config).
+        /// Comma-separated join rules: `private`, `invite`, `link`,
+        /// `join-link` (`invite,join-link` lets guests in by the room's
+        /// join link).
         #[arg(long)]
-        modes: String,
-        /// Comma-separated access roles
-        /// (`team_member,non_team_member,guest` for guest links).
+        join: String,
+        /// Comma-separated users allowed to join: `team-members`,
+        /// `non-team-members`, `guests`, `services`.
         #[arg(long)]
-        roles: String,
+        allow: String,
     },
-    /// Convenience over `room-access set`: opens the conversation
-    /// up for guest-link joins via the canonical
-    /// `access=["invite","code"]`,
-    /// `access_role=["team_member","non_team_member","guest"]`
-    /// configuration. Step 8b. Most Kupferdraht-created conversations
-    /// default to `access=["invite"]`; calling this once is the
+    /// Let guests join a room by its join link (Step 8b): members invite,
+    /// and the link admits team members, other users and guests. A room
+    /// Kupferdraht creates admits by invite only; calling this once is the
     /// prerequisite for `join-link-generate`.
     RoomAccessAllowGuests {
         /// Qualified room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
-    /// Redeem a guest link and MLS-join the conversation it names
-    /// (Steps 8, 122). Looks the conversation up by the link
-    /// (`GET /v{N}/conversations/join`), joins the caller as a
-    /// Wire-conversation member (`POST /v{N}/conversations/join`), then
-    /// runs `sync_metadata` and the Step-3 external-commit join on that
-    /// room. The link's `key` is read on the TTY (no echo) or, with
-    /// `--key-stdin`, as the first line of stdin — never from argv; the
+    /// Redeem a join link and MLS-join the room it names (Steps 8, 122,
+    /// 163c). Looks the room up by the link, joins the caller as a member,
+    /// then runs `sync_metadata` and the Step-3 external-commit join on
+    /// that room. The link's URL — as `join-link-generate` prints it — is
+    /// read on the TTY (no echo) or, with `--url-stdin`, as the first line
+    /// of stdin — never from argv: it carries the link's secret. The
     /// password (if the link is password-protected) on the TTY.
     JoinViaLink {
-        /// The link's `code` query parameter.
+        /// Read the link's URL from stdin (its first line) instead of the
+        /// TTY prompt.
         #[arg(long)]
-        code: String,
-        /// Read the link's `key` query parameter from stdin (its first
-        /// line) instead of the TTY prompt; the key is the link's secret.
-        #[arg(long)]
-        key_stdin: bool,
+        url_stdin: bool,
         /// Supply the link's password. Reads from the TTY (no echo).
         #[arg(short = 'p', long)]
         password: bool,
@@ -1358,7 +1347,7 @@ async fn async_main() -> ExitCode {
         Command::DmCreate { peer } => cli::rooms::dm_create(peer).await,
         Command::DmShow { peer } => cli::rooms::dm_show(peer).await,
         Command::DmWith { peer } => cli::rooms::dm_with(peer).await,
-        Command::SelfRoom => cli::rooms::self_room().await,
+        Command::PersonalRoom => cli::rooms::personal_room().await,
         Command::Devices => cli::devices::devices().await,
         Command::KeyPackages { replenish } => cli::devices::key_packages(replenish).await,
         Command::DeviceDelete { id, password_stdin } => {
@@ -1403,17 +1392,16 @@ async fn async_main() -> ExitCode {
         Command::JoinLinkRevoke { id } => cli::access::join_link_revoke(id).await,
         Command::JoinLinkCurrent { id } => cli::access::join_link_current(id).await,
         Command::RoomAccessShow { id } => cli::access::room_access_show(id).await,
-        Command::RoomAccessSet { id, modes, roles } => {
-            cli::access::room_access_set(id, modes, roles).await
+        Command::RoomAccessSet { id, join, allow } => {
+            cli::access::room_access_set(id, join, allow).await
         }
         Command::RoomAccessAllowGuests { id } => cli::access::room_access_allow_guests(id).await,
         Command::JoinViaLink {
-            code,
-            key_stdin,
+            url_stdin,
             password,
         } => {
-            let key = match secret_or_exit(key_stdin, "Link key: ", "key") {
-                Ok(key) => key,
+            let url = match secret_or_exit(url_stdin, "Link URL: ", "url") {
+                Ok(url) => url,
                 Err(exit) => return exit,
             };
             let pw = if password {
@@ -1424,7 +1412,7 @@ async fn async_main() -> ExitCode {
             } else {
                 None
             };
-            cli::access::join_via_link(code, key, pw).await
+            cli::access::join_via_link(url, pw).await
         }
         Command::Features { name } => cli::config::features(name).await,
         Command::Properties { key } => cli::config::properties(key).await,
@@ -1702,26 +1690,34 @@ mod tests {
         );
     }
 
-    /// The same for `join-via-link`'s `key`: `--key-stdin` or the prompt,
-    /// `-p` keeps prompting for the link's password.
+    /// The same for `join-via-link`'s URL, which carries the link's secret:
+    /// `--url-stdin` or the prompt, `-p` keeps prompting for the link's
+    /// password.
     #[test]
-    fn join_via_link_takes_the_key_from_stdin_or_the_prompt_never_from_argv() {
-        let base = ["kupferdraht-cli", "join-via-link", "--code", "c0de"];
+    fn join_via_link_takes_the_url_from_stdin_or_the_prompt_never_from_argv() {
+        let base = ["kupferdraht-cli", "join-via-link"];
+        for flag in [
+            ["--url", "https://link"],
+            ["--code", "c0de"],
+            ["--key", "k3y"],
+        ] {
+            assert!(
+                Cli::try_parse_from(argv(&base, &flag)).is_err(),
+                "{} must be refused",
+                flag[0]
+            );
+        }
         assert!(
-            Cli::try_parse_from(argv(&base, &["--key", "k3y"])).is_err(),
-            "--key must be refused"
+            Cli::try_parse_from(argv(&base, &["--url-stdin"])).is_ok(),
+            "--url-stdin must parse"
         );
         assert!(
-            Cli::try_parse_from(argv(&base, &["--key-stdin"])).is_ok(),
-            "--key-stdin must parse"
-        );
-        assert!(
-            Cli::try_parse_from(argv(&base, &["--key-stdin", "-p"])).is_ok(),
-            "--key-stdin with the password prompt must parse"
+            Cli::try_parse_from(argv(&base, &["--url-stdin", "-p"])).is_ok(),
+            "--url-stdin with the password prompt must parse"
         );
         assert!(
             Cli::try_parse_from(argv(&base, &[])).is_ok(),
-            "without a flag the key is prompted"
+            "without a flag the URL is prompted"
         );
     }
 

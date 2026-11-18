@@ -8,8 +8,10 @@
 //!
 //! * [`Room`] — a single conversation, read-only snapshot. Richer
 //!   behaviour (send / receive / timeline) comes in Steps 4 – 6.
-//! * [`RoomType`] — `DirectMessage` / `Group` / `Channel` / `SelfRoom`.
+//! * [`RoomType`] — `DirectMessage` / `Group` / `Channel` / `Personal`.
 //!   Cycle 2b maps Wire's numeric `ConvType` onto this enum.
+//! * [`RoomAccess`] — who may join a room and how: [`JoinRule`]s and
+//!   [`Joiner`]s (Step 163c).
 //! * [`RoomMember`] — one participant. Cycle 2b populates the raw
 //!   qualified user id; cycle 2c backfills `display_name` / `handle` via
 //!   `POST /v14/list-users`.
@@ -18,13 +20,15 @@
 //! [`room::room_from_conversation`]; Wire-specific terminology does
 //! not cross out of that function.
 
+mod access;
 mod devices;
 mod room;
 mod typing;
 
+pub use access::{JoinRule, Joiner, RoomAccess};
 pub use devices::{DeviceCredential, RoomDevice, RoomDevicesChange, RoomDevicesListener};
 pub(crate) use devices::{device_set_change, room_device_from_leaf};
-pub use room::{JoinLink, Room, RoomAccess, RoomMember, RoomMemberRole, RoomType};
+pub use room::{JoinLink, Room, RoomMember, RoomMemberRole, RoomType};
 
 pub(crate) use room::{
     apply_self_profile, apply_user_profiles, non_self_qualified_ids, parse_room_id,

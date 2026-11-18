@@ -89,7 +89,7 @@ kupferdraht-core/src/
 │   │                          server_configs.rs, device.rs, http_calls.rs,
 │   │                          pending*.rs
 │   └── mod.rs                — the Client struct + cross-module accessors
-├── rooms/                   — Room, RoomType, RoomMember, RoomAccess, JoinLink;
+├── rooms/                   — Room, RoomType, RoomMember, RoomAccess (JoinRule, Joiner), JoinLink;
 │                              typing.rs: Room::typing_notice (Step 162)
 ├── timeline/                 — Timeline + one child module per interaction
 │   │                          (Step 30 split): text, reaction, confirmation,
@@ -143,7 +143,7 @@ nine `pub use` statements re-exporting roughly 30 symbols:
 - `error::KupferdrahtError`
 - `identity::UserId`
 - `manager::{PendingAccount, PendingLogin, Kupferdraht, KupferdrahtBuilder}`
-- `rooms::{JoinLink, Room, RoomAccess, RoomMember, RoomType}`
+- `rooms::{JoinLink, JoinRule, Joiner, Room, RoomAccess, RoomMember, RoomType}`
 - `storage::{AccountEntry, GlobalStore, StorageProvider}`
 - `sync::{EventHandler, Message, MessageBody, SyncSettings, SyncSummary}`
 - `time::now_ms`
@@ -945,7 +945,7 @@ scheduler** (the core has no lifecycle to hang one on):
 | `joined_rooms()`                                      | `Vec<Arc<Room>>`                      | **Step 14c.** Rooms the caller has joined. In Kupferdraht's current model every cached room is joined, so this is semantically equivalent to `rooms()`; the two methods are distinguished for forward-compatibility once invitation materialization lands. Sync (`std::sync::RwLock`). matrix-rust-sdk analog: `Client::joined_rooms`. |
 | `invited_rooms()`                                     | `Vec<Arc<Room>>`                      | **Step 14c.** Rooms the caller has been invited to but has not yet joined. Returns an empty `Vec` today — Kupferdraht does not yet materialize pending invitations as `Room` objects (Kupferdraht-current limitation, tracked outside 14c). Sync. matrix-rust-sdk analog: `Client::invited_rooms`. |
 | `rooms_filtered<F>(F)`                                | `Vec<Arc<Room>>`                      | **Step 14c.** Filter the cached rooms by a closure `F: Fn(&Room) -> bool`. Replaces ad-hoc iteration through `rooms()`. matrix-rust-sdk uses a typed `RoomListFilter`; Kupferdraht takes a closure to stay UDL-friendly and avoid filter-variant churn. |
-| `self_room()`                                         | `Option<Arc<Room>>`                   | **Step 86.** Local-cache lookup of the caller's self conversation (`room_type == SelfRoom` — Wire's notes-to-self room, one MLS group of the user's own devices; the private cross-device channel later features ride: personal task list, `LastRead`, drafts). Sync, no network; `None` before the first sync / hydrate. The room may still be at epoch 0 (nobody established it) — `join_room` / `join_all_rooms` bring it online. No matrix-rust-sdk analog (Matrix has no self room). |
+| `personal_room()`                                     | `Option<Arc<Room>>`                   | **Step 86.** Local-cache lookup of the caller's personal room (`room_type == Personal` — the notes-to-self room, one MLS group of the user's own devices; the private cross-device channel later features ride: personal task list, `LastRead`, drafts). Sync, no network; `None` before the first sync / hydrate. The room may still be at epoch 0 (nobody established it) — `join_room` / `join_all_rooms` bring it online. No matrix-rust-sdk analog (Matrix has no personal room). Was `self_room` before Step 163c. |
 | `room(&str)`                                          | `Option<Arc<Room>>`                   | Single-room lookup by qualified id. **Step 15:** migrated from `room_id: String` to `&str` to drop the caller-side `.clone()` ceremony (closes `v1-api-ergonomics-audit.md §4.1`). |
 | `room_or_load(&str)`                                  | `Option<Arc<Room>>`                   | **Step 14g.** Cache-first lookup with lazy store-hydrate fallback. Tries `room` first; on `None`, calls `load_rooms_from_store` and retries. **Step 15:** migrated from `String` to `&str`. |
 | `unread_counts()`                                     | `Result<HashMap<String, u32>, KupferdrahtError>` | **Step 67.** Per-room unread counts in one grouped query — built for room lists (no n+1). Unread = inbound, not redacted, newer than the device-local read marker; **no marker → everything inbound counts**. Rooms without unread messages are absent (treat missing as 0). `Room::unread_count()` is the scoped sibling; `Timeline::mark_as_read` advances the marker (also when `ReceiptMode::Off` suppresses the outbound confirmation — the gate governs the wire signal, not the local read position). Cross-device read-position sync rides the self-conversation (later step). matrix-rust-sdk analog: `Room::unread_notification_counts` (Kupferdraht: single total, no mention split yet). |
@@ -953,9 +953,9 @@ scheduler** (the core has no lifecycle to hang one on):
 | `find_message_room(&str)`                             | `Result<Vec<String>, KupferdrahtError>`    | Reverse lookup — given a `message_id` or edit-event id, return the rooms it lives in. Reads `timeline_events` only; returns empty when the message hasn't been synced locally. Powers the CLI's optional-`--id` sugar on `mark-read` / `react` / `delete-message` / `edit` / `reply`. Composite-PK schema permits multi-room matches but UUIDv4 makes that astronomically unlikely. |
 | `find_message_by_id(message_id: &str)`                | `Result<Option<TimelineItem>, KupferdrahtError>` | **Step 34.** Resolve a single timeline item by id (stable `message_id` or edit-event id, same resolution as `find_message_room`) from the local store — no Wire call. Lightweight: the returned item's overlay collections (`reactions`, `read_by`, `delivered_to`) are empty; use `Room::messages` for a fully hydrated item. Primary use: resolving a reply's parent for a quote preview. `None` when the id isn't stored locally or no store is attached. |
 | `load_rooms_from_store()`                             | `Result<(), KupferdrahtError>`             | Hydrate the in-memory cache from `kupferdraht.db` without hitting Wire. Requires `ClientBuilder::base_dir`. |
-| `join_room(&str)`                                     | `Result<(), KupferdrahtError>`             | **Step 3.** External-commit join for one room. Fetches `GroupInfo`, runs openmls's `ExternalCommitBuilder`, uploads the commit bundle to `/v14/mls/commit-bundles`, and bumps the room's epoch to `server_epoch + 1` both in the cache and in `kupferdraht.db`. Requires `ClientBuilder::base_dir` so the MLS state persists across process restarts. **Step 86:** the never-established self conversation (`RoomType::SelfRoom` at `epoch == 0`) is **established** instead — Wire serves no `GroupInfo` before a member's first commit (`404 mls-missing-group-info`, live 2026-09-24): local group under the snapshot's `group_id`, the user's other devices Added (their Welcome rides the bundle, Step 69 absorbs it) or a self-update commit when this is the only device, epoch taken from openmls. A rejected bundle discards the local group so a later `join_all_rooms` retries (stale-snapshot race: another device established first → the next sync shows `epoch > 0` → external join). Non-self rooms are unchanged. |
+| `join_room(&str)`                                     | `Result<(), KupferdrahtError>`             | **Step 3.** External-commit join for one room. Fetches `GroupInfo`, runs openmls's `ExternalCommitBuilder`, uploads the commit bundle to `/v14/mls/commit-bundles`, and bumps the room's epoch to `server_epoch + 1` both in the cache and in `kupferdraht.db`. Requires `ClientBuilder::base_dir` so the MLS state persists across process restarts. **Step 86:** the never-established personal room (`RoomType::Personal` at `epoch == 0`) is **established** instead — Wire serves no `GroupInfo` before a member's first commit (`404 mls-missing-group-info`, live 2026-09-24): local group under the snapshot's `group_id`, the user's other devices Added (their Welcome rides the bundle, Step 69 absorbs it) or a self-update commit when this is the only device, epoch taken from openmls. A rejected bundle discards the local group so a later `join_all_rooms` retries (stale-snapshot race: another device established first → the next sync shows `epoch > 0` → external join). Non-self rooms are unchanged. |
 | `sync_members(&str)`                                  | `Result<Vec<RoomMember>, KupferdrahtError>` | **Step 3** (renamed in **Step 14b** from `refresh_members` per finding §41). Re-derives the member list from the local MLS group's leaves, backfills `display_name` / `handle` via `/list-users`, and swaps the result into the in-memory and persisted `room_members` snapshot. Since Step 72a the rebuild merges each member's `RoomMemberRole` from the conversation-metadata snapshot (leaves carry no role) — a resync never strips administrators. Available the moment `join_room` has populated the group. matrix-rust-sdk uses this exact name. |
-| `join_all_rooms()`                                    | `Result<JoinSummary, KupferdrahtError>`    | **Step 3.** Iterates the cached rooms, skips ones whose `group_id` is already in openmls storage (cheap local probe), and runs `join_room` on the rest. Per-room failures go into `JoinSummary.failed` rather than aborting the outer call. **Step 86:** through `join_room`'s branch a fresh device heals the self conversation automatically — established when it is at epoch 0, external-joined otherwise; either way it counts under `joined`. |
+| `join_all_rooms()`                                    | `Result<JoinSummary, KupferdrahtError>`    | **Step 3.** Iterates the cached rooms, skips ones whose `group_id` is already in openmls storage (cheap local probe), and runs `join_room` on the rest. Per-room failures go into `JoinSummary.failed` rather than aborting the outer call. **Step 86:** through `join_room`'s branch a fresh device heals the personal room automatically — established when it is at epoch 0, external-joined otherwise; either way it counts under `joined`. |
 | `resync_existing_rooms()`                             | `Result<ResyncSummary, KupferdrahtError>`  | **Step 7e.** Walk every cached room whose `group_id` is already known locally and re-join any whose persisted MLS leaf belongs to a *prior* `device_id` of the same `user_id` (the failure mode after an interactive re-`login`, CHANGELOG.md §29). Rooms with no local group at all are out of scope (that's `join_all_rooms`). Per-room failures land in `ResyncSummary.failed`. |
 | `resync_room(room_id: &str)`                          | `Result<(), KupferdrahtError>`             | **Step 7e.** Per-room recovery primitive `resync_existing_rooms` drives: discard the stale local MLS group state for `room_id` and re-join it via the unchanged Step-3 external-commit path (`join_room`). `InvalidInput` if `room_id` is not cached, has no `group_id`, or has no local MLS group to discard. |
 
@@ -989,22 +989,32 @@ state-event-driven (`m.room.join_rules`), while Wire's `access` /
 
 | Method | Returns | Notes |
 |---|---|---|
-| `Room::access_modes()`   | `Vec<String>` | **Step 8b.** Cached snapshot of Wire's `access` array (`"invite"`, `"code"`, `"link"`, `"private"`). Empty when the room was hydrated from the local store without a fresh `sync_metadata` round-trip. |
-| `Room::access_roles()`   | `Vec<String>` | **Step 8b.** Cached snapshot of Wire's `access_role` array (`"team_member"`, `"non_team_member"`, `"guest"`, `"service"`). Same fresh-on-sync semantics as `access_modes`. |
-| `Room::access()`         | `Result<RoomAccess, KupferdrahtError>` | **Step 14d.** Fetch the **live** `(access, access_role)` pair via a single `POST /v{N}/conversations/list` and project it into a typed `RoomAccess`. Replaces the removed `Client::fetch_room_access(...) -> Result<(Vec<String>, Vec<String>)>`. Use when the cached `access_modes()` / `access_roles()` snapshot may be stale. First method on `Room` that issues a Wire HTTP call. |
-| `Room::set_access(access: Vec<String>, access_role: Vec<String>)` | `Result<Arc<Room>, KupferdrahtError>` | **Step 8b.** `PUT /v{N}/conversations/{domain}/{cnv}/access` — replace both arrays. `Room::create_join_link` requires `access` to include `"code"`; guest-link redeemers also need `access_role` to include `"guest"` (typically `"non_team_member"` too). **Step 14e:** returns the refreshed `Arc<Room>`. Delegates to `Client::set_room_access`. |
-| `Room::open_to_guests()` | `Result<Arc<Room>, KupferdrahtError>` | **Step 8b.** Convenience over `set_access` with the canonical guest-enabling configuration: `access=["invite","code"]`, `access_role=["team_member","non_team_member","guest"]`. Most Kupferdraht-created conversations default to `access=["invite"]` (members only); call this once as the prerequisite for `Room::create_join_link`. |
-| `Client::set_room_access(room_id: &str, access: &[String], access_role: &[String])` | `Result<Arc<Room>, KupferdrahtError>` | **Step 8b.** The `Client`-level primitive `Room::set_access` delegates to. `InvalidInput` when `room_id` is unqualified, either list is empty, or the room is missing from the cache after refresh. `BackendRejected` on `403 access-denied` / `403 invalid-op` / `403 action-denied` (unauthorized caller) or `404 no-conversation`. |
+| `Room::cached_access()`  | `RoomAccess` | **Step 8b, typed by Step 163c.** Who may join and how, as of the last room-list sync. Empty when the room was hydrated from the local store without a fresh `sync_metadata` round-trip. |
+| `Room::access()`         | `Result<RoomAccess, KupferdrahtError>` | **Step 14d.** Ask the backend who may join and how: a single `POST /v{N}/conversations/list`, read into a typed `RoomAccess`. Use when `cached_access()` may be stale. First method on `Room` that issues an HTTP call. |
+| `Room::set_access(access: RoomAccess)` | `Result<Arc<Room>, KupferdrahtError>` | **Step 8b.** `PUT /v{N}/conversations/{domain}/{cnv}/access` — replace both sets. `Room::create_join_link` needs `JoinRule::JoinLink`; a guest redeeming the link needs `Joiner::Guests` (usually `NonTeamMembers` too). **Step 14e:** returns the refreshed `Arc<Room>`. Delegates to `Client::set_room_access`. |
+| `Room::allow_guests()`   | `Result<Arc<Room>, KupferdrahtError>` | **Step 8b.** Convenience over `set_access`: members invite, and the join link admits team members, other users and guests (`[Invite, JoinLink]`, `[TeamMembers, NonTeamMembers, Guests]`). A room Kupferdraht creates admits by invite only; call this once as the prerequisite for `Room::create_join_link`. Was `open_to_guests` before Step 163c. |
+| `Client::set_room_access(room_id: &str, access: &RoomAccess)` | `Result<Arc<Room>, KupferdrahtError>` | **Step 8b.** The `Client`-level primitive `Room::set_access` delegates to. `InvalidInput` when `room_id` is unqualified, either set is empty, or the room is missing from the cache after refresh. `BackendRejected` on `403 access-denied` / `403 invalid-op` / `403 action-denied` (unauthorized caller) or `404 no-conversation`. |
 
 ```rust
 pub struct RoomAccess {
-    pub modes: Vec<String>,  // Wire's `access` array
-    pub roles: Vec<String>,  // Wire's `access_role` array
+    pub join_rules: Vec<JoinRule>,  // how a user can join
+    pub allowed: Vec<Joiner>,       // who may
 }
+
+pub enum JoinRule { Private, Invite, Link, JoinLink }
+pub enum Joiner { TeamMembers, NonTeamMembers, Guests, Services }
 ```
 
-`RoomAccess` (Step 14d) is the typed projection `Room::access()`
-returns, replacing a bare `(Vec<String>, Vec<String>)` tuple.
+`RoomAccess` (Step 14d, typed by Step 163c) is what `Room::access()`
+returns. The backend keeps both sets on the room itself, so a room can
+permit several join rules — matrix-rust-sdk keeps one `JoinRule` in room
+state. `Private`: nobody joins, the room keeps its members (a personal
+room, a 1:1); `Invite`: a member adds the user; `JoinLink`: by the room's
+join link; `Link`: by a link the backend defines, which Kupferdraht never
+sets and reads back as it is. `Guests` have no account; `Services` are
+bots. A value the backend sends that this release does not know is left
+out and logged. Both sets are closed in the backend's API, so every state
+it can hold has a value here; its strings stay in `wire/`.
 
 ### Timeline (Step 4)
 
@@ -1248,7 +1258,7 @@ pub struct JoinSummary {
 }
 ```
 
-Since Step 86 an established self conversation (epoch 0 → 1 by this
+Since Step 86 an established personal room (epoch 0 → 1 by this
 device's commit, see `join_room`) counts under `joined` like an
 external-commit join.
 
@@ -2522,7 +2532,7 @@ pub struct RoomMember {
     pub role: RoomMemberRole,            // Step 72a: Administrator | Member
 }
 
-pub enum RoomType { DirectMessage, Group, Channel, SelfRoom }
+pub enum RoomType { DirectMessage, Group, Channel, Personal }
 ```
 
 `RoomType` has stable stringification via `as_str` /
@@ -2562,7 +2572,7 @@ pub struct RoomRecord {
     pub room_id: String,                      // "<uuid>@<domain>"
     pub group_id: Option<String>,             // base64 MLS GroupId; None until Step 3
     pub name: String,
-    pub room_type: String,                    // "direct_message" | "group" | "channel" | "self_room"
+    pub room_type: String,                    // "direct_message" | "group" | "channel" | "personal"
     pub epoch: i64,
     pub counterpart_user_id: Option<String>,  // only 1:1 DMs
     pub last_synced_at_ms: i64,
@@ -2626,11 +2636,11 @@ reports it through `on_error` and stops (`docs/bindings.md`).
 
 ## Join links (Step 8)
 
-Wire's reusable guest-link mechanism. Owners of a conversation issue
-a code/key pair via `Room::create_join_link`; anyone holding the
+The backend's reusable join-link mechanism. Owners of a room issue
+a link via `Room::create_join_link`; anyone holding the
 resulting URL (and the password, if one was set) can redeem it via
-`Client::join_via_link`. The redeemer is added to the Wire
-conversation member list and locally external-commit-joins the MLS
+`Client::join_via_link`. The redeemer is added to the room's
+members and locally external-commit-joins the MLS
 group.
 
 ### `JoinLink`
@@ -2713,15 +2723,16 @@ the local id only, unlike the rename / member-management routes.
 impl Client {
     pub async fn join_via_link(
         &self,
-        code: String,
-        key: String,
+        url: String,
         password: Option<String>,
     ) -> Result<Arc<Room>, KupferdrahtError>;
 }
 ```
 
-`code` and `key` are the link's query parameters. The redeem (Steps 8,
-122):
+`url` is the link as `Room::create_join_link` hands it out
+(`JoinLink::url`); it carries the link's secret, so keep it out of logs. A
+URL that is no join link is `InvalidInput`, before any request. The
+redeem (Steps 8, 122, 163c):
 
 1. `GET /v{N}/conversations/join?key&code` — the conversation the
    link names (its id). A link the backend does not know — another

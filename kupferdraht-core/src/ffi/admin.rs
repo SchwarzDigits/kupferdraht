@@ -387,19 +387,18 @@ impl Client {
         self.inner.load_rooms_from_store().await
     }
 
-    /// Join the room a guest link names, by its `code` and `key` (+ the
-    /// link's password, if it has one).
+    /// Join the room a join link names, by the link's URL (+ its
+    /// password, if it has one). The URL carries the link's secret.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
     pub async fn join_via_link(
         &self,
-        code: String,
-        key: String,
+        url: String,
         password: Option<String>,
     ) -> Result<Arc<Room>, KupferdrahtError> {
         self.inner
-            .join_via_link(code, key, password)
+            .join_via_link(url, password)
             .await
             .map(Room::wrap)
     }

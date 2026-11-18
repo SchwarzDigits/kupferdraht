@@ -8,6 +8,7 @@ use std::sync::{Arc, Weak};
 
 use base64::Engine as _;
 
+use super::access::RoomAccess;
 use crate::avatar::AvatarKeys;
 use crate::client::Client;
 use crate::error::KupferdrahtError;
@@ -15,8 +16,8 @@ use crate::storage::{RoomMemberRecord, RoomRecord};
 use crate::wire::dto::{ConvType, OwnConversation, Protocol, QualifiedId, UserProfile};
 
 /// Kind of room. Matches matrix-rust-sdk's coarse room taxonomy
-/// where we can; Wire-specific wrinkles (`SelfRoom`) get their own
-/// variant.
+/// where we can; the backend's own kinds (`Channel`, `Personal`) get
+/// their own variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum RoomType {
     /// 1:1 DM. `Room::counterpart` returns the single other
@@ -24,11 +25,11 @@ pub enum RoomType {
     DirectMessage,
     /// Multi-party group chat.
     Group,
-    /// Channel (broadcast-shaped group chat; Wire-specific).
+    /// Channel (broadcast-shaped group chat).
     Channel,
-    /// Self-room (Wire's notes-to-self conversation). Has only the
-    /// self member.
-    SelfRoom,
+    /// The account's personal room: notes to itself, the only member
+    /// is the account's own user (`Client::personal_room`).
+    Personal,
 }
 
 impl RoomType {
@@ -41,7 +42,7 @@ impl RoomType {
             Self::DirectMessage => "direct_message",
             Self::Group => "group",
             Self::Channel => "channel",
-            Self::SelfRoom => "self_room",
+            Self::Personal => "personal",
         }
     }
 
@@ -54,7 +55,7 @@ impl RoomType {
             "direct_message" => Some(Self::DirectMessage),
             "group" => Some(Self::Group),
             "channel" => Some(Self::Channel),
-            "self_room" => Some(Self::SelfRoom),
+            "personal" => Some(Self::Personal),
             _ => None,
         }
     }
@@ -144,15 +145,10 @@ pub struct Room {
     /// since after the proteus filter every surviving row is MLS and
     /// Wire guarantees `group_id` on those.
     group_id: Option<String>,
-    /// Wire's `access` array — Step 8b. Indicates which join modes
-    /// the conversation permits. `["invite"]` is members-only;
-    /// `["invite","code"]` permits guest-link redeem; `"link"` and
-    /// `"private"` are also possible. Empty when Wire's response
-    /// omits the field.
-    access: Vec<String>,
-    /// Wire's `access_role` array — Step 8b. User classes allowed
-    /// to join.
-    access_role: Vec<String>,
+    /// Who may join and how, as of the last room-list sync (Step 8b,
+    /// typed by Step 163c). Empty when the backend's answer carried no
+    /// access, or the room came from the store.
+    access: crate::rooms::RoomAccess,
     /// Weak handle back to the owning `Client`. `Weak::new()` (which
     /// never upgrades) on rooms constructed by unit tests that do not
     /// exercise the callback path.
@@ -739,39 +735,22 @@ impl Room {
         client.revoke_join_link(&self.id).await
     }
 
-    /// Wire's `access` array: which join modes this conversation
-    /// permits (`"invite"`, `"code"`, `"link"`, `"private"`). Step 8b.
-    /// Empty when the room was hydrated from the local Store
-    /// (`load_rooms_from_store`) without a fresh `sync_metadata`
-    /// round-trip — `sync_metadata` refreshes the value.
+    /// Who may join and how, as of the last room-list sync (Step 8b,
+    /// typed by Step 163c). Empty when the room was hydrated from the
+    /// local Store (`load_rooms_from_store`) without a fresh
+    /// `sync_metadata` round-trip — `sync_metadata` refreshes it, and
+    /// [`Self::access`] asks the backend.
     #[must_use]
-    pub fn access_modes(&self) -> Vec<String> {
+    pub fn cached_access(&self) -> RoomAccess {
         self.access.clone()
     }
 
-    /// Wire's `access_role` array: which user classes may join
-    /// (`"team_member"`, `"non_team_member"`, `"guest"`,
-    /// `"service"`). Step 8b. Empty / fresh-on-sync semantics
-    /// match [`Self::access_modes`].
-    #[must_use]
-    pub fn access_roles(&self) -> Vec<String> {
-        self.access_role.clone()
-    }
-
-    /// Step 14d — fetch the live `(access, access_role)` pair from
-    /// Wire and return it as a typed [`RoomAccess`]. Issues a single
-    /// `POST /v{N}/conversations/list` against this room's qualified
-    /// id and projects the response's `access` + `access_role`
-    /// arrays into the typed shape.
+    /// Step 14d — ask the backend who may join this room and how: a
+    /// single `POST /v{N}/conversations/list` for this room's id,
+    /// read into a typed [`RoomAccess`]. Room-scoped like
+    /// matrix-rust-sdk's per-room accessors.
     ///
-    /// Replaces the removed `Client::fetch_room_access(room_id) ->
-    /// Result<(Vec<String>, Vec<String>)>` — same HTTP call, method
-    /// moves to `Room` so room-scoped operations sit on `Room`
-    /// (matrix-rust-sdk's per-room-accessor pattern). First method
-    /// on `Room` that issues a Wire HTTP call.
-    ///
-    /// Use this when the cached [`Self::access_modes`] /
-    /// [`Self::access_roles`] snapshots are stale (e.g. after
+    /// Use this when [`Self::cached_access`] may be stale (e.g. after
     /// `load_rooms_from_store` without a follow-up `sync_metadata`,
     /// or to confirm the server-side state matches a recent
     /// `Room::set_access` mutation).
@@ -790,12 +769,12 @@ impl Room {
         client.list_room_access(&self.id).await
     }
 
-    /// Replace the conversation's `access` and `access_role` arrays
-    /// via `PUT /v{N}/conversations/{domain}/{cnv}/access`. Step 8b.
-    /// `Room::create_join_link` requires `access` to include
-    /// `"code"`; `Client::join_via_link` redeemers also need
-    /// `access_role` to include `"guest"` (and typically
-    /// `"non_team_member"`).
+    /// Set who may join this room and how
+    /// (`PUT /v{N}/conversations/{domain}/{cnv}/access`). Step 8b, typed
+    /// by Step 163c. `Room::create_join_link` needs
+    /// [`JoinRule::JoinLink`](crate::rooms::JoinRule); a guest redeeming
+    /// the link needs [`Joiner::Guests`](crate::rooms::Joiner) (and
+    /// usually `NonTeamMembers`).
     ///
     /// Delegates to [`Client::set_room_access`]. Step 14e: returns
     /// the refreshed `Arc<Room>` (cache updated post-PUT via
@@ -803,45 +782,32 @@ impl Room {
     ///
     /// # Errors
     /// * `InvalidInput` when the owning `Client` has been dropped
-    ///   or either list is empty.
+    ///   or either set is empty.
     /// * `BackendRejected` (`403 access-denied` /
     ///   `403 invalid-op` / `403 action-denied` for unauthorized
     ///   callers; `404 no-conversation` on missing room).
     pub async fn set_access(
         &self,
-        access: Vec<String>,
-        access_role: Vec<String>,
+        access: RoomAccess,
     ) -> Result<std::sync::Arc<Self>, KupferdrahtError> {
         let client = self.client.upgrade().ok_or_else(|| {
             KupferdrahtError::InvalidInput(
                 "Room: owning Client has been dropped; cannot set_access()".into(),
             )
         })?;
-        client
-            .set_room_access(&self.id, &access, &access_role)
-            .await
+        client.set_room_access(&self.id, &access).await
     }
 
-    /// Convenience over [`Self::set_access`] that opens the
-    /// conversation up for guest-link joins via the canonical
-    /// `access=["invite","code"]`,
-    /// `access_role=["team_member","non_team_member","guest"]`
-    /// configuration. Step 8b. Most Kupferdraht-created conversations
-    /// default to `access=["invite"]` (members only); calling this
-    /// once is the prerequisite for `Room::create_join_link`.
+    /// Convenience over [`Self::set_access`] that lets guests join by
+    /// the room's join link: members invite, and the link admits team
+    /// members, other users and guests. Step 8b. A room Kupferdraht
+    /// creates admits by invite only; calling this once is the
+    /// prerequisite for `Room::create_join_link`.
     ///
     /// # Errors
     /// Same as [`Self::set_access`].
-    pub async fn open_to_guests(&self) -> Result<std::sync::Arc<Self>, KupferdrahtError> {
-        self.set_access(
-            vec!["invite".into(), "code".into()],
-            vec![
-                "team_member".into(),
-                "non_team_member".into(),
-                "guest".into(),
-            ],
-        )
-        .await
+    pub async fn allow_guests(&self) -> Result<std::sync::Arc<Self>, KupferdrahtError> {
+        self.set_access(RoomAccess::for_guests()).await
     }
 }
 
@@ -860,28 +826,6 @@ impl Room {
 pub struct JoinLink {
     pub url: String,
     pub password_protected: bool,
-}
-
-/// Typed projection of Wire's `(access, access_role)` pair on a
-/// conversation. Step 14d — replaces the bare
-/// `(Vec<String>, Vec<String>)` tuple `Client::fetch_room_access`
-/// returned, and lands the first method on `Room` that issues a Wire
-/// HTTP call (`Room::access()`).
-///
-/// `modes` mirrors Wire's `access` array — which join modes the
-/// conversation permits (`"invite"`, `"code"`, `"link"`, `"private"`).
-///
-/// `roles` mirrors Wire's `access_role` array — which user classes
-/// may join (`"team_member"`, `"non_team_member"`, `"guest"`,
-/// `"service"`).
-///
-/// matrix-rust-sdk has no direct analog because Matrix' room access
-/// is state-event-driven (`m.room.join_rules`); Wire's `access` /
-/// `access_role` are first-class fields on `Conversation`.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct RoomAccess {
-    pub modes: Vec<String>,
-    pub roles: Vec<String>,
 }
 
 /// Overwrite the in-memory `members` list on a `Room` snapshot. Used
@@ -930,8 +874,7 @@ pub(crate) fn room_from_conversation(conv: OwnConversation, client: Weak<Client>
         // An empty group id is no group (Step 95c): every MLS entry
         // point would receive an empty `GroupId`.
         group_id: conv.group_id.filter(|g| !g.is_empty()),
-        access: conv.access,
-        access_role: conv.access_role,
+        access: RoomAccess::from_wire(&conv.access, &conv.access_role),
         client,
     })
 }
@@ -943,7 +886,7 @@ fn room_type_for(conv_type: ConvType, group_conv_type: Option<&str>) -> RoomType
     match conv_type {
         ConvType::Group if group_conv_type == Some("channel") => RoomType::Channel,
         ConvType::Group => RoomType::Group,
-        ConvType::SelfRoom => RoomType::SelfRoom,
+        ConvType::SelfConversation => RoomType::Personal,
         ConvType::DirectMessage | ConvType::Connect => RoomType::DirectMessage,
     }
 }
@@ -1112,11 +1055,10 @@ pub(crate) fn rooms_from_records(
                 counterpart,
                 members,
                 group_id: r.group_id,
-                // Step 8b: not persisted to the Store yet — access /
-                // access_role are refreshed by the next sync_metadata
-                // round-trip and exposed via `Room::access*` accessors.
-                access: Vec::new(),
-                access_role: Vec::new(),
+                // Step 8b: not persisted to the Store — the next
+                // sync_metadata round-trip refreshes the access
+                // (`Room::cached_access`).
+                access: RoomAccess::default(),
                 client: client.clone(),
             })
         })
@@ -1245,7 +1187,7 @@ mod tests {
     fn conv_type_maps_one_to_one() {
         for (wire, expected) in [
             (ConvType::Group, RoomType::Group),
-            (ConvType::SelfRoom, RoomType::SelfRoom),
+            (ConvType::SelfConversation, RoomType::Personal),
             (ConvType::DirectMessage, RoomType::DirectMessage),
             // Step 132: Wire's `type` 3 is a pending connection, a 1:1 shape.
             (ConvType::Connect, RoomType::DirectMessage),
@@ -1315,8 +1257,8 @@ mod tests {
     }
 
     #[test]
-    fn counterpart_is_none_for_self_room() {
-        let conv = make(ConvType::SelfRoom, Protocol::Mls, &[]);
+    fn counterpart_is_none_for_the_personal_room() {
+        let conv = make(ConvType::SelfConversation, Protocol::Mls, &[]);
         let room = room_from_conversation(conv, Weak::new()).expect("mapped");
         assert!(room.counterpart().is_none());
     }

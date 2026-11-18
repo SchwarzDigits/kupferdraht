@@ -121,7 +121,7 @@ and what it depends on.
 | Command(s)                     | Layer            | What it does                                                                                       | Wire endpoints                                                                            |
 |--------------------------------|------------------|----------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
 | `sync`                         | **Metadata**     | Fetches Wire's room list + member profiles. Updates the in-memory cache + `rooms` / `room_members`. **Does not touch MLS.** | `POST /v{N}/conversations/list-ids` + `POST /v{N}/conversations/list` + `POST /v{N}/list-users` |
-| `rooms-join-all`               | **MLS bootstrap** | For each cached room *without* local MLS state → join via external commit; the never-established self conversation (epoch 0) is **established** from this device instead (Step 86). Idempotent (skips rooms whose MLS group already exists). | `GET /v{N}/conversations/{d}/{id}/groupinfo` + `POST /v{N}/mls/commit-bundles` per room; self room at epoch 0: self-claim `POST /v{N}/mls/key-packages/claim/{d}/{u}` + `POST /v{N}/mls/commit-bundles` |
+| `rooms-join-all`               | **MLS bootstrap** | For each cached room *without* local MLS state → join via external commit; the never-established personal room (epoch 0) is **established** from this device instead (Step 86). Idempotent (skips rooms whose MLS group already exists). | `GET /v{N}/conversations/{d}/{id}/groupinfo` + `POST /v{N}/mls/commit-bundles` per room; self room at epoch 0: self-claim `POST /v{N}/mls/key-packages/claim/{d}/{u}` + `POST /v{N}/mls/commit-bundles` |
 | `rejoin-all`                   | **MLS recovery** | For each cached room *with* local MLS state whose `own_leaf` belongs to a **prior** `device_id` → re-join via external commit (Step 7e). | same as `rooms-join-all`, but only for stale rooms                                        |
 | `sync` / `sync-stream`         | **One iteration / loop** | `sync` drives one `Client::sync_once` — rooms-metadata refresh + one notifications drain + cursor advance, in a single iteration. `sync-stream` runs the same loop continuously with `--idle-backoff` between empty drains, refreshing the rooms metadata only on its first iteration, after an event changed the room list, and when it is older than 5 minutes (Step 118); `--transport websocket` (Steps 62/73) switches it to live push — the concrete socket is negotiated per connection (`/v14/events` when the server enables ConsumableNotifications, the legacy `/await` socket otherwise, whose frames only trigger a REST drain (ADR-0030); the startup banner prints the choice). | `GET /v{N}/notifications` · `GET /v{N}/events` or legacy `GET /await` (WS, `--transport websocket`, negotiated per ADR-0019) |
 | `send` / `room-create` / etc.  | **App actions**  | Encrypt + POST a `GenericMessage` (`send`); create / invite / kick / leave / rename rooms.        | various                                                                                   |
@@ -216,8 +216,8 @@ into `ps`, shell history, and process listings. Without
 `--password-stdin` the CLI prompts on the TTY with `rpassword`
 (echo off); from stdin a secret is its first line, without the line
 ending. The same rule holds for the callback URL of `sso callback`
-(`--callback-stdin`, Step 162; it carries a session) and a guest link's key
-(`join-via-link --key-stdin`) since Step 137.
+(`--callback-stdin`, Step 162; it carries a session) and a join link's URL
+(`join-via-link --url-stdin`, Step 163c; it carries the link's secret).
 
 A backend whose team default MLS ciphersuite is not Kupferdraht's
 (`mls.config.defaultCipherSuite` other than `2`) is refused at login
@@ -522,8 +522,8 @@ Output (one block per room):
 
 ```
 - c0ffee01-0000-4000-8000-000000000001@example.com
-    type:   group | direct_message | self_room
-    name:   Kupferdraht 6b smoke 3 | —          # — for DMs and self_room
+    type:   group | direct_message | channel | personal
+    name:   Kupferdraht 6b smoke 3 | —          # — for DMs and the personal room
     epoch:  1                              # local MLS group epoch
     members (2):
       * a11ce000-…@example.com — Alice Example @alice
@@ -613,9 +613,9 @@ This is the recommended command for "give me the DM with this user,
 whatever it takes" — the dominant caller shape for Wire's
 first-class 1:1 endpoint.
 
-### `self-room`
+### `personal-room`
 
-Look up the caller's self conversation (Step 86) — Wire's
+Look up the caller's personal room (Step 86) — the
 notes-to-self room, an MLS group of the user's own devices and the
 private cross-device channel (personal task list, read position,
 drafts later ride it). Strict local-cache lookup: no network, no
@@ -623,13 +623,13 @@ authentication. Prints `room_id` + `epoch` when the last `sync`'s
 snapshot carries it; exits with status 2 otherwise.
 
 ```bash
-kupferdraht-cli self-room
+kupferdraht-cli personal-room
 ```
 
 No flags. Output:
 
 ```
-self-room ok
+personal-room ok
   room_id: <uuid>@<domain>
   epoch:   0
   note:    not established yet — `rooms-join-all` establishes it from this device
@@ -687,7 +687,7 @@ kupferdraht-cli rooms-join-all
 ```
 
 No flags. Use this after a fresh `login` to bootstrap into every
-conversation Kupferdraht can see. The self conversation is healed on the
+conversation Kupferdraht can see. The personal room is healed on the
 same pass (Step 86): established when it is still at epoch 0,
 external-joined when another own device got there first — both
 count under `joined`.
@@ -2000,43 +2000,49 @@ Common errors:
 
 ---
 
-### room-access show / set / allow-guests (Step 8b)
+### room-access-show / room-access-set / room-access-allow-guests (Step 8b)
 
-Display and replace a conversation's `access` + `access_role`
-arrays. Required prerequisite for `join-link-generate`: Wire's
-`POST /code` returns `403 access-denied` on conversations whose
-`access` array doesn't include `"code"`. Kupferdraht-created
-conversations default to `access=["invite"]` (members only).
+Show and set who may join a room and how: its join rules and the users
+allowed (typed by Step 163c). The prerequisite for `join-link-generate`:
+the backend refuses a join link (`403 access-denied`) for a room whose
+join rules lack `join-link`. A room Kupferdraht creates admits by invite
+only.
 
 ```bash
-kupferdraht-cli room-access show --id <room-id>
-kupferdraht-cli room-access set --id <room-id> \
-    --modes "invite,code" \
-    --roles "team_member,non_team_member,guest"
-kupferdraht-cli room-access allow-guests --id <room-id>   # canonical guest-link config
+kupferdraht-cli room-access-show --id <room-id>
+kupferdraht-cli room-access-set --id <room-id> \
+    --join invite,join-link \
+    --allow team-members,non-team-members,guests
+kupferdraht-cli room-access-allow-guests --id <room-id>   # the same, in one word
 ```
 
-`room-access show` re-fetches via
-`POST /v{N}/conversations/list` so the output reflects Wire's
-live state, not the local sync snapshot.
+`room-access-show` asks the backend
+(`POST /v{N}/conversations/list`), so the output is the live state, not
+the local sync snapshot:
 
-`--modes` is comma-separated; valid values per Wire's schema:
-`invite`, `code`, `link`, `private`. `--roles` is comma-separated;
-valid values: `team_member`, `non_team_member`, `guest`,
-`service`. Both lists must be non-empty.
+```
+room-access
+  room_id:    <room>@<domain>
+  join_rules: [invite, join-link]
+  allowed:    [team-members, non-team-members, guests]
+```
 
-`allow-guests` is the convenience wrapper around the canonical
-`access=["invite","code"]`,
-`access_role=["team_member","non_team_member","guest"]`
-configuration the Wire web client applies when you turn on "guest
-links" in conversation settings.
+`--join` is comma-separated: `private` (nobody joins, the room keeps its
+members), `invite` (a member adds the user), `join-link` (by the room's
+join link), `link` (by a link the backend defines; Kupferdraht never sets
+it). `--allow` is comma-separated: `team-members`, `non-team-members`,
+`guests` (no account), `services` (bots). Both must name at least one
+value; an unknown name is refused before any request.
+
+`allow-guests` sets what the official clients set when guest links are
+turned on in a room's settings: `invite,join-link` for
+`team-members,non-team-members,guests`.
 
 **Errors:**
 - `403 access-denied` / `403 action-denied` — caller's role lacks
   the `modify_conversation_access` permission.
-- `403 invalid-op` — Wire rejected the requested combination as
-  invalid (e.g. `access=["link"]` without `"code"` in some team
-  configurations).
+- `403 invalid-op` — the backend rejected the combination as invalid
+  (e.g. `link` without `join-link` in some team configurations).
 - `404 no-conversation` — unknown room.
 
 ### join-link-generate (Step 8)
@@ -2079,27 +2085,28 @@ non-existent code prints success.
 kupferdraht-cli join-link-revoke --id <room-id>
 ```
 
-### join-via-link (Steps 8, 122)
+### join-via-link (Steps 8, 122, 163c)
 
-Redeem a guest link and MLS-join the conversation it names. `--code` is
-the link's `code` query parameter; its `key` — the link's secret — is
-read on the TTY (no echo) or, with `--key-stdin`, as the first line of
-stdin, never from an argument (Step 137). Four phases:
-`GET /v{N}/conversations/join` (the conversation the link names),
-`POST /v{N}/conversations/join` (Wire-side membership), `sync_metadata`,
-then the Step-3 external-commit `join_room` — skipped when the room's
-group is here already. Prints the `room_id` of the joined conversation.
+Redeem a join link and MLS-join the room it names. The link's URL — as
+`join-link-generate` prints it — carries the link's secret, so it is
+read on the TTY (no echo) or, with `--url-stdin`, as the first line of
+stdin, never from an argument (Steps 137, 163c). A URL that is no join
+link is refused before any request. Four phases:
+`GET /v{N}/conversations/join` (the room the link names),
+`POST /v{N}/conversations/join` (membership), `sync_metadata`, then the
+Step-3 external-commit `join_room` — skipped when the room's group is
+here already. Prints the `room_id` of the joined room.
 
 ```bash
-kupferdraht-cli join-via-link --code <code>                            # prompts for the key (no echo)
-kupferdraht-cli join-via-link --code <code> --key-stdin < key.txt
-kupferdraht-cli join-via-link --code <code> --key-stdin -p < key.txt   # the password is prompted on the TTY
+kupferdraht-cli join-via-link                            # prompts for the URL (no echo)
+kupferdraht-cli join-via-link --url-stdin < link.txt
+kupferdraht-cli join-via-link --url-stdin -p < link.txt  # the password is prompted on the TTY
 ```
 
 `-p` reads the link's password from the TTY (no echo); supply it
 when the link was issued password-protected. Step 122 dropped
-`--domain`: the link does not carry it, and the conversation id finds
-the room.
+`--domain`: the link does not carry it, and the room id finds the
+room. Step 163c replaced `--code` / `--key-stdin` by the URL.
 
 **Errors:**
 - `403 invalid-conversation-password` — wrong password (or none
@@ -2315,8 +2322,8 @@ kupferdraht-cli login --api-url https://nginz-https.example.com -e you@example.c
 kupferdraht-cli status                              # confirm session persisted
 kupferdraht-cli sync                                # populate rooms cache
 kupferdraht-cli rooms                               # see what's there
-kupferdraht-cli rooms-join-all                      # bootstrap into every room (establishes the self room, Step 86)
-kupferdraht-cli self-room                           # your notes-to-self room: room_id + epoch
+kupferdraht-cli rooms-join-all                      # bootstrap into every room (establishes the personal room, Step 86)
+kupferdraht-cli personal-room                       # your notes-to-self room: room_id + epoch
 kupferdraht-cli room-members --id <some-room>       # verify membership
 kupferdraht-cli send --id <some-room> -m "hello"    # send your first message
 ```

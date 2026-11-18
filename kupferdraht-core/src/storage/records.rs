@@ -108,7 +108,7 @@ pub struct BackendMlsKey {
 }
 
 /// One row of `rooms`. `room_type` is the stringified [`crate::RoomType`]
-/// (`"direct_message"` / `"group"` / `"channel"` / `"self_room"`).
+/// (`"direct_message"` / `"group"` / `"channel"` / `"personal"`).
 /// `last_synced_at_ms` is Unix-epoch milliseconds set by the caller
 /// at save time.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

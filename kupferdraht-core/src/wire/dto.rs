@@ -201,14 +201,14 @@ pub struct ConversationsResponse {
 /// | Wire | Kupferdraht `RoomType`    |
 /// |------|----------------------|
 /// | 0    | `Group`              |
-/// | 1    | `SelfRoom`           |
+/// | 1    | `SelfConversation`   |
 /// | 2    | `DirectMessage`      |
 /// | 3    | `Connect` (a pending connection, not a channel — observations §95) |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(try_from = "u8", into = "u8")]
 pub enum ConvType {
     Group = 0,
-    SelfRoom = 1,
+    SelfConversation = 1,
     DirectMessage = 2,
     /// Wire's `connect`: the 1:1 that exists while a connection request is
     /// pending (live: `type: 3`, `group_conv_type: "group_conversation"`,
@@ -223,7 +223,7 @@ impl TryFrom<u8> for ConvType {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(Self::Group),
-            1 => Ok(Self::SelfRoom),
+            1 => Ok(Self::SelfConversation),
             2 => Ok(Self::DirectMessage),
             3 => Ok(Self::Connect),
             other => Err(format!("unknown Wire ConvType integer: {other}")),
@@ -326,6 +326,78 @@ pub struct ConvMemberOther {
 #[must_use]
 pub fn conversation_role_is_admin(role: Option<&str>) -> bool {
     role == Some("wire_admin")
+}
+
+/// Wire's `Access`: how users can join a conversation (the Swagger's
+/// closed set). The strings stay inside `wire/` (ADR-0009); the rooms
+/// layer maps the variants onto its join rules (Step 163c).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Access {
+    Private,
+    Invite,
+    Link,
+    Code,
+}
+
+impl Access {
+    /// Every value, in the Swagger's order.
+    pub const ALL: [Self; 4] = [Self::Private, Self::Invite, Self::Link, Self::Code];
+
+    /// The value as Wire spells it.
+    #[must_use]
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            Self::Private => "private",
+            Self::Invite => "invite",
+            Self::Link => "link",
+            Self::Code => "code",
+        }
+    }
+
+    /// The value Wire spells `raw`, or `None` for one this client does
+    /// not know.
+    #[must_use]
+    pub fn from_wire(raw: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|access| access.as_wire() == raw)
+    }
+}
+
+/// Wire's `AccessRole`: which users and services can join a conversation
+/// (the Swagger's closed set). Strings and mapping as for [`Access`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccessRole {
+    TeamMember,
+    NonTeamMember,
+    Guest,
+    Service,
+}
+
+impl AccessRole {
+    /// Every value, in the Swagger's order.
+    pub const ALL: [Self; 4] = [
+        Self::TeamMember,
+        Self::NonTeamMember,
+        Self::Guest,
+        Self::Service,
+    ];
+
+    /// The value as Wire spells it.
+    #[must_use]
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            Self::TeamMember => "team_member",
+            Self::NonTeamMember => "non_team_member",
+            Self::Guest => "guest",
+            Self::Service => "service",
+        }
+    }
+
+    /// The value Wire spells `raw`, or `None` for one this client does
+    /// not know.
+    #[must_use]
+    pub fn from_wire(raw: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|role| role.as_wire() == raw)
+    }
 }
 
 /// Request body of `POST /v{N}/list-users`. The endpoint accepts
@@ -793,5 +865,22 @@ mod tests {
         let qid = QualifiedId::from(&UserId::new("user-uuid", "example.test"));
         assert_eq!(qid.id, "user-uuid");
         assert_eq!(qid.domain, "example.test");
+    }
+
+    /// Step 163c: every value the Swagger's `Access` and `AccessRole` name
+    /// reads and writes back as Wire spells it; one it does not name is
+    /// unknown.
+    #[test]
+    fn every_access_value_of_the_swagger_round_trips() {
+        for raw in ["private", "invite", "link", "code"] {
+            let access = Access::from_wire(raw).unwrap_or_else(|| panic!("{raw} is known"));
+            assert_eq!(access.as_wire(), raw);
+        }
+        for raw in ["team_member", "non_team_member", "guest", "service"] {
+            let role = AccessRole::from_wire(raw).unwrap_or_else(|| panic!("{raw} is known"));
+            assert_eq!(role.as_wire(), raw);
+        }
+        assert_eq!(Access::from_wire("everyone"), None);
+        assert_eq!(AccessRole::from_wire("Guest"), None, "case matters");
     }
 }

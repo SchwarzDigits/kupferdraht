@@ -102,6 +102,7 @@ mod clients;
 #[cfg(any(target_arch = "wasm32", test))]
 pub(crate) use clients::WEB_DEVICE_MODEL;
 mod conversation_join;
+pub(crate) use conversation_join::join_link_key_and_code;
 mod conversations;
 pub(crate) mod feature_configs;
 mod groups;

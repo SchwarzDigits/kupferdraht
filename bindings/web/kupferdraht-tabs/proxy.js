@@ -350,11 +350,11 @@ export class ClientProxy extends HandleProxy {
   renameRoom(roomId, name) { return this.#call('renameRoom', [roomId, name]); }
   deleteRoom(roomId) { return this.#call('deleteRoom', [roomId]); }
   roomAccess(roomId) { return this.#call('roomAccess', [roomId]); }
-  setRoomAccess(roomId, modes, roles) { return this.#call('setRoomAccess', [roomId, modes, roles]); }
+  setRoomAccess(roomId, access) { return this.#call('setRoomAccess', [roomId, access]); }
   allowGuests(roomId) { return this.#call('allowGuests', [roomId]); }
   createJoinLink(roomId, password) { return this.#call('createJoinLink', [roomId, password]); }
   revokeJoinLink(roomId) { return this.#call('revokeJoinLink', [roomId]); }
-  joinViaLink(code, key, password) { return this.#call('joinViaLink', [code, key, password]); }
+  joinViaLink(url, password) { return this.#call('joinViaLink', [url, password]); }
   startSync(onMessage, onTyping, onExpired, onSync, onDevicesChanged, onStorage, onRoomsChanged) {
     if (typeof onMessage !== 'function') throw new TypeError('startSync: onMessage must be a function');
     const subscription = {

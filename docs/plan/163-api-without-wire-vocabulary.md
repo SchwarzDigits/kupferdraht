@@ -148,6 +148,29 @@ where it has a term, otherwise a plain English name.
     (team members, guests, services). Wire's strings are mapped in `wire/`.
   - `join_via_link(url, password)` takes the link that `create_join_link` returns.
   - `self_room` gets a neutral name (for example a personal room).
+  - **Done 2026-11-18 (Volker's names):**
+    - `RoomAccess { join_rules: Vec<JoinRule>, allowed: Vec<Joiner> }`:
+      `JoinRule { Private, Invite, Link, JoinLink }` (matrix-rust-sdk's name;
+      Wire's `code` is the room's `JoinLink`, Volker considered `AccessLink`
+      too — `JoinLink` matches the record and `create_join_link`),
+      `Joiner { TeamMembers, NonTeamMembers, Guests, Services }`. Sets, as the
+      backend keeps them; both of its sets are closed, so every state it can
+      hold has a value — the round trip over all 16 × 16 combinations is a unit
+      test (`rooms/access.rs`). Wire's strings are `wire::dto::{Access,
+      AccessRole}`, the rooms layer maps the variants.
+    - `Room::cached_access` (was `access_modes` / `access_roles`),
+      `set_access(RoomAccess)`, `allow_guests` (was `open_to_guests`; the
+      browser's `allowGuests` already was the name).
+    - `join_via_link(url, password)`: the URL is split in `wire/`; one that is
+      no join link is `InvalidInput` before any request, naming no secret. The
+      CLI reads the URL like the key before it: TTY or `--url-stdin`, never argv.
+    - `RoomType::Personal`, `Client::personal_room`, CLI `personal-room`; the
+      stored `"self_room"` becomes `"personal"` (migration V38). `Channel`
+      stays (Volker: plain English). Wire's `ConvType` variant is
+      `SelfConversation` inside `wire/`.
+    - Pins: `tests/step_163c_room_names.rs`, the V38 test in
+      `storage/schema.rs`; `tests/step_86_self_conversation.rs` is
+      `step_86_personal_room.rs`.
 - **163d — identity, devices, session.**
   - `QualifiedUserId` becomes `UserId`.
   - `DeviceInfo{kind, display_name, model, last_seen_ms, registered_at_ms}`,

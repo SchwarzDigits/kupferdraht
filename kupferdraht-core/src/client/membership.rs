@@ -558,12 +558,12 @@ impl Client {
 
     /// Join an existing MLS group — via external commit (RFC 9420
     /// §12.5) for every room Wire has a `GroupInfo` for, or, for the
-    /// **never-established self conversation** (`RoomType::SelfRoom`
+    /// **never-established personal room** (`RoomType::Personal`
     /// at `epoch == 0`), by establishing it ourselves (Step 86,
-    /// [`Self::establish_self_room`]): Wire serves no `GroupInfo`
+    /// [`Self::establish_personal_room`]): Wire serves no `GroupInfo`
     /// before a member's first commit (`404 mls-missing-group-info`,
     /// live-confirmed), so an external join is impossible there. A
-    /// self room another own device already established (`epoch > 0`)
+    /// personal room another own device already established (`epoch > 0`)
     /// takes the external-commit path like any other room.
     ///
     /// External-commit flow:
@@ -595,8 +595,8 @@ impl Client {
         let room = self.room(room_id).await.ok_or_else(|| {
             KupferdrahtError::InvalidInput(format!("join_room: {room_id} not in cache"))
         })?;
-        let joined = if room.room_type() == RoomType::SelfRoom && room.epoch() == 0 {
-            self.establish_self_room(&room).await
+        let joined = if room.room_type() == RoomType::Personal && room.epoch() == 0 {
+            self.establish_personal_room(&room).await
         } else {
             self.join_room_by_external_commit(&room).await
         };

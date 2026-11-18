@@ -54,10 +54,10 @@ fn ffi_timeline_tracks_core_parity_surface() {
     // Step 26: the Ping / Location send methods must exist on the FFI wrapper.
     let _send_ping = kupferdraht::ffi::Timeline::send_ping;
     let _send_location = kupferdraht::ffi::Timeline::send_location;
-    // Step 86: the self-room lookup (sync, local cache) must exist on
+    // Step 86: the personal-room lookup (sync, local cache) must exist on
     // the FFI `Client` next to `dm_room`.
-    let _self_room: fn(&kupferdraht::ffi::Client) -> Option<Arc<kupferdraht::ffi::Room>> =
-        kupferdraht::ffi::Client::self_room;
+    let _personal_room: fn(&kupferdraht::ffi::Client) -> Option<Arc<kupferdraht::ffi::Room>> =
+        kupferdraht::ffi::Client::personal_room;
     // Step 79: failed-send recovery — per-message + per-room resend on
     // the FFI `Timeline`, the failed-row enumeration on the FFI `Room`.
     let _resend = kupferdraht::ffi::Timeline::resend;

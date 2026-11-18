@@ -151,6 +151,35 @@ is no skill for it — it is this short procedure:
   - An account's attachment cache is `accounts/<id>/attachments/`, no longer
     `assets/`. A client's start removes an existing `assets/` whole; what was
     cached there downloads again when asked for.
+- **BREAKING: room access is typed, and the rooms have plain names** (Step
+  163c, ADR-0009 revision 1.2):
+  - `RoomAccess { join_rules: Vec<JoinRule>, allowed: Vec<Joiner> }` replaces
+    `{ modes, roles }` of the backend's strings: `JoinRule` is `Private`,
+    `Invite`, `Link` or `JoinLink` (the room's join link), `Joiner` is
+    `TeamMembers`, `NonTeamMembers`, `Guests` or `Services`. `Room::access`
+    returns it, `Room::cached_access` replaces `access_modes()` /
+    `access_roles()`, and `Room::set_access(RoomAccess)` /
+    `Client::set_room_access(room_id, &RoomAccess)` take it. A value the
+    backend sends that this release does not know is left out and logged.
+  - `Room::allow_guests` replaces `open_to_guests`.
+  - `Client::join_via_link(url, password)` takes the link's URL — the
+    `JoinLink::url` `create_join_link` hands out — instead of its `code` and
+    `key`; a URL that is no join link is `InvalidInput` before any request.
+  - `RoomType::Personal` and `Client::personal_room` replace `SelfRoom` and
+    `self_room`; the stored room type `"self_room"` is `"personal"`: the
+    shipped store rewrites its rows on open (migration V38), a custom store
+    rewrites its own.
+  - FFI: the same names; `RoomAccess` with `joinRules` / `allowed`.
+  - Browser: `roomAccess(roomId)` answers `{ joinRules, allowed }`
+    (`'private' | 'invite' | 'link' | 'joinLink'`,
+    `'teamMembers' | 'nonTeamMembers' | 'guests' | 'services'`),
+    `setRoomAccess(roomId, access)` takes it, and `joinViaLink(url, password?)`
+    takes the link's URL.
+  - CLI: `personal-room` replaces `self-room`;
+    `room-access-set --join invite,join-link --allow team-members,…` replaces
+    `--modes` / `--roles`; `join-via-link` reads the link's URL on the TTY or
+    with `--url-stdin` — it carries the link's secret, so never from argv —
+    instead of `--code` / `--key-stdin`.
 
 ### Deprecated
 

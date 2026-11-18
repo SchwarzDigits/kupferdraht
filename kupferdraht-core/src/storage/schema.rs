@@ -348,4 +348,44 @@ mod tests {
             .expect("kinds");
         assert_eq!(kinds, ["a=attachment", "p=ping", "t=text"]);
     }
+
+    /// Step 163c: a database written before the rename stores the backend's
+    /// name as the type of the account's personal room; migrating it rewrites
+    /// it, and every other room type stays as it is.
+    #[test]
+    fn the_migration_renames_the_stored_type_of_the_personal_room() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        embedded::migrations::runner()
+            .set_grouped(true)
+            .set_target(refinery::Target::Version(37))
+            .run(&mut conn)
+            .expect("the schema before Step 163c");
+        for (room_id, stored_type) in [
+            ("c@example.test", "channel"),
+            ("d@example.test", "direct_message"),
+            ("g@example.test", "group"),
+            ("s@example.test", "self_room"),
+        ] {
+            conn.execute(
+                "INSERT INTO rooms (room_id, name, room_type, epoch, last_synced_at_ms) \
+                 VALUES (?1, '', ?2, 0, 1000)",
+                [room_id, stored_type],
+            )
+            .expect("a stored room");
+        }
+
+        run_migrations(&mut conn).expect("migrated forward");
+
+        let types: Vec<String> = conn
+            .prepare("SELECT substr(room_id, 1, 1) || '=' || room_type FROM rooms ORDER BY room_id")
+            .expect("query")
+            .query_map([], |row| row.get(0))
+            .expect("rows")
+            .collect::<Result<_, _>>()
+            .expect("types");
+        assert_eq!(
+            types,
+            ["c=channel", "d=direct_message", "g=group", "s=personal"]
+        );
+    }
 }
