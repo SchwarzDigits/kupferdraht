@@ -163,7 +163,7 @@ impl SyncService {
             }
         }
         client.room_freshness().note_drain_end(since);
-        // Follow-ups, removal flush, ephemeral sweep — after the lock.
+        // Follow-ups, removal flush, disappearing sweep — after the lock.
         self.end_dispatch_cycle(&client).await;
         Ok(total)
     }

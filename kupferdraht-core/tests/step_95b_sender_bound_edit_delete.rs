@@ -113,13 +113,13 @@ fn delete_message(message_id: &str, target: &str) -> Vec<u8> {
 }
 
 /// `GenericMessage { message_id = 1, ephemeral = 18 { expire_after_millis = 1, text = 2 } }`.
-fn ephemeral_text_message(message_id: &str, content: &str, ttl_ms: u64) -> Vec<u8> {
-    let mut ephemeral = Vec::new();
-    put_uint(1, ttl_ms, &mut ephemeral);
-    put_len_delimited(2, &text_payload(content), &mut ephemeral);
+fn disappearing_text_message(message_id: &str, content: &str, ttl_ms: u64) -> Vec<u8> {
+    let mut disappearing = Vec::new();
+    put_uint(1, ttl_ms, &mut disappearing);
+    put_len_delimited(2, &text_payload(content), &mut disappearing);
     let mut m = Vec::new();
     put_len_delimited(1, message_id.as_bytes(), &mut m);
-    put_len_delimited(18, &ephemeral, &mut m);
+    put_len_delimited(18, &disappearing, &mut m);
     m
 }
 
@@ -539,13 +539,13 @@ async fn the_original_sender_may_edit_and_delete_from_another_device() {
 }
 
 /// ADR-0028 d.2 (b), as revised 2026-09-28: another own device may
-/// delete a foreign **ephemeral** message — the own-device sync of a
+/// delete a foreign **disappearing** message — the own-device sync of a
 /// receiver-side expiry (observations §74).
 #[tokio::test]
-async fn a_delete_from_another_own_device_applies_to_a_foreign_ephemeral() {
+async fn a_delete_from_another_own_device_applies_to_a_foreign_disappearing() {
     let (_server, client, _store, _peers) = sync_scenario(|p| {
         vec![
-            p.sent_by_bob(&ephemeral_text_message("m-bob-eph", "expires", 60_000)),
+            p.sent_by_bob(&disappearing_text_message("m-bob-eph", "expires", 60_000)),
             p.sent_by_self2(&delete_message("d-self2", "m-bob-eph")),
         ]
     })
@@ -576,10 +576,10 @@ async fn a_delete_from_another_own_device_of_a_foreign_message_is_ignored() {
 }
 
 /// ADR-0028 d.2 (c) — preservation pin: any member may delete the
-/// client's own ephemeral message (the receiver enforces the sender's
+/// client's own disappearing message (the receiver enforces the sender's
 /// timer, observations §74 / Step 89).
 #[tokio::test]
-async fn a_member_may_delete_our_own_ephemeral_message() {
+async fn a_member_may_delete_our_own_disappearing_message() {
     let server = MockServer::start();
     let (client, _store) = logged_in_client(&server).await;
     mount_rooms(&server, &[(ROOM_UUID, GROUP_ID_B64)]);
@@ -600,9 +600,9 @@ async fn a_member_may_delete_our_own_ephemeral_message() {
         .expect("room cached")
         .timeline()
         .expect("timeline")
-        .send_ephemeral_text("own secret".into(), Duration::from_secs(3_600))
+        .send_disappearing_text("own secret".into(), Duration::from_secs(3_600))
         .await
-        .expect("send ephemeral text");
+        .expect("send disappearing text");
 
     first.delete();
     let _second = mount_notifications_page(
@@ -617,17 +617,17 @@ async fn a_member_may_delete_our_own_ephemeral_message() {
 
     assert!(
         item(&client, &handle.message_id).await.redacted,
-        "a receiver's delete of our own ephemeral message applies"
+        "a receiver's delete of our own disappearing message applies"
     );
 }
 
-/// ADR-0028 d.2: a third party cannot hasten someone else's ephemeral
-/// message — carol's delete of bob's ephemeral is rejected.
+/// ADR-0028 d.2: a third party cannot hasten someone else's disappearing
+/// message — carol's delete of bob's disappearing message is rejected.
 #[tokio::test]
-async fn a_third_partys_delete_of_someone_elses_ephemeral_is_rejected() {
+async fn a_third_partys_delete_of_someone_elses_disappearing_is_rejected() {
     let (_server, client, _store, _peers) = sync_scenario(|p| {
         vec![
-            p.sent_by_bob(&ephemeral_text_message(
+            p.sent_by_bob(&disappearing_text_message(
                 "eph-bob",
                 "self-destructs in an hour",
                 3_600_000,

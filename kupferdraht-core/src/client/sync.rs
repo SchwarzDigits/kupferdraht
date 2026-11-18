@@ -514,10 +514,10 @@ impl Client {
         // after the V23 migration — a populated cache short-circuits
         // via a single COUNT query.
         crate::timeline::task::backfill_task_cache(self).await?;
-        // Step 89: sweep ephemeral rows that expired while the process
+        // Step 89: sweep disappearing rows that expired while the process
         // was down and re-arm the timers of the ones still pending —
         // before any consumer can read a body that should be gone.
-        self.restore_ephemeral_timers().await?;
+        self.restore_disappearing_timers().await?;
         Ok(())
     }
 

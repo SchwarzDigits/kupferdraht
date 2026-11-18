@@ -720,7 +720,7 @@ impl LoginPipeline {
     /// Assemble the final `Client`. Consumes the pipeline to signal the
     /// end of the flow. The per-account `home` is echoed onto `Client` so
     /// a subsequent `ClientBuilder::resume` call (or any future rebuild)
-    /// can find the `mls.db` / asset cache without re-deriving the layout.
+    /// can find the `mls.db` / attachment cache without re-deriving the layout.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn finalize(
         self,

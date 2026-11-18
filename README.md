@@ -69,11 +69,11 @@ end-to-end encrypted with MLS (RFC 9420):
   - emoji reactions
   - read receipts and delivery status; a device-local read position with a
     private read (no receipt) and a hand-set unread flag
-  - knock and location messages
+  - ping and location messages
   - room events in the timeline: a room's creation, renames, joins and leaves, as data for the embedder to word
-  - self-deleting (ephemeral) text with a sender-chosen timer — Wire's official clients show the countdown; inbound ones self-redact locally when the timer elapses
-  - failed-send recovery: a send that failed offline stays a listable `Failed` row and is re-driven explicitly under the same message id (text, replies, mentions, ephemeral, knock, location, files) — no background scheduler; the reconnect contract is the consumer's loop
-  - keyed sends: a send under a caller-chosen idempotency key answers a retry of that key from the store instead of sending twice (text, replies, knock, location, files, reactions; keys kept 28 days)
+  - disappearing text with a sender-chosen timer — Wire's official clients show the countdown; inbound ones self-redact locally when the timer elapses
+  - failed-send recovery: a send that failed offline stays a listable `Failed` row and is re-driven explicitly under the same message id (text, replies, mentions, disappearing, ping, location, files) — no background scheduler; the reconnect contract is the consumer's loop
+  - keyed sends: a send under a caller-chosen idempotency key answers a retry of that key from the store instead of sending twice (text, replies, ping, location, files, reactions; keys kept 28 days)
   - typing indicators
   - local timeline reads plus diff-based timeline observers
 - **File attachments**
@@ -81,7 +81,7 @@ end-to-end encrypted with MLS (RFC 9420):
   - SHA-256 verification on download
   - path-based or streamed from a caller-supplied source
   - gated by the team's `fileSharing` policy
-  - AES-GCM assets tolerated on receive
+  - AES-GCM attachments tolerated on receive
 - **Tasks / todos**
   - assignee, due date, priority, status changes, re-assignment
   - manual ordering inside any conversation
@@ -109,7 +109,7 @@ end-to-end encrypted with MLS (RFC 9420):
   - matrix-rust-sdk-shaped Rust library
   - Rust CLI (~60 commands, the API's first consumer)
   - UniFFI bindings for Kotlin (Android / JVM) and Swift (iOS / macOS), built by the scripts in `bindings/`, not published as packages (`docs/non-goals.md` NG-31)
-  - browser target: the same crate compiles to `wasm32` with the same SQLite3MC-encrypted storage on sqlite-remote-vfs — in IndexedDB, or an account's databases on a sqlite-remote-server with storage tokens from a token exchange (dedicated Web Worker, cross-origin isolated page; ADR-0022, ADR-0035), service tokens for the embedder's own services from the same token exchange (ADR-0036), recovery data — the account's keys sealed with a PIN through a PIN service that limits the guesses, restored in a new browser, a picked file checked before the PIN — and leaving a browser for good with `logout({ purgeDevice, purgeLocal })` and a hand-written TypeScript-facing binding layer (login incl. SSO, sync, send/receive, assets) — see [`docs/bindings.md`](docs/bindings.md)
+  - browser target: the same crate compiles to `wasm32` with the same SQLite3MC-encrypted storage on sqlite-remote-vfs — in IndexedDB, or an account's databases on a sqlite-remote-server with storage tokens from a token exchange (dedicated Web Worker, cross-origin isolated page; ADR-0022, ADR-0035), service tokens for the embedder's own services from the same token exchange (ADR-0036), recovery data — the account's keys sealed with a PIN through a PIN service that limits the guesses, restored in a new browser, a picked file checked before the PIN — and leaving a browser for good with `logout({ purgeDevice, purgeLocal })` and a hand-written TypeScript-facing binding layer (login incl. SSO, sync, send/receive, attachments) — see [`docs/bindings.md`](docs/bindings.md)
   - many tabs, one instance in the browser: the tab holding the origin's lease is the leader, every other tab is a thin client over `BroadcastChannel` — `bindings/web/kupferdraht-tabs/` (opt-in reference module, ADR-0026); closing the leader promotes the next tab; an in-flight send is re-issued with its idempotency key and arrives once, other in-flight mutations fail typed instead of being sent twice
   - a self-hosted deployment of wire-server, Wire's open-source backend (API v14), named by its base URL (`--api-url`, required; no default)
   - Kupferdraht's logs reach the app through a listener on every surface (Rust, Kotlin, Swift, browser `onLog`) — Kupferdraht writes nowhere itself
@@ -130,8 +130,8 @@ How it all fits together is described in
 ## Known limitations
 
 - **No voice / video calls.** Calling is a hard non-goal — Kupferdraht is
-  messaging only. Also out of scope: asset preview thumbnails,
-  AES-GCM asset emission, and federation across non-Wire backends.
+  messaging only. Also out of scope: attachment preview thumbnails,
+  AES-GCM attachment emission, and federation across non-Wire backends.
   The MLS stack is RFC 9420 only, with no security-disabling options.
   Every decided scope cut, with its reason, is listed in
   [`docs/non-goals.md`](docs/non-goals.md).
@@ -168,7 +168,7 @@ to a package registry ([`docs/non-goals.md`](docs/non-goals.md) NG-31)
 | Kotlin / JVM (desktop) | JAR — `bindings/kotlin/build-jvm.sh` | implemented, binding-level tests (`./gradlew test`), run in CI since Step 153 |
 | Android | AAR (arm64-v8a) — `bindings/android/build-android.sh` (NDK + cargo-ndk) | implemented, builds + packages |
 | Swift (iOS + macOS) | `kupferdrahtFFI.xcframework` + SwiftPM — `bindings/swift/build-xcframework.sh` | implemented, binding-level tests (`swift test`) |
-| Browser (WASM) | `wasm-pack build --target web` (from `kupferdraht-core/`, needs a wasm-capable clang) + `bindings/web/kupferdraht-tabs/` (plain ES modules, no build) | usable subset — login incl. SSO, sync, send / receive, assets, read state, avatars and recovery data over the SQLite3MC store in IndexedDB or on a storage server (run in a dedicated Web Worker); many tabs served by one leader tab (`kupferdraht-tabs`, ADR-0026); storage pins and the tabs scenarios run in headless Firefox (`scripts/wasm-test.sh`), live-browser verification of the login vertical pending |
+| Browser (WASM) | `wasm-pack build --target web` (from `kupferdraht-core/`, needs a wasm-capable clang) + `bindings/web/kupferdraht-tabs/` (plain ES modules, no build) | usable subset — login incl. SSO, sync, send / receive, attachments, read state, avatars and recovery data over the SQLite3MC store in IndexedDB or on a storage server (run in a dedicated Web Worker); many tabs served by one leader tab (`kupferdraht-tabs`, ADR-0026); storage pins and the tabs scenarios run in headless Firefox (`scripts/wasm-test.sh`), live-browser verification of the login vertical pending |
 
 Per-target surface, packaging details, and the gaps on the wasm
 surface: [`docs/bindings.md`](docs/bindings.md).

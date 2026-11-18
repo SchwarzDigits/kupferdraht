@@ -170,7 +170,7 @@ mod tests {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: None,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         }
     }
 

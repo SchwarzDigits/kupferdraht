@@ -93,8 +93,8 @@ kupferdraht-core/src/
 │                              typing.rs: Room::typing_notice (Step 162)
 ├── timeline/                 — Timeline + one child module per interaction
 │   │                          (Step 30 split): text, reaction, confirmation,
-│   │                          delete, knock, location, asset_send,
-│   │                          asset_receive, lookup, ephemeral (Step 89:
+│   │                          delete, ping, location, attachment_send,
+│   │                          attachment_receive, lookup, disappearing (Step 89:
 │   │                          send + expiry sweep + timers), keyed
 │   │                          (Step 130a: send_keyed, OutgoingContent)
 │   └── mod.rs                — Timeline, MessageHandle, the pub-use surface
@@ -102,12 +102,12 @@ kupferdraht-core/src/
 │                                (SyncService is pub(crate) since Step 14b)
 │   └── dispatch/               — one inbound-event handler per interaction
 │                                (Step 32 split): text, reaction, confirmation,
-│                                delete, edit, knock, location, asset, config,
-│                                ephemeral (Step 89)
+│                                delete, edit, ping, location, attachment, config,
+│                                disappearing (Step 89)
 ├── encryption/                — pub(crate): MlsClient (openmls wrapper),
 │                                KupferdrahtProvider (openmls storage provider,
 │                                one transaction per MLS operation),
-│                                asset AES-256-CBC crypto, Proteus prekeys
+│                                attachment AES-256-CBC crypto, Proteus prekeys
 ├── identity/                  — UserId — the one typed identifier (§Identifiers)
 ├── manager/                   — Kupferdraht (device-level, multi-account manager),
 │                                KupferdrahtBuilder, PendingAccount, manager-level
@@ -147,7 +147,7 @@ nine `pub use` statements re-exporting roughly 30 symbols:
 - `storage::{AccountEntry, GlobalStore, StorageProvider}`
 - `sync::{EventHandler, Message, MessageBody, SyncSettings, SyncSummary}`
 - `time::now_ms`
-- `timeline::{AssetSummary, MessageHandle, Subscription, Timeline}`
+- `timeline::{AttachmentSummary, MessageHandle, Subscription, Timeline}`
 
 A second tier is `pub` inside `storage::` without a crate-root
 re-export — reachable as `kupferdraht::storage::X`, not `kupferdraht::X` —
@@ -204,7 +204,7 @@ See `docs/ARCHITECTURE.md` §8 for the architecture-level summary.
 
 **Sender of an inbound message (Step 95a, ADR-0027).** Every
 `sender_user_id` / `sender_device_id` Kupferdraht hands out for an inbound
-MLS message — `Message`, `TimelineItem`, `AssetSummary`, a task's
+MLS message — `Message`, `TimelineItem`, `AttachmentSummary`, a task's
 `creator_user_id`, the case gate — is the identity of the MLS leaf
 that signed the message, parsed from its Wire `BasicCredential`
 (`{uuid}:{client_id}@{domain}`). The Wire event envelope
@@ -349,7 +349,7 @@ pluggable.
 **Atomic event writes (Step 105).** An event whose timeline row has a
 dependent row is written through one `Store` call:
 `insert_timeline_event_with_mentions` (text), `…_with_attachment`
-(asset), `…_with_task` (task + fold row) and
+(attachment), `…_with_task` (task + fold row) and
 `apply_message_edit_with_mentions` (edit). Each returns whether the row
 was fresh / the edit applied; an existing row is reported, not an error,
 and nothing is written then. Their default bodies write in sequence and
@@ -383,7 +383,7 @@ callers (including `kupferdraht-cli`) must not.
 ### `ClientBuilder::add_root_certificates(self, pem: impl Into<String>) -> ClientBuilder`
 
 Trust these certificate authorities beside the built-in Mozilla list, for every
-TLS connection to the server — both HTTP clients (the asset store's redirect
+TLS connection to the server — both HTTP clients (the attachment store's redirect
 included) and the push WebSocket (Step 156, ADR-0044). `pem` holds one or more
 certificates; call it again for more. Without it nothing changes; the built-in
 list always stays, and nothing turns the check off. PEM without a certificate is
@@ -470,8 +470,8 @@ wrapping; N concurrent `401`s collapse to a single rebind. The rotated
 over the `Client`'s lifetime. The distinct `KupferdrahtError::Unauthorized`
 variant surfaces only when a `401` cannot be recovered — during the
 pre-login phase, or after a refreshed token is itself rejected.
-**Exception:** streaming asset upload/download bypass the funnel
-(non-cloneable body / custom streaming response), so a `401` mid-asset
+**Exception:** streaming attachment upload/download bypass the funnel
+(non-cloneable body / custom streaming response), so a `401` mid-attachment
 is *not* auto-retried — it surfaces and the next ordinary call
 refreshes.
 
@@ -709,7 +709,7 @@ be repeated. Storage and keystore errors of the purge surface as such.
 
 Forget `account_id` on this device without a session: a client this
 manager still holds (from `resume`) is closed first, then the account's
-directory under `base_dir/accounts/` goes (databases, locks, asset cache),
+directory under `base_dir/accounts/` goes (databases, locks, attachment cache),
 its keystore entries (the two database keys, the seed and storage-login
 key where a browser home has them), its registry entry, and the active
 account when it was this one. Other accounts of the home are untouched.
@@ -1014,15 +1014,15 @@ returns, replacing a bare `(Vec<String>, Vec<String>)` tuple.
 | `Timeline::room_id()`                                 | `&str`                                | The room id this `Timeline` is bound to — the same string the owning `Room::id()` returned at construction time. |
 | `Timeline::send_text(body)`                           | `Result<MessageHandle, KupferdrahtError>`  | Persist a `timeline_events` row as `Sending` (emitting its `Append`), encrypt a `GenericMessage(Text)` under the local MLS group, POST the resulting `MlsMessage(PrivateMessage)` to `/v14/mls/messages`, and settle the row to `Submitted` or `Failed` (`UpdateAt`) — see "Send lifecycle (Step 97a)". Requires the room's MLS group to be in local storage (`join_room` first). |
 | `Timeline::send_text_auto_join(body)`                 | `Result<MessageHandle, KupferdrahtError>`  | **Step 14g.** Eager auto-join + send: probes the local openmls store via `Client::has_mls_group`; on a missing group, calls `Client::join_room` first, then proceeds with `send_text`. Closes `v1-api-ergonomics-audit.md §1.2` — plain `send_text` fails confusingly when the room is cached but the openmls store has no group yet. Use this for "just send, set up if needed"; keep `send_text` for callers that want to decline the join (e.g. handle an invite gracefully) or want to typed-match `KupferdrahtError::MlsGroupMissing` themselves. `InvalidInput` when the room is not cached or has no `group_id` on its metadata snapshot. |
-| `Timeline::send_knock(hot_knock: bool)`               | `Result<MessageHandle, KupferdrahtError>`  | **Step 26.** Send a `GenericMessage(Knock)` (nudge / poke) over the same MLS encrypt path as `send_text`. `hot_knock` is Wire's double-tap flag; plain knocks pass `false`. Persists a `timeline_events` row with `kind='knock'`, `body='true'`/`'false'`. |
+| `Timeline::send_ping(repeated: bool)`                 | `Result<MessageHandle, KupferdrahtError>`  | **Step 26.** Send a ping — a message without content that draws the room's attention — over the same MLS encrypt path as `send_text`. `repeated` marks a ping sent again to insist; a plain ping passes `false`. Persists a `timeline_events` row with `kind='ping'`, `body='true'`/`'false'`. |
 | `Timeline::send_location(latitude: f32, longitude: f32, name: Option<String>, zoom: Option<i32>)` | `Result<MessageHandle, KupferdrahtError>`  | **Step 26.** Send a `GenericMessage(Location)` (map point). `name` is an optional place label, `zoom` an optional map zoom level. Persists a `timeline_events` row with `kind='location'` and the coordinates packed as JSON in `body`. |
-| `Timeline::send_ephemeral_text(body: String, ttl: Duration)` | `Result<MessageHandle, KupferdrahtError>`  | **Step 89.** Send a self-deleting text: `GenericMessage(Ephemeral { expire_after_millis: ttl, text })` over the same MLS encrypt path as `send_text` (which stays untouched — a plain text never expires). Official clients render a countdown and delete their copy locally; Kupferdraht's own row (`kind='text'`, `expires_at_ms = sent_at_ms + ttl`) self-redacts after `ttl` too. `ttl` must be 1 s … 365 days (`InvalidInput` otherwise, nothing uploaded). No mentions / quote inside the wrapper in V1. On an upload failure the row is persisted as `Failed` **without** an expiry stamp — the timer starts on the backend ack only, so the body stays available for a resend (the chosen TTL is persisted for exactly that, V28). See "Ephemeral messages" below for the timer contract. |
-| `Timeline::resend(message_id: String)`                | `Result<MessageHandle, KupferdrahtError>`  | **Step 79.** Re-drive one failed send (`DeliveryStatus::Failed`, Step 25a — since Step 97a also an abandoned `Sending` row, which reads as `Failed`) from its persisted row under the **same `message_id`** (matrix-rust-sdk's `SendHandle::unwedge` shape — the transaction id survives; receivers dedupe on the id if the first attempt did reach the backend behind a 5xx proxy). Covers text incl. reply / mentions (re-read from the local parent and the `mentions` table), ephemeral text (re-wrapped with the original TTL; `expires_at_ms` stamped and the timer armed on success), knock, location, and assets (the blob already sits on `/v14/assets` — only the MLS reference travels again). Re-encrypts at the current epoch, uploads once (the stale-epoch self-heal applies), flips the row to `Submitted`, re-stamps `sent_at_ms` to the resend instant (the row moves to where recipients see it), emits `TimelineDiff::UpdateAt`. A row this device already sent — `Submitted`, or `Received` once its echo arrived — answers its handle without uploading (**Step 130b**), so a repeated call after a lost answer converges on the first. `InvalidInput` for an unknown id, another sender's message, a send still in flight, a deleted row, or a **task / case / marker snapshot** (a stale full-state snapshot could regress every receiver's fold — re-send the current state via `update_task` / `set_case` / `set_task_list`). A transport error propagates and leaves the row `Failed` for the next attempt. |
+| `Timeline::send_disappearing_text(body: String, ttl: Duration)` | `Result<MessageHandle, KupferdrahtError>`  | **Step 89.** Send a disappearing text: `GenericMessage(Ephemeral { expire_after_millis: ttl, text })` over the same MLS encrypt path as `send_text` (which stays untouched — a plain text never expires). Official clients render a countdown and delete their copy locally; Kupferdraht's own row (`kind='text'`, `expires_at_ms = sent_at_ms + ttl`) self-redacts after `ttl` too. `ttl` must be 1 s … 365 days (`InvalidInput` otherwise, nothing uploaded). No mentions / quote inside the wrapper in V1. On an upload failure the row is persisted as `Failed` **without** an expiry stamp — the timer starts on the backend ack only, so the body stays available for a resend (the chosen TTL is persisted for exactly that, V28). See "Disappearing messages" below for the timer contract. |
+| `Timeline::resend(message_id: String)`                | `Result<MessageHandle, KupferdrahtError>`  | **Step 79.** Re-drive one failed send (`DeliveryStatus::Failed`, Step 25a — since Step 97a also an abandoned `Sending` row, which reads as `Failed`) from its persisted row under the **same `message_id`** (matrix-rust-sdk's `SendHandle::unwedge` shape — the transaction id survives; receivers dedupe on the id if the first attempt did reach the backend behind a 5xx proxy). Covers text incl. reply / mentions (re-read from the local parent and the `mentions` table), disappearing text (re-wrapped with the original TTL; `expires_at_ms` stamped and the timer armed on success), ping, location, and attachments (the blob already sits on `/v14/assets` — only the MLS reference travels again). Re-encrypts at the current epoch, uploads once (the stale-epoch self-heal applies), flips the row to `Submitted`, re-stamps `sent_at_ms` to the resend instant (the row moves to where recipients see it), emits `TimelineDiff::UpdateAt`. A row this device already sent — `Submitted`, or `Received` once its echo arrived — answers its handle without uploading (**Step 130b**), so a repeated call after a lost answer converges on the first. `InvalidInput` for an unknown id, another sender's message, a send still in flight, a deleted row, or a **task / case / marker snapshot** (a stale full-state snapshot could regress every receiver's fold — re-send the current state via `update_task` / `set_case` / `set_task_list`). A transport error propagates and leaves the row `Failed` for the next attempt. |
 | `Timeline::resend_failed()`                           | `Result<ResendSummary, KupferdrahtError>`  | **Step 79.** Re-drive every failed send of the room, **oldest first**, stopping at the first hard error (a stuck message must not be overtaken); snapshot rows are skipped, rows behind the stop stay `Failed` — the pass is re-runnable. Never errors as a whole once the rows could be read; the outcome is the summary. The room-scoped analog of matrix-rust-sdk's `SendQueue::respawn_tasks_for_rooms_with_unsent_requests`. |
 | `ResendSummary { resent, skipped, stopped_at, remaining }` | (struct)                          | **Step 79.** `resent: Vec<MessageHandle>` oldest first; `skipped: Vec<String>` the snapshot rows (`task` / `case` / `task_list_marker`) left `Failed`; `stopped_at: Option<(message_id, error)>` the hard error the pass stopped at; `remaining: u32` the failed rows behind it that were not attempted (snapshot rows included — the next pass classifies them). |
 | `Room::failed_sends()`                                | `Result<Vec<TimelineItem>, KupferdrahtError>` | **Step 79.** The room's failed sends — live `Failed` rows, fully overlaid, oldest first — so a consumer wires "sync came back → resend" in three lines (see "Reconnect contract"). Includes the snapshot rows `resend` refuses (nothing hides). matrix-rust-sdk analog: the `SendingFailed` local echoes a `RoomSendQueue::subscribe()` yields. |
 | `Timeline::send_keyed(idempotency_key: String, content: OutgoingContent)` | `Result<MessageHandle, KupferdrahtError>` | **Step 130a.** Send `content` under a caller-chosen key: the first call sends, a repeat of the key answers the stored handle (or resends a failed message under the same id) instead of sending twice. matrix-rust-sdk analog: `Room::send(content).with_transaction_id(txn_id)`. See "Keyed sends (Step 130a)" below. |
-| `OutgoingContent` | (enum) | **Step 130a.** What `send_keyed` sends: `Text { body, mentions }`, `Reply { parent_id, body }`, `Knock { hot_knock }`, `Location { latitude, longitude, name, zoom }`, `File { bytes, filename, mime_type }`, `Reaction { item_id, emoji }`. Re-exported at the crate root; a `uniffi::Enum`. |
+| `OutgoingContent` | (enum) | **Step 130a.** What `send_keyed` sends: `Text { body, mentions }`, `Reply { parent_id, body }`, `Ping { repeated }`, `Location { latitude, longitude, name, zoom }`, `File { bytes, filename, mime_type }`, `Reaction { item_id, emoji }`. Re-exported at the crate root; a `uniffi::Enum`. |
 | `Timeline::send_task(draft: TaskDraft, with_fallback: Option<bool>)` | `Result<MessageHandle, KupferdrahtError>`  | **Step 60a (ADR-0014).** Send a task: a `TaskPayload` in `GenericMessage` field 262000, *outside* the content oneof. `with_fallback: Some(true)` (normal chats) also sets the `Text` variant as human-readable fallback (assignee mention included, UTF-16 offsets; the checkbox reflects the status — `☑` done, `☒` cancelled); `Some(false)` (dedicated task-list rooms) sends the bare payload official clients ignore; `None` derives the default from the room's task-list marker (Step 75, ADR-0020: marked → off, unmarked → on) — an explicit choice always wins. The library generates the stable `task_id` and stamps `status: Open`. Persists a `timeline_events` row with `kind='task'` and the full state packed as JSON in `body`. Rejects an empty `title` with `InvalidInput`. |
 | `Timeline::update_task(task_id: &str, patch: TaskPatch, with_fallback: Option<bool>)` | `Result<MessageHandle, KupferdrahtError>`  | **Step 60b.** Read the current folded state, apply the **set-only** patch (unset fields keep their value; clearing is not expressible in V1), and send the resulting **full state** as a new task message — LWW on every receiver, `Done → Open` reopens, any transition is legal. `InvalidInput` for an unknown `task_id` or an empty patched title. |
 | `Room::tasks()` | `Result<Vec<FoldedTask>, KupferdrahtError>` | **Step 60b.** The folded task list of this room: one entry per `task_id`, latest full state wins (LWW in arrival order — the local proxy for the event stream's server order). A redacted task message (`MessageDelete` wipes the body) drops out of the fold — the prior state resurfaces; a task whose only message was deleted disappears. **Step 60c:** reads the materialized `tasks` table (fold-on-write, no per-read re-fold); ordering is `sort_key` first (manually moved tasks, lexicographic), then due date ascending (deadlines before none), then priority descending, then first-seen. |
@@ -1045,7 +1045,7 @@ browser — without sending twice. matrix-rust-sdk analog:
   retry that send.
 - **`OutgoingContent`:** `Text { body, mentions }` joins the room's MLS
   group first when it is missing (as `send_text_auto_join`); `Reply`,
-  `Knock`, `Location` send as `send_reply` / `send_knock` /
+  `Ping`, `Location` send as `send_reply` / `send_ping` /
   `send_location`; `File { bytes, filename, mime_type }` sends from
   memory (the browser's `sendFile` path); `Reaction { item_id, emoji }`
   is a toggle (as `toggle_reaction`).
@@ -1175,55 +1175,51 @@ an avatar as `<img>` or on a canvas, never as a document, `iframe` or `object`.
   is no disk cache: an embedder that wants one keys it by `avatar_key`.
 - **The team's icon** is as of the last login, like its name, and `None` without a
   team, for the default icon and when the team request failed at login. A replaced
-  own avatar's assets stay on the server, as with Wire's clients.
+  own avatar's images stay on the server, as with Wire's clients.
 
-### Assets (Step 11)
+### Attachments (Step 11)
 
 File-attachment send + receive per ADR-0011. AES-256-CBC over
-Wire's `/v14/assets` REST endpoint, MLS-protected reference.
+the backend's `/v14/assets` REST endpoint, MLS-protected reference.
 
 | Symbol                                                | Returns                               | Notes |
 |---|---|---|
 | `Timeline::send_file(&Path, &str)`                    | `Result<MessageHandle, KupferdrahtError>`  | **Step 11f.** Encrypt the file (AES-256-CBC + SHA-256, streamed), upload to `POST /v14/assets`, then send the MLS reference via the same `encrypt_and_upload` pipeline `send_text` uses. Consults `Client::file_sharing()` first (Step 10e gate) — `Disabled` rejects with `InvalidInput`, `Enabled` proceeds. |
-| `Timeline::send_file_stream(source: Arc<dyn AssetSource>, filename: &str, mime_type: &str)` | `Result<MessageHandle, KupferdrahtError>` | **Step 36.** Streaming counterpart of `send_file`: reads the plaintext from a foreign [`AssetSource`](#assetsource) byte stream instead of a filesystem path, so a platform without a real path (e.g. Android's `content://` picker `InputStream`) can send without a temp-file copy of the plaintext. Same chunked, never-fully-buffered memory profile. `filename` is the display name — the stream carries no path to derive it from. Same error surface as `send_file`, plus any `KupferdrahtError` `AssetSource::read_chunk` returns while reading. |
-| `Timeline::asset(&str)`                               | `Result<Option<AssetSummary>, KupferdrahtError>` | **Step 11h.** Look up the persisted asset for `message_id` in this timeline's room. `None` when no row matches (text-only message or not yet synced). |
-| `AssetSummary::download()`                            | `Result<Vec<u8>, KupferdrahtError>`        | **Step 11g.** Lazy-cache the encrypted ciphertext at `~/.kupferdraht/<account_id>/assets/<message_id>.enc` — fetched from the asset store when the backend answers `302` (one hop, no credentials, Step 141) —, verify SHA-256 over the bytes, unpack the DEK envelope on `otr_key`, decrypt via AES-256-CBC. Capped at 64 MB — for larger assets use `save_to`. Returns `InvalidInput` when `encryption_algo = "AES_GCM"` (ADR-0011 §AES-GCM toleration). **Step 160:** the download stops past `size_bytes` + 32 bytes (the IV and a block of padding) with `IntegrityCheck`, and the partial file leaves the cache. In the browser the ciphertext is decrypted in its own buffer, and an asset with `size_bytes` over 100 MiB returns `InvalidInput` before any request. **Step 84:** a summary taken before its message was deleted for everyone returns `InvalidInput` ("its message was deleted"), before the cache or the server is touched. |
-| `AssetSummary::save_to(&Path)`                        | `Result<(), KupferdrahtError>`             | **Step 11g.** Same pipeline as `download` but streams the plaintext to a filesystem path — suitable for multi-megabyte assets. The same download bound (Step 160) and the same refusal of a deleted file (Step 84). |
+| `Timeline::send_file_stream(source: Arc<dyn AttachmentSource>, filename: &str, mime_type: &str)` | `Result<MessageHandle, KupferdrahtError>` | **Step 36.** Streaming counterpart of `send_file`: reads the plaintext from a foreign [`AttachmentSource`](#attachmentsource) byte stream instead of a filesystem path, so a platform without a real path (e.g. Android's `content://` picker `InputStream`) can send without a temp-file copy of the plaintext. Same chunked, never-fully-buffered memory profile. `filename` is the display name — the stream carries no path to derive it from. Same error surface as `send_file`, plus any `KupferdrahtError` `AttachmentSource::read_chunk` returns while reading. |
+| `Timeline::attachment(&str)`                               | `Result<Option<AttachmentSummary>, KupferdrahtError>` | **Step 11h.** Look up the persisted attachment for `message_id` in this timeline's room. `None` when no row matches (text-only message or not yet synced). |
+| `AttachmentSummary::download()`                            | `Result<Vec<u8>, KupferdrahtError>`        | **Step 11g.** Lazy-cache the encrypted ciphertext at `~/.kupferdraht/<account_id>/attachments/<message_id>.enc` — fetched from the attachment store when the backend answers `302` (one hop, no credentials, Step 141) —, verify SHA-256 over the bytes, unwrap the content key, decrypt via AES-256-CBC. Capped at 64 MB — for larger attachments use `save_to`. Returns `InvalidInput` when the sender used AES-GCM (ADR-0011 §AES-GCM toleration). **Step 160:** the download stops past `size_bytes` + 32 bytes (the IV and a block of padding) with `IntegrityCheck`, and the partial file leaves the cache. In the browser the ciphertext is decrypted in its own buffer, and an attachment with `size_bytes` over 100 MiB returns `InvalidInput` before any request. **Step 84:** a summary taken before its message was deleted for everyone returns `InvalidInput` ("its message was deleted"), before the cache or the server is touched. |
+| `AttachmentSummary::save_to(&Path)`                        | `Result<(), KupferdrahtError>`             | **Step 11g.** Same pipeline as `download` but streams the plaintext to a filesystem path — suitable for multi-megabyte attachments. The same download bound (Step 160) and the same refusal of a deleted file (Step 84). |
 
 ```rust
-pub struct AssetSummary {
-    // Public metadata for UI display:
+pub struct AttachmentSummary {
+    // The description a UI renders:
     pub message_id: String,
     pub mime_type: String,
     pub filename: Option<String>,
     pub size_bytes: u64,
     pub sender_user_id: String,
     pub room_id: String,
-
-    // Asset locator + encryption flag for diagnostics:
-    pub asset_id: String,
-    pub asset_token: Option<String>,
-    pub asset_domain: String,
-    pub encryption_algo: String,   // "AES_CBC" | "AES_GCM"
     pub cache_path: Option<String>,
-    // sha256 + otr_key_ct + Weak<Client> are crate-private
-    // (security material — kept off the public surface).
+    // The server's locator and token, the cipher, sha256, the wrapped
+    // key and a Weak<Client> are crate-private: `download` / `save_to`
+    // use them, a consumer has no use for them, and the token grants
+    // the download (Step 163b).
 }
 ```
 
-`MessageBody::Asset(Box<AssetSummary>)` and
-`TimelineItemKind::Asset(Box<AssetSummary>)` are the two
+`MessageBody::Attachment(Box<AttachmentSummary>)` and
+`TimelineItemKind::Attachment(Box<AttachmentSummary>)` are the two
 public-facing surfaces consumers see — event handler callbacks
-get an `Asset` body; the timeline read API
+get an `Attachment` body; the timeline read API
 (`Timeline::items` / `TimelineDiff::Append`) surfaces the
-`Asset` kind. Both variants are boxed to keep enum stack size
+`Attachment` kind. Both variants are boxed to keep enum stack size
 compact next to the smaller `Text` variants.
 
-### AssetSource
+### AttachmentSource
 
 ```rust
 #[uniffi::export(with_foreign)]
-pub trait AssetSource: Send + Sync {
+pub trait AttachmentSource: Send + Sync {
     fn read_chunk(&self, max_len: u32) -> Result<Vec<u8>, KupferdrahtError>;
 }
 ```
@@ -1310,7 +1306,7 @@ Step 129's). A UI shows a room as needing attention while
 
 Mirror of read receipts for `Confirmation { type: DELIVERED }`. Kupferdraht
 **auto-sends** a delivery confirmation when an inbound content message
-(text/asset) arrives — but **only in 1:1 rooms** (group delivery would be
+(text/attachment) arrives — but **only in 1:1 rooms** (group delivery would be
 N² traffic) and **ungated** by the read-receipt setting (unlike READ).
 Best-effort: a failed confirmation never breaks receiving the message. The
 **receive** side applies an incoming DELIVERED in any room type.
@@ -1342,26 +1338,26 @@ send-state + receipt lists, app aggregates).
 
 | Method                                                 | Returns                          | Notes |
 |---|---|---|
-| `Timeline::redact(item_id: &str)`                       | `Result<MessageHandle>`          | Delete-for-everyone the message keyed by `item_id`. Wire-side emits `MessageDelete { message_id }`; locally `Store::apply_message_delete` clears the body and stamps `redacted_at_ms`. **Step 15:** migrated from `String` to `&str` for caller-ergonomics symmetry with the other Timeline send paths. **Step 95b (ADR-0028):** `InvalidInput` without uploading when the local row of `item_id` was sent by another user — delete-for-everyone is the sender's (any own device counts; an id unknown locally goes out as before; the receiver-side ephemeral expiry is a separate internal path). The own-message check runs **first**, before the room's MLS group is resolved — for an unknown room it decides by the local row alone. **Step 84:** a file message goes entirely — its attachment row (the key, the token, the locator) in the delete's transaction, its cached ciphertext after it, and its upload at the server through `DELETE /v14/assets/{domain}/{key}`, best effort (a failure is logged, the delete stands). A received delete does the same locally and leaves the upload to its sender. matrix-rust-sdk analog: `Timeline::redact`. |
+| `Timeline::redact(item_id: &str)`                       | `Result<MessageHandle>`          | Delete-for-everyone the message keyed by `item_id`. Wire-side emits `MessageDelete { message_id }`; locally `Store::apply_message_delete` clears the body and stamps `redacted_at_ms`. **Step 15:** migrated from `String` to `&str` for caller-ergonomics symmetry with the other Timeline send paths. **Step 95b (ADR-0028):** `InvalidInput` without uploading when the local row of `item_id` was sent by another user — delete-for-everyone is the sender's (any own device counts; an id unknown locally goes out as before; the receiver-side disappearing expiry is a separate internal path). The own-message check runs **first**, before the room's MLS group is resolved — for an unknown room it decides by the local row alone. **Step 84:** a file message goes entirely — its attachment row (the key, the token, the locator) in the delete's transaction, its cached ciphertext after it, and its upload at the server through `DELETE /v14/assets/{domain}/{key}`, best effort (a failure is logged, the delete stands). A received delete does the same locally and leaves the upload to its sender. matrix-rust-sdk analog: `Timeline::redact`. |
 | `Store::apply_message_delete(room_id, target_message_id, redacted_at_ms)` | `Result<bool>` | Idempotent UPDATE: matches via `(message_id = ?target OR current_edit_event_id = ?target)` so a delete targeting an already-edited message via its latest chain id still works. Returns `true` when a row was retired, `false` for "parent missing" or "older delete redelivered". |
-| Inbound authorization (Step 95b, ADR-0028) | — | An inbound `MessageDelete` applies only when its MLS-authenticated sender (ADR-0027) is the target's original **user** (any of their devices), **or**, for an **ephemeral** target, the self user (another own device syncing a receiver-side expiry) **or** any member when the target is the self user's own message (receivers enforce the sender's timer, observations §74). A self-sent delete of another member's ordinary message is ignored, as the official webapp does (observations §91). A third party's delete — of a normal message, someone else's ephemeral, a task carrier or a case snapshot — is dropped with a `warn!`: no row change, no diff, no fold change. No admin override (Wire parity). The target is resolved in the same room (`Store::load_timeline_event_in_room`). |
+| Inbound authorization (Step 95b, ADR-0028) | — | An inbound `MessageDelete` applies only when its MLS-authenticated sender (ADR-0027) is the target's original **user** (any of their devices), **or**, for a **disappearing** target, the self user (another own device syncing a receiver-side expiry) **or** any member when the target is the self user's own message (receivers enforce the sender's timer, observations §74). A self-sent delete of another member's ordinary message is ignored, as the official webapp does (observations §91). A third party's delete — of a normal message, someone else's disappearing message, a task carrier or a case snapshot — is dropped with a `warn!`: no row change, no diff, no fold change. No admin override (Wire parity). The target is resolved in the same room (`Store::load_timeline_event_in_room`). |
 | `TimelineItem::redacted: bool`                          | (field)                          | `true` when `redacted_at_ms` is set. The `kind` field is then `TimelineItemKind::Redacted`. |
 | `TimelineItemKind::Redacted`                            | (variant)                        | Body is hidden; `reply_to`, `mentions`, `edited_at_ms` are dropped from the projection. The row itself stays in `Room::messages` so reply chains pointing at it still resolve. |
 
-### Ephemeral messages (Step 89)
+### Disappearing messages (Step 89)
 
-Wire's `Ephemeral` wrapper (`GenericMessage` field 18) is supported
+Disappearing messages (on the wire, `GenericMessage` field 18) are supported
 for the `Text` inner arm in both directions. The contract:
 
 | Symbol | Notes |
 |---|---|
-| `Timeline::send_ephemeral_text(body, ttl)` | Send side — see the Timeline table above. |
-| `TimelineItem::expires_at_ms: Option<i64>` / `Message::expires_at_ms: Option<i64>` | Set only for an ephemeral message: the wall-clock (ms) at which the local timer elapses. The body stays an ordinary `TimelineItemKind::Text` / `MessageBody::Text` — the TTL is a decoration, so consumers that render text keep working; a countdown UI reads the stamp. |
+| `Timeline::send_disappearing_text(body, ttl)` | Send side — see the Timeline table above. |
+| `TimelineItem::expires_at_ms: Option<i64>` / `Message::expires_at_ms: Option<i64>` | Set only for a disappearing message: the wall-clock (ms) at which the local timer elapses. The body stays an ordinary `TimelineItemKind::Text` / `MessageBody::Text` — the TTL is a decoration, so consumers that render text keep working; a countdown UI reads the stamp. |
 | Timer start (V1) | **Dispatch/send time.** Receive: `received_at_ms + ttl`, stamped when the row is inserted; send: `sent_at_ms + ttl` once the upload succeeded. Official Wire receivers start the countdown only when the message is actually *viewed* (viewport), which a headless SDK cannot observe — Kupferdraht therefore starts earlier, never later: it may tombstone a message an official client would still show, never the reverse (observations §74, `docs/wire/message-types.md`). A view-triggered start (e.g. on `mark_as_read`) is a possible V2. |
-| Expiry | **Local tombstone, plus a receiver-side broadcast.** When the stamp passes, the row is tombstoned exactly like an inbound `MessageDelete` (`Store::expire_ephemeral_messages`: body cleared, `redacted_at_ms` stamped, `expires_at_ms` kept) and every subscriber receives a `TimelineDiff::UpdateAt` whose item is `redacted == true`, `kind == Redacted`, `expires_at_ms == Some(..)`. Reply chains keep resolving. For an **inbound** row Kupferdraht then sends one `MessageDelete` for the message into the room — the delete official senders wait for before purging their own copy (observations §74) — best-effort: a rejected upload is logged and not retried, the local tombstone is the contract. An expired **own** row sends nothing (official senders rely on the receiver's delete; Kupferdraht's own copy is already tombstoned). Not mirrored: the `DeleteForMe` into the self-conversation for the receiver's other devices (Step 86). |
+| Expiry | **Local tombstone, plus a receiver-side broadcast.** When the stamp passes, the row is tombstoned exactly like an inbound `MessageDelete` (`Store::expire_disappearing_messages`: body cleared, `redacted_at_ms` stamped, `expires_at_ms` kept) and every subscriber receives a `TimelineDiff::UpdateAt` whose item is `redacted == true`, `kind == Redacted`, `expires_at_ms == Some(..)`. Reply chains keep resolving. For an **inbound** row Kupferdraht then sends one `MessageDelete` for the message into the room — the delete official senders wait for before purging their own copy (observations §74) — best-effort: a rejected upload is logged and not retried, the local tombstone is the contract. An expired **own** row sends nothing (official senders rely on the receiver's delete; Kupferdraht's own copy is already tombstoned). Not mirrored: the `DeleteForMe` into the self-conversation for the receiver's other devices (Step 86). |
 | When the sweep runs | (1) a per-message native `tokio` timer armed at send / receive / resume; (2) at the end of every dispatch cycle (REST drain or push frame) — so a polling consumer is at most one interval late; (3) on `Client::load_rooms_from_store` (resume), which also re-arms the timers of still-pending rows. On wasm32 only (2) and (3) run — there is no task spawner; the sweep itself is the same SQLite sweep since Step 91; see `docs/bindings.md`. |
-| Failed send + resend (Step 79) | A rejected ephemeral send persists the body **and the chosen TTL** (`timeline_events.ephemeral_ttl_ms`, V28) but no stamp. `Timeline::resend` re-wraps the row in the same `Ephemeral` envelope with that TTL — never as a permanent text — and stamps `expires_at_ms = resend instant + ttl` on success, arming the timer then. Inbound rows carry no TTL column (their stamp is derived at dispatch; an inbound row is never resent). |
-| `Store::expire_ephemeral_messages(now_ms)` / `Store::pending_ephemeral_expiries(now_ms)` | The two storage primitives behind the sweep and the resume re-arm (default no-op for custom `Store` backends; the shipped store implements them on every target). `timeline_events.expires_at_ms` is the V27 column, with a partial index over live ephemeral rows. |
+| Failed send + resend (Step 79) | A rejected disappearing send persists the body **and the chosen TTL** (`TimelineEventRecord::ttl_ms`, V28) but no stamp. `Timeline::resend` re-wraps the row in the same `Ephemeral` envelope with that TTL — never as a permanent text — and stamps `expires_at_ms = resend instant + ttl` on success, arming the timer then. Inbound rows carry no TTL column (their stamp is derived at dispatch; an inbound row is never resent). |
+| `Store::expire_disappearing_messages(now_ms)` / `Store::pending_disappearing_expiries(now_ms)` | The two storage primitives behind the sweep and the resume re-arm (default no-op for custom `Store` backends; the shipped store implements them on every target). `timeline_events.expires_at_ms` is the V27 column, with a partial index over live disappearing rows. |
 
 ### Edit (Step 6-II-c)
 
@@ -1406,7 +1402,7 @@ not echoed to the sender. Both directions are supported.
 per-room set of currently-typing users. When the set changes,
 every registered `EventHandler` fires `on_typing(TypingEvent)`
 with the *current* set (an empty `typing_users` means the last
-typist stopped). The set is ephemeral and is cleared at the start
+typist stopped). The set is transient and is cleared at the start
 of each sync session (the orphan safety net for a sender that
 vanished without a `stopped`). Wire's backend runs no typing
 timer; the only timer is Kupferdraht's send-side auto-stop.
@@ -1462,7 +1458,7 @@ pub struct TimelineItem {
     pub read_by: Vec<String>,        // Step 6-II-f
     pub delivered_to: Vec<String>,   // Step 25b
     pub delivery_status: DeliveryStatus,
-    pub expires_at_ms: Option<i64>,  // Step 89 — Some only for an ephemeral message
+    pub expires_at_ms: Option<i64>,  // Step 89 — Some only for a disappearing message
 }
 
 pub enum DeliveryStatus {
@@ -1475,8 +1471,8 @@ pub enum DeliveryStatus {
 pub enum TimelineItemKind {
     Text { body: String, reply_to: Option<String>, mentions: Vec<Mention> },
     Redacted,
-    Asset(Box<AssetSummary>),                                            // Step 11
-    Knock { hot_knock: bool },                                           // Step 26
+    Attachment(Box<AttachmentSummary>),                                  // Step 11
+    Ping { repeated: bool },                                             // Step 26
     Location { latitude: f32, longitude: f32, name: Option<String>, zoom: Option<i32> }, // Step 26
     Task(Box<TaskItem>),                                                 // Step 60a (ADR-0014)
     MembershipChange(RoomMembershipChange),                              // Step 145
@@ -1563,10 +1559,10 @@ written by a newer Kupferdraht) degrades to `Submitted` with a `warn!`
 rather than failing the room read.
 
 **Send lifecycle (Step 97a).** Every send that creates its own row —
-text (incl. reply, mentions), ephemeral text, knock, location, file,
+text (incl. reply, mentions), disappearing text, ping, location, file,
 task, case, task-list marker — writes that row as `Sending` **before**
 the upload and emits its `Append`; after the upload the row is settled
-to `Submitted` or `Failed` and an `UpdateAt` follows (an ephemeral
+to `Submitted` or `Failed` and an `UpdateAt` follows (a disappearing
 send gets its expiry there — only a delivered send has a timer). A
 file's row and attachment are written after the blob upload, before
 the MLS send. While the upload runs the row reads `Sending`; a
@@ -1596,7 +1592,7 @@ Three consequences are part of the contract (Step 107):
   the item at `Sending` until it re-reads. After cancelling a send,
   re-read (`Room::messages`, `Room::failed_sends`) — the row reads
   `Failed` there.
-- **An ephemeral send's timer starts at the persist.** `arrived_at_ms` is
+- **A disappearing send's timer starts at the persist.** `arrived_at_ms` is
   stamped before the upload, so the local expiry
   (`arrived_at_ms + ttl`) counts the upload time too. `expires_at_ms` runs on
   this device's clock, not on `sent_at_ms`'s (Step 151).
@@ -1981,7 +1977,7 @@ account.handle();         // Option<&str>
 account.email();          // Option<&str>
 account.team_id();        // Option<&str>  — lowercase; None for a personal account
 account.team_name();      // Option<&str>
-account.team_avatar_key(); // Option<&str>  — the team icon's asset key
+account.team_avatar_key(); // Option<&str>  — the team icon's image key
 account.avatar_keys();    // &AvatarKeys — the own avatar (Step 152; `login_avatar_keys` is deprecated)
 
 client.refresh_account().await?; // Step 152: GET /self, GET /teams/{tid}, all or nothing
@@ -2051,12 +2047,12 @@ current variants:
 | `TooManyAttempts { retry_after_secs }` | Browser only (ADR-0035): the PIN service's attempt limit is reached (by default 5 per hour, 12 per day per user); try again after `retry_after_secs`. (Step 112) |
 | `InvalidRecoveryData { reason }` | Browser only (ADR-0035): the bytes cannot be opened as recovery data — `reason` is `notRecoveryData`, `unsupported` (an unknown format version, a key version the PIN service retired, an Argon2id cost beyond what a browser gives) or `otherAccount` (refused before the PIN service is asked). (Step 112) |
 | `SyncAlreadyRunning`   | A sync iteration is already in flight on this `Client` (concurrent `sync_once`/`sync`). (Step 14b) |
-| `Network`              | Transport-layer failure (DNS, TLS, timeout). Native timeouts (Step 98): 10 s to connect; an API call 30 s end to end; an asset download 30 s without a byte (no overall bound); an asset upload has no bound of its own — it fails when the connection fails, and the app can cancel the send. |
+| `Network`              | Transport-layer failure (DNS, TLS, timeout). Native timeouts (Step 98): 10 s to connect; an API call 30 s end to end; an attachment download 30 s without a byte (no overall bound); an attachment upload has no bound of its own — it fails when the connection fails, and the app can cancel the send. |
 | `BackendRejected`      | Non-2xx HTTP response; carries up to 1 KiB of the body for diagnostics, control characters stripped (Step 137). |
 | `RateLimited { retry_after_secs }` | The backend answered `429`; `retry_after_secs` is its `Retry-After` in seconds when it sent one (an HTTP-date or no header → `None`). The loop variants (`sync`, `sync_with_callback`, `sync_stream`, FFI `start_sync`, the push loop) wait it out — `Retry-After`, else `poll_interval`, bounded to 1–60 s — and carry on; every other call, `sync_once` included, returns it. (Step 103) |
 | `Encoding`             | JSON / TLS / Protobuf parse failure. |
-| `IntegrityCheck`       | A cryptographic integrity check failed on the asset path (SHA-256 / MAC / AEAD-tag mismatch), or an asset download ran longer than its sender declared (`size_bytes` + 32 bytes, Step 160). Migration checksum failures surface as `IncompatibleStore`, not here. |
-| `CertificateRejected(String)` | The server's TLS certificate was not trusted (Step 156): an issuer neither the built-in list nor `add_root_certificates` names, an expired certificate, or one for another host. Raised where a connection to a host is first made — the API version, a login, an authenticated call, the asset store's redirect, the push WebSocket. |
+| `IntegrityCheck`       | A cryptographic integrity check failed on the attachment path (SHA-256 / MAC / AEAD-tag mismatch), or an attachment download ran longer than its sender declared (`size_bytes` + 32 bytes, Step 160). Migration checksum failures surface as `IncompatibleStore`, not here. |
+| `CertificateRejected(String)` | The server's TLS certificate was not trusted (Step 156): an issuer neither the built-in list nor `add_root_certificates` names, an expired certificate, or one for another host. Raised where a connection to a host is first made — the API version, a login, an authenticated call, the attachment store's redirect, the push WebSocket. |
 | `IncompatibleStore { database, reason }` | The database does not fit this build (Step 157): its schema is `"newer"` than the code, or its applied migrations are `"divergent"` from the code's. `database` is `kupferdraht.db`, `mls.db` or `global.db`. Nothing is written; the build that fits the data — usually a newer one — opens it. An older database is migrated forward and opens. |
 | `InvalidInput`         | Caller-supplied argument violates a precondition. |
 | `MlsGroupMissing`      | No MLS group loaded for the conversation — `Client::join_room` first. |
@@ -2274,7 +2270,7 @@ rows), idempotency keys (`send_key`, `insert_timeline_event_keyed`,
 `replace_user_reactions_keyed` — Step 130a; default bodies keep no key,
 see "Keyed sends"), mentions, reactions, read + delivery receipts, sync-state
 cursors, self-user and server-config snapshots, feature configs, user
-properties, asset attachments, and the browser's recovery state
+properties, attachments, and the browser's recovery state
 (`save_recovery_state` / `load_recovery_state`, Step 112: when the current
 recovery data was made and the PIN's local verifier — one row, V30; no
 default bodies, a custom store implements them), and `close` (Step 114:
@@ -2406,7 +2402,7 @@ pub struct TimelineEventRecord {
     pub reply_to_id: Option<String>,     // Step 6-II-b — soft reference, quote parent
     pub edited_at_ms: Option<i64>,       // Step 6-II-c
     pub redacted_at_ms: Option<i64>,     // Step 6-II-d — body cleared once set
-    pub expires_at_ms: Option<i64>,      // Step 89 — ephemeral timer (V27); survives the tombstone
+    pub expires_at_ms: Option<i64>,      // Step 89 — disappearing timer (V27); survives the tombstone
 }
 ```
 
@@ -2431,25 +2427,25 @@ pub struct AttachmentRecord {
     pub filename: Option<String>,
     pub size_bytes: u64,
     pub sha256: Vec<u8>,
-    pub otr_key_ct: Vec<u8>,             // AES key, stored verbatim — protected by whole-DB encryption, no second wrap
-    pub asset_id: String,
-    pub asset_token: Option<String>,
-    pub asset_domain: String,
-    pub encryption_algo: String,         // "AES_CBC" | "AES_GCM"
+    pub key_ct: Vec<u8>,                 // AES key, stored verbatim — protected by whole-DB encryption, no second wrap
+    pub attachment_id: String,           // the server's id of the encrypted blob
+    pub attachment_token: Option<String>,
+    pub attachment_domain: String,
+    pub cipher: String,                  // "AES_CBC" | "AES_GCM"
     pub cache_path: Option<String>,      // Some once the encrypted blob is locally cached
     pub created_at_ms: i64,
 }
 ```
 
-Persisted asset attachment (Step 11d, ADR-0011 §Storage shape),
+Persisted attachment (Step 11d, ADR-0011 §Storage shape),
 anchored to a `timeline_events` row by `(message_id, room_id)`. The
-public-facing projection consumers see is `AssetSummary` (see
-[Assets](#assets-step-11) above); `AttachmentRecord` is the raw
+public-facing projection consumers see is `AttachmentSummary` (see
+[Attachments](#attachments-step-11) above); `AttachmentRecord` is the raw
 storage shape `Store::insert_attachment` / `get_attachment` /
 `list_attachments_for_room` operate on. A delete for everyone
 (`Store::apply_message_delete`) removes the row in its transaction, and
 `Store::attachment_message_ids` names what a client's start keeps of the
-asset cache (Step 84).
+attachment cache (Step 84).
 
 ### `CaseSnapshot` / `CaseState` / `CasePriority` (Step 72a, ADR-0018)
 

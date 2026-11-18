@@ -140,7 +140,7 @@ impl SyncService {
     /// End-of-cycle maintenance shared by the REST drain and both push
     /// dialects (one cycle = one drain or one push frame): refresh a room
     /// list the cycle marked stale (Step 118), flush the batched
-    /// external-removal commits (Step 74) and tombstone every ephemeral
+    /// external-removal commits (Step 74) and tombstone every disappearing
     /// row whose timer elapsed (Step 89). All three are infallible toward
     /// the caller — a failed refresh stays marked for the next pass, a
     /// failed flush retries next cycle, a failed refresh or sweep is
@@ -153,9 +153,9 @@ impl SyncService {
         self.run_follow_ups(client).await;
         client.rebuild_removal_flush_queue_once().await;
         self.flush_removal_commits(client).await;
-        if let Err(e) = client.expire_due_ephemeral_messages().await {
-            warn!(error = %e, "ephemeral expiry sweep failed; retrying next cycle");
-            self.notify_error(&format!("ephemeral expiry sweep: {e}"));
+        if let Err(e) = client.expire_due_disappearing_messages().await {
+            warn!(error = %e, "disappearing expiry sweep failed; retrying next cycle");
+            self.notify_error(&format!("disappearing expiry sweep: {e}"));
         }
     }
 
@@ -196,7 +196,7 @@ impl SyncService {
             NotificationOutcome::Deferred { .. } => 0,
         };
         // Step 74 / Step 89: every dispatch cycle ends with the removal flush and
-        // the ephemeral sweep (a no-op scan on typing).
+        // the disappearing sweep (a no-op scan on typing).
         self.end_dispatch_cycle(client).await;
         Ok(count)
     }
@@ -591,18 +591,19 @@ impl SyncService {
                 )
                 .await
             }
-            Some(generic_message::Content::Asset(asset)) => {
-                self.dispatch_inbound_asset(client, origin, asset).await
+            Some(generic_message::Content::Asset(attachment)) => {
+                self.dispatch_inbound_attachment(client, origin, attachment)
+                    .await
             }
-            Some(generic_message::Content::Knock(knock)) => {
-                self.dispatch_inbound_knock(client, origin, knock).await
+            Some(generic_message::Content::Knock(ping)) => {
+                self.dispatch_inbound_ping(client, origin, ping).await
             }
             Some(generic_message::Content::Location(location)) => {
                 self.dispatch_inbound_location(client, origin, location)
                     .await
             }
-            Some(generic_message::Content::Ephemeral(ephemeral)) => {
-                self.dispatch_inbound_ephemeral(client, origin, ephemeral)
+            Some(generic_message::Content::Ephemeral(disappearing)) => {
+                self.dispatch_inbound_disappearing(client, origin, disappearing)
                     .await
             }
             None => {
@@ -798,7 +799,7 @@ struct MlsEnvelope {
 }
 
 /// Step 80 dispatch boundary: the envelope `message_id` is
-/// peer-controlled and reaches the filesystem (asset cache
+/// peer-controlled and reaches the filesystem (attachment cache
 /// `<id>.enc`). A path-unsafe id is a malformed envelope — log and
 /// discard (never a hard error: one hostile message must not abort
 /// the drain; never an assert: runtime data).

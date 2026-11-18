@@ -70,10 +70,10 @@ pub struct SelfUserRecord {
     pub team_id: Option<String>,
     /// The team's name as of the last login (Step 143).
     pub team_name: Option<String>,
-    /// The own avatar's asset keys, thumbnail and full (Step 144).
+    /// The own avatar's image keys, thumbnail and full (Step 144).
     pub avatar_thumbnail_key: Option<String>,
     pub avatar_full_key: Option<String>,
-    /// The asset key of the team's icon as of the last login (Step 144).
+    /// The image key of the team's icon as of the last login (Step 144).
     pub team_avatar_key: Option<String>,
 }
 
@@ -138,7 +138,7 @@ pub struct RoomMemberRecord {
     /// `SQLite` gets the same via V26's `DEFAULT 'member'`.
     #[serde(default = "default_member_role")]
     pub role: String,
-    /// The member's avatar asset keys from `list-users` (Step 144).
+    /// The member's avatar image keys from `list-users` (Step 144).
     #[serde(default)]
     pub avatar_thumbnail_key: Option<String>,
     #[serde(default)]
@@ -291,26 +291,25 @@ pub struct TimelineEventRecord {
     /// resolve so consumers can render "(quoting deleted message)"
     /// rather than orphaning the reply. Step 6-II-d.
     pub redacted_at_ms: Option<i64>,
-    /// Wall-clock at which this row's ephemeral timer elapses, in
-    /// milliseconds since Unix epoch — `Some` only for a
-    /// self-deleting message (Wire's `Ephemeral` wrapper, field 18).
-    /// The timer starts at dispatch/send time: `sent_at_ms + ttl` on
+    /// Wall-clock at which this row's disappearing timer elapses, in
+    /// milliseconds since Unix epoch — `Some` only for a disappearing
+    /// message. The timer starts at dispatch/send time: `sent_at_ms + ttl` on
     /// both the send and the receive path. The stamp survives the
     /// tombstone so an expiry stays distinguishable from a
     /// `MessageDelete`. `None` for every ordinary row. Step 89.
     #[serde(default)]
     pub expires_at_ms: Option<i64>,
-    /// The TTL the sender chose for an OWN ephemeral send, in
+    /// The TTL the sender chose for an OWN disappearing send, in
     /// milliseconds — persisted so a `Failed` row (which carries no
     /// `expires_at_ms`, Step 89) can be re-driven under the same timer
     /// by `Timeline::resend` (Step 79, V28). `None` for every other
-    /// row, inbound ephemerals included (their stamp is derived at
+    /// row, inbound disappearing messages included (their stamp is derived at
     /// dispatch and an inbound row is never resent).
     #[serde(default)]
-    pub ephemeral_ttl_ms: Option<i64>,
+    pub ttl_ms: Option<i64>,
 }
 
-/// One row retired by the ephemeral sweep (`Store::expire_ephemeral_messages`)
+/// One row retired by the disappearing sweep (`Store::expire_disappearing_messages`)
 /// — the keys the caller needs to emit the tombstone `TimelineDiff`, plus
 /// the sender so the caller can tell an inbound row (broadcast the
 /// expiry as a delete-for-everyone, V1b) from an own one (local only).
@@ -357,10 +356,10 @@ pub struct UserPropertyEntry {
     pub last_synced_at_ms: i64,
 }
 
-/// Persisted asset attachment, anchored to a `timeline_events` row
+/// Persisted attachment, anchored to a `timeline_events` row
 /// by `(message_id, room_id)`. Step 11d (ADR-0011 §Storage shape).
 ///
-/// `otr_key_ct` holds the 32-byte AES key the asset content was
+/// `key_ct` holds the 32-byte AES key the attachment content was
 /// encrypted with for Wire. It is stored verbatim — the
 /// `attachments.otr_key` column lives in the whole-DB-encrypted
 /// `kupferdraht.db`, so the key is protected at rest by the database
@@ -371,8 +370,8 @@ pub struct UserPropertyEntry {
 /// when the encrypted blob has been downloaded (or, on send-side,
 /// moved out of the encrypt-step tempfile and into the cache).
 ///
-/// `encryption_algo` is `"AES_CBC"` for Kupferdraht-emitted assets and
-/// for the vast majority of inbound assets. `"AES_GCM"` rows are
+/// `cipher` is `"AES_CBC"` for Kupferdraht-emitted attachments and
+/// for the vast majority of inbound attachments. `"AES_GCM"` rows are
 /// kept for diagnostics but cannot be decrypted by Kupferdraht until a
 /// future ADR pins the GCM byte layout (per ADR-0011).
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -383,11 +382,11 @@ pub struct AttachmentRecord {
     pub filename: Option<String>,
     pub size_bytes: u64,
     pub sha256: Vec<u8>,
-    pub otr_key_ct: Vec<u8>,
-    pub asset_id: String,
-    pub asset_token: Option<String>,
-    pub asset_domain: String,
-    pub encryption_algo: String,
+    pub key_ct: Vec<u8>,
+    pub attachment_id: String,
+    pub attachment_token: Option<String>,
+    pub attachment_domain: String,
+    pub cipher: String,
     pub cache_path: Option<String>,
     pub created_at_ms: i64,
 }
@@ -402,14 +401,14 @@ impl std::fmt::Debug for AttachmentRecord {
             .field("filename", &self.filename)
             .field("size_bytes", &self.size_bytes)
             .field("sha256", &self.sha256)
-            .field("otr_key_ct", &crate::redact::byte_count(&self.otr_key_ct))
-            .field("asset_id", &self.asset_id)
+            .field("key_ct", &crate::redact::byte_count(&self.key_ct))
+            .field("attachment_id", &self.attachment_id)
             .field(
-                "asset_token",
-                &crate::redact::hidden_option(self.asset_token.as_ref()),
+                "attachment_token",
+                &crate::redact::hidden_option(self.attachment_token.as_ref()),
             )
-            .field("asset_domain", &self.asset_domain)
-            .field("encryption_algo", &self.encryption_algo)
+            .field("attachment_domain", &self.attachment_domain)
+            .field("cipher", &self.cipher)
             .field("cache_path", &self.cache_path)
             .field("created_at_ms", &self.created_at_ms)
             .finish()
@@ -619,7 +618,7 @@ pub trait Store: MaybeSendSync {
         Ok(true)
     }
 
-    /// Insert an asset row and its `attachments` row as **one** write
+    /// Insert a timeline row and its `attachments` row as **one** write
     /// (Step 105); `Ok(false)` when the row already exists (nothing
     /// written). The default writes in sequence and is not atomic.
     ///
@@ -935,7 +934,7 @@ pub trait Store: MaybeSendSync {
 
     /// Flip a `failed` row back to `submitted` after a successful
     /// resend (Step 79): re-stamp `sent_at_ms` to the resend instant
-    /// and set `expires_at_ms` (the re-armed ephemeral timer; `None`
+    /// and set `expires_at_ms` (the re-armed disappearing timer; `None`
     /// for an ordinary row). The WHERE guard pins the update to a live
     /// `failed` row — `true` when a row flipped, `false` when nothing
     /// matched. Default `Ok(false)` keeps custom backends compiling
@@ -955,7 +954,7 @@ pub trait Store: MaybeSendSync {
 
     /// Settle an own send after its upload (Step 97a): move a `sending`
     /// row to `submitted` (`delivered`) or `failed`, setting
-    /// `expires_at_ms` when given (a delivered ephemeral send). The
+    /// `expires_at_ms` when given (a delivered disappearing send). The
     /// WHERE guard pins the update to a `sending` row — an echo that
     /// already marked it `received` is never downgraded. `true` when a
     /// row changed. Default `Ok(false)` keeps custom backends compiling
@@ -1186,7 +1185,7 @@ pub trait Store: MaybeSendSync {
         redacted_at_ms: i64,
     ) -> Result<bool, KupferdrahtError>;
 
-    /// Tombstone every live row whose ephemeral timer has elapsed
+    /// Tombstone every live row whose disappearing timer has elapsed
     /// (`expires_at_ms <= now_ms`, not yet redacted): clear the body
     /// and stamp `redacted_at_ms = now_ms` — the same local tombstone
     /// an inbound `MessageDelete` produces, so reply chains keep
@@ -1199,7 +1198,7 @@ pub trait Store: MaybeSendSync {
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` on backend failure.
-    async fn expire_ephemeral_messages(
+    async fn expire_disappearing_messages(
         &self,
         _now_ms: i64,
     ) -> Result<Vec<ExpiredMessageRecord>, KupferdrahtError> {
@@ -1207,13 +1206,16 @@ pub trait Store: MaybeSendSync {
     }
 
     /// The distinct future expiry instants (`expires_at_ms > now_ms`)
-    /// of live ephemeral rows, ascending — what a resuming client
+    /// of live disappearing rows, ascending — what a resuming client
     /// re-arms its local timers from. Default empty (custom-store
     /// pattern). Step 89.
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` on backend failure.
-    async fn pending_ephemeral_expiries(&self, _now_ms: i64) -> Result<Vec<i64>, KupferdrahtError> {
+    async fn pending_disappearing_expiries(
+        &self,
+        _now_ms: i64,
+    ) -> Result<Vec<i64>, KupferdrahtError> {
         Ok(Vec::new())
     }
 
@@ -1388,7 +1390,7 @@ pub trait Store: MaybeSendSync {
         key: &str,
     ) -> Result<Option<UserPropertyEntry>, KupferdrahtError>;
 
-    /// Insert an asset attachment row, anchored to its parent
+    /// Insert an attachment row, anchored to its parent
     /// `timeline_events` row by `(message_id, room_id)`. Caller is
     /// responsible for inserting the parent `timeline_events` row
     /// first — the FK rejects orphan attachments. Step 11d.
@@ -1399,7 +1401,7 @@ pub trait Store: MaybeSendSync {
     async fn insert_attachment(&self, record: &AttachmentRecord) -> Result<(), KupferdrahtError>;
 
     /// Look up the attachment row for `(message_id, room_id)`.
-    /// `Ok(None)` when the message has no asset (pure-text message).
+    /// `Ok(None)` when the message has no attachment (pure-text message).
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` on `SQLite` failure.
@@ -1447,7 +1449,7 @@ pub trait Store: MaybeSendSync {
     ) -> Result<(), KupferdrahtError>;
 
     /// The message id of every attachment row, in no particular order — what
-    /// a client's start keeps of the asset cache (Step 84).
+    /// a client's start keeps of the attachment cache (Step 84).
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` on `SQLite` failure.

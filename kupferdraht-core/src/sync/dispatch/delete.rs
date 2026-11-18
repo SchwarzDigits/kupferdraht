@@ -19,7 +19,7 @@ impl SyncService {
     /// Idempotent via `Store::apply_message_delete`'s `redacted_at_ms`
     /// guard. The chain pointer covers deletes targeting an
     /// already-edited row. Only the original sender may delete — or, for
-    /// an **ephemeral** target, the self user (another own device) or,
+    /// a **disappearing** target, the self user (another own device) or,
     /// when the target is the self user's own message, any member
     /// (Step 95b, ADR-0028, `authorize.rs`).
     pub(crate) async fn dispatch_inbound_delete(

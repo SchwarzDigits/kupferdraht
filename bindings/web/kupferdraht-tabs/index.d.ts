@@ -202,7 +202,7 @@ export interface ResendStop { messageId: string; name: string; message: string }
 export interface ResendSummary { resent: MessageHandle[]; skipped: string[]; stoppedAt: ResendStop | null; remaining: number }
 export interface Reaction { emoji: string; count: number; isSelf: boolean }
 export type DeliveryStatus = 'sending' | 'submitted' | 'received' | 'failed';
-export interface AssetMeta { filename: string | null; mime: string; size: number }
+export interface AttachmentMeta { filename: string | null; mime: string; size: number }
 export interface TimelineItem {
   itemId: string; senderUserId: string;
   /** When it was sent, as the backend knows it. A timeline's times need not rise: do not sort by it (Step 151). */
@@ -211,9 +211,9 @@ export interface TimelineItem {
   arrivedAtMs: number;
   kind: string; body: string | null;
   replyTo: string | null; reactions: Reaction[]; edited: boolean; redacted: boolean;
-  asset: AssetMeta | null; expiresAtMs: number | null; deliveryStatus: DeliveryStatus;
-  /** Set for `kind === 'knock'`. */
-  hotKnock: boolean | null;
+  attachment: AttachmentMeta | null; expiresAtMs: number | null; deliveryStatus: DeliveryStatus;
+  /** Set for `kind === 'ping'`: whether the ping was repeated. */
+  repeated: boolean | null;
   /** Set for `kind === 'location'`. */
   location: { latitude: number; longitude: number; name: string | null; zoom: number | null } | null;
   /** Set for `kind === 'membership_change'` (Step 145); `kind` is one of the three room events' for these fields. */
@@ -371,7 +371,7 @@ export class ClientProxy {
   /** Re-drive the room's failed sends oldest first, stopping at the first error so no message is overtaken (Step 130b). */
   resendFailed(roomId: string): Promise<ResendSummary>;
   /** Keyed (`SendOptions`): re-issued at a leader change with its key. */
-  sendKnock(roomId: string, hotKnock: boolean, options?: SendOptions): Promise<KeyedMessageHandle>;
+  sendPing(roomId: string, repeated: boolean, options?: SendOptions): Promise<KeyedMessageHandle>;
   /** Keyed (`SendOptions`): re-issued at a leader change with its key. */
   sendLocation(roomId: string, latitude: number, longitude: number, name?: string, zoom?: number, options?: SendOptions): Promise<KeyedMessageHandle>;
   /** Keyed (`SendOptions`): re-issued at a leader change with its key. */
@@ -419,7 +419,7 @@ export class ClientProxy {
   logout(options?: { purgeDevice?: boolean; password?: string; purgeLocal?: boolean }): Promise<void>;
   /** Keyed (`SendOptions`, one key per file): the same key answers without a second upload. */
   sendFile(roomId: string, bytes: Uint8Array, filename: string, mimeType: string, options?: SendOptions): Promise<KeyedMessageHandle>;
-  downloadAsset(roomId: string, itemId: string): Promise<Uint8Array>;
+  downloadAttachment(roomId: string, itemId: string): Promise<Uint8Array>;
   /** The account's recovery data (ADR-0035). */
   recovery(): Promise<RecoveryProxy>;
 }

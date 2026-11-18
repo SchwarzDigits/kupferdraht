@@ -60,7 +60,7 @@ impl SyncService {
 
     /// Persist an inbound text `Message`, replace its mentions, notify
     /// the handlers, emit the `Append`, auto-ack delivery (1:1), and
-    /// arm the expiry timer when the message is ephemeral. The echo of
+    /// arm the expiry timer when the message is disappearing. The echo of
     /// an own send (row already present) upgrades `Submitted →
     /// Received` instead. Shared by the plain-text and the
     /// `Ephemeral(Text)` handlers (Step 89).
@@ -83,7 +83,7 @@ impl SyncService {
 
     /// The fresh-insert half of the inbound text tail (the mentions were
     /// stored with the row, Step 105): `on_message`, the `Append` diff, the 1:1 delivery receipt, and
-    /// (Step 89) the local expiry timer for an ephemeral row — armed on
+    /// (Step 89) the local expiry timer for a disappearing row — armed on
     /// the fresh insert only; an echoed own send was armed at send time.
     fn surface_fresh_inbound_text(
         &self,
@@ -116,7 +116,7 @@ impl SyncService {
         // 25b: auto-acknowledge delivery (1:1 only, best-effort).
         self.queue_delivery_confirmation(room_id, message_id);
         if let Some(at) = message.expires_at_ms {
-            client.arm_ephemeral_timer(at);
+            client.arm_disappearing_timer(at);
         }
     }
 }
@@ -159,7 +159,7 @@ impl SyncService {
             return Ok(false);
         };
         let MessageBody::Text(body) = &message.body else {
-            // Step 11g dispatch path handles Asset; this text-only
+            // Step 11g dispatch path handles Attachment; this text-only
             // persist is unreachable for non-Text bodies.
             return Ok(false);
         };
@@ -177,7 +177,7 @@ impl SyncService {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: message.expires_at_ms,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         };
         // A self-sent message round-trips through Wire and arrives
         // here too — the row already exists with status='submitted';

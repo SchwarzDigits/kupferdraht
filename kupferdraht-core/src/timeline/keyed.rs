@@ -31,8 +31,8 @@ pub enum OutgoingContent {
     },
     /// A text reply quoting `parent_id` (as [`Timeline::send_reply`]).
     Reply { parent_id: String, body: String },
-    /// A knock (as [`Timeline::send_knock`]).
-    Knock { hot_knock: bool },
+    /// A ping (as [`Timeline::send_ping`]).
+    Ping { repeated: bool },
     /// A map point (as [`Timeline::send_location`]).
     Location {
         latitude: f32,
@@ -189,8 +189,8 @@ impl Timeline {
             OutgoingContent::Reply { parent_id, body } => {
                 self.send_reply_keyed(&parent_id, body, key).await
             }
-            OutgoingContent::Knock { hot_knock } => {
-                self.client.send_knock(room_id, hot_knock, Some(key)).await
+            OutgoingContent::Ping { repeated } => {
+                self.client.send_ping(room_id, repeated, Some(key)).await
             }
             OutgoingContent::Location {
                 latitude,
@@ -369,7 +369,7 @@ mod tests {
         };
         assert_eq!(reaction.key_kind(), KIND_REACTION);
         assert_eq!(
-            OutgoingContent::Knock { hot_knock: false }.key_kind(),
+            OutgoingContent::Ping { repeated: false }.key_kind(),
             KIND_MESSAGE
         );
     }

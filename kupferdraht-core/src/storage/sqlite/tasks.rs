@@ -247,7 +247,7 @@ mod tests {
     /// The V23 backfill query must read the full row shape — its
     /// column list had fallen behind `read_raw_timeline_row` when
     /// Step 89 appended `expires_at_ms` (caught while Step 79 appended
-    /// `ephemeral_ttl_ms`): every backfill would have failed with an
+    /// `ttl_ms`): every backfill would have failed with an
     /// invalid column index the moment a task row existed.
     #[test]
     fn task_timeline_rows_backfill_query_reads_the_full_row() {
@@ -269,7 +269,7 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].message_id, "m-task");
         assert_eq!(rows[0].expires_at_ms, None);
-        assert_eq!(rows[0].ephemeral_ttl_ms, None);
+        assert_eq!(rows[0].ttl_ms, None);
     }
 
     #[test]

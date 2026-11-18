@@ -4,13 +4,13 @@
 //! FFI wrappers for the timeline read API (Step 20c-3).
 //!
 //! `TimelineItem` / `TimelineItemKind` are **mirrored** here rather than
-//! derived on the core types: the core `TimelineItemKind::Asset` holds a
-//! `Box<AssetSummary>`, and `AssetSummary` carries crate-private security
-//! material (`sha256`, `otr_key_ct`, a `Weak<Client>`) plus behaviour
+//! derived on the core types: the core `TimelineItemKind::Attachment` holds a
+//! `Box<AttachmentSummary>`, and `AttachmentSummary` carries crate-private security
+//! material (`sha256`, `key_ct`, a `Weak<Client>`) plus behaviour
 //! (`download` / `save_to`) — neither of which can be a `uniffi::Record`.
-//! The mirror reshapes the asset variant to a flat [`AssetMeta`] record
+//! The mirror reshapes the attachment variant to a flat [`AttachmentMeta`] record
 //! (the public metadata only); the download behaviour lands with the rest
-//! of the asset surface in 20c-4.
+//! of the attachment surface in 20c-4.
 //!
 //! The FFI-shaped leaves (`ReactionGroup`, `Mention`) keep their derives
 //! on the core type and are reused directly.
@@ -21,7 +21,7 @@ use super::Client;
 use super::sync::{Subscription, TimelineListener, adapt_timeline_listener};
 use crate::error::KupferdrahtError;
 use crate::timeline::{
-    AssetSource, AssetSummary, FoldedTask as CoreFoldedTask, Mention, MessageHandle,
+    AttachmentSource, AttachmentSummary, FoldedTask as CoreFoldedTask, Mention, MessageHandle,
     MessagesOptions, OutgoingContent, ResendSummary as CoreResendSummary,
     TaskDraft as CoreTaskDraft, TaskItem as CoreTaskItem, TaskPatch as CoreTaskPatch,
     TaskPriority as CoreTaskPriority, TaskStatus as CoreTaskStatus, Timeline as CoreTimeline,
@@ -69,52 +69,27 @@ impl From<&CoreResendSummary> for ResendSummary {
     }
 }
 
-/// Public metadata of an asset attached to a message — the read-only view
-/// embedded in `TimelineItemKind::Asset` / `MessageBody::Asset`.
+/// The description of a message's attachment — the read-only view
+/// embedded in `TimelineItemKind::Attachment` / `MessageBody::Attachment`.
 ///
-/// To fetch the bytes, look the asset up as a downloadable [`Asset`]
-/// object via `Timeline.asset(message_id)`; the timeline item itself
-/// carries only this metadata (object references can't sit in enum
-/// variants).
-#[derive(Clone, PartialEq, Eq, uniffi::Record)]
-pub struct AssetMeta {
+/// To fetch the bytes, look the attachment up as a downloadable
+/// [`Attachment`] object via `Timeline.attachment(message_id)`; the
+/// timeline item itself carries only this description (object references
+/// can't sit in enum variants). The server's locator and token stay
+/// inside the core: the download goes through the object.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AttachmentMeta {
     pub message_id: String,
     pub mime_type: String,
     pub filename: Option<String>,
     pub size_bytes: u64,
     pub sender_user_id: String,
     pub room_id: String,
-    pub asset_id: String,
-    pub asset_token: Option<String>,
-    pub asset_domain: String,
-    pub encryption_algo: String,
     pub cache_path: Option<String>,
 }
 
-impl std::fmt::Debug for AssetMeta {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Step 101: secrets redacted (`crate::redact`).
-        f.debug_struct("AssetMeta")
-            .field("message_id", &self.message_id)
-            .field("mime_type", &self.mime_type)
-            .field("filename", &self.filename)
-            .field("size_bytes", &self.size_bytes)
-            .field("sender_user_id", &self.sender_user_id)
-            .field("room_id", &self.room_id)
-            .field("asset_id", &self.asset_id)
-            .field(
-                "asset_token",
-                &crate::redact::hidden_option(self.asset_token.as_ref()),
-            )
-            .field("asset_domain", &self.asset_domain)
-            .field("encryption_algo", &self.encryption_algo)
-            .field("cache_path", &self.cache_path)
-            .finish()
-    }
-}
-
-impl From<&AssetSummary> for AssetMeta {
-    fn from(a: &AssetSummary) -> Self {
+impl From<&AttachmentSummary> for AttachmentMeta {
+    fn from(a: &AttachmentSummary) -> Self {
         Self {
             message_id: a.message_id.clone(),
             mime_type: a.mime_type.clone(),
@@ -122,10 +97,6 @@ impl From<&AssetSummary> for AssetMeta {
             size_bytes: a.size_bytes,
             sender_user_id: a.sender_user_id.clone(),
             room_id: a.room_id.clone(),
-            asset_id: a.asset_id.clone(),
-            asset_token: a.asset_token.clone(),
-            asset_domain: a.asset_domain.clone(),
-            encryption_algo: a.encryption_algo.clone(),
             cache_path: a.cache_path.clone(),
         }
     }
@@ -268,7 +239,7 @@ impl From<&crate::timeline::RoomTask> for RoomTask {
 
 /// Full state of one task — the read-only view embedded in
 /// `TimelineItemKind::Task` / `MessageBody::Task` (ADR-0014,
-/// Step 60a). Named alongside [`AssetMeta`].
+/// Step 60a). Named alongside [`AttachmentMeta`].
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct TaskMeta {
     /// Stable identity (UUID) — deliberately NOT the `message_id`.
@@ -334,12 +305,12 @@ pub enum TimelineItemKind {
         mentions: Vec<crate::timeline::Mention>,
     },
     Redacted,
-    Asset {
-        asset: AssetMeta,
+    Attachment {
+        attachment: AttachmentMeta,
     },
-    /// A nudge / "ping". Step 26.
-    Knock {
-        hot_knock: bool,
+    /// A ping; `repeated` marks one sent again to insist. Step 26.
+    Ping {
+        repeated: bool,
     },
     /// A shared map point. Step 26.
     Location {
@@ -392,11 +363,11 @@ impl From<&CoreKind> for TimelineItemKind {
                 mentions: mentions.clone(),
             },
             CoreKind::Redacted => Self::Redacted,
-            CoreKind::Asset(summary) => Self::Asset {
-                asset: AssetMeta::from(summary.as_ref()),
+            CoreKind::Attachment(summary) => Self::Attachment {
+                attachment: AttachmentMeta::from(summary.as_ref()),
             },
-            CoreKind::Knock { hot_knock } => Self::Knock {
-                hot_knock: *hot_knock,
+            CoreKind::Ping { repeated } => Self::Ping {
+                repeated: *repeated,
             },
             CoreKind::Location {
                 latitude,
@@ -445,8 +416,8 @@ pub struct TimelineItem {
     pub read_by: Vec<String>,
     pub delivered_to: Vec<String>,
     pub delivery_status: crate::timeline::DeliveryStatus,
-    /// Wall-clock (ms since Unix epoch) at which this item's ephemeral
-    /// timer elapses — set only for a self-deleting message; the row
+    /// Wall-clock (ms since Unix epoch) at which this item's disappearing
+    /// timer elapses — set only for a disappearing message; the row
     /// self-redacts locally when it passes and keeps the stamp. Step 89.
     pub expires_at_ms: Option<i64>,
 }
@@ -584,19 +555,19 @@ impl Timeline {
         self.inner.send_text(body).await
     }
 
-    /// Send a self-deleting text (Wire's `Ephemeral` wrapper): official
+    /// Send a disappearing text: official
     /// clients render a countdown of `ttl` and delete their copy
     /// locally; Kupferdraht's own copy self-redacts after `ttl` too. `ttl`
     /// must be between 1 s and 365 days. Step 89.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn send_ephemeral_text(
+    pub async fn send_disappearing_text(
         &self,
         body: String,
         ttl: std::time::Duration,
     ) -> Result<MessageHandle, KupferdrahtError> {
-        self.inner.send_ephemeral_text(body, ttl).await
+        self.inner.send_disappearing_text(body, ttl).await
     }
 
     /// Re-drive one failed send from its persisted row under the same
@@ -617,13 +588,13 @@ impl Timeline {
         Ok(ResendSummary::from(&self.inner.resend_failed().await?))
     }
 
-    /// Send a `Knock` (nudge). `hot_knock` is Wire's double-tap flag;
-    /// plain knocks pass `false`. Step 26.
+    /// Send a ping. `repeated` marks a ping sent again to insist; a
+    /// plain ping passes `false`. Step 26.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn send_knock(&self, hot_knock: bool) -> Result<MessageHandle, KupferdrahtError> {
-        self.inner.send_knock(hot_knock).await
+    pub async fn send_ping(&self, repeated: bool) -> Result<MessageHandle, KupferdrahtError> {
+        self.inner.send_ping(repeated).await
     }
 
     /// Share a `Location` (map point). `name` is an optional label,
@@ -805,7 +776,7 @@ impl Timeline {
         self.inner.mark_as_read(item_id, receipt).await
     }
 
-    /// Encrypt + upload a file and send the MLS asset reference.
+    /// Encrypt + upload a file and send the MLS attachment reference.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -819,8 +790,8 @@ impl Timeline {
             .await
     }
 
-    /// Encrypt + upload a file from a streaming [`AssetSource`] and send the
-    /// MLS asset reference — the streaming counterpart of [`Self::send_file`]
+    /// Encrypt + upload a file from a streaming [`AttachmentSource`] and send the
+    /// MLS attachment reference — the streaming counterpart of [`Self::send_file`]
     /// (no filesystem path; e.g. an Android `content://` stream). `filename`
     /// is the display name.
     ///
@@ -828,7 +799,7 @@ impl Timeline {
     /// See `KupferdrahtError`.
     pub async fn send_file_stream(
         &self,
-        source: Arc<dyn AssetSource>,
+        source: Arc<dyn AttachmentSource>,
         filename: &str,
         mime_type: &str,
     ) -> Result<MessageHandle, KupferdrahtError> {
@@ -837,55 +808,62 @@ impl Timeline {
             .await
     }
 
-    /// Look up the downloadable asset for `message_id` in this room, or
+    /// Look up the downloadable attachment for `message_id` in this room, or
     /// `None` if the message has no attachment / isn't synced locally.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn asset(&self, message_id: &str) -> Result<Option<Arc<Asset>>, KupferdrahtError> {
-        Ok(self.inner.asset(message_id).await?.map(Asset::wrap))
+    pub async fn attachment(
+        &self,
+        message_id: &str,
+    ) -> Result<Option<Arc<Attachment>>, KupferdrahtError> {
+        Ok(self
+            .inner
+            .attachment(message_id)
+            .await?
+            .map(Attachment::wrap))
     }
 }
 
-/// A downloadable asset attached to a message — the FFI wrapper around
-/// the native [`AssetSummary`](crate::timeline::AssetSummary). Carries
+/// A message's downloadable attachment — the FFI wrapper around
+/// the native [`AttachmentSummary`](crate::timeline::AttachmentSummary). Carries
 /// the security material off the public surface; consumers reach the
-/// plaintext via [`Asset::download`] / [`Asset::save_to`] and the public
-/// metadata via [`Asset::metadata`].
+/// plaintext via [`Attachment::download`] / [`Attachment::save_to`] and the
+/// description via [`Attachment::metadata`].
 #[derive(uniffi::Object)]
-pub struct Asset {
-    inner: AssetSummary,
+pub struct Attachment {
+    inner: AttachmentSummary,
 }
 
-impl Asset {
-    fn wrap(inner: AssetSummary) -> Arc<Self> {
+impl Attachment {
+    fn wrap(inner: AttachmentSummary) -> Arc<Self> {
         Arc::new(Self { inner })
     }
 }
 
 #[uniffi::export]
-impl Asset {
-    /// The asset's public metadata.
+impl Attachment {
+    /// The attachment's public metadata.
     #[must_use]
-    pub fn metadata(&self) -> AssetMeta {
-        AssetMeta::from(&self.inner)
+    pub fn metadata(&self) -> AttachmentMeta {
+        AttachmentMeta::from(&self.inner)
     }
 }
 
 #[uniffi::export(async_runtime = "tokio")]
-impl Asset {
-    /// Download + decrypt the asset, returning the plaintext bytes.
-    /// Capped at 64 MB — use `save_to` for larger assets.
+impl Attachment {
+    /// Download + decrypt the attachment, returning the plaintext bytes.
+    /// Capped at 64 MB — use `save_to` for larger attachments.
     ///
     /// # Errors
     /// See `KupferdrahtError`; `IntegrityCheck` also for a download longer
     /// than the declared `size_bytes` + 32 bytes (Step 160); `InvalidInput`
-    /// once the asset's message was deleted for everyone (Step 84).
+    /// once the attachment's message was deleted for everyone (Step 84).
     pub async fn download(&self) -> Result<Vec<u8>, KupferdrahtError> {
         self.inner.download().await
     }
 
-    /// Download + decrypt the asset, streaming the plaintext to a path.
+    /// Download + decrypt the attachment, streaming the plaintext to a path.
     ///
     /// # Errors
     /// See `KupferdrahtError`; the same download bound and refusal of a

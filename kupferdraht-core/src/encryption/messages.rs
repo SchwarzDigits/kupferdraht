@@ -13,7 +13,7 @@
 //! The plaintext input is opaque from this module's perspective —
 //! it's `wire::proto::build_text_generic_message`'s output. Keeping
 //! the protobuf concern at the layer above lets future content
-//! variants (Asset, Reaction, …) reuse this exact code path
+//! variants (Attachment, Reaction, …) reuse this exact code path
 //! unchanged.
 
 use openmls::framing::errors::{MessageDecryptionError, SecretTreeError};

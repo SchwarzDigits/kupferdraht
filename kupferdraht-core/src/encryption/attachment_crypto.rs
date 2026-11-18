@@ -1,18 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! AES-256-CBC + SHA-256 file-streaming for Step 11 asset content.
+//! AES-256-CBC + SHA-256 file-streaming for Step 11 attachment content.
 //!
-//! Wire's deployed asset protocol (live-validated round-trip
+//! Wire's deployed attachment protocol (live-validated round-trip
 //! against Wire's `/v14/assets` backend; construction spec in
 //! ADR-0011 §Crypto construction):
 //!
 //! - Symmetric: AES-256-CBC with PKCS7 padding. Key = 32 bytes,
-//!   IV = 16 bytes both generated fresh per-asset via OS CSPRNG.
+//!   IV = 16 bytes both generated fresh per-attachment via OS CSPRNG.
 //! - Output blob layout: `iv(16) || aes-cbc-pkcs7(plaintext)`. The
 //!   IV is part of the ciphertext stream, not a separate field.
 //! - Integrity: SHA-256 over the *full encrypted blob including the
-//!   IV prefix*. Travels in `Asset.RemoteData.sha256` inside the
+//!   IV prefix*. Travels in the attachment reference inside the
 //!   MLS-protected `GenericMessage`. The MLS layer authenticates the
 //!   sender of the SHA; the SHA binds the reference to the file.
 //!
@@ -20,8 +20,8 @@
 //!
 //! All three public functions operate on filesystem paths and stream
 //! plaintext / ciphertext through 64 KB buffers. Memory is constant
-//! (~64 KB peak per buffer) regardless of asset size — Kupferdraht can
-//! handle 100 MB+ assets without inflating process RSS. ADR-0011
+//! (~64 KB peak per buffer) regardless of attachment size — Kupferdraht can
+//! handle 100 MB+ attachments without inflating process RSS. ADR-0011
 //! §Streaming model.
 //!
 //! ## Plaintext persistence
@@ -53,7 +53,7 @@ type Aes256CbcDec = cbc::Decryptor<Aes256>;
 
 /// Buffer size for streamed reads / writes. 64 KB is large enough
 /// that AES per-block overhead is amortised, small enough that
-/// peak RSS stays bounded for arbitrarily large assets.
+/// peak RSS stays bounded for arbitrarily large attachments.
 pub(crate) const STREAM_CHUNK: usize = 64 * 1024;
 
 /// The longest ciphertext a plaintext of `plaintext_size` bytes makes:
@@ -64,25 +64,25 @@ pub(crate) fn max_ciphertext_len(plaintext_size: u64) -> u64 {
 }
 
 /// Output of [`encrypt_file`] — everything the upload + send
-/// pipeline needs to ship the asset.
+/// pipeline needs to ship the attachment.
 ///
 /// `key` is held in memory only; it travels in the MLS-protected
-/// `Asset.RemoteData.otr_key` field on send. The encrypted ciphertext
+/// attachment reference on send. The encrypted ciphertext
 /// is on disk at `ciphertext_path`; the upload step streams that
 /// file as the multipart body.
-pub struct EncryptedAsset {
-    /// 32-byte AES-256 key, fresh per asset — compiler-wiped on drop
+pub struct EncryptedAttachment {
+    /// 32-byte AES-256 key, fresh per attachment — compiler-wiped on drop
     /// (Step 70, `THREAT_MODEL.md` G4). The zeroized domain ends at two
-    /// serialization boundaries: the protobuf `Asset.RemoteData.otr_key`
+    /// serialization boundaries: the protobuf field of the reference
     /// field (prost `Vec<u8>`) and the send-side `attachments` row
     /// (whole-DB encryption at rest, ADR-0021) — chasing
     /// `Zeroizing` through prost/storage types would mean forking them.
     key: Zeroizing<[u8; 32]>,
-    /// 16-byte IV, fresh per asset. Recoverable from the first 16
+    /// 16-byte IV, fresh per attachment. Recoverable from the first 16
     /// bytes of `ciphertext_path` — this field is informational.
     pub iv: [u8; 16],
     /// SHA-256 over the full encrypted blob (IV prefix + ciphertext).
-    /// Travels in `Asset.RemoteData.sha256`. Receivers re-compute it
+    /// Travels in the attachment reference. Receivers re-compute it
     /// before decrypting and reject mismatched bytes.
     pub sha256: [u8; 32],
     /// Path to the temp file holding `iv(16) || aes-cbc-pkcs7(plaintext)`.
@@ -90,7 +90,7 @@ pub struct EncryptedAsset {
     /// either move it into the per-account cache or delete it.
     pub ciphertext_path: PathBuf,
     /// Number of plaintext bytes encrypted (informational; mirrors
-    /// `Asset.Original.size`).
+    /// the size the reference declares).
     pub plaintext_size: u64,
     /// Number of bytes written to `ciphertext_path` (= 16 IV bytes
     /// plus padded ciphertext). Used by the upload's Content-Length
@@ -98,11 +98,11 @@ pub struct EncryptedAsset {
     pub ciphertext_size: u64,
 }
 
-impl std::fmt::Debug for EncryptedAsset {
+impl std::fmt::Debug for EncryptedAttachment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Step 101: secrets redacted (`crate::redact`) — `Zeroizing`'s own
         // derived `Debug` would print the key bytes.
-        f.debug_struct("EncryptedAsset")
+        f.debug_struct("EncryptedAttachment")
             .field("key", &crate::redact::byte_count(&*self.key))
             .field("iv", &self.iv)
             .field("sha256", &self.sha256)
@@ -113,8 +113,8 @@ impl std::fmt::Debug for EncryptedAsset {
     }
 }
 
-impl EncryptedAsset {
-    /// Borrow the per-asset AES-256 key material through its
+impl EncryptedAttachment {
+    /// Borrow the per-attachment AES-256 key material through its
     /// compiler-wiped handle (`THREAT_MODEL.md` G4 / gap-B.21).
     pub(crate) fn key_material(&self) -> &Zeroizing<[u8; 32]> {
         &self.key
@@ -139,7 +139,7 @@ impl EncryptedAsset {
 pub fn encrypt_file(
     plaintext_path: &Path,
     ciphertext_dir: &Path,
-) -> Result<EncryptedAsset, KupferdrahtError> {
+) -> Result<EncryptedAttachment, KupferdrahtError> {
     let plaintext_file = File::open(plaintext_path).map_err(|e| {
         KupferdrahtError::Storage(format!("open {}: {e}", plaintext_path.display()))
     })?;
@@ -149,13 +149,13 @@ pub fn encrypt_file(
     )
 }
 
-/// Encrypt a plaintext byte stream to a Wire-shaped encrypted-asset file
+/// Encrypt a plaintext byte stream to a Wire-shaped encrypted-attachment file
 /// (`iv(16) || aes-cbc-pkcs7(plaintext)`) under `ciphertext_dir`. Streams in
-/// `STREAM_CHUNK` chunks — peak memory is bounded regardless of asset size.
+/// `STREAM_CHUNK` chunks — peak memory is bounded regardless of attachment size.
 ///
 /// The plaintext byte count is measured as bytes are consumed (via
 /// [`CountingReader`]), so a streaming source needs no separate length: the
-/// count feeds `EncryptedAsset::plaintext_size`. Shared by the path-based
+/// count feeds `EncryptedAttachment::plaintext_size`. Shared by the path-based
 /// [`encrypt_file`] and the callback-driven send-file-stream path.
 ///
 /// # Errors
@@ -163,14 +163,14 @@ pub fn encrypt_file(
 pub fn encrypt_reader<R: Read>(
     plaintext: R,
     ciphertext_dir: &Path,
-) -> Result<EncryptedAsset, KupferdrahtError> {
+) -> Result<EncryptedAttachment, KupferdrahtError> {
     let mut key = Zeroizing::new([0u8; 32]);
     let mut iv = [0u8; 16];
     OsRng.fill_bytes(&mut *key);
     OsRng.fill_bytes(&mut iv);
 
     let ciphertext_path =
-        ciphertext_dir.join(format!("asset-{}.enc", uuid::Uuid::new_v4().simple()));
+        ciphertext_dir.join(format!("attachment-{}.enc", uuid::Uuid::new_v4().simple()));
     let ciphertext_file = File::create(&ciphertext_path).map_err(|e| {
         KupferdrahtError::Storage(format!("create {}: {e}", ciphertext_path.display()))
     })?;
@@ -198,7 +198,7 @@ pub fn encrypt_reader<R: Read>(
             .map_err(|_| KupferdrahtError::Storage("ciphertext byte count overflows u64".into()))?;
     let sha256: [u8; 32] = hasher.finalize().into();
 
-    Ok(EncryptedAsset {
+    Ok(EncryptedAttachment {
         key,
         iv,
         sha256,
@@ -230,7 +230,7 @@ impl<R: Read> Read for CountingReader<R> {
     }
 }
 
-/// Decrypt a Wire-shaped encrypted-asset file (`iv(16) || ciphertext`)
+/// Decrypt a Wire-shaped encrypted-attachment file (`iv(16) || ciphertext`)
 /// into `plaintext_path`. Streams in 64 KB chunks; verifies SHA-256
 /// over the encrypted bytes before producing plaintext; rejects
 /// mismatches with [`KupferdrahtError::IntegrityCheck`].
@@ -269,7 +269,7 @@ pub fn decrypt_to_path(
 }
 
 /// In-memory variant of [`decrypt_to_path`]. Returns the decrypted
-/// bytes. Capped at 64 MB so a malicious/malformed asset cannot OOM
+/// bytes. Capped at 64 MB so a malicious/malformed attachment cannot OOM
 /// the process; consumers above the cap should use the path variant.
 ///
 /// # Errors
@@ -299,7 +299,7 @@ pub fn decrypt_to_memory(
     Ok(sink)
 }
 
-// ── wasm: in-memory (buffer) asset crypto (W7) ──────────────────────────────
+// ── wasm: in-memory (buffer) attachment crypto (W7) ──────────────────────────────
 //
 // The browser has no filesystem, so the streaming file paths above are replaced
 // by `Vec<u8>`-in/`Vec<u8>`-out variants: encryption through the same
@@ -309,11 +309,11 @@ pub fn decrypt_to_memory(
 // Compiled for native tests as well.
 
 /// The output of [`encrypt_bytes`]: the encrypted blob plus the key + digest a
-/// caller needs to upload and reference the asset.
+/// caller needs to upload and reference the attachment.
 #[cfg(any(target_arch = "wasm32", test))]
 pub(crate) struct EncryptedBytes {
     /// Compiler-wiped on drop (Step 70) — same serialization-boundary
-    /// caveat as [`EncryptedAsset::key`].
+    /// caveat as [`EncryptedAttachment::key`].
     key: Zeroizing<[u8; 32]>,
     pub(crate) sha256: [u8; 32],
     /// `iv(16) || aes-cbc-pkcs7(plaintext)`.
@@ -323,7 +323,7 @@ pub(crate) struct EncryptedBytes {
 
 #[cfg(any(target_arch = "wasm32", test))]
 impl EncryptedBytes {
-    /// Borrow the per-asset AES-256 key material through its
+    /// Borrow the per-attachment AES-256 key material through its
     /// compiler-wiped handle (`THREAT_MODEL.md` G4 / gap-B.21).
     pub(crate) fn key_material(&self) -> &Zeroizing<[u8; 32]> {
         &self.key
@@ -363,7 +363,7 @@ pub(crate) fn encrypt_bytes(plaintext: &[u8]) -> Result<EncryptedBytes, Kupferdr
 
 /// In-memory decrypt (W7): verify SHA-256 over the whole blob, then
 /// AES-256-CBC/PKCS7 decrypt it where it lies. The plaintext takes the
-/// blob's place, so the asset is held once, not as ciphertext and
+/// blob's place, so the attachment is held once, not as ciphertext and
 /// plaintext side by side (Step 160).
 ///
 /// # Errors
@@ -379,7 +379,7 @@ pub(crate) fn decrypt_bytes(
     let actual: [u8; 32] = Sha256::digest(&blob).into();
     if &actual != expected_sha256 {
         return Err(KupferdrahtError::IntegrityCheck(format!(
-            "asset SHA-256 mismatch: expected {}, got {}",
+            "attachment SHA-256 mismatch: expected {}, got {}",
             hex_lower(expected_sha256),
             hex_lower(&actual),
         )));
@@ -390,7 +390,7 @@ pub(crate) fn decrypt_bytes(
         ));
     }
     let cipher = Aes256CbcDec::new_from_slices(key, &blob[..16])
-        .map_err(|e| KupferdrahtError::Encoding(format!("asset key or IV: {e}")))?;
+        .map_err(|e| KupferdrahtError::Encoding(format!("attachment key or IV: {e}")))?;
     let plaintext_len = decrypt_in_place(cipher, &mut blob[16..])?;
     blob.copy_within(16..16 + plaintext_len, 0);
     blob.truncate(plaintext_len);
@@ -417,7 +417,7 @@ fn verify_sha256_over_file(path: &Path, expected: &[u8; 32]) -> Result<(), Kupfe
     let actual: [u8; 32] = hasher.finalize().into();
     if &actual != expected {
         return Err(KupferdrahtError::IntegrityCheck(format!(
-            "asset SHA-256 mismatch: expected {}, got {}",
+            "attachment SHA-256 mismatch: expected {}, got {}",
             hex_lower(expected),
             hex_lower(&actual),
         )));
@@ -587,16 +587,19 @@ mod tests {
     fn round_trip(plaintext: &[u8]) -> Vec<u8> {
         let dir = TempDir::new().expect("tempdir");
         let plain_path = write_temp(dir.path(), "in.bin", plaintext);
-        let asset = encrypt_file(&plain_path, dir.path()).expect("encrypt");
-        let decrypted =
-            decrypt_to_memory(&asset.ciphertext_path, asset.key_material(), &asset.sha256)
-                .expect("decrypt_to_memory");
+        let attachment = encrypt_file(&plain_path, dir.path()).expect("encrypt");
+        let decrypted = decrypt_to_memory(
+            &attachment.ciphertext_path,
+            attachment.key_material(),
+            &attachment.sha256,
+        )
+        .expect("decrypt_to_memory");
         // Also verify decrypt_to_path round-trip.
         let out_path = dir.path().join("out.bin");
         let n = decrypt_to_path(
-            &asset.ciphertext_path,
-            asset.key_material(),
-            &asset.sha256,
+            &attachment.ciphertext_path,
+            attachment.key_material(),
+            &attachment.sha256,
             &out_path,
         )
         .expect("decrypt_to_path");
@@ -617,10 +620,14 @@ mod tests {
     fn encrypt_file_key_material_is_compiler_wiped() {
         let dir = TempDir::new().expect("tempdir");
         let plain_path = write_temp(dir.path(), "in.bin", b"zeroize me");
-        let asset = encrypt_file(&plain_path, dir.path()).expect("encrypt");
-        requires_zeroize_on_drop(asset.key_material());
-        let back = decrypt_to_memory(&asset.ciphertext_path, asset.key_material(), &asset.sha256)
-            .expect("decrypt through the zeroizing handle");
+        let attachment = encrypt_file(&plain_path, dir.path()).expect("encrypt");
+        requires_zeroize_on_drop(attachment.key_material());
+        let back = decrypt_to_memory(
+            &attachment.ciphertext_path,
+            attachment.key_material(),
+            &attachment.sha256,
+        )
+        .expect("decrypt through the zeroizing handle");
         assert_eq!(back, b"zeroize me");
     }
 
@@ -649,7 +656,7 @@ mod tests {
         assert_eq!(max_ciphertext_len(u64::MAX), u64::MAX, "saturates");
     }
 
-    /// Step 160: the browser decrypts in the downloaded buffer, so an asset
+    /// Step 160: the browser decrypts in the downloaded buffer, so an attachment
     /// is held once, not as ciphertext and plaintext side by side.
     #[test]
     fn decrypt_bytes_decrypts_in_the_downloaded_buffer() {
@@ -701,10 +708,15 @@ mod tests {
     fn encrypt_reader_empty_round_trips() {
         use std::io::Cursor;
         let dir = TempDir::new().expect("tempdir");
-        let asset = encrypt_reader(Cursor::new(Vec::new()), dir.path()).expect("encrypt empty");
-        assert_eq!(asset.plaintext_size, 0);
-        let back = decrypt_to_memory(&asset.ciphertext_path, asset.key_material(), &asset.sha256)
-            .expect("decrypt");
+        let attachment =
+            encrypt_reader(Cursor::new(Vec::new()), dir.path()).expect("encrypt empty");
+        assert_eq!(attachment.plaintext_size, 0);
+        let back = decrypt_to_memory(
+            &attachment.ciphertext_path,
+            attachment.key_material(),
+            &attachment.sha256,
+        )
+        .expect("decrypt");
         assert!(back.is_empty());
     }
 
@@ -749,13 +761,13 @@ mod tests {
     fn ciphertext_size_equals_iv_plus_padded_plaintext() {
         let dir = TempDir::new().expect("tempdir");
         let plain_path = write_temp(dir.path(), "in.bin", &[0u8; 31]);
-        let asset = encrypt_file(&plain_path, dir.path()).expect("encrypt");
+        let attachment = encrypt_file(&plain_path, dir.path()).expect("encrypt");
         // 16-byte IV + ceil((31+1)/16)*16 = 16 + 32 = 48.
         // PKCS7: 31 bytes is ceil(31/16) = 2 blocks of plaintext,
         // padded to 32 by adding 1 byte of 0x01 — 2 blocks total.
         // Plus IV → 48.
-        assert_eq!(asset.ciphertext_size, 48);
-        let actual_size = std::fs::metadata(&asset.ciphertext_path)
+        assert_eq!(attachment.ciphertext_size, 48);
+        let actual_size = std::fs::metadata(&attachment.ciphertext_path)
             .expect("stat")
             .len();
         assert_eq!(actual_size, 48);
@@ -765,14 +777,18 @@ mod tests {
     fn sha256_mismatch_is_integrity_error() {
         let dir = TempDir::new().expect("tempdir");
         let plain_path = write_temp(dir.path(), "in.bin", b"original");
-        let asset = encrypt_file(&plain_path, dir.path()).expect("encrypt");
+        let attachment = encrypt_file(&plain_path, dir.path()).expect("encrypt");
         // Tamper one byte of the ciphertext post-encrypt.
-        let mut tampered = std::fs::read(&asset.ciphertext_path).expect("read");
+        let mut tampered = std::fs::read(&attachment.ciphertext_path).expect("read");
         let last = tampered.len() - 1;
         tampered[last] ^= 0xFF;
-        std::fs::write(&asset.ciphertext_path, &tampered).expect("rewrite");
-        let err = decrypt_to_memory(&asset.ciphertext_path, asset.key_material(), &asset.sha256)
-            .expect_err("integrity must fail");
+        std::fs::write(&attachment.ciphertext_path, &tampered).expect("rewrite");
+        let err = decrypt_to_memory(
+            &attachment.ciphertext_path,
+            attachment.key_material(),
+            &attachment.sha256,
+        )
+        .expect_err("integrity must fail");
         assert!(
             matches!(err, KupferdrahtError::IntegrityCheck(_)),
             "got {err:?}"
@@ -784,7 +800,7 @@ mod tests {
         let dir = TempDir::new().expect("tempdir");
         let plaintext = b"hello world this is a test";
         let plain_path = write_temp(dir.path(), "in.bin", plaintext);
-        let asset = encrypt_file(&plain_path, dir.path()).expect("encrypt");
+        let attachment = encrypt_file(&plain_path, dir.path()).expect("encrypt");
         let wrong_key = [0xFFu8; 32];
         // Override the key but keep the SHA — SHA verifies (we didn't
         // tamper the ciphertext), then PKCS7 unpadding rejects the
@@ -793,7 +809,7 @@ mod tests {
         // padding byte and decrypts to other bytes — never to the
         // plaintext. Both are the contract; asserting only the error
         // made the test flaky on CI.
-        match decrypt_to_memory(&asset.ciphertext_path, &wrong_key, &asset.sha256) {
+        match decrypt_to_memory(&attachment.ciphertext_path, &wrong_key, &attachment.sha256) {
             Err(KupferdrahtError::Encoding(_)) => {}
             Ok(bytes) => assert_ne!(
                 bytes.as_slice(),
@@ -805,7 +821,7 @@ mod tests {
     }
 
     #[test]
-    fn decrypt_to_memory_caps_oversized_assets() {
+    fn decrypt_to_memory_caps_oversized_attachments() {
         // Construct a faux 65 MB ciphertext file via metadata-only
         // tracking — we don't actually allocate; we just need to
         // demonstrate the cap rejection. Use a 65 MB file of zeros
@@ -843,8 +859,8 @@ mod tests {
         let dir = TempDir::new().expect("tempdir");
         let plaintext = b"the quick brown fox jumps over the lazy dog";
         let plain_path = write_temp(dir.path(), "in.bin", plaintext);
-        let asset = encrypt_file(&plain_path, dir.path()).expect("encrypt");
-        assert_eq!(asset.plaintext_size, plaintext.len() as u64);
+        let attachment = encrypt_file(&plain_path, dir.path()).expect("encrypt");
+        assert_eq!(attachment.plaintext_size, plaintext.len() as u64);
     }
 
     // ── Step 132 item 11: AES-256-CBC known answers ──────────────────

@@ -384,7 +384,7 @@ export class ClientProxy extends HandleProxy {
   failedSends(roomId) { return this.#call('failedSends', [roomId]); }
   resend(roomId, messageId) { return this.#call('resend', [roomId, messageId]); }
   resendFailed(roomId) { return this.#call('resendFailed', [roomId]); }
-  sendKnock(roomId, hotKnock, options) { return this.#call('sendKnock', [roomId, hotKnock, withKey(options)]); }
+  sendPing(roomId, repeated, options) { return this.#call('sendPing', [roomId, repeated, withKey(options)]); }
   sendLocation(roomId, latitude, longitude, name, zoom, options) {
     return this.#call('sendLocation', [roomId, latitude, longitude, name, zoom, withKey(options)]);
   }
@@ -414,7 +414,7 @@ export class ClientProxy extends HandleProxy {
   sendFile(roomId, bytes, filename, mimeType, options) {
     return this.#call('sendFile', [roomId, bytes, filename, mimeType, withKey(options)]);
   }
-  downloadAsset(roomId, itemId) { return this.#call('downloadAsset', [roomId, itemId]); }
+  downloadAttachment(roomId, itemId) { return this.#call('downloadAttachment', [roomId, itemId]); }
   recovery() { return this.#call('recovery', []).then((v) => wrapValue(this.transport, v, 'Recovery', this)); }
 }
 

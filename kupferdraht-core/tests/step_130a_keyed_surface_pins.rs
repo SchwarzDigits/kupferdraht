@@ -28,7 +28,7 @@ fn module_file(name: &str) -> String {
 const KEYED: [&str; 6] = [
     "sendText",
     "sendReply",
-    "sendKnock",
+    "sendPing",
     "sendLocation",
     "sendFile",
     "toggleReaction",

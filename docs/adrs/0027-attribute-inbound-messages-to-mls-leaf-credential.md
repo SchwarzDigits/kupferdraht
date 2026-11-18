@@ -203,3 +203,4 @@ Options B and E.
 
 - 2026-09-26: Created
 - 2026-11-02: Decision 2 amended (Step 135, from finding H1 of the external security scan of 2026-11-02; Volker Zöpfel): Option D replaces Option E — a message signed by a non-Basic leaf is dropped with a `warn!` instead of attributed through the envelope, since nothing authenticated that attribution and no deployment of Kupferdraht runs with e2ei. The Consequences follow. This is the follow-up the 2026-09-26 text promised, cut to what can be built without a certificate; X.509 identity parsing stays a later step.
+- 2026-11-18: Naming only (Step 163b, ADR-0009 revision 1.2): the handlers named knock, asset and ephemeral are ping, attachment and disappearing; `rules/0027` follows. No change of decision.

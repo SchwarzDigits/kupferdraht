@@ -5,8 +5,8 @@
 //! home id (Step 93, ADR-0025).
 //!
 //! One base directory hosts the device-level registry and every
-//! account's databases and asset cache. Centralizing the layout here
-//! keeps storage and the asset cache in agreement and makes the layout
+//! account's databases and attachment cache. Centralizing the layout here
+//! keeps storage and the attachment cache in agreement and makes the layout
 //! changeable in one place. Canonical layout:
 //!
 //! ```text
@@ -15,7 +15,7 @@
 //! base/kupferdraht.lock                  (native: the home-level process lock)
 //! base/accounts/<id>/kupferdraht.db
 //! base/accounts/<id>/mls.db
-//! base/accounts/<id>/assets/
+//! base/accounts/<id>/attachments/
 //! base/accounts/<id>/kupferdraht.lock    (native: the per-account process lock)
 //! ```
 //!
@@ -116,9 +116,9 @@ impl KupferdrahtHome {
         self.account_dir(account_id).join("mls.db")
     }
 
-    /// `base/accounts/<id>/assets` — the per-account asset cache.
-    pub(crate) fn account_assets(&self, account_id: &str) -> PathBuf {
-        self.account_dir(account_id).join("assets")
+    /// `base/accounts/<id>/attachments` — the per-account attachment cache.
+    pub(crate) fn account_attachments(&self, account_id: &str) -> PathBuf {
+        self.account_dir(account_id).join("attachments")
     }
 
     /// `base/kupferdraht.lock` — the home-level advisory lock (Step 85): guards
@@ -150,7 +150,7 @@ impl KupferdrahtHome {
 
 /// Whether `id` is safe to use as a SINGLE path component (Step 80).
 /// Envelope ids are peer-controlled runtime data that reach the
-/// filesystem (asset cache); an id containing separators, `..`/`.`,
+/// filesystem (attachment cache); an id containing separators, `..`/`.`,
 /// NUL/control characters, or nothing at all must never be joined
 /// into a path. Length-capped to stay under filesystem component
 /// limits with room for a suffix. Windows oddities (ADS via `:`,
@@ -325,16 +325,19 @@ mod tests {
     }
 
     #[test]
-    fn account_assets_is_single_nested_under_account_dir() {
-        // The double-nest fix: assets live directly under accounts/<id>,
-        // NOT accounts/<id>/<id>/assets.
+    fn account_attachments_is_single_nested_under_account_dir() {
+        // The double-nest fix: attachments live directly under accounts/<id>,
+        // NOT accounts/<id>/<id>/attachments.
         assert_eq!(
-            home().account_assets(ID),
-            home().account_dir(ID).join("assets")
+            home().account_attachments(ID),
+            home().account_dir(ID).join("attachments")
         );
         assert_eq!(
-            home().account_assets(ID),
-            PathBuf::from(BASE).join("accounts").join(ID).join("assets")
+            home().account_attachments(ID),
+            PathBuf::from(BASE)
+                .join("accounts")
+                .join(ID)
+                .join("attachments")
         );
     }
 }

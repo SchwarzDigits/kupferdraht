@@ -326,7 +326,7 @@ async fn dispatch_deduped(
     // Step 74: on the push path one frame = one dispatch cycle —
     // flush queued external-removal commits before the ack releases
     // the frame (mid-backlog rejections are silent and retry on the
-    // next frame's flush). Step 89: the ephemeral sweep rides the
+    // next frame's flush). Step 89: the disappearing sweep rides the
     // same hook.
     service.end_dispatch_cycle(client).await;
     Ok(count)

@@ -39,9 +39,9 @@ pub enum KupferdrahtError {
     /// authenticated-encryption tag did not match. Distinct from
     /// `Encoding` because integrity failures are semantically a
     /// "tampering / corruption" signal, not a "malformed input"
-    /// signal. Used by Step 11's asset receive path to reject a
+    /// signal. Used by Step 11's attachment receive path to reject a
     /// ciphertext blob whose SHA-256 disagrees with the value
-    /// carried in the MLS-protected `Asset.RemoteData.sha256`.
+    /// carried in the MLS-protected attachment reference.
     #[error("integrity check failed: {0}")]
     IntegrityCheck(String),
     #[error("invalid input: {0}")]

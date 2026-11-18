@@ -490,12 +490,12 @@ enum Command {
         /// Message body to send.
         #[arg(short = 'm', long)]
         message: String,
-        /// Send as a self-deleting message with this timer in seconds
+        /// Send as a disappearing message with this timer in seconds
         /// (1 … 31536000): official clients show a countdown and delete
         /// their copy; Kupferdraht's own copy self-redacts too (Step 89).
         /// `@handle` mentions are not parsed in this mode.
         #[arg(long, value_name = "SECS", conflicts_with = "idempotency_key")]
-        ephemeral: Option<u64>,
+        ttl: Option<u64>,
         /// Send under this idempotency key (1–128 characters, Step 130a):
         /// a repeat with the same key prints the first send's handle — or
         /// resends a failed one under the same id — instead of sending
@@ -507,7 +507,7 @@ enum Command {
     /// Re-drive a failed send (a `delivery_status='failed'` row —
     /// the upload never reached the backend) from its persisted row
     /// under the SAME message_id: text incl. reply / mentions,
-    /// ephemeral text (re-wrapped with its timer), knock, location,
+    /// disappearing text (re-wrapped with its timer), ping, location,
     /// and files (the blob is already uploaded; only the MLS
     /// reference travels again). Task / case / marker snapshots are
     /// refused — re-send the current state instead. Step 79.
@@ -1048,8 +1048,8 @@ enum Command {
         #[arg(long)]
         key: Option<String>,
     },
-    /// Encrypt + upload + MLS-send a file as an Asset content
-    /// variant (Step 11h, ADR-0011). The team's `fileSharing`
+    /// Encrypt + upload + MLS-send a file as an attachment
+    /// (Step 11h, ADR-0011). The team's `fileSharing`
     /// policy from Step 10e gates the call before any
     /// network traffic — `Disabled` rejects with InvalidInput;
     /// `Enabled` proceeds.
@@ -1062,9 +1062,8 @@ enum Command {
         /// ~200 KB regardless of file size.
         #[arg(long)]
         path: PathBuf,
-        /// Mime type for the asset (e.g. `image/png`,
-        /// `application/pdf`). Embedded into
-        /// `Asset.Original.mime_type`.
+        /// Mime type for the attachment (e.g. `image/png`,
+        /// `application/pdf`), carried in the attachment reference.
         #[arg(long)]
         mime: String,
     },
@@ -1073,16 +1072,16 @@ enum Command {
         #[command(subcommand)]
         action: AvatarCommand,
     },
-    /// Send a `Knock` (nudge) to a room (Step 26). Wire-side emits a
-    /// `GenericMessage { knock { hot_knock } }`; receivers surface it
-    /// as a poke with no body.
-    Knock {
+    /// Send a ping to a room (Step 26): a message without content that
+    /// draws the room's attention.
+    Ping {
         /// Qualified room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
-        /// Send a "hot" (double-tap) knock instead of a plain one.
+        /// Send a repeated ping, sent again to insist, instead of a
+        /// plain one.
         #[arg(long)]
-        hot: bool,
+        repeated: bool,
     },
     /// Share a `Location` (map point) with a room (Step 26). Wire-side
     /// emits a `GenericMessage { location { longitude, latitude, name?,
@@ -1161,20 +1160,20 @@ enum Command {
         #[arg(long)]
         id: String,
     },
-    /// Download + decrypt an inbound asset that has been
+    /// Download + decrypt an inbound attachment that has been
     /// dispatched into the local store (Step 11h). Verifies
-    /// SHA-256 against the value carried inside the MLS-protected
-    /// `Asset.RemoteData.sha256`; rejects tampered ciphertext
+    /// SHA-256 against the value the MLS-protected attachment reference
+    /// carries; rejects tampered ciphertext
     /// with `IntegrityCheck`.
     ///
     /// `--id` is optional — without it the CLI looks up the
     /// owning room from local `timeline_events` (same resolver
     /// as `mark-read` / `react` / etc.). With `--save-to <path>`
     /// the plaintext is streamed to the filesystem; without it
-    /// the command prints the asset's metadata only (filename,
+    /// the command prints the attachment's metadata only (filename,
     /// mime, size, sender, cache state).
-    DownloadAsset {
-        /// `message_id` of the asset message.
+    DownloadAttachment {
+        /// `message_id` of the attachment message.
         #[arg(long = "message")]
         message: String,
         /// Optional explicit room id. Auto-resolved from
@@ -1184,7 +1183,7 @@ enum Command {
         id: Option<String>,
         /// Filesystem path to write the decrypted plaintext to.
         /// Without this flag, the command prints metadata only
-        /// (useful for inspecting an asset before deciding to
+        /// (useful for inspecting an attachment before deciding to
         /// download multi-megabyte content).
         #[arg(long = "save-to")]
         save_to: Option<PathBuf>,
@@ -1325,9 +1324,9 @@ async fn async_main() -> ExitCode {
         Command::Send {
             id,
             message,
-            ephemeral,
+            ttl,
             idempotency_key,
-        } => cli::timeline::send(id, message, ephemeral, idempotency_key).await,
+        } => cli::timeline::send(id, message, ttl, idempotency_key).await,
         Command::Reply { id, to, message } => cli::timeline::reply(id, to, message).await,
         Command::Resend { id, message, all } => cli::resend::resend(id, message, all).await,
         Command::FailedSends { id } => cli::resend::failed_sends(id).await,
@@ -1429,7 +1428,7 @@ async fn async_main() -> ExitCode {
         }
         Command::Features { name } => cli::config::features(name).await,
         Command::Properties { key } => cli::config::properties(key).await,
-        Command::SendFile { id, path, mime } => cli::assets::send_file(id, path, mime).await,
+        Command::SendFile { id, path, mime } => cli::attachments::send_file(id, path, mime).await,
         Command::Avatar { action } => match action {
             AvatarCommand::Get {
                 user: Some(user),
@@ -1441,7 +1440,7 @@ async fn async_main() -> ExitCode {
             AvatarCommand::Upload { path } => cli::avatar::upload(path).await,
             AvatarCommand::Remove => cli::avatar::remove().await,
         },
-        Command::Knock { id, hot } => cli::timeline::knock(id, hot).await,
+        Command::Ping { id, repeated } => cli::timeline::ping(id, repeated).await,
         Command::CaseSet {
             id,
             case_ref,
@@ -1589,11 +1588,11 @@ async fn async_main() -> ExitCode {
             name,
             zoom,
         } => cli::timeline::location(id, lat, lon, name, zoom).await,
-        Command::DownloadAsset {
+        Command::DownloadAttachment {
             message,
             id,
             save_to,
-        } => cli::assets::download_asset(message, id, save_to).await,
+        } => cli::attachments::download_attachment(message, id, save_to).await,
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

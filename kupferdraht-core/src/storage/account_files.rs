@@ -12,7 +12,7 @@ use crate::error::KupferdrahtError;
 use crate::storage::KupferdrahtHome;
 
 /// Remove the databases of `account_id` in `home` when they exist. Native:
-/// the account directory as a whole (databases, locks, asset cache); the
+/// the account directory as a whole (databases, locks, attachment cache); the
 /// browser: `kupferdraht.db` and `mls.db` through their prepared VFS
 /// (`storage::prepare_account_databases` first).
 ///

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! `kupferdraht-cli` asset command handlers (send-file / download-asset).
+//! `kupferdraht-cli` attachment command handlers (send-file / download-attachment).
 
 use std::path::PathBuf;
 
@@ -27,14 +27,14 @@ pub(crate) async fn send_file(
     Ok(())
 }
 
-pub(crate) async fn download_asset(
+pub(crate) async fn download_attachment(
     message_id: String,
     room_id: Option<String>,
     save_to: Option<PathBuf>,
 ) -> Result<(), KupferdrahtError> {
     let client = resume_client().await?;
     // Hydrate the in-memory rooms cache from the local store
-    // — `Timeline::asset` needs the Room handle to be present.
+    // — `Timeline::attachment` needs the Room handle to be present.
     // No Wire round-trip needed: the attachment row lives in our
     // own store, not Wire's. Saves a /v14/conversations/list call
     // compared to `sync_metadata`.
@@ -45,15 +45,15 @@ pub(crate) async fn download_asset(
         .await
         .ok_or_else(|| KupferdrahtError::InvalidInput(format!("room {room_id} not in cache")))?;
     let timeline = room.timeline()?;
-    let summary = timeline.asset(&message_id).await?.ok_or_else(|| {
+    let summary = timeline.attachment(&message_id).await?.ok_or_else(|| {
         KupferdrahtError::InvalidInput(format!(
-            "no asset row for message {message_id} in room {room_id} \
-                 (run `sync-fetch` first; or the message isn't an asset, or it was deleted)"
+            "no attachment row for message {message_id} in room {room_id} \
+                 (run `sync-fetch` first; or the message isn't an attachment, or it was deleted)"
         ))
     })?;
     if let Some(dest) = save_to {
         summary.save_to(&dest).await?;
-        println!("download-asset ok");
+        println!("download-attachment ok");
         println!("  message_id: {message_id}");
         println!("  room_id:    {room_id}");
         println!(
@@ -65,22 +65,20 @@ pub(crate) async fn download_asset(
         println!("  sender:     {}", summary.sender_user_id);
         println!("  saved_to:   {}", dest.display());
     } else {
-        println!("download-asset (metadata only — pass --save-to <path> to decrypt)");
-        println!("  message_id:  {message_id}");
-        println!("  room_id:     {room_id}");
+        println!("download-attachment (metadata only — pass --save-to <path> to decrypt)");
+        println!("  message_id: {message_id}");
+        println!("  room_id:    {room_id}");
         println!(
-            "  filename:    {}",
+            "  filename:   {}",
             summary.filename.as_deref().unwrap_or("—")
         );
-        println!("  mime:        {}", summary.mime_type);
-        println!("  size_bytes:  {}", summary.size_bytes);
-        println!("  sender:      {}", summary.sender_user_id);
-        println!("  asset_id:    {}", summary.asset_id);
-        println!("  asset_dom:   {}", summary.asset_domain);
-        println!("  encryption:  {}", summary.encryption_algo);
-        // The cache_path field isn't pub on AssetSummary (it's
-        // pub(crate)) so we don't surface it here. The download
-        // path itself will hit cache on second run.
+        println!("  mime:       {}", summary.mime_type);
+        println!("  size_bytes: {}", summary.size_bytes);
+        println!("  sender:     {}", summary.sender_user_id);
+        println!(
+            "  cached:     {}",
+            summary.cache_path.as_deref().unwrap_or("—")
+        );
     }
     Ok(())
 }

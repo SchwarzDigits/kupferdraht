@@ -61,7 +61,7 @@ use crate::wire::tls::TrustAnchors;
 ///
 /// **Field selection — exactly three are sufficient:**
 /// - `api_base_url` — prefixed to every HTTP request in the
-///   `wire/http` modules (login, register, MLS, conversations, assets…).
+///   `wire/http` modules (login, register, MLS, conversations, attachments…).
 /// - `websocket_url` — host where `GET /v14/events` is served;
 ///   Wire deploys it on a different host than the REST API, so
 ///   one URL cannot stand in for both.
@@ -440,7 +440,7 @@ impl ClientBuilder {
         )?;
         let client =
             assemble_resumed_client(parts, server, http, store, mls_client, mls_public_key, home)?;
-        // Step 84: a start removes what the asset cache holds that no row names.
+        // Step 84: a start removes what the attachment cache holds that no row names.
         #[cfg(not(target_arch = "wasm32"))]
         client.remove_leftover_files().await;
         Ok(client)

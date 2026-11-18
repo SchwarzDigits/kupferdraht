@@ -65,7 +65,7 @@ pub trait EventHandler: Send + Sync {
 /// started/stopped event changes it.
 ///
 /// Wire delivers discrete started/stopped signals; Kupferdraht derives this
-/// "who is typing now" view client-side (Step 21). Ephemeral — never
+/// "who is typing now" view client-side (Step 21). Transient — never
 /// persisted, never echoed back to the sender.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypingEvent {
@@ -114,10 +114,10 @@ pub struct Message {
     /// `Text.quote.quoted_message_id` if this body is a reply.
     /// `None` for a plain (non-reply) text. Step 6-II-b.
     pub reply_to_id: Option<String>,
-    /// Wall-clock at which this message's ephemeral timer elapses —
-    /// `Some` only when the sender wrapped the body in Wire's
-    /// `Ephemeral` (field 18). Kupferdraht starts the countdown at dispatch
-    /// (`received_at_ms + ttl`) — a headless client has no viewport,
+    /// Wall-clock at which this message's disappearing timer elapses —
+    /// `Some` only when the sender sent a disappearing message.
+    /// Kupferdraht starts the countdown at dispatch (`received_at_ms +
+    /// ttl`) — a headless client has no viewport,
     /// so this is never later than an official client's
     /// view-triggered start; Kupferdraht tombstones its local row when it
     /// passes. `None` for every ordinary message. Step 89.
@@ -131,14 +131,13 @@ pub enum MessageBody {
     /// Plain-text message body. Wire's `Text.content` Protobuf
     /// field, UTF-8 already.
     Text(String),
-    /// File-attachment reference. Wire's `Asset` Protobuf variant
-    /// (Step 11g). Consumers call `summary.download().await` to
-    /// materialise the plaintext bytes. Boxed to keep the enum's
-    /// stack-size compact — `AssetSummary` carries ~200 bytes of
-    /// metadata + envelope state.
-    Asset(Box<crate::timeline::AssetSummary>),
-    /// A nudge / "ping" (`Knock`). `hot_knock` marks a repeat. Step 26.
-    Knock { hot_knock: bool },
+    /// An attachment (Step 11g). Consumers call `summary.download().await`
+    /// to materialise the plaintext bytes. Boxed to keep the enum's
+    /// stack-size compact — `AttachmentSummary` carries ~200 bytes of
+    /// description and download state.
+    Attachment(Box<crate::timeline::AttachmentSummary>),
+    /// A ping; `repeated` marks one sent again to insist. Step 26.
+    Ping { repeated: bool },
     /// A shared map point (`Location`). Step 26.
     Location {
         latitude: f32,

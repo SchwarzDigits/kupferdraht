@@ -8,8 +8,8 @@ Accepted 2026-09-26 (Step 95a implements it); decision 2 amended
 - **The sender of an inbound application message is the leaf credential
   openmls authenticated** (`ProcessedMessage::credential()`), parsed as
   Wire's W-4 identity `{uuid}:{client_id}@{domain}` — exactly three
-  non-empty parts. Every handler (text, reaction, receipt, knock,
-  location, asset, ephemeral, task, case, marker) dispatches under it.
+  non-empty parts. Every handler (text, reaction, receipt, ping,
+  location, attachment, disappearing, task, case, marker) dispatches under it.
 - **The envelope (`qualified_from` / `from_client`) is a cross-check
   only:** on mismatch dispatch under the MLS sender and `warn!` both
   values. **Don't** drop the message, **don't** fall back to the envelope

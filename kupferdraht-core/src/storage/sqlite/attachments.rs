@@ -8,15 +8,15 @@
 //! `(message_id, room_id)` composite primary key + FK. The
 //! FK uses the `SQLite` default `ON DELETE NO ACTION` (CHANGELOG.md
 //! §32 lesson — a CASCADE in this direction would let a future
-//! cleanup pass silently drop asset metadata; an explicit two-
+//! cleanup pass silently drop attachment metadata; an explicit two-
 //! step delete is the safer contract).
 //!
-//! `otr_key_ct` is the AES-256-GCM ciphertext of the 32-byte raw
-//! AES key the asset was encrypted with — encrypted via the
+//! `key_ct` is the AES-256-GCM ciphertext of the 32-byte raw
+//! AES key the attachment was encrypted with — encrypted via the
 //! per-account DEK from Step 7c. The plaintext key never lives on
 //! disk; callers that need it (send re-cache, receive decrypt)
 //! unwrap on demand inside the `_ct` decrypt envelope. **This
-//! module stores `otr_key_ct` verbatim** — the encrypt-on-write
+//! module stores `key_ct` verbatim** — the encrypt-on-write
 //! step is the caller's responsibility (mirrors how
 //! `session.access_token_ct` etc. are handled by their callers).
 
@@ -59,11 +59,11 @@ pub(super) fn insert_attachment_on(
             record.filename,
             size_bytes,
             record.sha256,
-            record.otr_key_ct,
-            record.asset_id,
-            record.asset_token,
-            record.asset_domain,
-            record.encryption_algo,
+            record.key_ct,
+            record.attachment_id,
+            record.attachment_token,
+            record.attachment_domain,
+            record.cipher,
             record.cache_path,
             record.created_at_ms,
         ],
@@ -179,11 +179,11 @@ fn record_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachmentRecord
         filename: row.get(3)?,
         size_bytes: u64::try_from(size_bytes_i64).unwrap_or(0),
         sha256: row.get(5)?,
-        otr_key_ct: row.get(6)?,
-        asset_id: row.get(7)?,
-        asset_token: row.get(8)?,
-        asset_domain: row.get(9)?,
-        encryption_algo: row.get(10)?,
+        key_ct: row.get(6)?,
+        attachment_id: row.get(7)?,
+        attachment_token: row.get(8)?,
+        attachment_domain: row.get(9)?,
+        cipher: row.get(10)?,
         cache_path: row.get(11)?,
         created_at_ms: row.get(12)?,
     })
@@ -201,7 +201,7 @@ mod tests {
             room_id: room_id.into(),
             sender_user_id: "u@wire.test".into(),
             sender_device_id: "dev".into(),
-            kind: "asset".into(),
+            kind: "attachment".into(),
             body: String::new(),
             sent_at_ms: 1_000,
             arrived_at_ms: 1_000,
@@ -210,7 +210,7 @@ mod tests {
             edited_at_ms: None,
             redacted_at_ms: None,
             expires_at_ms: None,
-            ephemeral_ttl_ms: None,
+            ttl_ms: None,
         }
     }
 
@@ -222,11 +222,11 @@ mod tests {
             filename: Some("photo.png".into()),
             size_bytes: 1_024,
             sha256: vec![0xABu8; 32],
-            otr_key_ct: vec![0xCDu8; 48], // simulated AES-GCM ciphertext (32B key + 12B nonce + 16B tag — 60B but Kupferdraht's envelope shape is opaque here)
-            asset_id: "asset-key-uuid".into(),
-            asset_token: Some("private-token-jwt".into()),
-            asset_domain: "prod.example.test".into(),
-            encryption_algo: "AES_CBC".into(),
+            key_ct: vec![0xCDu8; 48], // simulated AES-GCM ciphertext (32B key + 12B nonce + 16B tag — 60B but Kupferdraht's envelope shape is opaque here)
+            attachment_id: "attachment-key-uuid".into(),
+            attachment_token: Some("private-token-jwt".into()),
+            attachment_domain: "prod.example.test".into(),
+            cipher: "AES_CBC".into(),
             cache_path: None,
             created_at_ms: 2_000,
         }
@@ -487,7 +487,7 @@ mod tests {
 
     #[tokio::test]
     async fn otr_key_ct_persists_verbatim_blob() {
-        // The Store layer treats `otr_key_ct` as an opaque blob —
+        // The Store layer treats `key_ct` as an opaque blob —
         // the per-account DEK envelope is applied by the caller,
         // not this module. Round-trip preserves the bytes exactly.
         let (_dir, store) = fresh_store();
@@ -498,14 +498,14 @@ mod tests {
             .await
             .expect("parent");
         let mut a = sample_attachment(message_id, room_id);
-        a.otr_key_ct = (0u8..=255u8).collect();
+        a.key_ct = (0u8..=255u8).collect();
         store.insert_attachment(&a).await.expect("insert");
         let fetched = store
             .get_attachment(message_id, room_id)
             .await
             .expect("get")
             .expect("present");
-        assert_eq!(fetched.otr_key_ct, a.otr_key_ct);
-        assert_eq!(fetched.otr_key_ct.len(), 256);
+        assert_eq!(fetched.key_ct, a.key_ct);
+        assert_eq!(fetched.key_ct.len(), 256);
     }
 }

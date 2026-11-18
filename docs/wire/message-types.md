@@ -194,7 +194,7 @@ state to late joiners (the ADR-0020 MUST).
 Outbound variants are built in the per-interaction send files under
 `timeline/` (text, reaction, confirmation, delete, knock, location, asset,
 task, task-list marker, ephemeral); inbound variants are decoded and routed by the `sync/dispatch/`
-handlers (one per interaction; `dispatch/ephemeral.rs` unwraps the
+handlers (one per interaction; `dispatch/disappearing.rs` unwraps the
 field-18 wrapper and reuses the text tail). See `docs/ARCHITECTURE.md` §3 (module map) and §5
 (data flows). All sends funnel through one chokepoint
 (`Client::encrypt_and_upload`), which is what gives every variant epoch

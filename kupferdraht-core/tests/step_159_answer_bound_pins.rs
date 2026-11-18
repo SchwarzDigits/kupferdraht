@@ -9,7 +9,7 @@
 //! scanned: files of tests only (`*_tests.rs`, `test_support.rs`) and a
 //! file's trailing `mod tests` block.
 //!
-//! The browser's whole-asset download (W7) reads through the same bound,
+//! The browser's whole-attachment download (W7) reads through the same bound,
 //! with the sender's declared size as its own (Step 160): no body read is
 //! exempt.
 

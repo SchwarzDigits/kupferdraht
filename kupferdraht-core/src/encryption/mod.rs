@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-pub(crate) mod asset_crypto;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod atomicity_tests;
+pub(crate) mod attachment_crypto;
 mod external_commit;
 mod external_removal;
 mod group_create;

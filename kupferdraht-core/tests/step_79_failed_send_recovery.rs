@@ -15,7 +15,7 @@
 //! overtaken (matrix's strict-order rule). Rows behind the stop stay
 //! `Failed` — the pass is re-runnable after the next reconnect.
 //!
-//! Fixtures mirror `step_89_ephemeral_messages.rs`: the client is
+//! Fixtures mirror `step_89_disappearing_messages.rs`: the client is
 //! welcomed into a fixture peer's group, so sends run real MLS
 //! encryption; the peer decrypts what was captured off
 //! `POST /v14/mls/messages` and a minimal protobuf reader pins the
@@ -336,12 +336,12 @@ fn mount_mls_upload_failing(server: &MockServer) -> Mock<'_> {
     })
 }
 
-fn mount_asset_upload(server: &MockServer) -> Mock<'_> {
+fn mount_attachment_upload(server: &MockServer) -> Mock<'_> {
     server.mock(|when, then| {
         when.method(POST).path("/v14/assets");
         then.status(201)
             .header("content-type", "application/json")
-            .body(r#"{"key":"asset-key-79","token":"tok-79","domain":"example.test"}"#);
+            .body(r#"{"key":"attachment-key-79","token":"tok-79","domain":"example.test"}"#);
     })
 }
 
@@ -837,15 +837,15 @@ async fn resend_refuses_a_failed_task_snapshot_and_names_the_recovery() {
 }
 
 #[tokio::test]
-async fn resend_of_a_failed_ephemeral_text_re_wraps_the_ttl_and_starts_the_timer() {
+async fn resend_of_a_failed_disappearing_text_re_wraps_the_ttl_and_starts_the_timer() {
     let server = MockServer::start();
     let mut fx = welcomed_client(&server, &[]).await;
     let mut failing = mount_mls_upload_failing(&server);
     let err = fx
         .timeline
-        .send_ephemeral_text("otp 4711".into(), Duration::from_secs(1))
+        .send_disappearing_text("otp 4711".into(), Duration::from_secs(1))
         .await
-        .expect_err("ephemeral upload rejected");
+        .expect_err("disappearing upload rejected");
     assert!(
         matches!(err, kupferdraht::KupferdrahtError::BackendRejected(_)),
         "{err:?}"
@@ -870,16 +870,16 @@ async fn resend_of_a_failed_ephemeral_text_re_wraps_the_ttl_and_starts_the_timer
         "the timer starts on the delivered resend with the ORIGINAL ttl"
     );
 
-    // On the wire: the Ephemeral wrapper (field 18) with the original
+    // On the wire: the disappearing wrapper (field 18) with the original
     // TTL — never a plain Text (field 2) that would outlive its purpose.
     let uploads = captured_mls_uploads_for(&server);
     let (wire_id, fields) =
         decode_generic_message(&fx.peer.decrypt_application_message(&uploads[0]));
     assert_eq!(wire_id, id);
     assert!(bytes_field(&fields, 2).is_none(), "no plain Text arm");
-    let eph = decode_fields(bytes_field(&fields, 18).expect("Ephemeral arm"));
+    let eph = decode_fields(bytes_field(&fields, 18).expect("disappearing arm"));
     assert_eq!(varint_field(&eph, 1), Some(1_000), "expire_after_millis");
-    let text = decode_fields(bytes_field(&eph, 2).expect("Ephemeral.text"));
+    let text = decode_fields(bytes_field(&eph, 2).expect("disappearing text"));
     assert_eq!(str_field(&text, 1).as_deref(), Some("otp 4711"));
 
     tokio::time::sleep(Duration::from_millis(1_500)).await;
@@ -889,10 +889,10 @@ async fn resend_of_a_failed_ephemeral_text_re_wraps_the_ttl_and_starts_the_timer
 }
 
 #[tokio::test]
-async fn resend_of_a_failed_asset_reuses_the_uploaded_blob() {
+async fn resend_of_a_failed_attachment_reuses_the_uploaded_blob() {
     let server = MockServer::start();
     let mut fx = welcomed_client(&server, &[]).await;
-    let assets = mount_asset_upload(&server);
+    let attachments = mount_attachment_upload(&server);
     let mut failing = mount_mls_upload_failing(&server);
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("notes.txt");
@@ -907,41 +907,45 @@ async fn resend_of_a_failed_asset_reuses_the_uploaded_blob() {
         matches!(err, kupferdraht::KupferdrahtError::BackendRejected(_)),
         "{err:?}"
     );
-    assert_eq!(assets.calls(), 1, "the blob was uploaded");
+    assert_eq!(attachments.calls(), 1, "the blob was uploaded");
     let failed = fx.room.failed_sends().await.expect("failed_sends");
     assert_eq!(failed.len(), 1);
-    assert!(matches!(failed[0].kind, TimelineItemKind::Asset(_)));
+    assert!(matches!(failed[0].kind, TimelineItemKind::Attachment(_)));
     let id = failed[0].item_id.clone();
 
     failing.delete();
     let ok = mount_mls_upload_ok(&server);
-    let handle = fx.timeline.resend(id.clone()).await.expect("resend asset");
+    let handle = fx
+        .timeline
+        .resend(id.clone())
+        .await
+        .expect("resend attachment");
     assert_eq!(handle.message_id, id);
     assert_eq!(ok.calls(), 1);
     assert_eq!(
-        assets.calls(),
+        attachments.calls(),
         1,
         "no second blob upload — the reference is persisted"
     );
     let row = item(&fx.client, &id).await;
     assert_eq!(row.delivery_status, DeliveryStatus::Submitted);
     match &row.kind {
-        TimelineItemKind::Asset(a) => assert_eq!(a.asset_id, "asset-key-79"),
-        other => panic!("expected an asset row, got {other:?}"),
+        TimelineItemKind::Attachment(a) => assert_eq!(a.filename.as_deref(), Some("notes.txt")),
+        other => panic!("expected an attachment row, got {other:?}"),
     }
 
-    // On the wire: the same reference every Wire client needs to fetch it.
+    // On the wire: the same reference every client needs to fetch it.
     let uploads = captured_mls_uploads_for(&server);
     let (wire_id, fields) =
         decode_generic_message(&fx.peer.decrypt_application_message(&uploads[0]));
     assert_eq!(wire_id, id);
-    let asset = decode_fields(bytes_field(&fields, 11).expect("Asset arm"));
-    let original = decode_fields(bytes_field(&asset, 1).expect("Asset.original"));
+    let attachment = decode_fields(bytes_field(&fields, 11).expect("attachment arm"));
+    let original = decode_fields(bytes_field(&attachment, 1).expect("attachment original"));
     assert_eq!(str_field(&original, 1).as_deref(), Some("text/plain"));
     assert_eq!(varint_field(&original, 2), Some(9), "plaintext size");
     assert_eq!(str_field(&original, 3).as_deref(), Some("notes.txt"));
-    let remote = decode_fields(bytes_field(&asset, 4).expect("Asset.uploaded"));
-    assert_eq!(str_field(&remote, 3).as_deref(), Some("asset-key-79"));
+    let remote = decode_fields(bytes_field(&attachment, 4).expect("attachment uploaded"));
+    assert_eq!(str_field(&remote, 3).as_deref(), Some("attachment-key-79"));
     assert_eq!(str_field(&remote, 5).as_deref(), Some("tok-79"));
     assert_eq!(str_field(&remote, 7).as_deref(), Some("example.test"));
     assert_eq!(

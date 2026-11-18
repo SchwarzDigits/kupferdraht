@@ -280,12 +280,12 @@ fn mount_mls_upload_failing(server: &MockServer) -> Mock<'_> {
     })
 }
 
-fn mount_asset_upload(server: &MockServer) -> Mock<'_> {
+fn mount_attachment_upload(server: &MockServer) -> Mock<'_> {
     server.mock(|when, then| {
         when.method(POST).path("/v14/assets");
         then.status(201)
             .header("content-type", "application/json")
-            .body(r#"{"key":"asset-key-130a","token":"tok-130a","domain":"example.test"}"#);
+            .body(r#"{"key":"attachment-key-130a","token":"tok-130a","domain":"example.test"}"#);
     })
 }
 
@@ -633,10 +633,10 @@ async fn a_keyed_reaction_is_applied_once_and_a_new_key_toggles_it_off() {
 // ---- every keyed kind ----
 
 #[tokio::test]
-async fn reply_knock_location_and_file_each_answer_their_key_once() {
+async fn reply_ping_location_and_file_each_answer_their_key_once() {
     let server = MockServer::start();
     let fx = welcomed_client(&server).await;
-    let assets = mount_asset_upload(&server);
+    let attachments = mount_attachment_upload(&server);
     let ok = mount_mls_upload_ok(&server);
     let contents = [
         (
@@ -646,7 +646,7 @@ async fn reply_knock_location_and_file_each_answer_their_key_once() {
                 body: "a reply".into(),
             },
         ),
-        ("key-knock", OutgoingContent::Knock { hot_knock: false }),
+        ("key-ping", OutgoingContent::Ping { repeated: false }),
         (
             "key-location",
             OutgoingContent::Location {
@@ -680,7 +680,7 @@ async fn reply_knock_location_and_file_each_answer_their_key_once() {
         );
     }
     assert_eq!(ok.calls(), 4, "one upload per key");
-    assert_eq!(assets.calls(), 1, "the file's blob went up once");
+    assert_eq!(attachments.calls(), 1, "the file's blob went up once");
 }
 
 // ---- refused keys ----

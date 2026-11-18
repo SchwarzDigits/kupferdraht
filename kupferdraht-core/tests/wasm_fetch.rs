@@ -39,7 +39,7 @@ async fn fetch_backend_performs_a_real_round_trip() {
 
 /// Step 160: in the browser a body arrives as a stream of chunks (`reqwest`'s
 /// `stream` feature over the `fetch` body's `ReadableStream`), which the
-/// bounded reads of answers and assets count as they come.
+/// bounded reads of answers and attachments count as they come.
 #[wasm_bindgen_test]
 async fn a_body_arrives_as_a_stream_of_chunks() {
     use futures_util::StreamExt as _;

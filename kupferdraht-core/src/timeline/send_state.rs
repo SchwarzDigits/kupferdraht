@@ -58,7 +58,7 @@ impl InFlightSends {
 pub(crate) struct ContentRow<'a> {
     pub(crate) message_id: &'a str,
     pub(crate) plaintext: &'a [u8],
-    /// `timeline_events.kind` (`knock`, `location`, `case`, …).
+    /// `timeline_events.kind` (`ping`, `location`, `case`, …).
     pub(crate) kind: &'a str,
     /// The packed body `TimelineItem::from_record` decodes.
     pub(crate) body: &'a str,
@@ -152,7 +152,7 @@ impl Client {
             && self.device_id() == Some(row.sender_device_id.as_str())
     }
 
-    /// The persist-first send of a non-text content row (knock,
+    /// The persist-first send of a non-text content row (ping,
     /// location, case snapshot, task-list marker): write the row as
     /// `Sending` and emit it, upload under `op`, settle. Returns the
     /// row's `sent_at_ms` on a delivered send; the upload's error
@@ -180,7 +180,7 @@ impl Client {
 
     /// Settle a send after its upload: `sending` → `submitted` (with the
     /// time of the backend's answer, and `expires_at_ms` for a delivered
-    /// ephemeral) or `failed`, then tell subscribers. Never an error: the upload's
+    /// disappearing) or `failed`, then tell subscribers. Never an error: the upload's
     /// outcome is what the caller must see — a failed status write
     /// leaves the row `sending`, which reads as `Failed` once the send is
     /// over, and a resend reuses the id (receivers dedupe on it).

@@ -542,17 +542,20 @@ impl Store for FaultyStore {
             .await
     }
 
-    async fn expire_ephemeral_messages(
+    async fn expire_disappearing_messages(
         &self,
         now_ms: i64,
     ) -> Result<Vec<ExpiredMessageRecord>, KupferdrahtError> {
         self.gate("expire_ephemeral_messages").await?;
-        self.inner.expire_ephemeral_messages(now_ms).await
+        self.inner.expire_disappearing_messages(now_ms).await
     }
 
-    async fn pending_ephemeral_expiries(&self, now_ms: i64) -> Result<Vec<i64>, KupferdrahtError> {
+    async fn pending_disappearing_expiries(
+        &self,
+        now_ms: i64,
+    ) -> Result<Vec<i64>, KupferdrahtError> {
         self.gate("pending_ephemeral_expiries").await?;
-        self.inner.pending_ephemeral_expiries(now_ms).await
+        self.inner.pending_disappearing_expiries(now_ms).await
     }
 
     async fn save_sync_state(&self, state: &SyncStateRecord) -> Result<(), KupferdrahtError> {

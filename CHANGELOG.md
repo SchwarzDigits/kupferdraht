@@ -115,6 +115,44 @@ is no skill for it — it is this short procedure:
   `deleteDevice(deviceId, password?)`; a call with a password stays valid in Kotlin,
   Swift and JavaScript. The CLI's `device-delete` and `logout --purge-device` take an
   empty answer as no password and say how to give one on `missing-auth`.
+- **BREAKING: the message kinds have plain names** (Step 163b, ADR-0009
+  revision 1.2) — attachments, pings and disappearing messages, everywhere:
+  - Rust: `Timeline::asset` → `Timeline::attachment`, `AssetSummary` →
+    `AttachmentSummary`, `AssetSource` → `AttachmentSource`,
+    `MessageBody::Asset` / `TimelineItemKind::Asset` → `::Attachment`;
+    `send_knock(hot_knock)` → `send_ping(repeated)`, `Knock { hot_knock }` →
+    `Ping { repeated }` in `MessageBody`, `TimelineItemKind` and
+    `OutgoingContent`; `send_ephemeral_text` → `send_disappearing_text`.
+  - The description of an attachment carries no locator any more:
+    `AttachmentSummary` drops the public `asset_id`, `asset_token`,
+    `asset_domain` and `encryption_algo`; the download goes through
+    `download()` / `save_to()` as before.
+  - FFI: the object `Asset` → `Attachment`, `Timeline.asset` →
+    `Timeline.attachment`, the record `AssetMeta` → `AttachmentMeta` without
+    `assetId`, `assetToken`, `assetDomain` and `encryptionAlgo` (nothing in it
+    needs keeping out of a log any more), `sendKnock(hotKnock)` →
+    `sendPing(repeated)`, `sendEphemeralText` → `sendDisappearingText`.
+  - Browser: `sendKnock(roomId, hotKnock)` → `sendPing(roomId, repeated)`,
+    `downloadAsset` → `downloadAttachment`; a timeline item's `asset` →
+    `attachment` (type `AttachmentMeta`), `hotKnock` → `repeated`, and `kind`
+    `"asset"` / `"knock"` → `"attachment"` / `"ping"`.
+  - CLI: `knock --hot` → `ping --repeated`, `send --ephemeral <secs>` →
+    `send --ttl <secs>`, `download-asset` → `download-attachment`, whose metadata
+    lists the cache path in place of the locator.
+  - A custom store: `Store::expire_ephemeral_messages` →
+    `expire_disappearing_messages`, `pending_ephemeral_expiries` →
+    `pending_disappearing_expiries`; `TimelineEventRecord.ephemeral_ttl_ms` →
+    `ttl_ms`; `AttachmentRecord` `otr_key_ct` → `key_ct`, `asset_id` /
+    `asset_token` / `asset_domain` → `attachment_id` / `attachment_token` /
+    `attachment_domain`, `encryption_algo` → `cipher` — serialized records carry
+    the new field names. The stored kinds `"knock"` / `"asset"` are `"ping"` /
+    `"attachment"`: the shipped store rewrites its rows on open (migration V37),
+    a custom store rewrites its own.
+  - An account's attachment cache is `accounts/<id>/attachments/`, no longer
+    `assets/`. An existing `assets/` is not moved: a file cached there is still
+    read through its row's `cache_path`, but a client's start and a delete for
+    everyone clear only `attachments/` — delete the old directory (its
+    attachments download again when asked for).
 
 ### Deprecated
 

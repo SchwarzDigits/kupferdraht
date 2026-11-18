@@ -4,7 +4,7 @@
 //! FFI wrappers for sync + observers (Step 20c-5).
 //!
 //! The core observer traits (`EventHandler`, `TimelineListener`) carry
-//! `Box<AssetSummary>`-bearing types, so they can't be exported directly.
+//! `Box<AttachmentSummary>`-bearing types, so they can't be exported directly.
 //! Instead each gets a foreign-implementable `#[uniffi::export(with_foreign)]`
 //! twin here, plus a private Rust **adapter** that implements the core
 //! trait and forwards core→ffi-converted values. The continuous sync loop
@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use tokio::sync::Notify;
 
 use super::Client;
-use super::timeline::{AssetMeta, TimelineDiff};
+use super::timeline::{AttachmentMeta, TimelineDiff};
 use crate::error::KupferdrahtError;
 use crate::sync::{
     EventHandler as CoreEventHandler, Message as CoreMessage, MessageBody as CoreBody,
@@ -36,7 +36,7 @@ use crate::timeline::{Subscription as CoreSubscription, TimelineListener as Core
 
 /// Decoded body of an inbound [`Message`].
 // FFI enums cross the boundary by serialization, not by in-memory
-// layout, so the `Text`/`Asset` size gap is irrelevant — and a boxed
+// layout, so the `Text`/`Attachment` size gap is irrelevant — and a boxed
 // variant field would not marshal through UniFFI.
 #[allow(clippy::large_enum_variant)]
 // No `Eq`: the `Location` variant carries `f32` coords (Step 26).
@@ -45,12 +45,12 @@ pub enum MessageBody {
     Text {
         text: String,
     },
-    Asset {
-        asset: AssetMeta,
+    Attachment {
+        attachment: AttachmentMeta,
     },
-    /// A nudge / "ping". Step 26.
-    Knock {
-        hot_knock: bool,
+    /// A ping; `repeated` marks one sent again to insist. Step 26.
+    Ping {
+        repeated: bool,
     },
     /// A shared map point. Step 26.
     Location {
@@ -81,11 +81,11 @@ impl From<&CoreBody> for MessageBody {
     fn from(body: &CoreBody) -> Self {
         match body {
             CoreBody::Text(text) => Self::Text { text: text.clone() },
-            CoreBody::Asset(summary) => Self::Asset {
-                asset: AssetMeta::from(summary.as_ref()),
+            CoreBody::Attachment(summary) => Self::Attachment {
+                attachment: AttachmentMeta::from(summary.as_ref()),
             },
-            CoreBody::Knock { hot_knock } => Self::Knock {
-                hot_knock: *hot_knock,
+            CoreBody::Ping { repeated } => Self::Ping {
+                repeated: *repeated,
             },
             CoreBody::Location {
                 latitude,
@@ -129,7 +129,7 @@ pub struct Message {
     pub message_id: String,
     pub reply_to_id: Option<String>,
     /// Wall-clock (ms since Unix epoch) at which the message's
-    /// ephemeral timer elapses — set only for a self-deleting message
+    /// disappearing timer elapses — set only for a disappearing message
     /// (`received_at_ms + ttl`). Step 89.
     pub expires_at_ms: Option<i64>,
 }

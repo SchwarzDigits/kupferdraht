@@ -276,12 +276,12 @@ fn mount_mls_upload_ok(server: &MockServer) -> Mock<'_> {
     })
 }
 
-fn mount_asset_upload(server: &MockServer) -> Mock<'_> {
+fn mount_attachment_upload(server: &MockServer) -> Mock<'_> {
     server.mock(|when, then| {
         when.method(POST).path("/v14/assets");
         then.status(201)
             .header("content-type", "application/json")
-            .body(r#"{"key":"asset-key-79","token":"tok-79","domain":"example.test"}"#);
+            .body(r#"{"key":"attachment-key-79","token":"tok-79","domain":"example.test"}"#);
     })
 }
 
@@ -706,7 +706,7 @@ async fn an_abandoned_sending_row_reads_failed_after_a_restart() {
 async fn a_file_send_cancelled_during_the_mls_upload_resends_without_a_second_blob_upload() {
     let server = MockServer::start();
     let fx = welcomed_client(&server, &[]).await;
-    let assets = mount_asset_upload(&server);
+    let attachments = mount_attachment_upload(&server);
     let mut hanging = mount_mls_upload_delayed(&server, Duration::from_secs(30));
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("notes.txt");
@@ -721,7 +721,7 @@ async fn a_file_send_cancelled_during_the_mls_upload_resends_without_a_second_bl
         cancelled.is_err(),
         "the send was waiting for the MLS upload"
     );
-    assert_eq!(assets.calls(), 1, "the blob went up");
+    assert_eq!(attachments.calls(), 1, "the blob went up");
 
     let failed = fx.room.failed_sends().await.expect("failed_sends");
     assert_eq!(
@@ -729,7 +729,7 @@ async fn a_file_send_cancelled_during_the_mls_upload_resends_without_a_second_bl
         1,
         "the file row was written before the MLS upload"
     );
-    assert!(matches!(failed[0].kind, TimelineItemKind::Asset(_)));
+    assert!(matches!(failed[0].kind, TimelineItemKind::Attachment(_)));
     let id = failed[0].item_id.clone();
 
     hanging.delete();
@@ -737,7 +737,7 @@ async fn a_file_send_cancelled_during_the_mls_upload_resends_without_a_second_bl
     let handle = fx.timeline.resend(id.clone()).await.expect("resend");
     assert_eq!(handle.message_id, id);
     assert_eq!(ok.calls(), 1);
-    assert_eq!(assets.calls(), 1, "no second blob upload");
+    assert_eq!(attachments.calls(), 1, "no second blob upload");
 }
 
 /// Step 107 (review of Step 97a): the lookup by id settles an abandoned

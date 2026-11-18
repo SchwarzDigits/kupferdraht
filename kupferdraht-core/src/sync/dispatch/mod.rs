@@ -17,17 +17,17 @@
 //! Reviewers landing on a 6-II-c regression don't have to page
 //! through the WebSocket-shaped drain loop, and vice-versa.
 
-mod asset;
+mod attachment;
 mod authorize;
 pub(super) mod case;
 mod config;
 mod confirmation;
 mod delete;
+mod disappearing;
 mod edit;
-mod ephemeral;
-mod knock;
 mod location;
 mod marker;
+mod ping;
 mod reaction;
 mod room_event;
 pub(super) mod task;
@@ -61,7 +61,7 @@ pub(crate) struct InboundOrigin<'a> {
 }
 
 impl SyncService {
-    /// Persist an inbound non-text content message (knock / location /
+    /// Persist an inbound non-text content message (ping / location /
     /// case / marker / task) via [`message_to_record`] — a task together
     /// with its fold row, one write (Step 105). Returns whether a fresh
     /// row was inserted; a self-sent round-trip or a replay writes
@@ -92,7 +92,7 @@ impl SyncService {
 
     /// Dispatch a simple inbound content message (no mentions / attachments):
     /// persist, notify, emit `Append`, and auto-ack delivery on a fresh
-    /// insert. Shared by knock, location, and task. Returns whether a
+    /// insert. Shared by ping, location, and task. Returns whether a
     /// fresh row was inserted (false on a redelivery) so callers can
     /// skip side effects for duplicates — the task fold cache must not
     /// regress to an older state (Step 60c). Step 26.
@@ -229,17 +229,17 @@ fn mentions_to_records(
 /// Project an in-flight inbound `Message` into the `TimelineEventRecord`
 /// shape used by `TimelineItem::from_record`. Used by the
 /// `TimelineDiff::Append` emitted on a fresh inbound text. Only
-/// `MessageBody::Text` is in scope here — `MessageBody::Asset`
+/// `MessageBody::Text` is in scope here — `MessageBody::Attachment`
 /// follows its own dispatch path (Step 11g) and does not pass
 /// through this helper.
 fn message_to_record(message: &Message) -> TimelineEventRecord {
-    // Map the body to the persisted (kind, body) pair. Knock/Location
+    // Map the body to the persisted (kind, body) pair. Ping/Location
     // (Step 26) and Task (Step 60a) pack their small payload into the
-    // `body` TEXT column. Asset has its own persist path and never
+    // `body` TEXT column. Attachment has its own persist path and never
     // reaches here.
     let (kind, body) = match &message.body {
         MessageBody::Text(b) => ("text", b.clone()),
-        MessageBody::Knock { hot_knock } => ("knock", hot_knock.to_string()),
+        MessageBody::Ping { repeated } => ("ping", repeated.to_string()),
         MessageBody::Location {
             latitude,
             longitude,
@@ -261,7 +261,7 @@ fn message_to_record(message: &Message) -> TimelineEventRecord {
             "case",
             crate::timeline::case::case_body(snapshot, *sender_authorized),
         ),
-        MessageBody::Asset(_) => unreachable!("message_to_record called with Asset body"),
+        MessageBody::Attachment(_) => unreachable!("message_to_record called with Attachment body"),
     };
     TimelineEventRecord {
         message_id: message.message_id.clone(),
@@ -277,6 +277,6 @@ fn message_to_record(message: &Message) -> TimelineEventRecord {
         edited_at_ms: None,
         redacted_at_ms: None,
         expires_at_ms: message.expires_at_ms,
-        ephemeral_ttl_ms: None,
+        ttl_ms: None,
     }
 }

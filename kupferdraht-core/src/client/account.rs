@@ -103,7 +103,7 @@ impl Account {
         self.team.name.as_deref()
     }
 
-    /// The asset key of the team's icon, as of the last login or refresh
+    /// The image key of the team's icon, as of the last login or refresh
     /// (Steps 144, 152);
     /// [`Client::team_avatar`](super::Client::team_avatar) fetches the image.
     #[must_use]

@@ -47,7 +47,7 @@ pub(crate) async fn timeline(
             DeliveryStatus::Failed => "✗",
         };
         let (body_preview, reply_to, mentions) = item_preview(item);
-        // Step 89: an expired ephemeral is a tombstone that still
+        // Step 89: an expired disappearing message is a tombstone that still
         // carries its expiry stamp — label it distinctly from a
         // delete-for-everyone; a live one shows its deadline.
         let mut suffix = if item.redacted {
@@ -116,9 +116,9 @@ pub(super) fn item_preview(
             mentions,
         } => (body.clone(), reply_to.clone(), mentions.clone()),
         TimelineItemKind::Redacted => ("<redacted>".into(), None, Vec::new()),
-        TimelineItemKind::Asset(a) => (
+        TimelineItemKind::Attachment(a) => (
             format!(
-                "<asset {} bytes mime={}{}>",
+                "<attachment {} bytes mime={}{}>",
                 a.size_bytes,
                 a.mime_type,
                 a.filename
@@ -129,8 +129,8 @@ pub(super) fn item_preview(
             None,
             Vec::new(),
         ),
-        TimelineItemKind::Knock { hot_knock } => (
-            format!("<knock{}>", if *hot_knock { " (hot)" } else { "" }),
+        TimelineItemKind::Ping { repeated } => (
+            format!("<ping{}>", if *repeated { " (repeated)" } else { "" }),
             None,
             Vec::new(),
         ),
@@ -209,18 +209,18 @@ fn membership_line(change: &kupferdraht::timeline::RoomMembershipChange) -> Stri
 pub(crate) async fn send(
     room_id: String,
     body: String,
-    ephemeral_secs: Option<u64>,
+    ttl_secs: Option<u64>,
     idempotency_key: Option<String>,
 ) -> Result<(), KupferdrahtError> {
     let (client, room, room_id) = resume_with_room(room_id).await?;
     let timeline = room.timeline()?;
     // Step 89: a self-deleting text rides Wire's `Ephemeral` wrapper;
     // the wrapper carries no mentions, so handle parsing is skipped.
-    if let Some(secs) = ephemeral_secs {
+    if let Some(secs) = ttl_secs {
         let ttl = std::time::Duration::from_secs(secs);
-        let handle = timeline.send_ephemeral_text(body, ttl).await?;
+        let handle = timeline.send_disappearing_text(body, ttl).await?;
         print_send_handle(&room_id, &handle);
-        println!("  ephemeral:  {secs}s");
+        println!("  ttl:        {secs}s");
         let expires_at_ms = handle.sent_at_ms + i64::try_from(secs * 1_000).unwrap_or(i64::MAX);
         println!("  expires_at: {}", super::fmt_ms(expires_at_ms));
         return Ok(());
@@ -257,14 +257,14 @@ fn print_send_handle(room_id: &str, handle: &kupferdraht::MessageHandle) {
     println!("  sent_at:    {}", super::fmt_ms(handle.sent_at_ms));
 }
 
-/// Step 26 — send a `Knock` (nudge) to a room.
-pub(crate) async fn knock(room_id: String, hot: bool) -> Result<(), KupferdrahtError> {
+/// Step 26 — send a ping to a room.
+pub(crate) async fn ping(room_id: String, repeated: bool) -> Result<(), KupferdrahtError> {
     let (_client, room, room_id) = resume_with_room(room_id).await?;
     let timeline = room.timeline()?;
-    let handle = timeline.send_knock(hot).await?;
-    println!("knock ok");
+    let handle = timeline.send_ping(repeated).await?;
+    println!("ping ok");
     println!("  room_id:    {room_id}");
-    println!("  hot_knock:  {hot}");
+    println!("  repeated:   {repeated}");
     println!("  message_id: {}", handle.message_id);
     println!("  sent_at:    {}", super::fmt_ms(handle.sent_at_ms));
     Ok(())
@@ -534,7 +534,7 @@ mod tests {
     #[test]
     fn a_skipped_read_names_its_real_reason() {
         let room_event = TimelineItemKind::RoomNameChange { name: "New".into() };
-        let message = TimelineItemKind::Knock { hot_knock: false };
+        let message = TimelineItemKind::Ping { repeated: false };
 
         assert_eq!(
             skipped_reason(Some(&room_event)),

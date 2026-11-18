@@ -61,7 +61,7 @@ consumers use the `ffi` surface below.
   })
   ```
 
-**Objects** (opaque, passed by reference; ephemeral — compare by `id`, not
+**Objects** (opaque, passed by reference; transient — compare by `id`, not
 object identity)
 - `Kupferdraht` — `home_id()` / `cookie_label()` (Step 93: the home's id from
   `base_dir/home.id` and its Wire login label `kupferdraht-<home-id>` — one
@@ -130,26 +130,25 @@ object identity)
   `toggle_reaction`, `mark_as_read(item_id, receipt: ReceiptType)` — `Read`
   / `ReadPrivate`, Step 138, a breaking change of the Kotlin and Swift
   signatures —, `send_file`, `send_file_stream`,
-  `send_text_with_mentions`, `send_knock`, `send_location`,
-  `send_ephemeral_text(body, ttl: Duration)` — Step 89; `edit` / `redact`
+  `send_text_with_mentions`, `send_ping`, `send_location`,
+  `send_disappearing_text(body, ttl: Duration)` — Step 89; `edit` / `redact`
   refuse another user's message with `InvalidInput`, Step 95b),
   failed-send recovery (`resend(message_id)` — one failed row under the
   same id, a row this device already sent answers its handle, Step 130b;
   `resend_failed() -> ResendSummary` — the room oldest-first, stops at
   the first hard error; Step 79), keyed sends
   (`send_keyed(idempotency_key, content: OutgoingContent)` — a text,
-  reply, knock, location, file or reaction under a caller-chosen key; a
+  reply, ping, location, file or reaction under a caller-chosen key; a
   repeat of the key answers the stored handle instead of sending twice;
-  Step 130a, `docs/library.md`), `asset(message_id) -> Asset?`,
+  Step 130a, `docs/library.md`), `attachment(message_id) -> Attachment?`,
   `subscribe(listener) -> Subscription`.
-- `Asset` — `metadata() -> AssetMeta`, `download() -> bytes`,
-  `save_to(path)`; both refuse with `InvalidInput` once the asset's message
-  was deleted for everyone, also on an `Asset` taken before the delete
-  (Step 84). `AssetMeta.assetToken` is the short-lived download
-  token of the asset: the Rust `Debug` redacts it, but the Kotlin
-  `toString()` and Swift `description` UniFFI generates print every
-  field — **do not log `AssetMeta` as a whole** (Step 132; the threat
-  model's N3 puts a leaked token on the consumer).
+- `Attachment` — `metadata() -> AttachmentMeta`, `download() -> bytes`,
+  `save_to(path)`; both refuse with `InvalidInput` once the attachment's message
+  was deleted for everyone, also on an `Attachment` taken before the delete
+  (Step 84). `AttachmentMeta` is the description only — message id, mime
+  type, filename, size, sender, room and cache path; the server's locator,
+  the download token and the cipher stay inside the core, and the download
+  goes through the object (Step 163b).
 
 **Records / enums** — `QualifiedUserId`, `Account`, `Avatar`, `AvatarSize`,
 `RoomMember` (its `avatar_thumbnail_key` and `avatar_full_key`, Step 144; the
@@ -162,7 +161,7 @@ foreign-implemented `RoomDevicesListener` sits with the other observers),
 [library.md](library.md)),
 `TimelineDiff`, `DeliveryStatus`, `Message`, `MessageBody` (`TimelineItem`
 and `Message` carry `expires_at_ms: Option<i64>` since Step 89 — set
-only for an ephemeral message), `AssetMeta`,
+only for a disappearing message), `AttachmentMeta`,
 `MessageHandle`, `Mention`, `OutgoingContent` (Step 130a — the content
 of `send_keyed`), `ReactionGroup`, `DeviceInfo`, `FeatureConfigEntry`,
 `UserPropertyEntry`, `FileSharingPolicy`, `ReceiptMode`, `AccountEntry`,
@@ -228,7 +227,7 @@ home's registry file, for the account databases the account directory).
   `on_session_expired()` fires at most once when the loop hits the
   terminal `KupferdrahtError::SessionExpired` — the loop has already stopped;
   surface a re-login gate (Step 39).
-- `AssetSource` — foreign-implemented streaming byte source for
+- `AttachmentSource` — foreign-implemented streaming byte source for
   `Timeline::send_file_stream`, the streaming counterpart of `send_file`
   for platforms with no filesystem path (e.g. an Android `content://`
   stream). `read_chunk(max_len) -> bytes`; an empty `Vec` signals EOF.
@@ -810,7 +809,7 @@ Since Step 110 (ADR-0035):
   `thumbprint` is Wire's "MLS Thumbprint"), `ownDeviceThumbprint()`.
 - Timeline: `sendText(roomId, body)` (MLS auto-join), `messages(roomId,
   limit?, before?)` (local decrypted read, oldest-first; `before` is a
-  message id, Step 98c), `sendKnock(roomId, hotKnock)` /
+  message id, Step 98c), `sendPing(roomId, repeated)` /
   `sendLocation(roomId, lat, lon, name?, zoom?)` (Step 98c), `sendReply`,
   `toggleReaction`, `editMessage`, `redact`, `markAsRead` (`editMessage` /
   `redact` reject another user's message — Step 95b, ADR-0028; a
@@ -821,7 +820,7 @@ Since Step 110 (ADR-0035):
   `lastReadAtMs`. `messages()` is in order of arrival, so its `sentAtMs` need not rise: do not
   sort by it, and compare `lastReadAtMs` with `arrivedAtMs`. Rows from before this release show
   their receive time.
-- Keyed sends (Step 130a): `sendText`, `sendReply`, `sendKnock`,
+- Keyed sends (Step 130a): `sendText`, `sendReply`, `sendPing`,
   `sendLocation`, `sendFile` and `toggleReaction` take a trailing
   `options?: { idempotencyKey?: string }` (1–128 characters; the binding
   generates a UUID when it is missing) and resolve
@@ -875,9 +874,9 @@ Since Step 110 (ADR-0035):
   canvas, never as a document, `iframe` or `object`.** Under tabs, `avatar`,
   `avatarKey` and `teamAvatar` are re-issued at a leader change, `uploadAvatar` and
   `removeAvatar` reject `LeaderChangedError`.
-- Assets (W7): `sendFile(roomId, bytes, filename, mimeType)` (in-memory
-  encrypted send), `downloadAsset(roomId, itemId) -> bytes` (download +
-  decrypt + SHA-256 verify). The download is held in memory: an asset
+- Attachments (W7): `sendFile(roomId, bytes, filename, mimeType)` (in-memory
+  encrypted send), `downloadAttachment(roomId, itemId) -> bytes` (download +
+  decrypt + SHA-256 verify). The download is held in memory: an attachment
   whose sender declared over 100 MiB rejects `InvalidInput` before any
   request, and more bytes than declared + 32 reject `IntegrityCheck`
   (Step 160).
@@ -923,7 +922,7 @@ Since Step 110 (ADR-0035):
 **JS callbacks** (plain functions passed to `startSync`):
 - `onMessage({roomId, senderUserId, messageId, body, replyToId,
   sentAtMs, receivedAtMs, expiresAtMs})` — one call per inbound decrypted
-  message (`sentAtMs` is when the backend took it, Step 151; `expiresAtMs` is set only for an ephemeral message, Step 89;
+  message (`sentAtMs` is when the backend took it, Step 151; `expiresAtMs` is set only for a disappearing message, Step 89;
   `messages()` items carry the same field). `senderUserId` is the
   MLS-authenticated signer, not the backend's envelope — the same
   rule on every surface (Step 95a, ADR-0027; `docs/library.md`
@@ -1032,17 +1031,17 @@ instance" into "served to every tab". Two halves:
   its `name`, `message` and the recovery detail (`reason`,
   `attemptsRemaining`, `retryAfter`). The leader answers
   each `(tabId, requestId)` once. Payloads are the wasm view objects,
-  structured-cloned (asset bytes are copied, not transferred).
+  structured-cloned (attachment bytes are copied, not transferred).
 - **Failover, honest by construction (L3, three classes since Step
   130a):** when a new leader announces itself, an **idempotent** call in
   flight — the reads (`accounts`, `rooms`, `messages`, `members`,
-  `downloadAsset`, `resume`, `syncOnce`, `ssoLoginUrl`, `recovery`,
+  `downloadAttachment`, `resume`, `syncOnce`, `ssoLoginUrl`, `recovery`,
   `Recovery.state` / `verifyPin`, …) and the mutations a repeat converges
   (`markAsRead`, `markAsUnread`, `typingNotice`, `redact`,
   `createDm`, `renameRoom`, `setRoomAccess`, `allowGuests`,
   `setDisplayName`) — is re-issued to it (a `Client` proxy re-resumes by
   `userId` first, a `Recovery` proxy asks its client again); a **keyed**
-  call in flight (`sendText`, `sendReply`, `sendKnock`, `sendLocation`,
+  call in flight (`sendText`, `sendReply`, `sendPing`, `sendLocation`,
   `sendFile`, `toggleReaction`) is re-issued with its `idempotencyKey` —
   the proxy adds one when the caller gave none — so a send the old leader
   completed answers its stored handle and nothing reaches the backend
@@ -1093,11 +1092,11 @@ Timeline items carry `deliveryStatus` (`"sending" | "submitted" | "received"
 **Not on the wasm surface** (vs. UniFFI): registration
 (`PendingClient`),
 `TimelineListener`/`subscribe`, `SyncListener`-driven `start_sync`,
-`Asset.save_to` (no filesystem), mentions/ephemeral
+`Attachment.save_to` (no filesystem), mentions/disappearing
 sends. Failed-send recovery is there since Step 130b (`failedSends`,
 `resend`, `resendFailed`). The core `sync_stream` is a stub on wasm (single `Err`) — use
-`startSync`. Ephemeral expiry on wasm is **sweep-only** (no task
-spawner): inbound ephemeral rows self-redact at the end of the next
+`startSync`. Disappearing expiry on wasm is **sweep-only** (no task
+spawner): inbound disappearing rows self-redact at the end of the next
 `syncOnce` / `startSync` cycle or on resume, not on a live timer. The
 sweep itself is the same SQLite sweep native runs (Step 91 closed the
 IndexedDB no-op).

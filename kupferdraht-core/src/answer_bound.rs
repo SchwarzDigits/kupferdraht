@@ -3,7 +3,7 @@
 
 //! Every answer read into memory goes through a bound on its decoded bytes
 //! (Step 159). A server's oversized answer, or a compressed one that inflates,
-//! stops at the bound instead of filling memory. The browser's asset download
+//! stops at the bound instead of filling memory. The browser's attachment download
 //! reads through the same [`read_bounded`], bounded by the size its sender
 //! declared (Step 160).
 
@@ -71,7 +71,7 @@ pub(crate) async fn read_json<T: DeserializeOwned>(
 /// The body, up to `max_bytes` decoded bytes: reading stops at the first
 /// chunk past it, natively and in the browser alike (Step 160). The declared
 /// length, capped at the bound, reserves the buffer once. A read error drops
-/// its URL, which can carry a secret (a join code, a signed asset URL).
+/// its URL, which can carry a secret (a join code, a signed attachment URL).
 pub(crate) async fn read_bounded(
     resp: reqwest::Response,
     max_bytes: usize,

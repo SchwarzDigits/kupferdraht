@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Step 84 — the asset cache keeps only what a message names.
+//! Step 84 — the attachment cache keeps only what a message names.
 //!
 //! A delete for everyone removes its message's cached ciphertext after the
 //! store took the file's row. A client's start removes what is left over: the
@@ -15,8 +15,8 @@ use std::path::Path;
 
 use tracing::warn;
 
-use super::asset_receive::asset_cache_file_name;
-use super::asset_send::{STAGING_DIR, remove_ciphertext_file};
+use super::attachment_receive::attachment_cache_file_name;
+use super::attachment_send::{STAGING_DIR, remove_ciphertext_file};
 use crate::client::Client;
 
 impl Client {
@@ -24,29 +24,32 @@ impl Client {
     /// everyone took. Absent is fine; a failure is logged.
     pub(crate) fn remove_cached_file(&self, message_id: &str) {
         debug_assert!(!message_id.is_empty(), "a deleted message has an id");
-        let Some(dir) = self.assets_dir() else {
+        let Some(dir) = self.attachments_dir() else {
             return;
         };
-        match asset_cache_file_name(message_id) {
+        match attachment_cache_file_name(message_id) {
             Ok(name) => remove_ciphertext_file(&dir.join(name)),
             Err(e) => warn!(message_id, error = %e, "no cache file name for a deleted message"),
         }
     }
 
-    /// Remove what the account's asset cache holds that no message names:
+    /// Remove what the account's attachment cache holds that no message names:
     /// every staged copy and every cached file no attachment row names.
     pub(crate) async fn remove_leftover_files(&self) {
-        let (Some(dir), Some(store)) = (self.assets_dir(), self.store_handle()) else {
+        let (Some(dir), Some(store)) = (self.attachments_dir(), self.store_handle()) else {
             return;
         };
-        debug_assert!(dir.ends_with("assets"), "the sweep runs on the asset cache");
+        debug_assert!(
+            dir.ends_with("attachments"),
+            "the sweep runs on the attachment cache"
+        );
         remove_ciphertext_files(&dir.join(STAGING_DIR), |_| true);
         match store.attachment_message_ids().await {
             Ok(ids) => {
                 let named: HashSet<String> = ids.into_iter().collect();
                 remove_ciphertext_files(&dir, |message_id| !named.contains(message_id));
             }
-            Err(e) => warn!(error = %e, "asset cache kept: attachment rows unreadable"),
+            Err(e) => warn!(error = %e, "attachment cache kept: attachment rows unreadable"),
         }
     }
 }
@@ -58,7 +61,7 @@ fn remove_ciphertext_files(dir: &Path, unnamed: impl Fn(&str) -> bool) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
         Err(e) => {
-            warn!(dir = %dir.display(), error = %e, "asset cache not readable");
+            warn!(dir = %dir.display(), error = %e, "attachment cache not readable");
             return;
         }
     };
