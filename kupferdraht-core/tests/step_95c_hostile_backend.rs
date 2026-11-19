@@ -73,7 +73,7 @@ async fn an_empty_login_access_token_is_an_encoding_error() {
 /// device id — asserted by the rebind, the key-package upload and, in
 /// release builds too, the push loop.
 #[tokio::test]
-async fn an_empty_registered_client_id_is_an_encoding_error() {
+async fn an_empty_registered_device_id_is_an_encoding_error() {
     let server = MockServer::start();
     server.mock(|when, then| {
         when.method(POST).path("/v14/clients");
@@ -91,7 +91,7 @@ async fn an_empty_registered_client_id_is_an_encoding_error() {
 /// formatted into every client path later (Step 137's guard, checked on
 /// the response because the id is the backend's).
 #[tokio::test]
-async fn a_hostile_registered_client_id_is_an_encoding_error() {
+async fn a_hostile_registered_device_id_is_an_encoding_error() {
     for id in ["a/b", "..", "dev?x=1"] {
         let server = MockServer::start();
         let body = format!(r#"{{"id":"{id}","type":"permanent"}}"#);
@@ -129,11 +129,11 @@ async fn an_empty_rebound_access_token_is_an_encoding_error() {
     assert_encoding(login_and_register(&server).await, "empty rebound token");
 }
 
-/// `GET /mls/public-keys` with an empty P-256 removal key used to be
+/// `GET /mls/public-keys` with an empty P-256 external sender key used to be
 /// persisted into a `debug_assert!` — and would be written into every
 /// group's `external_senders` extension.
 #[tokio::test]
-async fn an_empty_backend_removal_key_is_an_encoding_error() {
+async fn an_empty_external_sender_key_is_an_encoding_error() {
     let server = MockServer::start();
     server.mock(|when, then| {
         when.method(GET).path("/v14/mls/public-keys");
@@ -143,7 +143,10 @@ async fn an_empty_backend_removal_key_is_an_encoding_error() {
     });
     common::mount_full_login_flow(&server);
 
-    assert_encoding(login_and_register(&server).await, "empty removal key");
+    assert_encoding(
+        login_and_register(&server).await,
+        "empty external sender key",
+    );
 }
 
 /// `/self` with an empty `qualified_id.domain` used to build the account's

@@ -8,7 +8,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
-import uniffi.kupferdraht.QualifiedUserId
+import uniffi.kupferdraht.UserId
 import uniffi.kupferdraht.SecureKeyStore
 import uniffi.kupferdraht.ServerConfig
 import uniffi.kupferdraht.Kupferdraht
@@ -31,7 +31,7 @@ class KupferdrahtTest {
 
     @Test
     fun parseUserIdReturnsStructuredParts() {
-        val id: QualifiedUserId = parseUserId("alice@example.test")
+        val id: UserId = parseUserId("alice@example.test")
         assertEquals("alice", id.localpart)
         assertEquals("example.test", id.domain)
     }

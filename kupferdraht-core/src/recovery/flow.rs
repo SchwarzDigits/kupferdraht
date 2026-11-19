@@ -13,7 +13,7 @@
 use rand::{CryptoRng, RngCore};
 use zeroize::Zeroizing;
 
-use super::data::{RecoveryData, SEALED_LEN, account_hash, client_id_field, invalid};
+use super::data::{RecoveryData, SEALED_LEN, account_hash, device_id_field, invalid};
 use super::oprf::{self, Blinded};
 use super::pin::normalize_pin;
 use super::pin_service::{self, Evaluation};
@@ -55,11 +55,11 @@ pub(crate) async fn account_slot(
 }
 
 /// The device recovery data belongs to (Step 120, ADR-0040): the account
-/// and its Wire client — the storage slot's label.
+/// and its device — the storage slot's label.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RecoveryDevice<'a> {
     pub(crate) account_id: &'a str,
-    pub(crate) client_id: &'a str,
+    pub(crate) device_id: &'a str,
 }
 
 /// The largest Argon2id memory an opened file may ask for (KiB): a
@@ -96,7 +96,7 @@ pub(crate) async fn seal_for_account(
         salt,
         nonce,
         account_hash: account_hash(device.account_id),
-        client_id: client_id_field(device.client_id)?,
+        device_id: device_id_field(device.device_id)?,
         created_at_ms: u64::try_from(crate::time::now_ms()).unwrap_or_default(),
         refund_key,
         sealed: [0; SEALED_LEN],
@@ -151,7 +151,7 @@ pub(crate) async fn open_for_account(
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum BeforePin {
     /// The account's data for the device its storage slot names: that
-    /// device's Wire client id.
+    /// device's id.
     SlotDevice(String),
     /// Why the data cannot bring the account back here.
     Refused(RecoveryDataVerdict),
@@ -198,10 +198,10 @@ fn local_verdict(data: &RecoveryData, account_id: &str) -> Option<RecoveryDataVe
     None
 }
 
-/// Whether `data` belongs to the Wire client `client_id`; an empty label
+/// Whether `data` belongs to the device `device_id`; an empty label
 /// (a device being set up) names none.
-fn is_device_of(data: &RecoveryData, client_id: &str) -> bool {
-    client_id_field(client_id).is_ok_and(|field| field == data.client_id)
+fn is_device_of(data: &RecoveryData, device_id: &str) -> bool {
+    device_id_field(device_id).is_ok_and(|field| field == data.device_id)
 }
 
 /// What the header says, checked before any request: the account, an
@@ -213,7 +213,7 @@ fn check_header(data: &RecoveryData, device: RecoveryDevice<'_>) -> Result<(), K
     if let Some(verdict) = local_verdict(data, device.account_id) {
         return Err(verdict.refusal());
     }
-    if data.client_id != client_id_field(device.client_id)? {
+    if data.device_id != device_id_field(device.device_id)? {
         return Err(RecoveryDataVerdict::OldDevice.refusal());
     }
     Ok(())
@@ -292,7 +292,7 @@ mod tests {
     const CLIENT: &str = "db8ad281d4aa66";
     const DEVICE: RecoveryDevice<'static> = RecoveryDevice {
         account_id: ACCOUNT,
-        client_id: CLIENT,
+        device_id: CLIENT,
     };
     const SEED: [u8; 32] = [7; 32];
     /// The mock PIN service's OPRF key.
@@ -516,7 +516,7 @@ mod tests {
             &WireSession::Login(Zeroizing::new("wire.token".into())),
             RecoveryDevice {
                 account_id: ACCOUNT,
-                client_id: "fc100a0123ef263d",
+                device_id: "fc100a0123ef263d",
             },
             &data,
             "482913",
@@ -542,7 +542,7 @@ mod tests {
         let data = RecoveryData::decode(&sealed(&exchange, &pin_service).await).expect("data");
 
         assert_eq!(
-            crate::recovery::data::client_id_text(&data.client_id),
+            crate::recovery::data::device_id_text(&data.device_id),
             CLIENT
         );
         assert!(data.created_at_ms > 1_700_000_000_000, "the creation time");
@@ -560,7 +560,7 @@ mod tests {
             &WireSession::Login(Zeroizing::new("wire.token".into())),
             RecoveryDevice {
                 account_id: "other-uuid@example.test",
-                client_id: CLIENT,
+                device_id: CLIENT,
             },
             &data,
             "482913",
@@ -743,7 +743,7 @@ mod tests {
             salt: [0x11; 16],
             nonce: [0x22; 12],
             account_hash: crate::recovery::data::account_hash(ACCOUNT),
-            client_id: crate::recovery::data::client_id_field(CLIENT).expect("client id"),
+            device_id: crate::recovery::data::device_id_field(CLIENT).expect("client id"),
             created_at_ms: 1_791_000_000_000,
             refund_key,
             sealed: [0; SEALED_LEN],

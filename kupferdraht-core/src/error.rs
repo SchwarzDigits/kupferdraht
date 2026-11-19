@@ -19,10 +19,10 @@ pub enum KupferdrahtError {
     /// token.
     #[error("access token expired or rejected")]
     Unauthorized,
-    /// The refresh cookie (`zuid`) is no longer valid — `POST /access`
+    /// The refresh cookie is no longer valid — `POST /access`
     /// returned `403` with label `invalid-credentials` ("Invalid zauth
     /// token"). **Terminal**: unlike `Unauthorized` (a 401 the refresh seam
-    /// recovers), a dead `zuid` cannot be refreshed and the user must
+    /// recovers), a dead refresh cookie cannot be refreshed and the user must
     /// re-authenticate. Distinct from `BackendRejected` so the sync loop can
     /// stop retrying and signal a re-login instead of looping. The MLS state +
     /// chats survive (re-login reuses the device); only the auth tokens are

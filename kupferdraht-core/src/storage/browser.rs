@@ -727,13 +727,13 @@ pub(crate) fn claim_account_slot(path: &Path) -> Result<Option<String>, Kupferdr
 }
 
 /// Step 120 (ADR-0040): label the account's storage slot with this
-/// device's Wire client id — the slot this key holds.
+/// device's id — the slot this key holds.
 ///
 /// # Errors
 /// `DeviceRetired` when another device holds the slot; as
 /// [`claim_account_slot`] otherwise.
-pub(crate) fn label_account_slot(path: &Path, client_id: &str) -> Result<(), KupferdrahtError> {
-    with_server_vfs(path, "label the slot", |vfs| vfs.set_slot_label(client_id)).map(|_| ())
+pub(crate) fn label_account_slot(path: &Path, device_id: &str) -> Result<(), KupferdrahtError> {
+    with_server_vfs(path, "label the slot", |vfs| vfs.set_slot_label(device_id)).map(|_| ())
 }
 
 /// Step 120 (ADR-0040): release the account's storage slot and delete

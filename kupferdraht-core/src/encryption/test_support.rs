@@ -42,8 +42,8 @@ pub(crate) fn group_with_alice_and_bob() -> (MlsClient, Vec<u8>, SignatureKeyPai
 
 /// Add one fresh-device member to Alice's group (generate a real
 /// `KeyPackage`, Add-commit, merge).
-pub(crate) fn add_member(alice: &MlsClient, group_id: &[u8], user_id: &str, client_id: &str) {
-    let member = MlsClient::new_fresh(user_id, client_id).expect("member MlsClient");
+pub(crate) fn add_member(alice: &MlsClient, group_id: &[u8], user_id: &str, device_id: &str) {
+    let member = MlsClient::new_fresh(user_id, device_id).expect("member MlsClient");
     let kp = member
         .generate_key_packages(1)
         .expect("generate_key_packages")

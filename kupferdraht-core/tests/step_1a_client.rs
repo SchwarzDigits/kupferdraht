@@ -174,7 +174,7 @@ async fn successful_login_fetches_self_and_parses_into_self_user() {
 
     let account = client.account();
     assert_eq!(account.user_id().as_str(), "user-uuid@example.test");
-    assert_eq!(account.handle(), Some("alice"));
+    assert_eq!(account.username(), Some("alice"));
     assert_eq!(account.display_name(), "Alice Example");
     assert_eq!(client.api_version(), 14);
     assert_eq!(

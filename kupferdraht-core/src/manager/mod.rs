@@ -197,18 +197,18 @@ impl Kupferdraht {
 
     /// The id of this home (Step 93, ADR-0025): 32 lowercase hex characters
     /// persisted in `base/home.id`, created once under the home lock. Every
-    /// keystore id of this home and its login cookie label carry it.
+    /// keystore id of this home and its session label carry it.
     #[must_use]
     pub fn home_id(&self) -> &str {
         self.home.home_id()
     }
 
-    /// The Wire login cookie label of this home, `kupferdraht-<home-id>`
-    /// (Step 93, ADR-0025): the `(user, label)` slot Wire keeps one refresh
-    /// cookie in — per home, so two homes of one user never evict each other.
+    /// The session label of this home, `kupferdraht-<home-id>` (Step 93,
+    /// ADR-0025): the backend keeps one login per user and label — one label
+    /// per home, so two homes of one user never sign each other out.
     #[must_use]
-    pub fn cookie_label(&self) -> String {
-        self.home.cookie_label()
+    pub fn session_label(&self) -> String {
+        self.home.session_label()
     }
 
     /// Phase 1 of login: authenticate against `server` and return a
@@ -230,11 +230,11 @@ impl Kupferdraht {
         email: String,
         password: String,
         second_factor_code: Option<String>,
-        device_label: Option<String>,
+        initial_device_display_name: Option<String>,
     ) -> Result<Arc<PendingLogin>, KupferdrahtError> {
         let mut builder = self.client_builder(Some(server.clone()));
-        if let Some(label) = device_label {
-            builder = builder.device_label(label);
+        if let Some(display_name) = initial_device_display_name {
+            builder = builder.initial_device_display_name(display_name);
         }
         let inner = builder.login(email, password, second_factor_code).await?;
         let pending = PendingLogin::new(inner, server, self.global.clone());
@@ -269,10 +269,10 @@ impl Kupferdraht {
         &self,
         server: ServerConfig,
         callback_url: &str,
-        device_label: Option<String>,
+        initial_device_display_name: Option<String>,
     ) -> Result<Arc<PendingLogin>, KupferdrahtError> {
         let outcome = crate::wire::sso::read_callback_url(callback_url)?;
-        self.login_with_sso_outcome(server, outcome, device_label)
+        self.login_with_sso_outcome(server, outcome, initial_device_display_name)
             .await
     }
 
@@ -285,11 +285,11 @@ impl Kupferdraht {
         &self,
         server: ServerConfig,
         outcome: crate::wire::sso::SsoResult,
-        device_label: Option<String>,
+        initial_device_display_name: Option<String>,
     ) -> Result<Arc<PendingLogin>, KupferdrahtError> {
         let mut builder = self.client_builder(Some(server.clone()));
-        if let Some(label) = device_label {
-            builder = builder.device_label(label);
+        if let Some(display_name) = initial_device_display_name {
+            builder = builder.initial_device_display_name(display_name);
         }
         let inner = builder.login_with_sso_outcome(outcome).await?;
         let pending = PendingLogin::new(inner, server, self.global.clone());
@@ -413,7 +413,7 @@ async fn register_account(
     let entry = AccountEntry {
         account_id: account.user_id().as_str().to_string(),
         server,
-        handle: account.handle().map(str::to_string),
+        username: account.username().map(str::to_string),
         display_name: (!display.is_empty()).then(|| display.to_string()),
         last_active_ms: crate::time::now_ms(),
     };
@@ -563,7 +563,7 @@ async fn persist_session(
             refresh_token: client.refresh_token().unwrap_or_default(),
             // Step 93: the label this session was logged in with, so a
             // session still on a pre-Step-93 label is diagnosable.
-            cookie_label: client.cookie_label().map(str::to_owned),
+            session_label: client.session_label().map(str::to_owned),
             api_version: client.api_version(),
             access_token_issued_at_ms: crate::time::now_ms(),
         })
@@ -571,7 +571,7 @@ async fn persist_session(
     store
         .save_device(&DeviceRecord {
             user_id: user_id.clone(),
-            client_id: device_id.clone(),
+            device_id: device_id.clone(),
             mls_public_key: Some(
                 base64::engine::general_purpose::STANDARD.encode(client.mls_signature_public_key()),
             ),
@@ -580,14 +580,13 @@ async fn persist_session(
     store
         .save_self_user(&SelfUserRecord {
             id: user_id,
-            handle: account.handle().map(str::to_string),
+            username: account.username().map(str::to_string),
             name: account.display_name().to_string(),
             email: account.email().map(str::to_string),
             team_id: account.team_id().map(str::to_string),
             team_name: account.team_name().map(str::to_string),
-            avatar_thumbnail_key: account.avatar_keys().thumbnail.clone(),
-            avatar_full_key: account.avatar_keys().full.clone(),
-            team_avatar_key: account.team_avatar_key().map(str::to_string),
+            avatar_source: account.avatar_source().clone(),
+            team_avatar_version: account.team_avatar_version().map(str::to_string),
         })
         .await?;
     store
@@ -601,7 +600,7 @@ async fn persist_session(
         .save_backend_mls_key(&BackendMlsKey {
             purpose: "removal".to_string(),
             signature_scheme: "ecdsa_secp256r1_sha256".to_string(),
-            public_key: client.backend_removal_key_ecdsa_p256().to_vec(),
+            public_key: client.external_sender_key().to_vec(),
         })
         .await?;
     Ok(())

@@ -9,7 +9,7 @@ use std::sync::{Arc, Weak};
 use base64::Engine as _;
 
 use super::access::RoomAccess;
-use crate::avatar::AvatarKeys;
+use crate::avatar::AvatarSource;
 use crate::client::Client;
 use crate::error::KupferdrahtError;
 use crate::storage::{RoomMemberRecord, RoomRecord};
@@ -97,32 +97,30 @@ impl RoomMemberRole {
     }
 }
 
-/// One participant in a `Room`. Cycle 2b fills in the qualified
-/// `user_id` and the `is_self` flag only; `display_name` and
-/// `handle` are populated by cycle 2c's `POST /v14/list-users`
+/// One participant in a `Room`. Cycle 2b fills in the `<uuid>@<domain>`
+/// `user_id` and the `is_own` flag only; `display_name` and
+/// `username` are populated by cycle 2c's `POST /v14/list-users`
 /// resolution; `role` comes from the conversation metadata
 /// (Step 72a).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RoomMember {
     pub user_id: String,
-    pub is_self: bool,
+    /// Whether this member is the signed-in user.
+    pub is_own: bool,
     pub display_name: Option<String>,
-    pub handle: Option<String>,
+    pub username: Option<String>,
     pub role: RoomMemberRole,
-    /// The image keys of this member's avatar from the last `list-users`
-    /// (Step 144): Wire's `preview` and `complete`.
-    pub avatar_thumbnail_key: Option<String>,
-    pub avatar_full_key: Option<String>,
+    /// Where this member's avatar images are, from the last `list-users`
+    /// (Step 144).
+    pub avatar_source: AvatarSource,
 }
 
 impl RoomMember {
-    /// The version marker of this member's avatar (Step 144): the thumbnail's
-    /// key, the full image's when the profile has only that.
+    /// The version marker of this member's avatar (Step 144): the id of the
+    /// thumbnail's image, the full image's when the profile has only that.
     #[must_use]
-    pub fn avatar_key(&self) -> Option<&str> {
-        self.avatar_thumbnail_key
-            .as_deref()
-            .or(self.avatar_full_key.as_deref())
+    pub fn avatar_version(&self) -> Option<&str> {
+        self.avatar_source.version()
     }
 }
 
@@ -166,8 +164,8 @@ impl Room {
         })
     }
 
-    /// Qualified room id: `<uuid>@<domain>` (Wire's
-    /// `Qualified_ConvId` rendered as a single string). Stable key
+    /// The room id: `<uuid>@<domain>`, the backend's
+    /// id and domain as a single string. Stable key
     /// for `Client::room`.
     #[must_use]
     pub fn id(&self) -> String {
@@ -477,7 +475,7 @@ impl Room {
     /// `Client::room(id)` yields from then on, verified via
     /// `Arc::ptr_eq`).
     ///
-    /// `user_ids` are qualified `<uuid>@<domain>` strings.
+    /// `user_ids` are `<uuid>@<domain>` strings.
     ///
     /// # Errors
     /// * `KupferdrahtError::InvalidInput` if the owning `Client` has been
@@ -503,7 +501,7 @@ impl Room {
     ///
     /// Step 14e: returns the refreshed `Arc<Room>`.
     ///
-    /// `user_ids` are qualified `<uuid>@<domain>` strings — the same
+    /// `user_ids` are `<uuid>@<domain>` strings — the same
     /// shape `Room::members().user_id` exposes.
     ///
     /// **Self-kick** is intentionally rejected. Removing your own
@@ -895,14 +893,13 @@ fn build_room_members(
     conv: &OwnConversation,
     room_type: RoomType,
 ) -> (Vec<RoomMember>, Option<RoomMember>) {
-    let self_member = RoomMember {
+    let own_member = RoomMember {
         user_id: qualify(&conv.members.self_member.qualified_id),
-        is_self: true,
+        is_own: true,
         display_name: None,
-        handle: None,
+        username: None,
         role: role_from_wire(conv.members.self_member.conversation_role.as_deref()),
-        avatar_thumbnail_key: None,
-        avatar_full_key: None,
+        avatar_source: AvatarSource::default(),
     };
     let others: Vec<RoomMember> = conv
         .members
@@ -910,12 +907,11 @@ fn build_room_members(
         .iter()
         .map(|o| RoomMember {
             user_id: qualify(&o.qualified_id),
-            is_self: false,
+            is_own: false,
             display_name: None,
-            handle: None,
+            username: None,
             role: role_from_wire(o.conversation_role.as_deref()),
-            avatar_thumbnail_key: None,
-            avatar_full_key: None,
+            avatar_source: AvatarSource::default(),
         })
         .collect();
     let counterpart = if room_type == RoomType::DirectMessage && others.len() == 1 {
@@ -924,7 +920,7 @@ fn build_room_members(
         None
     };
     let mut members = Vec::with_capacity(1 + others.len());
-    members.push(self_member);
+    members.push(own_member);
     members.extend(others);
     (members, counterpart)
 }
@@ -959,15 +955,15 @@ pub(crate) fn parse_room_id(room_id: &str) -> Option<QualifiedId> {
     })
 }
 
-/// Collect every non-self member's qualified id across a set of
-/// rooms, deduplicated. This is the input list for
+/// Collect every other member's id across a set of rooms,
+/// deduplicated. This is the input list for
 /// `HttpClient::list_users` during `Client::sync_metadata`.
-pub(crate) fn non_self_qualified_ids(rooms: &[Room]) -> Vec<QualifiedId> {
+pub(crate) fn other_member_ids(rooms: &[Room]) -> Vec<QualifiedId> {
     let mut seen = std::collections::HashSet::new();
     let mut out = Vec::new();
     for room in rooms {
         for m in &room.members {
-            if m.is_self {
+            if m.is_own {
                 continue;
             }
             if !seen.insert(m.user_id.clone()) {
@@ -1004,12 +1000,11 @@ pub(crate) fn room_to_records(
         .map(|m| RoomMemberRecord {
             room_id: room.id.clone(),
             user_id: m.user_id.clone(),
-            is_self: m.is_self,
+            is_own: m.is_own,
             display_name: m.display_name.clone(),
-            handle: m.handle.clone(),
+            username: m.username.clone(),
             role: m.role.as_db_str().to_string(),
-            avatar_thumbnail_key: m.avatar_thumbnail_key.clone(),
-            avatar_full_key: m.avatar_full_key.clone(),
+            avatar_source: m.avatar_source.clone(),
         })
         .collect();
     (record, members)
@@ -1035,12 +1030,11 @@ pub(crate) fn rooms_from_records(
                 .into_iter()
                 .map(|m| RoomMember {
                     user_id: m.user_id,
-                    is_self: m.is_self,
+                    is_own: m.is_own,
                     display_name: m.display_name,
-                    handle: m.handle,
+                    username: m.username,
                     role: RoomMemberRole::from_db_str(&m.role),
-                    avatar_thumbnail_key: m.avatar_thumbnail_key,
-                    avatar_full_key: m.avatar_full_key,
+                    avatar_source: m.avatar_source,
                 })
                 .collect();
             let counterpart = r
@@ -1065,23 +1059,22 @@ pub(crate) fn rooms_from_records(
         .collect()
 }
 
-/// Pre-populate the self-member's `display_name` / `handle` from
+/// Pre-populate the own member's `display_name` / `username` from
 /// the caller's `Account` snapshot, so the CLI's `rooms` output
 /// doesn't render own membership as an unnamed row. `list-users`
-/// deliberately excludes self (the self-resolve path lives in
+/// deliberately excludes the own user (the own profile comes from
 /// `GET /v14/self` and is already owned by `Account`).
-pub(crate) fn apply_self_profile(
+pub(crate) fn apply_own_member_profile(
     mut room: Room,
     display_name: &str,
-    handle: Option<&str>,
-    avatar: &AvatarKeys,
+    username: Option<&str>,
+    avatar: &AvatarSource,
 ) -> Room {
     for m in &mut room.members {
-        if m.is_self {
+        if m.is_own {
             m.display_name = Some(display_name.to_string());
-            m.handle = handle.map(str::to_string);
-            m.avatar_thumbnail_key.clone_from(&avatar.thumbnail);
-            m.avatar_full_key.clone_from(&avatar.full);
+            m.username = username.map(str::to_string);
+            m.avatar_source.clone_from(avatar);
         }
     }
     room
@@ -1089,8 +1082,8 @@ pub(crate) fn apply_self_profile(
 
 /// Apply a user-directory lookup (from
 /// `HttpClient::list_users`) to every member of the supplied room,
-/// including the counterpart slot. A member whose qualified id is
-/// not in the lookup keeps its `None` `display_name` / `handle`.
+/// including the counterpart slot. A member whose id is not in the
+/// lookup keeps its `None` `display_name` / `username`.
 pub(crate) fn apply_user_profiles(mut room: Room, lookup: &HashMap<String, UserProfile>) -> Room {
     for m in &mut room.members {
         if let Some(p) = lookup.get(&m.user_id) {
@@ -1106,11 +1099,9 @@ pub(crate) fn apply_user_profiles(mut room: Room, lookup: &HashMap<String, UserP
 }
 
 fn apply_user_profile(member: &mut RoomMember, profile: &UserProfile) {
-    let avatar = AvatarKeys::from_assets(&profile.assets);
     member.display_name = Some(profile.name.clone());
-    member.handle.clone_from(&profile.handle);
-    member.avatar_thumbnail_key = avatar.thumbnail;
-    member.avatar_full_key = avatar.full;
+    member.username.clone_from(&profile.handle);
+    member.avatar_source = AvatarSource::from_assets(&profile.assets);
 }
 
 #[cfg(test)]
@@ -1215,7 +1206,7 @@ mod tests {
             .counterpart()
             .expect("DM with one other has counterpart");
         assert_eq!(cp.user_id, "bob@example.test");
-        assert!(!cp.is_self);
+        assert!(!cp.is_own);
     }
 
     /// Step 132 item 9: the channel signal is `group_conv_type: "channel"`
@@ -1290,9 +1281,9 @@ mod tests {
         // members contains self + others, self first.
         let ms = room.members().await.expect("members");
         assert_eq!(ms.len(), 3);
-        assert!(ms[0].is_self);
+        assert!(ms[0].is_own);
         assert_eq!(ms[0].user_id, "me@example.test");
-        assert!(!ms[1].is_self);
+        assert!(!ms[1].is_own);
         assert_eq!(ms[1].user_id, "bob@example.test");
         assert_eq!(ms[2].user_id, "carol@other.test");
     }

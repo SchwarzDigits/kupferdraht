@@ -9,26 +9,26 @@ use super::resume_client;
 
 pub(crate) async fn profile_set(
     display_name: Option<String>,
-    handle: Option<String>,
+    username: Option<String>,
 ) -> Result<(), KupferdrahtError> {
-    if display_name.is_none() && handle.is_none() {
+    if display_name.is_none() && username.is_none() {
         return Err(KupferdrahtError::InvalidInput(
-            "profile-set: at least one of --display-name or --handle is required".into(),
+            "profile-set: at least one of --display-name or --username is required".into(),
         ));
     }
     let client = resume_client().await?;
     if let Some(name) = display_name.as_deref() {
         client.set_display_name(name).await?;
     }
-    if let Some(handle) = handle.as_deref() {
-        client.set_handle(handle).await?;
+    if let Some(username) = username.as_deref() {
+        client.set_username(username).await?;
     }
     println!("profile-set ok");
     if let Some(name) = display_name.as_deref() {
         println!("  display_name: {name}");
     }
-    if let Some(handle) = handle.as_deref() {
-        println!("  handle:       {handle}");
+    if let Some(username) = username.as_deref() {
+        println!("  username:     {username}");
     }
     Ok(())
 }

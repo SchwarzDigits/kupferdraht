@@ -35,9 +35,9 @@ impl ClientBuilder {
         provider: Option<&str>,
     ) -> Result<String, KupferdrahtError> {
         let redirects = redirect_url.map(redirect_pair).transpose()?;
-        let (http, cookie_label) = self.sso_transport()?;
+        let (http, session_label) = self.sso_transport()?;
         let provider = sso_provider(&http, provider).await?;
-        http.sso_initiate_login_url(&provider, redirects.as_ref(), &cookie_label)
+        http.sso_initiate_login_url(&provider, redirects.as_ref(), &session_label)
     }
 
     /// Log in from the URL the browser came back to after

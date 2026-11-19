@@ -657,11 +657,11 @@ account's storage — with the seed here, or after a first setup
 (`manager::PendingLogin`'s `first_setup` module, compiled for wasm and
 tests) created it durably — so a takeover of databases another browser
 holds (`registerDevice` / `resume` with `takeOver`) never needs a second
-login. The login cookie label
-`kupferdraht-<home-id>` (`KupferdrahtHome::cookie_label`) derives from the same
+login. The session label
+`kupferdraht-<home-id>` (`KupferdrahtHome::session_label`) derives from the same
 id and replaces the Step-41 per-install label that lived in the
 keystore (`kupferdraht.install-id`, retired, left in place); the login
-records it in `SessionRecord.cookie_label`. The home id itself is an
+records it in `SessionRecord.session_label`. The home id itself is an
 identifier, not a secret (THREAT_MODEL.md); on wasm it is the keystore
 entry `kupferdraht.home-id` (Step 111a — it lives exactly as long as the keys
 whose ids carry it) and the namespace of the local databases; the
@@ -706,7 +706,12 @@ reason }` — refinery's `abort_missing` / `abort_divergent` for `kupferdraht.db
 and `mls.db`, `PRAGMA user_version` (1) for `global.db`. On every platform. `mls.db` has
 the same since Step 142: the openmls fork's `openmls_sqlite_storage` runs
 openmls's migrations grouped (history table
-`openmls_sqlite_storage_migrations`). The current
+`openmls_sqlite_storage_migrations`). Step 163d renamed record fields, not
+columns: `session.cookie_label`, `devices.client_id`, the `handle` and
+`is_self` of `self_user` / `room_members`, their `avatar_*_key` and
+`team_avatar_key` columns keep their names and are read into
+`session_label`, `device_id`, `username`, `is_own`, `avatar_source` and
+`team_avatar_version`. The current
 schema version is **V38**
 (`V38__step_163c_personal_room.sql` — the stored type of the account's
 personal room takes the library's own name, `self_room` → `personal`,

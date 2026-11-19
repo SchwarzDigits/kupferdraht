@@ -37,7 +37,7 @@ fn session_and_login_tokens_are_hidden() {
         device_id: "device".into(),
         access_token: format!("{SECRET}-access"),
         refresh_token: format!("{SECRET}-zuid"),
-        cookie_label: None,
+        session_label: None,
         api_version: 14,
         access_token_issued_at_ms: 1,
     };

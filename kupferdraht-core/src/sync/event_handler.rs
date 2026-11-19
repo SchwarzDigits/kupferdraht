@@ -25,7 +25,7 @@ pub trait EventHandler: Send + Sync {
     /// peer-sent and self-sent messages — Wire echoes back every
     /// device's own send via the event stream. Consumers that want
     /// to dedupe self-messages compare `message.sender_user_id`
-    /// against `Client::account()::qualified_user_id()`.
+    /// against `Client::account().user_id()`.
     fn on_message(&self, message: Message);
 
     /// Kupferdraht has been invited to a new MLS group via a
@@ -69,9 +69,9 @@ pub trait EventHandler: Send + Sync {
 /// persisted, never echoed back to the sender.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypingEvent {
-    /// Qualified room id (`<uuid>@<domain>`).
+    /// Room id (`<uuid>@<domain>`).
     pub room_id: String,
-    /// Qualified user ids (`<uuid>@<domain>`) currently typing in the
+    /// User ids (`<uuid>@<domain>`) currently typing in the
     /// room, sorted for a stable order. Empty when the last typist
     /// stopped — the indicator should clear.
     pub typing_users: Vec<String>,
@@ -82,15 +82,15 @@ pub struct TypingEvent {
 // No `Eq`: `MessageBody::Location` carries `f32` coords (Step 26).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Message {
-    /// Qualified room id (`<uuid>@<domain>`).
+    /// Room id (`<uuid>@<domain>`).
     pub room_id: String,
-    /// Qualified user id of the sender — the leaf openmls authenticated
+    /// User id of the sender — the leaf openmls authenticated
     /// as the signer (Step 95a, ADR-0027), never the backend-written
     /// envelope. A message whose signer carries no Basic credential (an
     /// e2ei X.509 certificate) is dropped before it becomes a `Message`
     /// (Step 135).
     pub sender_user_id: String,
-    /// Wire `client_id` of the sending device, from the same
+    /// The id of the sending device, from the same
     /// authenticated leaf. Set for every inbound message since Step 135
     /// (a Basic leaf always carries one); the `Option` stays for API
     /// stability.

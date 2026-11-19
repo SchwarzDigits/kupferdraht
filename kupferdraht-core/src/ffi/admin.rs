@@ -88,10 +88,11 @@ impl Client {
         self.inner.mls_signature_public_key().to_vec()
     }
 
-    /// Wire's backend external-sender removal key (raw bytes).
+    /// The backend's external sender key: the P-256 public key it signs
+    /// its Remove proposals with (raw bytes).
     #[must_use]
-    pub fn backend_removal_key_ecdsa_p256(&self) -> Vec<u8> {
-        self.inner.backend_removal_key_ecdsa_p256().to_vec()
+    pub fn external_sender_key(&self) -> Vec<u8> {
+        self.inner.external_sender_key().to_vec()
     }
 }
 
@@ -119,12 +120,12 @@ impl Client {
         self.inner.set_display_name(name).await
     }
 
-    /// Set the user's `@handle` (globally unique).
+    /// Set the user's username (unique on the backend).
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn set_handle(&self, handle: &str) -> Result<(), KupferdrahtError> {
-        self.inner.set_handle(handle).await
+    pub async fn set_username(&self, username: &str) -> Result<(), KupferdrahtError> {
+        self.inner.set_username(username).await
     }
 
     /// Ask the backend to change the user's email address (Step 162). It
@@ -181,16 +182,16 @@ impl Client {
             .await
     }
 
-    /// Rename a device's user-visible label.
+    /// Give a device a new display name.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
     pub async fn rename_device(
         &self,
         device_id: &str,
-        label: &str,
+        display_name: &str,
     ) -> Result<(), KupferdrahtError> {
-        self.inner.rename_device(device_id, label).await
+        self.inner.rename_device(device_id, display_name).await
     }
 
     /// Snapshot of every team-feature config (read-only).

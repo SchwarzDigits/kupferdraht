@@ -208,13 +208,13 @@ impl PendingLogin {
         let session = self.login_session();
         // Step 120 (ADR-0040): the data must be the slot's device's; Step 147:
         // what the bytes alone decide is decided before any request.
-        let client_id = match check_before_pin(services, &session, self.user_id(), data).await? {
-            BeforePin::SlotDevice(client_id) => client_id,
+        let device_id = match check_before_pin(services, &session, self.user_id(), data).await? {
+            BeforePin::SlotDevice(device_id) => device_id,
             BeforePin::Refused(verdict) => return Err(verdict.refusal()),
         };
         let device = crate::recovery::flow::RecoveryDevice {
             account_id: self.user_id(),
-            client_id: &client_id,
+            device_id: &device_id,
         };
         let seed = crate::recovery::flow::open_for_account(
             services,

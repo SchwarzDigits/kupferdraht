@@ -160,7 +160,7 @@ impl Home {
             .upsert_account(&AccountEntry {
                 account_id: OTHER.to_owned(),
                 server: self.wire.base_url(),
-                handle: None,
+                username: None,
                 display_name: None,
                 last_active_ms: 1,
             })

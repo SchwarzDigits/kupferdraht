@@ -10,8 +10,8 @@
 //! whose `name` is the variant (Step 110, ADR-0035).
 //!
 //! The vertical exposed here — `Kupferdraht.open → login → PendingLogin.register_device
-//! → Client` — exercises the whole wasm stack end to end: fetch (W5), the `zuid`
-//! browser cookie jar (W6), the persistent `IndexedDb` keystore (W2), and the
+//! → Client` — exercises the whole wasm stack end to end: fetch (W5), the refresh
+//! cookie in the browser's jar (W6), the persistent `IndexedDb` keystore (W2), and the
 //! `SQLite3MC` store — on the storage server (ADR-0035), or over OPFS in the
 //! local mode (Step 91, ADR-0022).
 //!
@@ -419,19 +419,19 @@ impl Kupferdraht {
     }
 
     /// The id of this home (Step 93, ADR-0025) — `home.id` in the OPFS pool,
-    /// 32 lowercase hex; every keystore id and the login cookie label carry
-    /// it (one origin = one home, so it is stable across reloads).
+    /// 32 lowercase hex; every keystore id and the session label carry it
+    /// (one origin = one home, so it is stable across reloads).
     #[wasm_bindgen(getter, js_name = homeId)]
     #[must_use]
     pub fn home_id(&self) -> String {
         self.inner.home_id().to_owned()
     }
 
-    /// The Wire login cookie label of this home, `kupferdraht-<home-id>` (Step 93).
-    #[wasm_bindgen(getter, js_name = cookieLabel)]
+    /// The session label of this home, `kupferdraht-<home-id>` (Step 93).
+    #[wasm_bindgen(getter, js_name = sessionLabel)]
     #[must_use]
-    pub fn cookie_label(&self) -> String {
-        self.inner.cookie_label()
+    pub fn session_label(&self) -> String {
+        self.inner.session_label()
     }
 
     /// Phase 1 of login: authenticate against a Wire server and return a
@@ -439,7 +439,7 @@ impl Kupferdraht {
     ///
     /// `websocket_url`/`title` complete the Wire [`ServerConfig`] (Wire pairs an
     /// HTTPS API host with a separate WS host); pass empty strings if unused for
-    /// this flow. `second_factor_code`/`device_label` are optional.
+    /// this flow. `second_factor_code`/`initial_device_display_name` are optional.
     #[wasm_bindgen(js_name = login)]
     pub async fn login(
         &self,
@@ -449,7 +449,7 @@ impl Kupferdraht {
         email: String,
         password: String,
         second_factor_code: Option<String>,
-        device_label: Option<String>,
+        initial_device_display_name: Option<String>,
     ) -> Result<PendingLogin, JsValue> {
         let server = ServerConfig {
             api_base_url,
@@ -458,7 +458,13 @@ impl Kupferdraht {
         };
         let inner = self
             .inner
-            .login(server, email, password, second_factor_code, device_label)
+            .login(
+                server,
+                email,
+                password,
+                second_factor_code,
+                initial_device_display_name,
+            )
             .await
             .map_err(|e| to_js(&e))?;
         Ok(PendingLogin {
@@ -502,7 +508,7 @@ impl Kupferdraht {
         websocket_url: String,
         title: String,
         message: JsValue,
-        device_label: Option<String>,
+        initial_device_display_name: Option<String>,
     ) -> Result<PendingLogin, JsValue> {
         let message: crate::wire::sso::PageMessage = serde_wasm_bindgen::from_value(message)
             .map_err(|e| named_error("InvalidInput", &format!("SSO page message: {e}")))?;
@@ -514,7 +520,7 @@ impl Kupferdraht {
         };
         let inner = self
             .inner
-            .login_with_sso_outcome(server, outcome, device_label)
+            .login_with_sso_outcome(server, outcome, initial_device_display_name)
             .await
             .map_err(|e| to_js(&e))?;
         Ok(PendingLogin {
@@ -568,7 +574,7 @@ impl Kupferdraht {
     }
 
     /// The device account registry (ids the app can `resume`), as a JS array of
-    /// `{ accountId, server, handle, displayName, lastActiveMs }`.
+    /// `{ accountId, server, username, displayName, lastActiveMs }`.
     #[wasm_bindgen(js_name = accounts)]
     pub async fn accounts(&self) -> Result<JsValue, JsValue> {
         let entries = self.inner.accounts().await.map_err(|e| to_js(&e))?;
@@ -583,25 +589,38 @@ impl Kupferdraht {
 #[serde(rename_all = "camelCase")]
 struct DeviceInfoView {
     device_id: String,
-    class: Option<String>,
-    label: Option<String>,
+    /// `"phone"` | `"tablet"` | `"desktop"` | `"legalHold"` | `"other"`.
+    kind: &'static str,
+    display_name: Option<String>,
     model: Option<String>,
-    registered_at: Option<String>,
-    last_active: Option<String>,
-    is_self: bool,
+    registered_at_ms: Option<i64>,
+    last_seen_ms: Option<i64>,
+    is_own: bool,
 }
 
 impl From<crate::client::DeviceInfo> for DeviceInfoView {
     fn from(d: crate::client::DeviceInfo) -> Self {
         Self {
             device_id: d.device_id,
-            class: d.class,
-            label: d.label,
+            kind: device_kind_name(d.kind),
+            display_name: d.display_name,
             model: d.model,
-            registered_at: d.registered_at,
-            last_active: d.last_active,
-            is_self: d.is_self,
+            registered_at_ms: d.registered_at_ms,
+            last_seen_ms: d.last_seen_ms,
+            is_own: d.is_own,
         }
+    }
+}
+
+/// The JS name of a `DeviceKind` (Step 163d).
+fn device_kind_name(kind: crate::client::DeviceKind) -> &'static str {
+    use crate::client::DeviceKind;
+    match kind {
+        DeviceKind::Phone => "phone",
+        DeviceKind::Tablet => "tablet",
+        DeviceKind::Desktop => "desktop",
+        DeviceKind::LegalHold => "legalHold",
+        DeviceKind::Other => "other",
     }
 }
 
@@ -630,7 +649,7 @@ struct StorageEngineView {
 struct AccountView {
     account_id: String,
     server: String,
-    handle: Option<String>,
+    username: Option<String>,
     display_name: Option<String>,
     last_active_ms: i64,
 }
@@ -640,7 +659,7 @@ impl From<crate::storage::AccountEntry> for AccountView {
         Self {
             account_id: e.account_id,
             server: e.server,
-            handle: e.handle,
+            username: e.username,
             display_name: e.display_name,
             last_active_ms: e.last_active_ms,
         }
@@ -658,7 +677,7 @@ pub struct PendingLogin {
 
 #[wasm_bindgen]
 impl PendingLogin {
-    /// The authenticated user's qualified Wire id.
+    /// The authenticated user's id, `<uuid>@<domain>`.
     #[wasm_bindgen(getter, js_name = userId)]
     #[must_use]
     pub fn user_id(&self) -> String {
@@ -799,7 +818,7 @@ impl PendingLogin {
         devices_to_js(self.inner.devices().await.map_err(|e| to_js(&e))?)
     }
 
-    /// Delete a device by its Wire `client_id` to free a slot (Step 98a).
+    /// Delete a device by its id to free a slot (Step 98a).
     /// No password: phase 1 already authenticated this handle.
     #[wasm_bindgen(js_name = deleteDevice)]
     pub async fn delete_device(&self, device_id: String) -> Result<(), JsValue> {
@@ -833,7 +852,7 @@ pub(super) type RoomsChangedSlot = std::rc::Rc<std::cell::RefCell<Option<js_sys:
 
 #[wasm_bindgen]
 impl Client {
-    /// The logged-in user's qualified Wire id, or `undefined` before identity
+    /// The logged-in user's id (`<uuid>@<domain>`), or `undefined` before identity
     /// is established.
     #[wasm_bindgen(getter, js_name = userId)]
     #[must_use]
@@ -849,13 +868,13 @@ impl Client {
         self.inner.account().email().map(str::to_owned)
     }
 
-    /// The account's handle, or `undefined` when the account has none on
+    /// The account's username, or `undefined` when the account has none on
     /// record (Step 125) — as of the login, `refreshAccount` or this
-    /// session's `setHandle` (Step 152).
+    /// session's `setUsername` (Step 152).
     #[wasm_bindgen(getter)]
     #[must_use]
-    pub fn handle(&self) -> Option<String> {
-        self.inner.account().handle().map(str::to_owned)
+    pub fn username(&self) -> Option<String> {
+        self.inner.account().username().map(str::to_owned)
     }
 
     /// The user's team, or `undefined` for a personal account (Step 143) — as
@@ -993,7 +1012,7 @@ impl Client {
 
     /// The devices of `roomId` (Step 95d) as `{ userId, deviceId,
     /// credential, thumbprint }[]` — one per MLS leaf; `thumbprint` is
-    /// Wire's "MLS Thumbprint".
+    /// the MLS thumbprint the official apps show.
     #[wasm_bindgen(js_name = roomDevices)]
     pub async fn room_devices(&self, room_id: String) -> Result<JsValue, JsValue> {
         let room = self
@@ -1012,7 +1031,7 @@ impl Client {
     }
 
     /// This device's MLS thumbprint (Step 95d) — compare it with the
-    /// "MLS Thumbprint" an official Wire app shows for this device.
+    /// one the official apps show for this device.
     #[wasm_bindgen(js_name = ownDeviceThumbprint)]
     pub fn own_device_thumbprint(&self) -> Result<String, JsValue> {
         self.inner.own_device_thumbprint().map_err(|e| to_js(&e))
@@ -1341,7 +1360,7 @@ impl Client {
         room_to_js(&room).await
     }
 
-    /// Open (or reuse) a 1:1 conversation with the qualified `peer` user id.
+    /// Open (or reuse) a 1:1 conversation with the `peer` user id (`<uuid>@<domain>`).
     /// Returns `{ roomId, name }`.
     #[wasm_bindgen(js_name = createDm)]
     pub async fn create_dm(&self, peer: String) -> Result<JsValue, JsValue> {
@@ -1365,12 +1384,17 @@ impl Client {
     }
 
     /// The version marker of a user's avatar, or `null` (Step 144). A changed
-    /// avatar has a new key; a method because the own key changes in a session.
-    #[wasm_bindgen(js_name = avatarKey)]
-    pub async fn avatar_key(&self, user_id: String) -> Result<JsValue, JsValue> {
+    /// avatar has a new one; a method because the own one changes in a
+    /// session.
+    #[wasm_bindgen(js_name = avatarVersion)]
+    pub async fn avatar_version(&self, user_id: String) -> Result<JsValue, JsValue> {
         let user = UserId::parse(&user_id).map_err(|e| to_js(&e))?;
-        let key = self.inner.avatar_key(&user).await.map_err(|e| to_js(&e))?;
-        Ok(key.map_or(JsValue::NULL, |key| JsValue::from_str(&key)))
+        let version = self
+            .inner
+            .avatar_version(&user)
+            .await
+            .map_err(|e| to_js(&e))?;
+        Ok(version.map_or(JsValue::NULL, |version| JsValue::from_str(&version)))
     }
 
     /// The icon of the account's team as of the last login, or `null` (Step 144).
@@ -1392,7 +1416,8 @@ impl Client {
         self.inner.remove_avatar().await.map_err(|e| to_js(&e))
     }
 
-    /// The members of `roomId` as `{ userId, isSelf, displayName, handle }[]`.
+    /// The members of `roomId` as
+    /// `{ userId, isOwn, displayName, username, role, avatarVersion }[]`.
     #[wasm_bindgen(js_name = members)]
     pub async fn members(&self, room_id: String) -> Result<JsValue, JsValue> {
         let room = self
@@ -1410,7 +1435,7 @@ impl Client {
         js_view::to_js(&view)
     }
 
-    /// Add `userIds` (qualified ids) to `roomId`'s MLS group. Returns the
+    /// Add `userIds` (`<uuid>@<domain>` each) to `roomId`'s MLS group. Returns the
     /// refreshed `{ roomId, name }`.
     #[wasm_bindgen(js_name = invite)]
     pub async fn invite(&self, room_id: String, user_ids: Vec<String>) -> Result<JsValue, JsValue> {
@@ -1562,7 +1587,7 @@ impl Client {
     }
 
     /// Read the own account and team again (Step 152): when the promise
-    /// resolves, `displayName`, `handle`, `email`, `teamId`, `teamName` and
+    /// resolves, `displayName`, `username`, `email`, `teamId`, `teamName` and
     /// `teamAvatar()` answer the new values; on any failure it rejects and
     /// nothing changes. Nothing calls it by itself: the embedder decides
     /// when, for instance at the start and on window focus.
@@ -1580,10 +1605,13 @@ impl Client {
             .map_err(|e| to_js(&e))
     }
 
-    /// Set the user's globally unique `@handle` (Step 98a).
-    #[wasm_bindgen(js_name = setHandle)]
-    pub async fn set_handle(&self, handle: String) -> Result<(), JsValue> {
-        self.inner.set_handle(&handle).await.map_err(|e| to_js(&e))
+    /// Set the user's username, unique on the backend (Step 98a).
+    #[wasm_bindgen(js_name = setUsername)]
+    pub async fn set_username(&self, username: String) -> Result<(), JsValue> {
+        self.inner
+            .set_username(&username)
+            .await
+            .map_err(|e| to_js(&e))
     }
 
     /// Ask the backend to change the account's email address (Step 98a,
@@ -1678,7 +1706,7 @@ impl Client {
     }
 
     /// Revoke the session server-side (`POST /access/logout`); the browser
-    /// cookie jar's `zuid` is invalidated by Wire. `options` is
+    /// jar's refresh cookie is invalidated by the backend. `options` is
     /// `{ purgeDevice?: boolean, password?: string, purgeLocal?: boolean }`
     /// (ADR-0035): without options the account's keys and data stay, so the
     /// next login needs no recovery data — only `activeAccount` is cleared
@@ -1911,25 +1939,25 @@ struct FileSharingView {
 #[serde(rename_all = "camelCase")]
 struct MemberView {
     user_id: String,
-    is_self: bool,
+    is_own: bool,
     display_name: Option<String>,
-    handle: Option<String>,
+    username: Option<String>,
     /// `"administrator"` | `"member"` (Step 72a — same neutral
     /// vocabulary the native FFI mirrors via `RoomMemberRole`).
     role: String,
     /// The version marker of the member's avatar (Step 144).
-    avatar_key: Option<String>,
+    avatar_version: Option<String>,
 }
 
 impl From<&crate::rooms::RoomMember> for MemberView {
     fn from(m: &crate::rooms::RoomMember) -> Self {
         Self {
             user_id: m.user_id.clone(),
-            is_self: m.is_self,
+            is_own: m.is_own,
             display_name: m.display_name.clone(),
-            handle: m.handle.clone(),
+            username: m.username.clone(),
             role: m.role.as_db_str().to_string(),
-            avatar_key: m.avatar_key().map(str::to_owned),
+            avatar_version: m.avatar_version().map(str::to_owned),
         }
     }
 }
@@ -2021,7 +2049,7 @@ struct ReactionView {
     count: u32,
     /// Step 98c: whether the local user is among this group's senders. The
     /// core aggregates `{emoji, senders}`; a bare count cannot express it.
-    is_self: bool,
+    is_own: bool,
 }
 
 /// File metadata for an attachment timeline item.
@@ -2034,8 +2062,8 @@ struct AttachmentMeta {
 }
 
 impl TimelineItemView {
-    /// Project a core item for JS. `me` is the local user's qualified id,
-    /// needed for `ReactionView::is_self`; `None` degrades that flag to
+    /// Project a core item for JS. `me` is the local user's id,
+    /// needed for `ReactionView::is_own`; `None` degrades that flag to
     /// `false` rather than guessing.
     #[allow(clippy::cast_precision_loss)]
     fn project(it: &crate::timeline::TimelineItem, me: Option<&str>) -> Self {
@@ -2078,7 +2106,7 @@ impl TimelineItemView {
             .map(|r| ReactionView {
                 emoji: r.emoji.clone(),
                 count: u32::try_from(r.senders.len()).unwrap_or(u32::MAX),
-                is_self: me.is_some_and(|me| r.senders.iter().any(|s| s == me)),
+                is_own: me.is_some_and(|me| r.senders.iter().any(|s| s == me)),
             })
             .collect();
         Self {

@@ -17,12 +17,12 @@ use kupferdraht::keystore::{InMemoryKeyStore, SecureKeyStore};
 use kupferdraht::storage::{AccountEntry, open_default_global_store};
 use tempfile::TempDir;
 
-fn entry(account_id: &str, handle: &str) -> AccountEntry {
+fn entry(account_id: &str, username: &str) -> AccountEntry {
     AccountEntry {
         account_id: account_id.into(),
         server: "https://wire.example".into(),
-        handle: Some(handle.into()),
-        display_name: Some(handle.into()),
+        username: Some(username.into()),
+        display_name: Some(username.into()),
         last_active_ms: 1_700_000_000_000,
     }
 }
@@ -56,7 +56,7 @@ async fn global_store_registers_lists_and_removes_accounts() {
         .iter()
         .find(|a| a.account_id == "alice@example.test")
         .expect("alice present");
-    assert_eq!(alice.handle.as_deref(), Some("alice-renamed"));
+    assert_eq!(alice.username.as_deref(), Some("alice-renamed"));
 
     global
         .remove_account("bob@example.test")

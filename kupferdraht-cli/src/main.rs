@@ -16,7 +16,7 @@ use crate::cli::{read_password, read_secret};
 
 /// A secret from stdin (`from_stdin`, its first line) or the TTY prompt,
 /// or the exit code `2` after a line on stderr; the value may not be
-/// empty. Step 137: the `zuid` cookie and a link's key never go into argv.
+/// empty. Step 137: the refresh cookie and a link's key never go into argv.
 fn secret_or_exit(from_stdin: bool, prompt: &str, what: &str) -> Result<String, ExitCode> {
     match read_secret(from_stdin, prompt) {
         Ok(secret) if !secret.is_empty() => Ok(secret),
@@ -45,7 +45,7 @@ struct Cli {
 enum TaskCommand {
     /// Create and send a new task (status starts at `open`). Step 60a.
     Add {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// Task headline (required, non-empty).
@@ -54,7 +54,7 @@ enum TaskCommand {
         /// Free-text description; links are plain text inside it.
         #[arg(long)]
         description: Option<String>,
-        /// Qualified user id (`<uuid>@<domain>`) of the assignee.
+        /// User id (`<uuid>@<domain>`) of the assignee.
         #[arg(long)]
         assignee: Option<String>,
         /// Due date, ISO 8601: `yyyy-mm-dd` (due by end of that local
@@ -83,7 +83,7 @@ enum TaskCommand {
     /// `--mine` (assigned to me, open/in-progress) or `--delegated`
     /// (created by me, assigned to someone else). Steps 60b/60c.
     List {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long, conflicts_with_all = ["mine", "delegated"])]
         id: Option<String>,
         /// Cross-room: tasks assigned to me, still open/in-progress.
@@ -97,7 +97,7 @@ enum TaskCommand {
     /// between the `--after`/`--before` neighbors, sent as an ordinary
     /// full-state update. Step 60c.
     Move {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// The task's stable `task_id` (from `task list`).
@@ -120,7 +120,7 @@ enum TaskCommand {
     },
     /// Mark a task done (status = done). Step 60b.
     Done {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// The task's stable `task_id` (from `task list`).
@@ -137,13 +137,13 @@ enum TaskCommand {
     },
     /// Re-assign a task to another member. Step 60b.
     Assign {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// The task's stable `task_id` (from `task list`).
         #[arg(long)]
         task: String,
-        /// Qualified user id (`<uuid>@<domain>`) of the new assignee.
+        /// User id (`<uuid>@<domain>`) of the new assignee.
         #[arg(short = 'u', long)]
         user: String,
         /// Send the bare payload without the Text fallback (mode a).
@@ -158,7 +158,7 @@ enum TaskCommand {
     /// Edit task fields via a set-only patch (at least one field
     /// required; optional fields can be set, not cleared). Step 60b.
     Edit {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// The task's stable `task_id` (from `task list`).
@@ -170,7 +170,7 @@ enum TaskCommand {
         /// New free-text description.
         #[arg(long)]
         description: Option<String>,
-        /// Qualified user id (`<uuid>@<domain>`) of the assignee.
+        /// User id (`<uuid>@<domain>`) of the assignee.
         #[arg(long)]
         assignee: Option<String>,
         /// Due date, ISO 8601: `yyyy-mm-dd` (due by end of that local
@@ -201,7 +201,7 @@ enum TaskCommand {
     /// re-broadcast to invitees. Official clients see nothing.
     /// Step 75.
     Mark {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// Clear the marker instead of setting it.
@@ -215,7 +215,7 @@ enum AvatarCommand {
     /// Download an avatar, written anew by Kupferdraht: a user's with `--user`,
     /// the team's icon with `--team`.
     Get {
-        /// Qualified user id (`<uuid>@<domain>`).
+        /// User id (`<uuid>@<domain>`).
         #[arg(long, conflicts_with = "team", required_unless_present = "team")]
         user: Option<String>,
         /// The icon of the account's team, as of the last login.
@@ -405,7 +405,7 @@ enum Command {
     /// registered at Wire — delete it with `device-delete` from another
     /// device, or sign in and use `logout --purge-device` instead.
     AccountForget {
-        /// Qualified account id (`<uuid>@<domain>`), as printed by
+        /// Account id (`<uuid>@<domain>`), as printed by
         /// `kupferdraht-cli accounts`.
         #[arg(long)]
         id: String,
@@ -416,7 +416,7 @@ enum Command {
     /// Loads the latest session, server config, device, self-user,
     /// and backend removal key from `kupferdraht.db`, refreshes the
     /// access token via `POST /v14/access?client_id=<id>` using the
-    /// persisted `zuid` refresh cookie, then drives
+    /// persisted refresh cookie, then drives
     /// `Client::sync_metadata` through
     /// `POST /v14/conversations/list-ids` +
     /// `POST /v14/conversations/list` + `POST /v14/list-users`.
@@ -445,7 +445,7 @@ enum Command {
     /// Requires a prior `kupferdraht-cli login` and a recent `kupferdraht-cli
     /// sync` so the target room id is in the cache.
     RoomJoin {
-        /// Qualified room id (`<uuid>@<domain>`) as printed by
+        /// Room id (`<uuid>@<domain>`) as printed by
         /// `kupferdraht-cli rooms`.
         #[arg(long)]
         id: String,
@@ -463,18 +463,18 @@ enum Command {
     RejoinAll,
     /// List the members of a room as derived from the local MLS
     /// group's leaves (post-`room-join`). Resolves display name /
-    /// handle for every non-self leaf via `POST /v14/list-users`.
+    /// username for every other member's leaf via `POST /v14/list-users`.
     RoomMembers {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
     /// List the devices of a room — one per leaf of the local MLS group,
-    /// with the MLS thumbprint to compare against the "MLS Thumbprint" an
-    /// official Wire app shows in the device details. `*` marks this
+    /// with the MLS thumbprint to compare against the one the official
+    /// apps show in the device details. `*` marks this
     /// device. Step 95d.
     RoomDevices {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
@@ -484,7 +484,7 @@ enum Command {
     /// Persists a `timeline_events` row with
     /// `delivery_status='submitted'`.
     Send {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// Message body to send.
@@ -517,7 +517,7 @@ enum Command {
     /// `--id <room> --all` — that pass stops at the first hard
     /// error and leaves the rest failed for the next run.
     Resend {
-        /// Qualified room id (`<uuid>@<domain>`). Required with
+        /// Room id (`<uuid>@<domain>`). Required with
         /// `--all`; optional with `--message` (auto-resolved from
         /// the message id against the local timeline cache).
         #[arg(long)]
@@ -537,7 +537,7 @@ enum Command {
     /// List a room's failed sends (`delivery_status='failed'`),
     /// oldest first — the rows `resend` can re-drive. Step 79.
     FailedSends {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
@@ -567,7 +567,7 @@ enum Command {
     /// group is registered server-side via `POST /v14/conversations`
     /// and the local MLS state is built at epoch 0 with Wire's
     /// backend removal key in the `external_senders` extension.
-    /// Print the qualified `room_id` so subsequent `send` /
+    /// Print the `room_id` so subsequent `send` /
     /// `room-join` / `room-members` calls can target it.
     RoomCreate {
         /// Room name (1–256 characters per Wire's schema).
@@ -581,10 +581,10 @@ enum Command {
     /// freshly-created (epoch 0) room also unlocks `send` against
     /// it (CHANGELOG.md §25).
     RoomInvite {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
-        /// One or more qualified user ids (`<uuid>@<domain>`),
+        /// One or more user ids (`<uuid>@<domain>`),
         /// repeatable.
         #[arg(short = 'u', long = "user", required = true, num_args = 1..)]
         users: Vec<String>,
@@ -595,10 +595,10 @@ enum Command {
     /// leaves), uploads it to `/v14/mls/commit-bundles`, and
     /// re-syncs the room metadata. Self-kick is rejected.
     RoomKick {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
-        /// One or more qualified user ids (`<uuid>@<domain>`),
+        /// One or more user ids (`<uuid>@<domain>`),
         /// repeatable.
         #[arg(short = 'u', long = "user", required = true, num_args = 1..)]
         users: Vec<String>,
@@ -610,10 +610,10 @@ enum Command {
     /// the peer's key packages + upload the establishing Add-commit
     /// (only then does wire-server list the conversation); epoch > 0
     /// → external-commit join; local group present → resume. Runs
-    /// `sync_metadata` and prints the resulting qualified `room_id`.
+    /// `sync_metadata` and prints the resulting `room_id`.
     /// matrix-rust-sdk analog: `Client::create_dm`.
     DmCreate {
-        /// Qualified peer user id (`<uuid>@<domain>`).
+        /// Peer user id (`<uuid>@<domain>`).
         #[arg(long)]
         peer: String,
     },
@@ -624,7 +624,7 @@ enum Command {
     /// `room-members` on a cache miss). matrix-rust-sdk analog:
     /// `Client::get_dm_room` (renamed per finding §41).
     DmShow {
-        /// Qualified peer user id (`<uuid>@<domain>`).
+        /// Peer user id (`<uuid>@<domain>`).
         #[arg(long)]
         peer: String,
     },
@@ -635,7 +635,7 @@ enum Command {
     /// peer de-duplicate the POST. Kupferdraht-specific (no
     /// matrix-rust-sdk analog — see finding §42).
     DmWith {
-        /// Qualified peer user id (`<uuid>@<domain>`).
+        /// Peer user id (`<uuid>@<domain>`).
         #[arg(long)]
         peer: String,
     },
@@ -662,14 +662,14 @@ enum Command {
         #[arg(long)]
         replenish: bool,
     },
-    /// Revoke a registered device by its `client_id` (Step 1d).
-    /// Wire re-authenticates by the account's password; pass it via
-    /// stdin (`--password-stdin`) or be prompted interactively — an
+    /// Revoke a registered device by its id (Step 1d).
+    /// The backend re-authenticates by the account's password; pass it
+    /// via stdin (`--password-stdin`) or be prompted interactively — an
     /// account without one (SSO) answers with an empty line.
     /// Refuses to delete the *current* device — use `logout` for
     /// that once Step 6e ships.
     DeviceDelete {
-        /// Wire `client_id` (hexadecimal) of the device to delete,
+        /// Device id (hexadecimal) of the device to delete,
         /// as printed by `kupferdraht-cli devices`.
         #[arg(long)]
         id: String,
@@ -678,33 +678,33 @@ enum Command {
         #[arg(long)]
         password_stdin: bool,
     },
-    /// Rename a registered device (Step 1d). Updates the
-    /// user-visible label shown in Wire's settings UI.
+    /// Give a registered device a new display name (Step 1d), the name
+    /// the user's device list shows.
     DeviceRename {
-        /// Wire `client_id` of the device to rename, as printed
+        /// Device id of the device to rename, as printed
         /// by `kupferdraht-cli devices`.
         #[arg(long)]
         id: String,
-        /// New label.
-        #[arg(short = 'l', long)]
-        label: String,
+        /// The new display name.
+        #[arg(short = 'n', long)]
+        name: String,
     },
     /// Read the own account and team again (Step 152) and print them:
     /// `GET /self`, then `GET /teams/{tid}`. On a failure nothing changes.
     AccountRefresh,
     /// Update the authenticated user's profile (Step 2g). At least
-    /// one of `--display-name` or `--handle` must be supplied.
-    /// `--display-name` patches Wire's `PUT /v{N}/self`;
-    /// `--handle` patches `PUT /v{N}/self/handle`. Both are sent
+    /// one of `--display-name` or `--username` must be supplied.
+    /// `--display-name` patches `PUT /v{N}/self`;
+    /// `--username` patches `PUT /v{N}/self/handle`. Both are sent
     /// independently when both are supplied.
     ProfileSet {
-        /// New display name (Wire's `name` field).
+        /// New display name.
         #[arg(long)]
         display_name: Option<String>,
-        /// New handle (Wire's `handle` field). Wire enforces global
-        /// uniqueness; collisions surface as `BackendRejected`.
+        /// New username. The backend keeps usernames unique; one
+        /// already taken surfaces as `BackendRejected`.
         #[arg(long)]
-        handle: Option<String>,
+        username: Option<String>,
     },
     /// Ask the backend to change the account email (Step 98a, renamed in
     /// 162): `PUT /v{N}/access/self/email`. The backend mails a confirmation
@@ -721,7 +721,7 @@ enum Command {
     /// process, so one command does both. Past 11 seconds the automatic
     /// stop comes first and the explicit one sends nothing.
     Typing {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// How long the notice stands before the stop.
@@ -737,7 +737,7 @@ enum Command {
     /// `PUT /v{N}/conversations/{domain}/{id}/name`. Wire emits a
     /// `conversation.rename` event to all members.
     RoomRename {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// New conversation name.
@@ -749,7 +749,7 @@ enum Command {
     /// success the room no longer appears in `rooms` and `send`
     /// against it fails.
     RoomLeave {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
@@ -759,7 +759,7 @@ enum Command {
     /// conversation's `team` field. Only valid for team conversations —
     /// a 1:1 / non-team group is rejected (leave it instead).
     RoomDelete {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
@@ -776,7 +776,7 @@ enum Command {
     /// it explicitly when the message has not been synced locally
     /// or when the lookup is ambiguous.
     MarkRead {
-        /// Qualified room id (`<uuid>@<domain>`). Optional —
+        /// Room id (`<uuid>@<domain>`). Optional —
         /// auto-resolved from `--message` against the local
         /// timeline cache when omitted.
         #[arg(long)]
@@ -792,7 +792,7 @@ enum Command {
     /// although its messages are read. Device-local — Wire carries no
     /// message for it; the next `mark-read` of the room clears it.
     MarkUnread {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
@@ -805,7 +805,7 @@ enum Command {
     /// `--id` is optional — see `mark-read` for the resolution
     /// rule.
     React {
-        /// Qualified room id (`<uuid>@<domain>`). Optional —
+        /// Room id (`<uuid>@<domain>`). Optional —
         /// auto-resolved from `--message` against the local
         /// timeline cache when omitted.
         #[arg(long)]
@@ -831,7 +831,7 @@ enum Command {
     /// `--id` is optional — see `mark-read` for the resolution
     /// rule.
     DeleteMessage {
-        /// Qualified room id (`<uuid>@<domain>`). Optional —
+        /// Room id (`<uuid>@<domain>`). Optional —
         /// auto-resolved from `--message` against the local
         /// timeline cache when omitted.
         #[arg(long)]
@@ -849,7 +849,7 @@ enum Command {
     /// `--id` is optional — see `mark-read` for the resolution
     /// rule.
     Edit {
-        /// Qualified room id (`<uuid>@<domain>`). Optional —
+        /// Room id (`<uuid>@<domain>`). Optional —
         /// auto-resolved from `--message` against the local
         /// timeline cache when omitted.
         #[arg(long)]
@@ -871,7 +871,7 @@ enum Command {
     /// parent message's room via `--to` against the local
     /// timeline cache.
     Reply {
-        /// Qualified room id (`<uuid>@<domain>`). Optional —
+        /// Room id (`<uuid>@<domain>`). Optional —
         /// auto-resolved from `--to` against the local timeline
         /// cache when omitted.
         #[arg(long)]
@@ -889,7 +889,7 @@ enum Command {
     /// after `sync-fetch` / `sync-stream` so the receive-path has
     /// populated the rows first.
     Timeline {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// Maximum number of items to print (omitted = no limit).
@@ -901,7 +901,7 @@ enum Command {
         before: Option<String>,
     },
     /// Sign out of the backend (Step 6e-2; through the device manager
-    /// since Step 78). Revokes the `zuid` refresh cookie server-side via
+    /// since Step 78). Revokes the refresh cookie server-side via
     /// `POST /v{N}/access/logout` and marks the account signed out: it is
     /// no longer the active account, so the next command asks for a
     /// `login`. With `--purge-device`, **also** issues
@@ -939,7 +939,7 @@ enum Command {
     /// (TTY, no echo) — there is deliberately no `--password` flag
     /// to keep secrets out of `ps`.
     JoinLinkGenerate {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// Issue a password-protected link. The password is read on
@@ -952,7 +952,7 @@ enum Command {
     /// `DELETE /v{N}/conversations/{cnv}/code` (Step 8). Idempotent:
     /// revoking a non-existent code is a no-op.
     JoinLinkRevoke {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
@@ -960,7 +960,7 @@ enum Command {
     /// `GET /v{N}/conversations/{cnv}/code` (Step 8). Prints
     /// `(no link issued)` when none is on file.
     JoinLinkCurrent {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
@@ -968,13 +968,13 @@ enum Command {
     /// users allowed. Asks the backend, so the output is the live state,
     /// not the local sync snapshot.
     RoomAccessShow {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
     /// Set who may join a room and how (Step 8b, typed by Step 163c).
     RoomAccessSet {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// Comma-separated join rules: `private`, `invite`, `link`,
@@ -992,7 +992,7 @@ enum Command {
     /// Kupferdraht creates admits by invite only; calling this once is the
     /// prerequisite for `join-link-generate`.
     RoomAccessAllowGuests {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
@@ -1043,7 +1043,7 @@ enum Command {
     /// network traffic — `Disabled` rejects with InvalidInput;
     /// `Enabled` proceeds.
     SendFile {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// Path to the plaintext file to send. Streamed through
@@ -1064,7 +1064,7 @@ enum Command {
     /// Send a ping to a room (Step 26): a message without content that
     /// draws the room's attention.
     Ping {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// Send a repeated ping, sent again to insist, instead of a
@@ -1076,7 +1076,7 @@ enum Command {
     /// emits a `GenericMessage { location { longitude, latitude, name?,
     /// zoom? } }`.
     Location {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// Latitude in decimal degrees.
@@ -1106,7 +1106,7 @@ enum Command {
     /// caller to be a conversation administrator). Unset flags keep
     /// their current values.
     CaseSet {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
         /// Case identity — honored only when creating.
@@ -1125,7 +1125,7 @@ enum Command {
         /// Free-text sub-state.
         #[arg(long)]
         detail: Option<String>,
-        /// Qualified user id of the assignee.
+        /// User id (`<uuid>@<domain>`) of the assignee.
         #[arg(long)]
         assignee: Option<String>,
         /// Deadline, milliseconds since Unix epoch.
@@ -1145,7 +1145,7 @@ enum Command {
     /// Print the folded case state of a room (Step 72c) — the latest
     /// admin-authorized snapshot plus display-only extensions.
     CaseShow {
-        /// Qualified room id (`<uuid>@<domain>`).
+        /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
     },
@@ -1353,12 +1353,12 @@ async fn async_main() -> ExitCode {
         Command::DeviceDelete { id, password_stdin } => {
             cli::devices::device_delete(id, password_stdin).await
         }
-        Command::DeviceRename { id, label } => cli::devices::device_rename(id, label).await,
+        Command::DeviceRename { id, name } => cli::devices::device_rename(id, name).await,
         Command::AccountRefresh => cli::auth::account_refresh().await,
         Command::ProfileSet {
             display_name,
-            handle,
-        } => cli::config::profile_set(display_name, handle).await,
+            username,
+        } => cli::config::profile_set(display_name, username).await,
         Command::EmailChange { email } => cli::config::email_change(email).await,
         Command::Typing { id, seconds } => cli::rooms::typing(id, seconds).await,
         Command::ChangePassword => cli::auth::change_password().await,

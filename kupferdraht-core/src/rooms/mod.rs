@@ -31,6 +31,6 @@ pub(crate) use devices::{device_set_change, room_device_from_leaf};
 pub use room::{JoinLink, Room, RoomMember, RoomMemberRole, RoomType};
 
 pub(crate) use room::{
-    apply_self_profile, apply_user_profiles, non_self_qualified_ids, parse_room_id,
+    apply_own_member_profile, apply_user_profiles, other_member_ids, parse_room_id,
     room_from_conversation, room_to_records, rooms_from_records, with_epoch, with_members,
 };

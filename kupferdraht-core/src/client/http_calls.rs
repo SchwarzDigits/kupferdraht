@@ -5,7 +5,7 @@
 //!
 //! The thin `self.http` forwarding slice of the `Client` runtime
 //! (Step 29): crate-private helpers that wrap a single Wire endpoint
-//! each (`http_send`, `http_list_clients`, `http_fetch_notifications`,
+//! each (`http_send`, `http_list_devices`, `http_fetch_notifications`,
 //! `http_upload_attachment`, …) so the timeline / device / sync modules do
 //! not reach into `self.http` / `self.api_version` directly.
 
@@ -44,7 +44,7 @@ impl Client {
     /// `Client::devices()`. Wraps the transport call so the device
     /// module doesn't need direct access to `self.http` /
     /// `self.api_version`.
-    pub(crate) async fn http_list_clients(
+    pub(crate) async fn http_list_devices(
         &self,
         access_token: &str,
     ) -> Result<Vec<crate::wire::dto::WireClient>, KupferdrahtError> {
@@ -53,27 +53,28 @@ impl Client {
 
     /// Crate-scoped HTTP helper — `DELETE /v14/clients/{id}`. Used by
     /// Step 1d's `Client::delete_device()`.
-    pub(crate) async fn http_delete_client(
+    pub(crate) async fn http_delete_device(
         &self,
         access_token: &str,
-        client_id: &str,
+        device_id: &str,
         password: Option<&str>,
     ) -> Result<(), KupferdrahtError> {
         self.http
-            .delete_client(self.api_version, access_token, client_id, password)
+            .delete_client(self.api_version, access_token, device_id, password)
             .await
     }
 
-    /// Crate-scoped HTTP helper — `PUT /v14/clients/{id}` with a
-    /// `label` body. Used by Step 1d's `Client::rename_device()`.
-    pub(crate) async fn http_update_client_label(
+    /// Crate-scoped HTTP helper — `PUT /v14/clients/{id}` with the
+    /// device's new display name. Used by Step 1d's
+    /// `Client::rename_device()`.
+    pub(crate) async fn http_rename_device(
         &self,
         access_token: &str,
-        client_id: &str,
-        label: &str,
+        device_id: &str,
+        display_name: &str,
     ) -> Result<(), KupferdrahtError> {
         self.http
-            .update_client_label(self.api_version, access_token, client_id, label)
+            .update_client_label(self.api_version, access_token, device_id, display_name)
             .await
     }
 

@@ -56,8 +56,8 @@ impl Client {
     ///    the user's password for this (Step 1d's surface). Doing this
     ///    *before* the cookie-revocation step ensures the access token
     ///    still works for the device-delete authorization.
-    /// 2. `POST /v14/access/logout` — revoke the `zuid` refresh
-    ///    cookie server-side. The access token itself expires
+    /// 2. `POST /v14/access/logout` — revoke the refresh cookie
+    ///    server-side. The access token itself expires
     ///    naturally within its ~15 min TTL; no further `/access`
     ///    rebinds are possible after this.
     /// 3. (Caller — typically the CLI — optionally wipes the local
@@ -94,7 +94,7 @@ impl Client {
         password: Option<&str>,
     ) -> Result<(), KupferdrahtError> {
         if purge_device {
-            self.http_delete_client(
+            self.http_delete_device(
                 &self.current_access_token(),
                 &self.device_id,
                 super::device::given_password(password),
@@ -157,8 +157,8 @@ impl Client {
         Some(&self.user_id)
     }
 
-    /// Wire device id (the hexadecimal `client_id` returned from
-    /// `POST /v14/clients`).
+    /// The device id: the hexadecimal id `POST /v14/clients` gave this
+    /// device.
     ///
     /// Optional for the same reason as `user_id`.
     #[must_use]
@@ -235,7 +235,7 @@ impl Client {
             .unwrap_or_default()
     }
 
-    /// Wire's `zuid` refresh-cookie value. The CLI persists this in
+    /// The refresh cookie's value. The CLI persists this in
     /// `SessionRecord.refresh_token` so a later `kupferdraht-cli sync`
     /// can drive `ClientBuilder::resume` without the password.
     ///
@@ -246,7 +246,7 @@ impl Client {
         Some(self.current_refresh_token())
     }
 
-    /// Snapshot of the current `zuid` refresh cookie (read-lock + clone).
+    /// Snapshot of the current refresh cookie (read-lock + clone).
     pub(super) fn current_refresh_token(&self) -> String {
         self.tokens
             .read()
@@ -284,9 +284,8 @@ impl Client {
         &self.mls_signature_public_key
     }
 
-    /// Wire's backend external-sender public key for the P-256
-    /// signature scheme (`removal` purpose). Raw bytes, base64-decoded
-    /// from the Wire response.
+    /// The backend's external sender key: the P-256 public key it signs
+    /// its Remove proposals with, as raw bytes.
     ///
     /// Fetched during login from `GET /v14/mls/public-keys` and embedded
     /// into every MLS group's `external_senders` extension so
@@ -295,7 +294,7 @@ impl Client {
     ///
     /// Wire-specific extension — matrix-rust-sdk has no equivalent.
     #[must_use]
-    pub fn backend_removal_key_ecdsa_p256(&self) -> &[u8] {
-        &self.backend_removal_key_ecdsa_p256
+    pub fn external_sender_key(&self) -> &[u8] {
+        &self.external_sender_key
     }
 }

@@ -7,7 +7,7 @@
 //! A room's devices are the leaves of its MLS group: who they belong to
 //! (the W-4 identity of a Basic credential; unparsed for an e2ei X.509
 //! leaf) and the MLS thumbprint of each leaf's signature key — the RFC
-//! 7638 JWK thumbprint official Wire apps show as "MLS Thumbprint", so a
+//! 7638 JWK thumbprint the official apps show for a device, so a
 //! user can compare devices across clients. Every change of a room's
 //! device set (a leaf added, removed, or re-keyed) is reported to the
 //! [`RoomDevicesListener`]s as a diff against the last persisted set, so
@@ -18,7 +18,7 @@
 /// The credential type of a device's MLS leaf.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, uniffi::Enum)]
 pub enum DeviceCredential {
-    /// A Wire `BasicCredential` (`{uuid}:{client_id}@{domain}`).
+    /// A Basic credential (RFC 9420), naming its user and device.
     Basic,
     /// An e2ei X.509 credential — its identity is not parsed yet.
     X509,
@@ -27,16 +27,17 @@ pub enum DeviceCredential {
 /// One device (MLS leaf) of a room.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, uniffi::Record)]
 pub struct RoomDevice {
-    /// Qualified user id; `None` for an X.509 leaf or a Basic leaf whose
-    /// identity is not Wire's W-4 shape.
+    /// The `<uuid>@<domain>` user id; `None` for an X.509 leaf or a Basic
+    /// leaf whose identity has another shape than the backend gives its
+    /// devices (W-4).
     pub user_id: Option<String>,
-    /// Wire `client_id`; `None` exactly when `user_id` is.
+    /// The device id; `None` exactly when `user_id` is.
     pub device_id: Option<String>,
     /// The leaf's credential type.
     pub credential: DeviceCredential,
     /// RFC 7638 JWK thumbprint (SHA-256, base64url, no padding) of the
-    /// leaf's signature key — Wire's "MLS Thumbprint". `None` when the
-    /// key is not a P-256 SEC1 point.
+    /// leaf's signature key — the MLS thumbprint the official apps show.
+    /// `None` when the key is not a P-256 SEC1 point.
     pub thumbprint: Option<String>,
 }
 
@@ -44,7 +45,7 @@ pub struct RoomDevice {
 /// persisted for that room.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RoomDevicesChange {
-    /// Qualified room id.
+    /// The room id (`<uuid>@<domain>`).
     pub room_id: String,
     /// Devices that joined (or re-keyed: the new leaf).
     pub added: Vec<RoomDevice>,

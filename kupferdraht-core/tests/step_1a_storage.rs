@@ -33,7 +33,7 @@ fn sample_session() -> SessionRecord {
         device_id: "client-id-7e".into(),
         access_token: "access.jwt.value".into(),
         refresh_token: "refresh-cookie-value".into(),
-        cookie_label: Some("zuid".into()),
+        session_label: Some("kupferdraht-step1a".into()),
         api_version: 14,
         access_token_issued_at_ms: 1_700_000_000_000,
     }

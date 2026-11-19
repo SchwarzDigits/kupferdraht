@@ -9,16 +9,16 @@
 
 use std::sync::{Arc, PoisonError};
 
-use crate::avatar::AvatarKeys;
+use crate::avatar::AvatarSource;
 use crate::error::KupferdrahtError;
 use crate::storage::SelfUserRecord;
 use crate::wire::dto::{SelfUser, Team};
 
 use super::{Account, Client};
 
-/// The team the login and a refresh name the same way: `"default"` and an
-/// empty icon are none.
-pub(super) fn team_icon_key(team: &Team) -> Option<String> {
+/// The version marker of a team's icon, the login's and a refresh's alike:
+/// `"default"` and an empty icon are none.
+pub(super) fn team_avatar_version(team: &Team) -> Option<String> {
     team.icon
         .clone()
         .filter(|icon| !icon.is_empty() && icon != "default")
@@ -67,9 +67,15 @@ impl Client {
         self.apply_own_profile(|row| fill_from_backend(row, &self_user, team.as_ref()))
             .await?;
         let after = self.account();
-        if (before.display_name(), before.handle(), before.avatar_keys())
-            != (after.display_name(), after.handle(), after.avatar_keys())
-        {
+        if (
+            before.display_name(),
+            before.username(),
+            before.avatar_source(),
+        ) != (
+            after.display_name(),
+            after.username(),
+            after.avatar_source(),
+        ) {
             // The own `members()` row follows at the next refresh.
             self.mark_rooms_stale();
         }
@@ -113,28 +119,25 @@ fn fill_from_backend(
     self_user: &SelfUser,
     team: Option<&(String, Team)>,
 ) {
-    let avatar = AvatarKeys::from_assets(&self_user.assets);
+    row.avatar_source = AvatarSource::from_assets(&self_user.assets);
     row.name.clone_from(&self_user.name);
-    row.handle.clone_from(&self_user.handle);
+    row.username.clone_from(&self_user.handle);
     row.email.clone_from(&self_user.email);
-    row.avatar_thumbnail_key = avatar.thumbnail;
-    row.avatar_full_key = avatar.full;
     row.team_id = team.map(|(id, _)| id.clone());
     row.team_name = team.map(|(_, team)| team.name.clone());
-    row.team_avatar_key = team.and_then(|(_, team)| team_icon_key(team));
+    row.team_avatar_version = team.and_then(|(_, team)| team_avatar_version(team));
 }
 
 /// The row an account would be stored as.
 pub(super) fn row_of(account: &Arc<Account>) -> SelfUserRecord {
     SelfUserRecord {
         id: account.user_id().as_str().to_string(),
-        handle: account.handle().map(str::to_owned),
+        username: account.username().map(str::to_owned),
         name: account.display_name().to_owned(),
         email: account.email().map(str::to_owned),
         team_id: account.team_id().map(str::to_owned),
         team_name: account.team_name().map(str::to_owned),
-        avatar_thumbnail_key: account.avatar_keys().thumbnail.clone(),
-        avatar_full_key: account.avatar_keys().full.clone(),
-        team_avatar_key: account.team_avatar_key().map(str::to_owned),
+        avatar_source: account.avatar_source().clone(),
+        team_avatar_version: account.team_avatar_version().map(str::to_owned),
     }
 }

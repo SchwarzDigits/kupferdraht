@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #![cfg(not(target_arch = "wasm32"))]
-//! Step 125 — the browser `Client` answers the account's handle.
+//! Step 125 — the browser `Client` answers the account's username.
 //!
-//! `setHandle` writes it and nothing reads it back, so an embedder whose
-//! session type carries a handle keeps a `GET /self` of its own alive for
-//! one string the engine already holds (`Account::handle`, which
+//! `setUsername` writes it and nothing read it back, so an embedder whose
+//! session type carries a username kept a `GET /self` of its own alive for
+//! one string the engine already holds (`Account::username`, which
 //! `accounts()` lists today).
 //!
 //! These are source and doc pins, in the idiom of
@@ -26,27 +26,27 @@ fn module_file(name: &str) -> String {
 }
 
 #[test]
-fn the_wasm_surface_exports_the_handle_getter() {
+fn the_wasm_surface_exports_the_username_getter() {
     assert!(
         workspace_file("kupferdraht-core/src/wasm/manager.rs")
-            .contains("pub fn handle(&self) -> Option<String>"),
-        "the wasm Client does not give the account's handle back"
+            .contains("pub fn username(&self) -> Option<String>"),
+        "the wasm Client does not give the account's username back"
     );
 }
 
 #[test]
-fn the_tab_mirror_carries_the_handle_getter() {
+fn the_tab_mirror_carries_the_username_getter() {
     assert!(
-        module_file("protocol.js").contains(r#"["Client", "handle"]"#),
-        "protocol.js has no GETTERS row for Client.handle"
+        module_file("protocol.js").contains(r#"["Client", "username"]"#),
+        "protocol.js has no GETTERS row for Client.username"
     );
     assert!(
-        module_file("proxy.js").contains("get handle()"),
-        "proxy.js does not define the handle getter"
+        module_file("proxy.js").contains("get username()"),
+        "proxy.js does not define the username getter"
     );
     assert!(
-        module_file("index.d.ts").contains("readonly handle"),
-        "index.d.ts does not declare readonly handle"
+        module_file("index.d.ts").contains("readonly username"),
+        "index.d.ts does not declare readonly username"
     );
 }
 

@@ -258,12 +258,12 @@ mod tests {
     fn client(id: &str, model: &str) -> DeviceInfo {
         DeviceInfo {
             device_id: id.into(),
-            class: None,
-            label: None,
+            kind: crate::client::DeviceKind::Other,
+            display_name: None,
             model: Some(model.into()),
-            registered_at: None,
-            last_active: None,
-            is_self: false,
+            registered_at_ms: None,
+            last_seen_ms: None,
+            is_own: false,
         }
     }
 

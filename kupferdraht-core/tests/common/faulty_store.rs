@@ -183,10 +183,10 @@ impl Store for FaultyStore {
     async fn load_device(
         &self,
         user_id: &str,
-        client_id: &str,
+        device_id: &str,
     ) -> Result<Option<DeviceRecord>, KupferdrahtError> {
         self.gate("load_device").await?;
-        self.inner.load_device(user_id, client_id).await
+        self.inner.load_device(user_id, device_id).await
     }
 
     async fn save_backend_mls_key(&self, key: &BackendMlsKey) -> Result<(), KupferdrahtError> {

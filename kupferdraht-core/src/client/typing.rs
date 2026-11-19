@@ -197,7 +197,7 @@ impl Client {
     /// 162). `room_id` is the qualified `<uuid>@<domain>` form.
     ///
     /// # Errors
-    /// * `InvalidInput` if `room_id` is empty or unqualified.
+    /// * `InvalidInput` if `room_id` is empty or has no `@<domain>`.
     /// * `BackendRejected` / `Network` from the typing POST.
     pub(crate) async fn typing_notice(
         &self,

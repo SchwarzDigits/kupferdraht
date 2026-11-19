@@ -250,7 +250,7 @@ fn home_id_is_created_once_and_stable_across_reopens() {
     let first = open_app(home.path(), &keystore);
     let id = first.home_id().to_owned();
     assert!(is_home_id(&id), "32 lowercase hex, got {id:?}");
-    assert_eq!(first.cookie_label(), format!("kupferdraht-{id}"));
+    assert_eq!(first.session_label(), format!("kupferdraht-{id}"));
     assert_eq!(
         fs::read_to_string(home.path().join(HOME_ID_FILE)).expect("home.id"),
         format!("{id}\n"),
@@ -337,7 +337,7 @@ fn two_homes_on_one_keystore_get_distinct_ids_labels_and_registry_keys() {
     let app_a = open_app(home_a.path(), &keystore);
     let app_b = open_app(home_b.path(), &keystore);
     assert_ne!(app_a.home_id(), app_b.home_id());
-    assert_ne!(app_a.cookie_label(), app_b.cookie_label());
+    assert_ne!(app_a.session_label(), app_b.session_label());
     let key_a = secret(&keystore, &namespaced(app_a.home_id(), "global-db"))
         .expect("home a's registry key under its namespaced id");
     let key_b = secret(&keystore, &namespaced(app_b.home_id(), "global-db"))
@@ -362,7 +362,7 @@ async fn two_homes_of_one_user_on_one_keystore_keep_both_sessions_alive() {
     let keystore = memory_keystore();
     let app_a = open_app(home_a.path(), &keystore);
     let app_b = open_app(home_b.path(), &keystore);
-    let (label_a, label_b) = (app_a.cookie_label(), app_b.cookie_label());
+    let (label_a, label_b) = (app_a.session_label(), app_b.session_label());
     assert_ne!(label_a, label_b, "one label per home");
     let login_a = mount_login_for_label(&server, &label_a, "a");
     let login_b = mount_login_for_label(&server, &label_b, "b");
@@ -392,7 +392,7 @@ async fn two_homes_of_one_user_on_one_keystore_keep_both_sessions_alive() {
             .expect("load")
             .expect("session persisted");
         assert_eq!(
-            session.cookie_label.as_deref(),
+            session.session_label.as_deref(),
             Some(label.as_str()),
             "the session row records the label it was logged in with"
         );
@@ -562,7 +562,7 @@ async fn a_pre_step_93_home_resumes_after_adopting_all_three_keys() {
     let home = TempDir::new().expect("home");
     let first = memory_keystore();
     let app = open_app(home.path(), &first);
-    let _login = mount_login_for_label(&server, &app.cookie_label(), "one");
+    let _login = mount_login_for_label(&server, &app.session_label(), "one");
     drop(login_via_manager(&app, &server).await);
     drop(app);
     let old_id = home_id_on_disk(home.path());

@@ -57,7 +57,7 @@ pub struct PendingClient {
 }
 
 impl PendingClient {
-    /// The new account's Wire user id (UUID from the `qualified_id`
+    /// The new account's user id (the UUID the backend's answer names
     /// in the `POST /register` response).
     #[must_use]
     pub fn user_id(&self) -> &str {

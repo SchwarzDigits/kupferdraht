@@ -154,7 +154,7 @@ struct RpcOutcome {
     stray_responses_on_b: usize,
     survived_forged_response: bool,
     home_id: String,
-    cookie_label: String,
+    session_label: String,
 }
 
 #[wasm_bindgen_test]
@@ -187,7 +187,7 @@ async fn rpc_round_trip_through_the_leader() {
         o.home_id, "stub-home-0123456789abcdef",
         "the leader's Kupferdraht getters ride on its announcement (Step 93 mirror)"
     );
-    assert_eq!(o.cookie_label, "kupferdraht-stub-home-0123456789abcdef");
+    assert_eq!(o.session_label, "kupferdraht-stub-home-0123456789abcdef");
 }
 
 #[derive(serde::Deserialize)]

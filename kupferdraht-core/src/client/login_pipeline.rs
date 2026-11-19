@@ -14,7 +14,7 @@
 //!    nginx injects the `Z-Client` claim on subsequent calls.
 //! 4. [`LoginPipeline::upload_initial_key_packages`] — fresh MLS
 //!    identity + 100 `KeyPackage`s → `POST /v{N}/mls/key-packages/self/{client_id}`.
-//! 5. [`LoginPipeline::fetch_backend_removal_key`] —
+//! 5. [`LoginPipeline::fetch_external_sender_key`] —
 //!    `GET /v{N}/mls/public-keys`, pick the ECDSA-P256 `removal` entry.
 //! 6. [`LoginPipeline::finalize`] — assemble the `Account` + `Client`.
 //!
@@ -28,7 +28,7 @@ use base64::Engine as _;
 use openmls_sqlite_storage::Connection;
 use tracing::{debug, warn};
 
-use crate::avatar::AvatarKeys;
+use crate::avatar::AvatarSource;
 use crate::client::{Account, Client, OwnTeam, ServerConfig};
 use crate::encryption::{
     INITIAL_KEY_PACKAGE_COUNT, KupferdrahtProvider, MLS_PUBLIC_KEY_TYPE, MlsClient,
@@ -150,10 +150,10 @@ pub(super) struct LoginPipeline {
     /// devices of the same account from invalidating each other's `zuid`. Used
     /// for both `POST /login` (the persist cookie) and `POST /clients` (the
     /// device's cookie slot).
-    cookie_label: String,
+    session_label: String,
     /// Human-readable device label shown in Wire's device list (Step 41), e.g.
     /// the OS device name from the embedder. `None` → a platform-derived default.
-    device_label: Option<String>,
+    initial_device_display_name: Option<String>,
 }
 
 /// Cookie label used for both the Wire `cookie` field of the client
@@ -218,8 +218,8 @@ impl LoginPipeline {
         permit_http: bool,
         trust: &crate::wire::tls::TrustAnchors,
         store: Option<Arc<dyn Store>>,
-        cookie_label: String,
-        device_label: Option<String>,
+        session_label: String,
+        initial_device_display_name: Option<String>,
     ) -> Result<Self, KupferdrahtError> {
         let http = HttpClient::with_trust(&server.api_base_url, permit_http, trust)?;
         let api_info = http.api_version().await?;
@@ -230,8 +230,8 @@ impl LoginPipeline {
             api_version,
             home,
             store,
-            cookie_label,
-            device_label,
+            session_label,
+            initial_device_display_name,
         })
     }
 
@@ -270,7 +270,7 @@ impl LoginPipeline {
                 email,
                 password,
                 second_factor_code,
-                &self.cookie_label,
+                &self.session_label,
             )
             .await?;
         let self_user = self
@@ -283,7 +283,7 @@ impl LoginPipeline {
     /// SSO analogue of [`authenticate`](Self::authenticate) (Step 17β, 162):
     /// mint the first access token from the session cookie an SSO login
     /// ended with, then fetch the self-profile. No password and no
-    /// `client_id` — the rest of the pipeline (phases 3–6) is identical to
+    /// device id — the rest of the pipeline (phases 3–6) is identical to
     /// the password flow. In the browser the cookie is in its jar and
     /// `session_cookie` empty.
     pub(super) async fn authenticate_with_session_cookie(
@@ -376,7 +376,7 @@ impl LoginPipeline {
     ///   HTTP call.
     /// * `Encoding` if the `ecdsa_secp256r1_sha256` entry is not valid
     ///   base64.
-    pub(super) async fn fetch_backend_removal_key(
+    pub(super) async fn fetch_external_sender_key(
         &self,
         access_token: &str,
     ) -> Result<Vec<u8>, KupferdrahtError> {
@@ -558,8 +558,8 @@ impl LoginPipeline {
                 &login.access_token,
                 password,
                 &prekeys,
-                &self.cookie_label,
-                self.device_label.as_deref(),
+                &self.session_label,
+                self.initial_device_display_name.as_deref(),
             )
             .await
             .map_err(map_too_many_clients)?;
@@ -701,7 +701,7 @@ impl LoginPipeline {
         {
             Ok(team) => OwnTeam {
                 id: Some(id),
-                icon_key: super::own_account::team_icon_key(&team),
+                avatar_version: super::own_account::team_avatar_version(&team),
                 name: Some(team.name),
             },
             Err(e) => {
@@ -728,20 +728,20 @@ impl LoginPipeline {
         own_team: OwnTeam,
         login: LoginOutcome,
         registration: RegistrationOutcome,
-        backend_removal_key: Vec<u8>,
+        external_sender_key: Vec<u8>,
         mls_identity: MlsIdentityArtifacts,
         home: Option<KupferdrahtHome>,
     ) -> Arc<Client> {
         let localpart = login.user;
         let user_id = UserId::new(&localpart, &self_user.qualified_id.domain);
-        let avatar_keys = AvatarKeys::from_assets(&self_user.assets);
+        let avatar_source = AvatarSource::from_assets(&self_user.assets);
         let account = Account::new(
             user_id.clone(),
             self_user.name,
             self_user.handle,
             self_user.email,
             own_team,
-            avatar_keys,
+            avatar_source,
         );
         Client::new(
             user_id,
@@ -751,13 +751,13 @@ impl LoginPipeline {
             registration.access_token,
             registration.refresh_token,
             account,
-            backend_removal_key,
+            external_sender_key,
             mls_identity.signature_public_key,
             self.http,
             self.store,
             Some(mls_identity.mls_client),
             home,
-            Some(self.cookie_label),
+            Some(self.session_label),
         )
     }
 }

@@ -31,7 +31,7 @@ directory:
 | `kupferdraht.db`   | SQLite — sessions, devices, rooms snapshot, timeline events, sync cursor. Whole-DB encrypted via SQLite3MC in its `chacha20` scheme (ChaCha20-Poly1305, raw 32-byte key, 32-byte plaintext header), keyed per account from the OS keystore (ADR-0021). |
 | `mls.db`      | openmls's storage — group state, leaf signatures, key packages, ratchet state. Same engine and scheme, its own key. |
 | `global.db`   | device-level account registry (`accounts`); same engine and scheme, keyed under the home-scoped `kupferdraht.<home-id>.global-db` id. |
-| `home.id`     | the home id (Step 93, ADR-0025): 32 lowercase hex, plaintext — an identifier, not a secret. Created once on the first open (under the home lock); every keystore id of this home (`kupferdraht.<home-id>.…`) and the login cookie label `kupferdraht-<home-id>` carry it. **Never edit, delete or copy it**: a new id orphans every key of the home, a copied home shares keys and label with the original. |
+| `home.id`     | the home id (Step 93, ADR-0025): 32 lowercase hex, plaintext — an identifier, not a secret. Created once on the first open (under the home lock); every keystore id of this home (`kupferdraht.<home-id>.…`) and the session label `kupferdraht-<home-id>` carry it. **Never edit, delete or copy it**: a new id orphans every key of the home, a copied home shares keys and label with the original. |
 | `kupferdraht.lock` | advisory cross-process lock (Step 85): one in the home (the registry key's and the home id's first creation), one per `accounts/<id>/` (that account's key creation + token refresh). Holds the holder's pid; stays on disk, holds no lock once the process is gone. |
 | `sync.lock`   | per `accounts/<id>/` (Step 97d, ADR-0031): one sync dispatch per account at a time across processes — held while a fetched page is processed, waited for up to 5 s. Same mechanics as `kupferdraht.lock`. |
 
@@ -57,7 +57,7 @@ the two critical sections that cannot be shared — the token refresh and
 a first-time key creation — fail fast with exit code 3 when the other
 process is inside them; just retry. Two homes may share a keystore
 (Step 93): each keys its databases under its own home id and logs in
-under its own cookie label, so a second home of the same user — a
+under its own session label, so a second home of the same user — a
 second `KUPFERDRAHT_HOME` on one `KUPFERDRAHT_DEV_KEYSTORE`, or the CLI beside
 kupferdraht-tui on one keychain — no longer evicts the first one's session
 (observations §83). A home keyed before Step 93 adopts its keys on its
@@ -316,7 +316,7 @@ kupferdraht-cli sso callback --api-url https://nginz-https.example.com --callbac
 
 Step 162 (`ClientBuilder::login_with_sso_callback`). Takes the URL the browser
 came back to after `sso url`, mints the session from the cookie in it
-(`POST /access`, no `client_id`), then registers this device and persists the
+(`POST /access`, no device id), then registers this device and persists the
 account — immediately listable via `accounts` and resumable via `resume`,
 exactly like `login`. A refused login errors with the backend's reason. The URL
 is read on the TTY (no echo) or, with `--callback-stdin`, as the first line of
@@ -329,10 +329,10 @@ recoverable with `--delete-device` on the same session (no re-auth).
 Print the most-recently-persisted session: `user_id`, `device_id`,
 `api_version`, `access_token_issued_at_ms`, and key prefixes for
 the access token and the MLS public key, the device's `mls_thumbprint`
-(Step 95d — Wire's "MLS Thumbprint", 2-character groups); then the home lines (Step 93)
-— `home_id` (the id in `$KUPFERDRAHT_HOME/home.id`), `cookie_label` (the
+(Step 95d — the MLS thumbprint the official apps show, in 2-character groups); then the home lines (Step 93)
+— `home_id` (the id in `$KUPFERDRAHT_HOME/home.id`), `session_label` (the
 login label in effect for this home, `kupferdraht-<home-id>`) and
-`session_label` (the label the persisted session was logged in with;
+`stored_session_label` (the label the persisted session was logged in with;
 `—` for a session persisted before Step 93, which still holds the old
 shared label on Wire's side until its next `login`) — followed by one
 `storage:` line naming the whole-DB encryption engine, cipher scheme
@@ -354,12 +354,12 @@ session:
   access_token_prefix:       eyJhbGciOiJI…
   mls_public_key_prefix:     MCowBQYDK2VwAy…
   home_id:                   0123456789abcdef0123456789abcdef
-  cookie_label:              kupferdraht-0123456789abcdef0123456789abcdef
-  session_label:             kupferdraht-0123456789abcdef0123456789abcdef
+  stored_session_label:      kupferdraht-0123456789abcdef0123456789abcdef
+  stored_session_label:      kupferdraht-0123456789abcdef0123456789abcdef
 storage: SQLite3 Multiple Ciphers 2.5.1 · chacha20 · plaintext header 32
 ```
 
-A `session_label` that differs from `cookie_label` (or shows `—`) is a
+A `stored_session_label` that differs from `session_label` (or shows `—`) is a
 two-home diagnosis in one glance: this session was not logged in under
 this home's label.
 
@@ -372,7 +372,7 @@ No flags. No network calls. Run this first when something feels
 off. An `access_token_issued_at_ms` older than ~15 minutes is no
 longer a problem on its own: the next command's `resume` refreshes
 the token in place via an `/access` rebind with the persisted
-`zuid` (CHANGELOG.md §51). You only need to re-`login` once the `zuid`
+refresh cookie (CHANGELOG.md §51). You only need to re-`login` once the
 refresh cookie itself expires or is revoked.
 
 ### `accounts`
@@ -387,9 +387,9 @@ kupferdraht-cli accounts
 
 ```text
 * user-uuid@example.com
-    handle:  @alice
-    name:    Alice Example
-    server:  https://nginz-https.example.com
+    username: alice
+    name:     Alice Example
+    server:   https://nginz-https.example.com
 ```
 
 The registry is populated by `login` (which registers the account, marks
@@ -402,11 +402,11 @@ One iteration of the matrix-rust-sdk-shaped sync family (Step 14b).
 Drives `Client::sync_once(SyncSettings::default())`:
 
 1. Refreshes the access token via `POST /v{N}/access` using the
-   persisted `zuid` cookie.
+   persisted refresh cookie.
 2. Lists conversation IDs (`POST /v{N}/conversations/list-ids`)
    and fetches their metadata
    (`POST /v{N}/conversations/list`).
-3. Resolves member display names / handles
+3. Resolves member display names / usernames
    (`POST /v{N}/list-users`).
 4. Drains `GET /v{N}/notifications` once, decrypts + dispatches
    every queued event through the registered handler, and
@@ -548,7 +548,7 @@ kupferdraht-cli room-create -n "Kupferdraht 6c smoke"
 |------------------|----------|---------------------------------------------------|
 | `-n`, `--name`   | yes      | Room name (1–256 characters per Wire's schema).   |
 
-Output prints the qualified room id so subsequent commands can
+Output prints the room id so subsequent commands can
 target it. The room is **inert** until a successful `room-invite`
 advances it past epoch 0 — application messages at epoch 0 are
 rejected by Wire (`mls-protocol-error`, CHANGELOG.md §25).
@@ -564,7 +564,7 @@ The reservation alone leaves the conversation hidden from
 branches: `epoch == 0` → claim the peer's key packages and upload
 the establishing Add-commit; `epoch > 0` → join via external
 commit; local group already present → plain resume. Ends with a
-metadata sync and prints the resulting qualified `room_id`.
+metadata sync and prints the resulting `room_id`.
 
 ```bash
 kupferdraht-cli dm-create --peer c0ffee02-…@example.com
@@ -572,7 +572,7 @@ kupferdraht-cli dm-create --peer c0ffee02-…@example.com
 
 | Flag       | Required | Description                                                  |
 |------------|----------|--------------------------------------------------------------|
-| `--peer`   | yes      | Peer's qualified user id `<uuid>@<domain>`.                  |
+| `--peer`   | yes      | Peer's user id `<uuid>@<domain>`.                  |
 
 Output prints `room_id` + `epoch`. Subsequent `send` / `timeline` /
 other room commands target the printed id. Multiple `dm-create`
@@ -592,7 +592,7 @@ kupferdraht-cli dm-show --peer c0ffee02-…@example.com
 
 | Flag       | Required | Description                                                  |
 |------------|----------|--------------------------------------------------------------|
-| `--peer`   | yes      | Peer's qualified user id `<uuid>@<domain>`.                  |
+| `--peer`   | yes      | Peer's user id `<uuid>@<domain>`.                  |
 
 ### `dm-with`
 
@@ -607,7 +607,7 @@ kupferdraht-cli dm-with --peer c0ffee02-…@example.com
 
 | Flag       | Required | Description                                                  |
 |------------|----------|--------------------------------------------------------------|
-| `--peer`   | yes      | Peer's qualified user id `<uuid>@<domain>`.                  |
+| `--peer`   | yes      | Peer's user id `<uuid>@<domain>`.                  |
 
 This is the recommended command for "give me the DM with this user,
 whatever it takes" — the dominant caller shape for Wire's
@@ -655,7 +655,7 @@ kupferdraht-cli room-join --id <uuid>@<domain>
 
 | Flag       | Required | Description                                                   |
 |------------|----------|---------------------------------------------------------------|
-| `--id`     | yes      | Qualified room id (`<uuid>@<domain>`) as printed by `rooms`. |
+| `--id`     | yes      | Room id (`<uuid>@<domain>`) as printed by `rooms`. |
 
 Requires a prior `sync` so the target room is in the cache.
 **Not idempotent:** re-running against an already-joined room issues a
@@ -696,7 +696,7 @@ count under `joined`.
 
 Re-join every room whose persisted MLS leaf belongs to a prior
 `device_id` of the same user. Step 7e's recovery surface for the
-"re-login changed my Wire client_id, prior-session rooms are
+"re-login changed my device id, prior-session rooms are
 unreachable" case. Idempotent: rooms whose leaf already matches
 the current device are reported as `already_current` and skipped.
 
@@ -739,9 +739,9 @@ changed under the same `user_id`).
 ### `room-members`
 
 List the members of a room as derived from the local MLS group's
-leaves (post-`room-join`). Resolves display name / handle for every
-non-self leaf via `POST /v{N}/list-users`. A member with an avatar shows its
-`avatar_key` (Step 144).
+leaves (post-`room-join`). Resolves display name / username for every
+other member's leaf via `POST /v{N}/list-users`. A member with an avatar shows its
+`avatar_version` (Step 144).
 
 ```bash
 kupferdraht-cli room-members --id <uuid>@<domain>
@@ -749,7 +749,7 @@ kupferdraht-cli room-members --id <uuid>@<domain>
 
 | Flag       | Required | Description                                       |
 |------------|----------|---------------------------------------------------|
-| `--id`     | yes      | Qualified room id.                                |
+| `--id`     | yes      | Room id.                                |
 
 Output:
 
@@ -769,8 +769,8 @@ role).
 
 List the devices of a room — one per leaf of the local MLS group
 (Step 95d) — with the **MLS thumbprint** of each device's signature key,
-printed in 2-character groups like the "MLS Thumbprint" an official Wire
-app shows in the device details, so the two can be compared by eye. `*`
+printed in 2-character groups as the official apps
+show it in the device details, so the two can be compared by eye. `*`
 marks this device. An e2ei X.509 device is listed with `(identity not
 parsed)`.
 
@@ -780,7 +780,7 @@ kupferdraht-cli room-devices --id <room>@<domain>
 
 | Flag   | Required | Description                     |
 |--------|----------|---------------------------------|
-| `--id` | yes      | Qualified room id.              |
+| `--id` | yes      | Room id.              |
 
 Output:
 
@@ -808,8 +808,8 @@ kupferdraht-cli room-invite --id <room>@<domain> -u alice@... -u bob@...   # mul
 
 | Flag            | Required | Description                                                                |
 |-----------------|----------|----------------------------------------------------------------------------|
-| `--id`          | yes      | Qualified room id.                                                         |
-| `-u`, `--user`  | yes      | One or more qualified user ids. Repeat the flag for multiple invitees.    |
+| `--id`          | yes      | Room id.                                                         |
+| `-u`, `--user`  | yes      | One or more user ids. Repeat the flag for multiple invitees.    |
 
 Self-bootstrap: the orchestrator also claims the caller's own
 `KeyPackage`s (excluding the current device) and folds them into
@@ -839,8 +839,8 @@ kupferdraht-cli room-kick --id <room>@<domain> -u alice@... -u bob@...   # multi
 
 | Flag            | Required | Description                                                                |
 |-----------------|----------|----------------------------------------------------------------------------|
-| `--id`          | yes      | Qualified room id.                                                         |
-| `-u`, `--user`  | yes      | One or more qualified user ids. Repeat the flag for multiple targets.     |
+| `--id`          | yes      | Room id.                                                         |
+| `-u`, `--user`  | yes      | One or more user ids. Repeat the flag for multiple targets.     |
 
 **Self-kick is rejected.** Removing your own last device from a
 room collapses your own MLS state in a way that needs the proper
@@ -866,23 +866,23 @@ room-kick ok
 
 ### `send` (with mentions, Step 6-II-g)
 
-The `send` command auto-parses `@<handle>` tokens in the body
-and resolves each one to a qualified user-id via Wire's
-`POST /v{N}/list-users` (qualified-handles shape). Each
-resolved handle becomes a `Mention { start, length,
-qualified_user_id }` entry in the outbound `Text.mentions`,
+The `send` command auto-parses `@<username>` tokens in the body
+and resolves each one to a user id via
+`POST /v{N}/list-users`. Each
+resolved username becomes a `Mention { start, length,
+user id }` entry in the outbound `Text.mentions`,
 with offsets in UTF-16 code units to match what
-iOS / Android / Web emit. Handles Wire can't resolve are
+iOS / Android / Web emit. Usernames the backend can't resolve are
 left as plain text in the body.
 
 ```bash
 kupferdraht-cli send --id <room>@<domain> -m "hi @alice, see this"
-# Output adds a `mentions: N` line when at least one handle
+# Output adds a `mentions: N` line when at least one username
 # resolved.
 ```
 
 The `timeline` printer suffixes mention-carrying lines with
-`[mentions: @<uid>@<domain> @<uid>@<domain>]` so the qualified
+`[mentions: @<uid>@<domain> @<uid>@<domain>]` so the
 ids land in the visible output.
 
 ### `send`
@@ -902,10 +902,10 @@ kupferdraht-cli send --id <room>@<domain> -m "hello" --idempotency-key order-471
 
 | Flag              | Required | Description                                       |
 |-------------------|----------|---------------------------------------------------|
-| `--id`            | yes      | Qualified room id.                                |
+| `--id`            | yes      | Room id.                                |
 | `-m`, `--message` | yes      | UTF-8 message body.                               |
-| `--ttl <SECS>`   | no       | **Step 89.** Send as a disappearing message with this timer (1 … 31536000 s): official clients show a countdown and delete their copy, Kupferdraht's own row self-redacts too (`Timeline::send_disappearing_text`). `@handle` mentions are not parsed in this mode (a disappearing message carries none). |
-| `--idempotency-key <KEY>` | no | **Step 130a.** Send under this key (1–128 characters) through `Timeline::send_keyed`: a repeat with the same key prints the first send's handle instead of sending again — or resends a failed send under the same `message_id`; a key used in another room or for a reaction, or still in flight, fails `InvalidInput`. Keys are kept 28 days. Joins the room's MLS group first when it is missing; `@handle` mentions are parsed as without the flag. Conflicts with `--ttl`. |
+| `--ttl <SECS>`   | no       | **Step 89.** Send as a disappearing message with this timer (1 … 31536000 s): official clients show a countdown and delete their copy, Kupferdraht's own row self-redacts too (`Timeline::send_disappearing_text`). `@username` mentions are not parsed in this mode (a disappearing message carries none). |
+| `--idempotency-key <KEY>` | no | **Step 130a.** Send under this key (1–128 characters) through `Timeline::send_keyed`: a repeat with the same key prints the first send's handle instead of sending again — or resends a failed send under the same `message_id`; a key used in another room or for a reaction, or still in flight, fails `InvalidInput`. Keys are kept 28 days. Joins the room's MLS group first when it is missing; `@username` mentions are parsed as without the flag. Conflicts with `--ttl`. |
 
 Output:
 
@@ -973,7 +973,7 @@ kupferdraht-cli resend --id <room>@<domain> --all             # every failed row
 | Flag        | Required | Description |
 |-------------|----------|-------------|
 | `--message` | with one row | `message_id` of the failed row (from `failed-sends` / `timeline`). |
-| `--id`      | with `--all` | Qualified room id. Optional with `--message` (auto-resolved from the message id against the local timeline cache). |
+| `--id`      | with `--all` | Room id. Optional with `--message` (auto-resolved from the message id against the local timeline cache). |
 | `--all`     | no       | Re-drive every failed send of the room, oldest first. The pass **stops at the first hard error** (a stuck message must not be overtaken) and leaves the rest `failed` for the next run; snapshot rows are skipped. |
 
 Output (one row):
@@ -1022,10 +1022,13 @@ Output (`*` marks the current device):
 ```
 devices ok
   registered: M/7
-    * <client_id> [desktop] — <label> (last_active: <UTC>)
-      <client_id> [phone]   — <label> (last_active: <UTC>)
+    * <device_id> [desktop] — <display name> (last_seen: <local time>)
+      <device_id> [phone] — <display name> (last_seen: <local time>)
       ...
 ```
+
+The kind is `phone`, `tablet`, `desktop`, `legal-hold` or `other` (a device
+that names no kind, or one this release does not know).
 
 ### `key-packages`
 
@@ -1056,8 +1059,8 @@ key-packages
 
 ### `device-delete`
 
-Revoke a registered device by its `client_id`
-(`DELETE /v{N}/clients/{id}`). Wire re-authenticates the delete by
+Revoke a registered device by its id
+(`DELETE /v{N}/clients/{id}`). The backend re-authenticates the delete by
 the account's password — pass it via stdin (`--password-stdin`) or
 be prompted on the TTY. An account without a password, an SSO
 user's, answers the prompt with Enter (or pipes an empty line):
@@ -1068,21 +1071,21 @@ session would be revoked mid-call). Use `logout` once Step 6e
 ships for that flow.
 
 ```bash
-kupferdraht-cli device-delete --id <client_id>
-kupferdraht-cli device-delete --id <client_id> --password-stdin < pw.txt
-echo | kupferdraht-cli device-delete --id <client_id> --password-stdin   # an SSO account
+kupferdraht-cli device-delete --id <device_id>
+kupferdraht-cli device-delete --id <device_id> --password-stdin < pw.txt
+echo | kupferdraht-cli device-delete --id <device_id> --password-stdin   # an SSO account
 ```
 
 | Flag                | Required | Description                                              |
 |---------------------|----------|----------------------------------------------------------|
-| `--id`              | yes      | Wire `client_id` (hexadecimal) of the device to delete.  |
+| `--id`              | yes      | Device id (hexadecimal) of the device to delete.         |
 | `--password-stdin`  | no       | Read password from stdin instead of prompting.           |
 
 Output:
 
 ```
 device-delete ok
-  device_id: <client_id>
+  device_id: <device_id>
 ```
 
 Common errors:
@@ -1091,31 +1094,30 @@ Common errors:
   Re-run with the correct password, or with none.
 - `403 missing-auth` — no password given, but the account has one;
   the CLI adds how to enter it.
-- `404 client-not-found` — the `client_id` doesn't belong to
+- `404 client-not-found` — the device id doesn't belong to
   this user (or already deleted). Re-run `devices` to see what
   remains.
 
 ### `device-rename`
 
-Update the user-visible label of a registered device
-(`PUT /v{N}/clients/{id}` with `{"label": "..."}`). The label
-shows up in Wire's settings UI on every Wire client.
+Give a registered device a new display name (`PUT /v{N}/clients/{id}`).
+The name shows up in the device list of every app of the account.
 
 ```bash
-kupferdraht-cli device-rename --id <client_id> -l "MacBook Pro M2"
+kupferdraht-cli device-rename --id <device_id> -n "MacBook Pro M2"
 ```
 
 | Flag           | Required | Description                                          |
 |----------------|----------|------------------------------------------------------|
-| `--id`         | yes      | Wire `client_id` of the device to rename.            |
-| `-l`, `--label`| yes      | New label.                                           |
+| `--id`         | yes      | Device id of the device to rename.                   |
+| `-n`, `--name` | yes      | The new display name.                                |
 
 Output:
 
 ```
 device-rename ok
-  device_id: <client_id>
-  label:     <new label>
+  device_id:    <device_id>
+  display_name: <new display name>
 ```
 
 ### `account-refresh`
@@ -1127,7 +1129,7 @@ a failure nothing changes and the command exits with the error.
 ```
 account-refresh ok
   display_name:  Alice
-  handle:        alice
+  username:      alice
   email:         alice@example.com
   team:          Acme (<team id>)
 ```
@@ -1135,26 +1137,26 @@ account-refresh ok
 ### `profile-set`
 
 Update the authenticated user's profile (Step 2g). At least
-one of `--display-name` or `--handle` must be supplied; both can
-be supplied in one call (each is sent as a separate Wire request).
+one of `--display-name` or `--username` must be supplied; both can
+be supplied in one call (each is sent as a separate request).
 
 ```bash
 kupferdraht-cli profile-set --display-name "Alice (Kupferdraht)"
-kupferdraht-cli profile-set --handle "alice"
-kupferdraht-cli profile-set --display-name "Alice" --handle "alice2"
+kupferdraht-cli profile-set --username "alice"
+kupferdraht-cli profile-set --display-name "Alice" --username "alice2"
 ```
 
 | Flag             | Required                  | Description                                                                  |
 |------------------|---------------------------|------------------------------------------------------------------------------|
-| `--display-name` | one of these two required | Patches `PUT /v{N}/self` with `{"name": "..."}`.                            |
-| `--handle`       | one of these two required | Patches `PUT /v{N}/self/handle` with `{"handle": "..."}`. Wire enforces global uniqueness — collisions surface as `BackendRejected`. |
+| `--display-name` | one of these two required | Patches `PUT /v{N}/self`.                                                    |
+| `--username`     | one of these two required | Patches `PUT /v{N}/self/handle`. The backend keeps usernames unique — one already taken surfaces as `BackendRejected`. |
 
 Output:
 
 ```
 profile-set ok
   display_name: <new display_name>     # only if --display-name was passed
-  handle:       <new handle>           # only if --handle was passed
+  username:     <new username>         # only if --username was passed
 ```
 
 Note: the local `Account` snapshot (visible via `kupferdraht-cli status`)
@@ -1225,7 +1227,7 @@ kupferdraht-cli room-rename --id <room>@<domain> -n "New room name"
 
 | Flag         | Required | Description                          |
 |--------------|----------|--------------------------------------|
-| `--id`       | yes      | Qualified room id.                   |
+| `--id`       | yes      | Room id.                   |
 | `-n`, `--name` | yes    | New conversation name.               |
 
 Output:
@@ -1267,7 +1269,7 @@ kupferdraht-cli mark-read --message <message_id> --no-receipt
 
 | Flag           | Required | Description                                                                       |
 |----------------|----------|-----------------------------------------------------------------------------------|
-| `--id`         | no¹      | Qualified room id. When omitted, auto-resolved from `--message` against local timeline. |
+| `--id`         | no¹      | Room id. When omitted, auto-resolved from `--message` against local timeline. |
 | `--message`    | yes      | `message_id` of the message to confirm.                                           |
 | `--no-receipt` | no       | A private read (Step 138): move the read position, send no `Confirmation`. |
 
@@ -1343,7 +1345,7 @@ kupferdraht-cli mark-unread --id <room>@<domain>
 
 | Flag   | Required | Description                                   |
 |--------|----------|-----------------------------------------------|
-| `--id` | yes      | Qualified room id; must be known locally (`sync` first). |
+| `--id` | yes      | Room id; must be known locally (`sync` first). |
 
 Output:
 
@@ -1372,7 +1374,7 @@ kupferdraht-cli typing --id <room>@<domain> --seconds 8
 
 | Flag        | Required | Description                                   |
 |-------------|----------|-----------------------------------------------|
-| `--id`      | yes      | Qualified room id; must be known locally (`sync` first). |
+| `--id`      | yes      | Room id; must be known locally (`sync` first). |
 | `--seconds` | no       | How long the notice stands before the stop (default 3). |
 
 Output:
@@ -1402,7 +1404,7 @@ kupferdraht-cli react --message <message_id> --emoji "👍" --idempotency-key li
 
 | Flag        | Required | Description                                                                       |
 |-------------|----------|-----------------------------------------------------------------------------------|
-| `--id`      | no       | Qualified room id. Auto-resolved from `--message` when omitted (see `mark-read`). |
+| `--id`      | no       | Room id. Auto-resolved from `--message` when omitted (see `mark-read`). |
 | `--message` | yes      | `message_id` of the message to react to.                                          |
 | `--emoji`   | yes      | Emoji to toggle (single, e.g. `👍`).                                              |
 | `--idempotency-key <KEY>` | no | **Step 130a.** Toggle under this key (1–128 characters) through `Timeline::send_keyed`: a repeat with the same key prints the first toggle's handle and never flips the reaction back; a new key toggles again. A key used for a message, in another room, or still in flight fails `InvalidInput`. Kept 28 days. The output ends with an `idempotency_key:` line. |
@@ -1441,7 +1443,7 @@ kupferdraht-cli delete-message --id <room>@<domain> --message <message_id>
 
 | Flag           | Required | Description                                                                       |
 |----------------|----------|-----------------------------------------------------------------------------------|
-| `--id`         | no       | Qualified room id. Auto-resolved from `--message` when omitted (see `mark-read`). |
+| `--id`         | no       | Room id. Auto-resolved from `--message` when omitted (see `mark-read`). |
 | `--message`    | yes      | `message_id` of the message to delete.                                            |
 
 Output:
@@ -1484,7 +1486,7 @@ kupferdraht-cli edit --id <room>@<domain> --message <message_id> -m "<new body>"
 
 | Flag             | Required | Description                                                                       |
 |------------------|----------|-----------------------------------------------------------------------------------|
-| `--id`           | no       | Qualified room id. Auto-resolved from `--message` when omitted (see `mark-read`). |
+| `--id`           | no       | Room id. Auto-resolved from `--message` when omitted (see `mark-read`). |
 | `--message`      | yes      | `message_id` of the original to replace.                                          |
 | `-m`, `--new-body` | yes    | Updated body.                                                                     |
 
@@ -1521,7 +1523,7 @@ kupferdraht-cli reply --id <room>@<domain> --to <message_id> -m "..."
 
 | Flag           | Required | Description                                                                                 |
 |----------------|----------|---------------------------------------------------------------------------------------------|
-| `--id`         | no       | Qualified room id. Auto-resolved from `--to` (the parent's id) when omitted (see `mark-read`). |
+| `--id`         | no       | Room id. Auto-resolved from `--to` (the parent's id) when omitted (see `mark-read`). |
 | `--to`         | yes      | `message_id` of the parent message (UUID from `send` / `timeline`).                         |
 | `-m`, `--message` | yes   | Reply body.                                                                                 |
 
@@ -1551,7 +1553,7 @@ kupferdraht-cli ping --id <room>@<domain> --repeated
 
 | Flag         | Required | Description                                       |
 |--------------|----------|---------------------------------------------------|
-| `--id`       | yes      | Qualified room id.                                |
+| `--id`       | yes      | Room id.                                |
 | `--repeated` | no       | Send a repeated ping instead of a plain one.      |
 
 Output:
@@ -1580,7 +1582,7 @@ kupferdraht-cli location --id <room>@<domain> --lat 48.1372 --lon 11.5756 --name
 
 | Flag     | Required | Description                          |
 |----------|----------|--------------------------------------|
-| `--id`   | yes      | Qualified room id.                   |
+| `--id`   | yes      | Room id.                   |
 | `--lat`  | yes      | Latitude in decimal degrees.         |
 | `--lon`  | yes      | Longitude in decimal degrees.        |
 | `--name` | no       | Optional human-readable place label. |
@@ -1620,11 +1622,11 @@ kupferdraht-cli case-show --id <uuid>@<domain>
 
 | Flag | Description |
 |------|-------------|
-| `--id` | Qualified room id (required). |
+| `--id` | Room id (required). |
 | `--case-ref` | Case identity — honored only on create (default: generated UUID). |
 | `--title` / `--case-type` / `--detail` / `--external-ref` / `--authority` | Core text fields. |
 | `--state` | `open`\|`active`\|`waiting`\|`resolved`\|`closed`\|`cancelled`. |
-| `--assignee` | Qualified user id. |
+| `--assignee` | User id (`<uuid>@<domain>`). |
 | `--due-ms` | Deadline (Unix ms). |
 | `--priority` | `low`\|`normal`\|`high`\|`urgent`. |
 | `--ext KEY=VALUE` | Display-only extras, repeatable; replaces the whole map when given. |
@@ -1667,7 +1669,7 @@ kupferdraht-cli timeline --id <room>@<domain> --before <message_id>
 
 | Flag        | Required | Description                                                            |
 |-------------|----------|------------------------------------------------------------------------|
-| `--id`      | yes      | Qualified room id.                                                     |
+| `--id`      | yes      | Room id.                                                     |
 | `--limit`   | no       | Max items to return (omitted = no limit). Returns the newest window of size `limit`, then sorted oldest-first. **Semantic change:** `--limit 0` now prints zero items — the 0-as-no-limit sentinel is gone. |
 | `--before`  | no       | Cursor: only items strictly older than this `message_id` are returned. |
 
@@ -1837,7 +1839,7 @@ task mark ok
 
 Sign out of the backend (Step 6e-2; through the device manager since
 Step 78 — `Kupferdraht::logout`). Issues `POST /v{N}/access/logout` to
-revoke the `zuid` refresh cookie server-side and marks the account
+revoke the refresh cookie server-side and marks the account
 signed out: it is no longer the active account, so the next command
 answers "no persisted account — run `kupferdraht-cli login` first". With
 `--purge-device`, **also** issues `DELETE /v{N}/clients/{device_id}`
@@ -1871,7 +1873,7 @@ Output:
 ```
 logout ok
   account_id:   <uuid>@<domain>
-  device_id:    <client_id>
+  device_id:    <device_id>
   purge_device: true | false
   purge_local:  true | false
   local state:  preserved (signed out; other accounts untouched) | forgotten (databases, keys and registry row of the account)
@@ -1911,7 +1913,7 @@ kupferdraht-cli account-forget --id <uuid>@<domain>
 
 | Flag       | Required | Description                                                  |
 |------------|----------|--------------------------------------------------------------|
-| `--id`     | yes      | Qualified account id, as printed by `kupferdraht-cli accounts`. |
+| `--id`     | yes      | Account id, as printed by `kupferdraht-cli accounts`. |
 
 Output:
 
@@ -1950,7 +1952,7 @@ kupferdraht-cli room-leave --id <room>@<domain>
 
 | Flag    | Required | Description           |
 |---------|----------|-----------------------|
-| `--id`  | yes      | Qualified room id.    |
+| `--id`  | yes      | Room id.    |
 
 Output:
 
@@ -1984,7 +1986,7 @@ kupferdraht-cli room-delete --id <room>@<domain>
 
 | Flag    | Required | Description           |
 |---------|----------|-----------------------|
-| `--id`  | yes      | Qualified room id.    |
+| `--id`  | yes      | Room id.    |
 
 Output:
 
@@ -2187,7 +2189,7 @@ kupferdraht-cli send-file --id <room>@<domain> --path <path> --mime <mime>
 
 | Flag       | Required | Description                                                         |
 |------------|----------|---------------------------------------------------------------------|
-| `--id`     | yes      | Qualified room id.                                                  |
+| `--id`     | yes      | Room id.                                                  |
 | `--path`   | yes      | Plaintext file path. Streamed through AES-256-CBC + SHA-256.        |
 | `--mime`   | yes      | Mime type (e.g. `image/png`), carried in the attachment reference.  |
 
@@ -2236,7 +2238,7 @@ kupferdraht-cli download-attachment --message <id> [--id <room>] [--save-to <pat
 | Flag         | Required | Description                                                                       |
 |--------------|----------|-----------------------------------------------------------------------------------|
 | `--message`  | yes      | `message_id` of the attachment message.                                           |
-| `--id`       | no       | Qualified room id. Auto-resolved from `--message` against the local timeline cache when omitted (same resolver as `mark-read`). |
+| `--id`       | no       | Room id. Auto-resolved from `--message` against the local timeline cache when omitted (same resolver as `mark-read`). |
 | `--save-to`  | no       | Filesystem path to write the decrypted plaintext to. Without this flag, prints metadata only — useful for inspecting multi-megabyte attachments before deciding to decrypt. |
 
 Output (metadata only — no `--save-to`):
@@ -2248,7 +2250,7 @@ download-attachment (metadata only — pass --save-to <path> to decrypt)
   filename:   <the sender's filename or —>
   mime:       <mime type>
   size_bytes: <plaintext size>
-  sender:     <qualified-user-id>
+  sender:     <user-id>
   cached:     <path of the cached ciphertext or —>
 ```
 
@@ -2261,7 +2263,7 @@ download-attachment ok
   filename:   <the sender's filename or —>
   mime:       <mime type>
   size_bytes: <plaintext size>
-  sender:     <qualified-user-id>
+  sender:     <user-id>
   saved_to:   <path>
 ```
 
@@ -2311,7 +2313,7 @@ kupferdraht-cli avatar remove
 
 `avatar get` prints the MIME type, the size and the path, or `avatar: —` for a user
 or team without one, and then writes no file. `avatar upload` prints the new
-`avatar_key`. `room-members` prints each member's `avatar_key`.
+`avatar_version`. `room-members` prints each member's `avatar_version`.
 
 ## Workflows
 
@@ -2331,7 +2333,7 @@ kupferdraht-cli send --id <some-room> -m "hello"    # send your first message
 ### Daily use after a previous login
 
 ```bash
-# resume auto-refreshes a stale token; re-login only if the zuid expired:
+# resume auto-refreshes a stale token; re-login only if the refresh cookie expired:
 kupferdraht-cli status                              # optional: inspect token age
 # Then:
 kupferdraht-cli sync                                # refresh metadata + drain events (Step 14b)

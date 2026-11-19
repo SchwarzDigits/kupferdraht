@@ -21,7 +21,7 @@
 //!
 //! The home id is read once, when the home is resolved (`open`), and
 //! held here: every keystore id of the home (`keystore::key_id`) and its
-//! login cookie label derive from it.
+//! session label derive from it.
 
 use std::path::PathBuf;
 
@@ -89,9 +89,9 @@ impl KupferdrahtHome {
         &self.home_id
     }
 
-    /// The Wire login cookie label of this home, `kupferdraht-<home-id>`.
-    pub(crate) fn cookie_label(&self) -> String {
-        super::home_id::cookie_label(&self.home_id)
+    /// The session label of this home, `kupferdraht-<home-id>`.
+    pub(crate) fn session_label(&self) -> String {
+        super::home_id::session_label(&self.home_id)
     }
 
     // On wasm these are the OPFS pool's file names (Step 91, ADR-0022): the
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn the_home_carries_its_id_and_the_label_derives_from_it() {
         assert_eq!(home().home_id(), HOME_ID);
-        assert_eq!(home().cookie_label(), format!("kupferdraht-{HOME_ID}"));
+        assert_eq!(home().session_label(), format!("kupferdraht-{HOME_ID}"));
     }
 
     #[test]

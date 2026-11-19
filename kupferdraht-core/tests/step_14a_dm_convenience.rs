@@ -32,7 +32,7 @@
 //!   exactly once; two concurrent callers de-duplicate the POST.
 //!
 //! All 7 feature tests panic via `todo!()` at red-phase; the
-//! `create_dm_rejects_unqualified_peer` input-guard test passes
+//! `create_dm_rejects_a_peer_without_a_domain` input-guard test passes
 //! because the stub already returns `InvalidInput` for an
 //! `@`-less peer string (matches the documented `Err` shape).
 //! Step 14a green-phase implements the three methods + the
@@ -224,22 +224,22 @@ async fn create_dm_drives_get_then_returns_room_for_peer() {
 }
 
 #[tokio::test]
-async fn create_dm_rejects_unqualified_peer() {
+async fn create_dm_rejects_a_peer_without_a_domain() {
     let server = MockServer::start();
     let client = logged_in_client(&server).await;
 
     let err = client
         .create_dm("peer-uuid")
         .await
-        .expect_err("unqualified peer (no @) must be rejected client-side");
+        .expect_err("a peer without a domain (no @) must be rejected client-side");
     assert!(
         matches!(err, kupferdraht::KupferdrahtError::InvalidInput(_)),
         "expected InvalidInput, got {err:?}"
     );
     let msg = format!("{err}");
     assert!(
-        msg.contains("peer must be qualified"),
-        "error message must mention 'peer must be qualified', got: {msg}"
+        msg.contains("peer must be '<uuid>@<domain>'"),
+        "error message must name the expected shape, got: {msg}"
     );
 }
 

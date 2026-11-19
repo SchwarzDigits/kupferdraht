@@ -114,11 +114,11 @@ fn mount_register_with_schema_guard<'a>(server: &'a MockServer) -> httpmock::Moc
 /// require the exact cookie value here so the test both verifies the
 /// extraction path (Set-Cookie → LoginOutcome::refresh_token) and the
 /// forwarding path (LoginOutcome::refresh_token → outbound Cookie).
-fn mount_rebind_for<'a>(server: &'a MockServer, client_id: &str) -> httpmock::Mock<'a> {
+fn mount_rebind_for<'a>(server: &'a MockServer, device_id: &str) -> httpmock::Mock<'a> {
     server.mock(|when, then| {
         when.method(POST)
             .path("/v14/access")
-            .query_param("client_id", client_id)
+            .query_param("client_id", device_id)
             .header("cookie", "zuid=test");
         then.status(200)
             .header("content-type", "application/json")
@@ -148,7 +148,7 @@ async fn register_client_request_includes_proteus_prekeys_and_lastkey() {
 }
 
 #[tokio::test]
-async fn login_materializes_client_id_from_register_response() {
+async fn login_materializes_the_device_id_from_register_response() {
     let server = MockServer::start();
     mount_step_1a_endpoints(&server);
     let _ = mount_register_with_schema_guard(&server);

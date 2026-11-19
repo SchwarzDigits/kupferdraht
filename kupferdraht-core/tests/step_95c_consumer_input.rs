@@ -281,7 +281,7 @@ fn mount_joined_room(server: &MockServer, welcome: &[u8]) {
 }
 
 /// Room-level entry points: malformed invitee ids, an empty typing room,
-/// an unqualified join-link room id, an empty task id.
+/// a join-link room id without a domain, an empty task id.
 #[tokio::test]
 async fn malformed_ids_at_room_entry_points_are_refused() {
     let server = MockServer::start();
@@ -309,17 +309,17 @@ async fn malformed_ids_at_room_entry_points_are_refused() {
             &format!("invite_members([{invitee:?}])"),
         );
     }
-    let unqualified = format!("@{DOMAIN}");
+    let without_domain = format!("@{DOMAIN}");
     assert_invalid(
-        client.create_join_link(&unqualified, None).await,
+        client.create_join_link(&without_domain, None).await,
         "create_join_link(\"@domain\")",
     );
     assert_invalid(
-        client.current_join_link(&unqualified).await,
+        client.current_join_link(&without_domain).await,
         "current_join_link(\"@domain\")",
     );
     assert_invalid(
-        client.revoke_join_link(&unqualified).await,
+        client.revoke_join_link(&without_domain).await,
         "revoke_join_link(\"@domain\")",
     );
     let timeline = client

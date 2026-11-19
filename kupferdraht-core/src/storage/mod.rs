@@ -61,7 +61,7 @@ pub(crate) use durable_keys::ensure_global_key_durable;
 pub(crate) use durable_keys::store_seed_durably;
 pub(crate) use global::open_global_store_in;
 pub(crate) use home::{KupferdrahtHome, is_path_safe_id};
-pub(crate) use home_id::ephemeral_cookie_label;
+pub(crate) use home_id::ephemeral_session_label;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use lock::ProcessLock;
 #[cfg(target_arch = "wasm32")]

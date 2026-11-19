@@ -53,7 +53,7 @@ impl PendingLogin {
         }
     }
 
-    /// The authenticated user's qualified Wire id.
+    /// The authenticated user's id, `<uuid>@<domain>`.
     #[must_use]
     pub fn user_id(&self) -> &str {
         self.inner.user_id()

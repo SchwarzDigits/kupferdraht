@@ -20,7 +20,7 @@ impl Client {
     /// from the rooms cache, which can be stale.
     ///
     /// # Errors
-    /// `InvalidInput` for an unqualified or uncached room, a room without
+    /// `InvalidInput` for a room id without a domain or an uncached room, a room without
     /// a group id, or a conversation the backend does not return; the
     /// local group's and the HTTP layer's errors otherwise.
     pub(crate) async fn backend_epoch_ahead(
