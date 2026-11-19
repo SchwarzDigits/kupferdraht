@@ -222,7 +222,7 @@ impl Future for Rung {
     }
 }
 
-/// `{base}/await?client={client_id}&access_token={token}` — the legacy
+/// `{base}/await?client={device_id}&access_token={token}` — the legacy
 /// doorbell socket, authenticated the only way a browser can.
 ///
 /// # Errors
@@ -230,7 +230,7 @@ impl Future for Rung {
 /// is not `ws`/`wss` — the token must never travel in the clear.
 pub fn await_url_with_token(
     websocket_base: &str,
-    client_id: &str,
+    device_id: &str,
     access_token: &str,
     permit_http: bool,
 ) -> Result<url::Url, KupferdrahtError> {
@@ -238,8 +238,8 @@ pub fn await_url_with_token(
     // builders — `ws://` and `http://` only with the opt-in.
     crate::wire::http::checked_websocket_base(websocket_base, permit_http)?;
     debug_assert!(
-        !client_id.is_empty(),
-        "await_url_with_token: client_id must be non-empty"
+        !device_id.is_empty(),
+        "await_url_with_token: device_id must be non-empty"
     );
     if access_token.is_empty() {
         // Not an assertion: a resumed session can legitimately be between
@@ -277,7 +277,7 @@ pub fn await_url_with_token(
         })?;
     }
     url.query_pairs_mut()
-        .append_pair("client", client_id)
+        .append_pair("client", device_id)
         .append_pair("access_token", access_token);
     Ok(url)
 }
@@ -332,12 +332,12 @@ impl Drop for BrowserPushSocket {
 /// `KupferdrahtError::Network` when the socket fails to open.
 pub async fn connect(
     websocket_base: &str,
-    client_id: &str,
+    device_id: &str,
     access_token: &str,
     doorbell: &Doorbell,
     permit_http: bool,
 ) -> Result<BrowserPushSocket, KupferdrahtError> {
-    let url = await_url_with_token(websocket_base, client_id, access_token, permit_http)?;
+    let url = await_url_with_token(websocket_base, device_id, access_token, permit_http)?;
     let socket = web_sys::WebSocket::new(url.as_str()).map_err(|e| {
         KupferdrahtError::Network(format!("push socket construct: {}", js_text(&e)))
     })?;

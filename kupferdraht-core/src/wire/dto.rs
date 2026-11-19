@@ -400,6 +400,40 @@ impl AccessRole {
     }
 }
 
+/// Wire's `ClientClass`: what kind of device a client is (the Swagger's
+/// closed set). The strings stay inside `wire/` (ADR-0009); the device
+/// layer maps the variants onto its device kinds (Step 163d).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientClass {
+    Phone,
+    Tablet,
+    Desktop,
+    Legalhold,
+}
+
+impl ClientClass {
+    /// Every value, in the Swagger's order.
+    pub const ALL: [Self; 4] = [Self::Phone, Self::Tablet, Self::Desktop, Self::Legalhold];
+
+    /// The value as Wire spells it.
+    #[must_use]
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            Self::Phone => "phone",
+            Self::Tablet => "tablet",
+            Self::Desktop => "desktop",
+            Self::Legalhold => "legalhold",
+        }
+    }
+
+    /// The value Wire spells `raw`, or `None` for one this client does
+    /// not know.
+    #[must_use]
+    pub fn from_wire(raw: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|class| class.as_wire() == raw)
+    }
+}
+
 /// Request body of `POST /v{N}/list-users`. The endpoint accepts
 /// either `qualified_ids` or `qualified_handles` (but not both);
 /// Kupferdraht uses ids during `sync_metadata`'s display-name backfill,
@@ -882,5 +916,17 @@ mod tests {
         }
         assert_eq!(Access::from_wire("everyone"), None);
         assert_eq!(AccessRole::from_wire("Guest"), None, "case matters");
+    }
+
+    /// Step 163d: every class the Swagger's `ClientClass` names reads and
+    /// writes back as Wire spells it; one it does not name is unknown.
+    #[test]
+    fn every_client_class_of_the_swagger_round_trips() {
+        for raw in ["phone", "tablet", "desktop", "legalhold"] {
+            let class = ClientClass::from_wire(raw).unwrap_or_else(|| panic!("{raw} is known"));
+            assert_eq!(class.as_wire(), raw);
+        }
+        assert_eq!(ClientClass::from_wire("watch"), None);
+        assert_eq!(ClientClass::from_wire("Desktop"), None, "case matters");
     }
 }

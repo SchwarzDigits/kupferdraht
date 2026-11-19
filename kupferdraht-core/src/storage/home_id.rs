@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The home id (Step 93, ADR-0025) — `base/home.id`, the 32-hex identifier
-//! every keystore id of a home and its Wire login cookie label carry.
+//! every keystore id of a home and its session label carry.
 //!
 //! An identifier, not a secret: it sits in plaintext next to the
 //! databases, inside the keystore ids and inside the login label Wire
@@ -73,11 +73,11 @@ pub(crate) fn generate_home_id() -> String {
     uuid::Uuid::new_v4().simple().to_string()
 }
 
-/// The Wire login cookie label of the home `home_id`: `kupferdraht-<home-id>`.
-/// Wire keeps one refresh cookie per `(user, label)`; one label per home
+/// The session label of the home `home_id`: `kupferdraht-<home-id>`. The
+/// backend keeps one refresh cookie per `(user, label)`; one label per home
 /// is what keeps two homes of one user from evicting each other.
 #[must_use]
-pub(crate) fn cookie_label(home_id: &str) -> String {
+pub(crate) fn session_label(home_id: &str) -> String {
     debug_assert!(is_home_id(home_id), "labels derive from a home id");
     format!("kupferdraht-{home_id}")
 }
@@ -86,8 +86,8 @@ pub(crate) fn cookie_label(home_id: &str) -> String {
 /// `base_dir`): a fresh id per builder — such a session persists no
 /// device either, so it never resumes a cookie.
 #[must_use]
-pub(crate) fn ephemeral_cookie_label() -> String {
-    cookie_label(&generate_home_id())
+pub(crate) fn ephemeral_session_label() -> String {
+    session_label(&generate_home_id())
 }
 
 /// Exactly 32 lowercase hex characters.
@@ -213,8 +213,8 @@ mod tests {
 
     #[test]
     fn ephemeral_labels_differ_per_call_and_carry_the_prefix() {
-        let a = ephemeral_cookie_label();
-        let b = ephemeral_cookie_label();
+        let a = ephemeral_session_label();
+        let b = ephemeral_session_label();
         assert!(a.starts_with("kupferdraht-") && a.len() == "kupferdraht-".len() + HOME_ID_LEN);
         assert_ne!(a, b);
     }

@@ -166,12 +166,12 @@ fn undeclared_fields(src: &str, types: &str) -> Vec<String> {
 #[test]
 fn a_wrong_type_and_a_view_without_a_row_are_named() {
     let types =
-        "export interface Member { displayName: string | null; handle: string; role: string }";
+        "export interface Member { displayName: string | null; username: string; role: string }";
     let src = r#"
 #[derive(serde::Serialize)]
 struct MemberView {
     display_name: Option<String>,
-    handle: Option<String>,
+    username: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     role: Option<String>,
 }
@@ -190,7 +190,7 @@ struct NewView {
     assert_eq!(
         undeclared_fields(src, types),
         [
-            "MemberView.handle in Member: Some(\"string\")",
+            "MemberView.username in Member: Some(\"string\")",
             "NewView has no row in VIEW_DECLARATIONS"
         ]
     );

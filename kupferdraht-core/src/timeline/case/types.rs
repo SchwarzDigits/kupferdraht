@@ -45,7 +45,7 @@ pub struct CaseSnapshot {
     pub case_type: Option<String>,
     pub state: CaseState,
     pub state_detail: Option<String>,
-    /// Qualified user id (`<uuid>@<domain>`).
+    /// User id (`<uuid>@<domain>`).
     pub assignee: Option<String>,
     pub due_at_ms: Option<i64>,
     pub priority: Option<CasePriority>,

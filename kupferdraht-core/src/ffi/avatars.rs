@@ -23,12 +23,15 @@ impl Client {
         self.inner.avatar(&UserId::parse(&user_id)?, size).await
     }
 
-    /// The version marker of a user's avatar: a changed avatar has a new key.
+    /// The version marker of a user's avatar: a changed avatar has a new one.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn avatar_key(&self, user_id: String) -> Result<Option<String>, KupferdrahtError> {
-        self.inner.avatar_key(&UserId::parse(&user_id)?).await
+    pub async fn avatar_version(
+        &self,
+        user_id: String,
+    ) -> Result<Option<String>, KupferdrahtError> {
+        self.inner.avatar_version(&UserId::parse(&user_id)?).await
     }
 
     /// The icon of the account's team as of the last login; `None` without one.

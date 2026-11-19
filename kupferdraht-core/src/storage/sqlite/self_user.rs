@@ -3,11 +3,12 @@
 
 //! `self_user` table CRUD. Whole-DB encryption protects the
 //! `email` column at rest, so it is stored and read verbatim like
-//! the rest (`id`, `handle`, `name`). `id` holds the qualified
+//! the rest (`id`, the username, `name`). `id` holds the
 //! `<localpart>@<domain>` user id (Step 19).
 
 use rusqlite::{OptionalExtension, params};
 
+use crate::avatar::AvatarSource;
 use crate::error::KupferdrahtError;
 use crate::storage::records::SelfUserRecord;
 
@@ -35,14 +36,14 @@ pub(super) fn save_self_user(
              team_avatar_key      = excluded.team_avatar_key",
         params![
             user.id,
-            user.handle,
+            user.username,
             user.name,
             user.email.as_deref().map(str::as_bytes),
             user.team_id,
             user.team_name,
-            user.avatar_thumbnail_key,
-            user.avatar_full_key,
-            user.team_avatar_key,
+            user.avatar_source.thumbnail,
+            user.avatar_source.full,
+            user.team_avatar_version,
         ],
     )
     .map_err(|e| KupferdrahtError::Storage(format!("save_self_user: {e}")))?;
@@ -68,8 +69,10 @@ pub(super) fn load_self_user(
                     row.get::<_, Option<Vec<u8>>>(2)?,
                     row.get::<_, Option<String>>(3)?,
                     row.get::<_, Option<String>>(4)?,
-                    row.get::<_, Option<String>>(5)?,
-                    row.get::<_, Option<String>>(6)?,
+                    AvatarSource {
+                        thumbnail: row.get(5)?,
+                        full: row.get(6)?,
+                    },
                     row.get::<_, Option<String>>(7)?,
                 ))
             },
@@ -77,29 +80,19 @@ pub(super) fn load_self_user(
         .optional()
         .map_err(|e| KupferdrahtError::Storage(format!("load_self_user: {e}")))?
     };
-    let Some((
-        handle,
-        name,
-        email,
-        team_id,
-        team_name,
-        avatar_thumbnail_key,
-        avatar_full_key,
-        team_avatar_key,
-    )) = raw
+    let Some((username, name, email, team_id, team_name, avatar_source, team_avatar_version)) = raw
     else {
         return Ok(None);
     };
     let email = email.map(|b| utf8_column(b, "email")).transpose()?;
     Ok(Some(SelfUserRecord {
         id: id.to_string(),
-        handle,
+        username,
         name,
         email,
         team_id,
         team_name,
-        avatar_thumbnail_key,
-        avatar_full_key,
-        team_avatar_key,
+        avatar_source,
+        team_avatar_version,
     }))
 }

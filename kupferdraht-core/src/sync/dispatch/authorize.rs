@@ -37,10 +37,10 @@ fn may_delete(
     sender_user_id: &str,
     self_user_id: Option<&str>,
 ) -> bool {
-    let is_self = |user: &str| self_user_id == Some(user);
+    let is_own = |user: &str| self_user_id == Some(user);
     let is_disappearing = target.expires_at_ms.is_some() || target.ttl_ms.is_some();
     target.sender_user_id == sender_user_id
-        || (is_disappearing && (is_self(sender_user_id) || is_self(&target.sender_user_id)))
+        || (is_disappearing && (is_own(sender_user_id) || is_own(&target.sender_user_id)))
 }
 
 /// The operation an inbound message performs on an earlier one.

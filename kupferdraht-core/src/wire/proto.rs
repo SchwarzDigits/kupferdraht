@@ -57,6 +57,17 @@ fn mention_to_proto(m: &MentionInput) -> Mention {
     }
 }
 
+/// The protobuf `QualifiedUserId` of a `<id>@<domain>` user id — the
+/// assignee of a task or a case (Step 163d keeps the type's name inside
+/// `wire/`). An id without a domain gets an empty one.
+pub(crate) fn user_reference(user_id: &str) -> QualifiedUserId {
+    let (id, domain) = user_id.split_once('@').unwrap_or((user_id, ""));
+    QualifiedUserId {
+        id: id.to_string(),
+        domain: domain.to_string(),
+    }
+}
+
 /// A reference to the parent message of a Quote / Reply.
 /// `body` and `sent_at_ms` are the parent's plaintext body and
 /// wall-clock timestamp in milliseconds since Unix epoch — the

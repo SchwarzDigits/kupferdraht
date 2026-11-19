@@ -178,7 +178,7 @@ async fn a_provider_yields_the_start_url_with_the_redirect_pair() {
 /// The SSO session gets the same per-home cookie label a password login
 /// asks for (ADR-0025), so the two kinds of login treat a home alike.
 #[tokio::test]
-async fn the_start_url_names_the_homes_cookie_label() {
+async fn the_start_url_names_the_homes_session_label() {
     let server = MockServer::start();
     let seen: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let sink = seen.clone();
@@ -339,7 +339,7 @@ async fn a_signed_in_callback_logs_in() {
 
     let account = client.account();
     assert_eq!(account.display_name(), "alice@example.test");
-    assert_eq!(account.handle(), None);
+    assert_eq!(account.username(), None);
     assert_eq!(
         account.email(),
         None,

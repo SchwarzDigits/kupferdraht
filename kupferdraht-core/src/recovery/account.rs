@@ -133,12 +133,12 @@ async fn seal_and_record(
     let session = WireSession::Client(refresher);
     let account_id = client_account_id(client);
     // Step 120 (ADR-0040): the data belongs to this device — the slot's.
-    let client_id = client.device_id().ok_or_else(|| {
+    let device_id = client.device_id().ok_or_else(|| {
         KupferdrahtError::InvalidInput("recovery needs a registered device".into())
     })?;
     let device = RecoveryDevice {
         account_id: &account_id,
-        client_id,
+        device_id,
     };
     let data = seal_for_account(services, &session, device, &seed, pin, &mut OsRng).await?;
     let record = RecoveryStateRecord {

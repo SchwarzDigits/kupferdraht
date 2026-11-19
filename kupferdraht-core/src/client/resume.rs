@@ -18,7 +18,6 @@ use std::sync::{Arc, Mutex as StdMutex};
 
 use base64::Engine as _;
 
-use crate::avatar::AvatarKeys;
 use crate::client::Account;
 use crate::client::Client;
 use crate::client::OwnTeam;
@@ -113,9 +112,9 @@ pub(super) struct DeviceIdentity {
 
 /// When the persisted access token has aged past its ~15-min TTL,
 /// refresh it in place: rebind via cookie-auth `POST /access` with the
-/// persisted `zuid`, swap the fresh token + rotated `zuid` into
-/// `session`, and re-persist. A live `zuid` keeps the session alive
-/// across process restarts (no re-login); a dead `zuid` surfaces the
+/// persisted refresh cookie, swap the fresh token + rotated refresh cookie into
+/// `session`, and re-persist. A live refresh cookie keeps the session alive
+/// across process restarts (no re-login); a dead refresh cookie surfaces the
 /// rebind error so the caller re-runs `login`.
 ///
 /// Step 85: the same cross-process critical section as the in-session
@@ -129,17 +128,17 @@ pub(super) struct DeviceIdentity {
 /// rebind is rejected by Wire prod.
 ///
 /// # Errors
-/// * `Storage` for an empty `client_id`, `SessionExpired` for a blanked
+/// * `Storage` for an empty `device_id`, `SessionExpired` for a blanked
 ///   refresh token (Step 95c — see `ensure_session_resumable`).
 /// * `AccountLocked`, and whatever the rebind or the save surfaces.
 pub(super) async fn refresh_stale_access_token(
     session: &mut crate::storage::SessionRecord,
     http: &HttpClient,
     store: &dyn Store,
-    client_id: &str,
+    device_id: &str,
     home: Option<&KupferdrahtHome>,
 ) -> Result<(), KupferdrahtError> {
-    ensure_session_resumable(session, client_id)?;
+    ensure_session_resumable(session, device_id)?;
     if !access_token_is_stale(session) {
         return Ok(());
     }
@@ -155,10 +154,10 @@ pub(super) async fn refresh_stale_access_token(
     }
     tracing::debug!(
         age_min = (now_ms() - session.access_token_issued_at_ms) / 60_000,
-        "resume: access token aged out — rebinding via /access with the persisted zuid"
+        "resume: access token aged out — rebinding via /access with the persisted refresh cookie"
     );
     let rebound = http
-        .rebind_access_token(session.api_version, &session.refresh_token, client_id)
+        .rebind_access_token(session.api_version, &session.refresh_token, device_id)
         .await?;
     session.access_token = rebound.access_token;
     session.refresh_token = rebound.refresh_token;
@@ -167,20 +166,20 @@ pub(super) async fn refresh_stale_access_token(
 }
 
 /// Step 95c: the persisted rows are runtime data, never asserted. An
-/// empty `client_id` is a damaged device row; an empty refresh token
+/// empty `device_id` is a damaged device row; an empty refresh token
 /// (native) is the state `clear_persisted_tokens` leaves after
 /// `SessionExpired` — the re-login gate. wasm is exempt from the second
 /// check: there the empty string is the deliberate sentinel (the browser
 /// jar owns the cookie — W6).
 ///
 /// # Errors
-/// `Storage` for an empty `client_id`; `SessionExpired` for an empty
+/// `Storage` for an empty `device_id`; `SessionExpired` for an empty
 /// native refresh token.
 fn ensure_session_resumable(
     session: &crate::storage::SessionRecord,
-    client_id: &str,
+    device_id: &str,
 ) -> Result<(), KupferdrahtError> {
-    if client_id.is_empty() || session.device_id.is_empty() {
+    if device_id.is_empty() || session.device_id.is_empty() {
         return Err(KupferdrahtError::Storage(
             "resume: the persisted device has an empty client id — re-run login".into(),
         ));
@@ -245,24 +244,25 @@ pub(super) fn assemble_resumed_client(
     let user_id = account.user_id().clone();
     Ok(Client::new(
         user_id,
-        parts.device.client_id,
+        parts.device.device_id,
         server,
         parts.session.api_version,
         parts.session.access_token,
         parts.session.refresh_token,
         account,
-        parts.removal_key.public_key,
+        parts.external_sender_key.public_key,
         mls_public_key,
         http,
         Some(store),
         mls_client,
         kupferdraht_home,
-        parts.session.cookie_label,
+        parts.session.session_label,
     ))
 }
 
 /// Build the [`Account`] view used by `resume` from the persisted
-/// `SelfUserRecord` (whose `id` is the qualified user id since Step 19).
+/// `SelfUserRecord` (whose `id` is the `<localpart>@<domain>` user id since
+/// Step 19).
 pub(super) fn account_from_row(
     self_user: &crate::storage::SelfUserRecord,
 ) -> Result<Arc<Account>, KupferdrahtError> {
@@ -270,17 +270,14 @@ pub(super) fn account_from_row(
     Ok(Account::new(
         user_id,
         self_user.name.clone(),
-        self_user.handle.clone(),
+        self_user.username.clone(),
         self_user.email.clone(),
         OwnTeam {
             id: self_user.team_id.clone(),
             name: self_user.team_name.clone(),
-            icon_key: self_user.team_avatar_key.clone(),
+            avatar_version: self_user.team_avatar_version.clone(),
         },
-        AvatarKeys {
-            thumbnail: self_user.avatar_thumbnail_key.clone(),
-            full: self_user.avatar_full_key.clone(),
-        },
+        self_user.avatar_source.clone(),
     ))
 }
 
@@ -291,7 +288,7 @@ pub(super) fn account_from_row(
 pub(super) fn resume_mls_state(
     home: Option<&KupferdrahtHome>,
     qualified_user: &str,
-    client_id: &str,
+    device_id: &str,
     mls_public_key: &[u8],
     mls_key: Option<&DbKey>,
 ) -> Result<Option<Arc<StdMutex<MlsClient>>>, KupferdrahtError> {
@@ -301,7 +298,7 @@ pub(super) fn resume_mls_state(
     Ok(Some(resume_mls_client(
         home,
         qualified_user,
-        client_id,
+        device_id,
         mls_public_key,
         mls_key,
     )?))
@@ -316,7 +313,7 @@ pub(super) struct ResumeState {
     pub(super) server_cfg: crate::storage::ServerConfigRecord,
     pub(super) device: crate::storage::DeviceRecord,
     pub(super) self_user: crate::storage::SelfUserRecord,
-    pub(super) removal_key: crate::storage::BackendMlsKey,
+    pub(super) external_sender_key: crate::storage::BackendMlsKey,
 }
 
 pub(super) async fn load_resume_state(
@@ -345,13 +342,13 @@ pub(super) async fn load_resume_state(
         })?;
     // Step 95c: an empty persisted key (writable by pre-95c release
     // builds) counts as missing — it would reach `create_group`.
-    let removal_key = store
+    let external_sender_key = store
         .load_backend_mls_key("removal", "ecdsa_secp256r1_sha256")
         .await?
         .filter(|key| !key.public_key.is_empty())
         .ok_or_else(|| {
             KupferdrahtError::InvalidInput(
-                "no persisted backend removal key — re-run `login`".into(),
+                "no persisted external sender key — re-run `login`".into(),
             )
         })?;
     Ok(ResumeState {
@@ -359,7 +356,7 @@ pub(super) async fn load_resume_state(
         server_cfg,
         device,
         self_user,
-        removal_key,
+        external_sender_key,
     })
 }
 
@@ -398,14 +395,14 @@ pub(super) fn decode_persisted_mls_public_key(
 fn resume_mls_client(
     home: &KupferdrahtHome,
     account_id: &str,
-    client_id: &str,
+    device_id: &str,
     mls_public_key: &[u8],
     mls_key: Option<&DbKey>,
 ) -> Result<Arc<StdMutex<MlsClient>>, KupferdrahtError> {
     // Route through the shared crate-internal MLS-open seam (Step 43), the
     // same one the login pipeline uses, instead of a second inline open.
     let provider = super::login_pipeline::open_mls_provider(Some(home), account_id, mls_key)?;
-    let mls = MlsClient::resume_with_storage(provider, account_id, client_id, mls_public_key)?;
+    let mls = MlsClient::resume_with_storage(provider, account_id, device_id, mls_public_key)?;
     Ok(Arc::new(StdMutex::new(mls)))
 }
 
@@ -419,17 +416,17 @@ mod refresh_stale_access_token_tests {
     use httpmock::MockServer;
     use tempfile::TempDir;
 
-    const CLIENT_ID: &str = "device-cid";
+    const DEVICE_ID: &str = "device-cid";
 
     /// A session whose access token is epoch-old — i.e. always past the
     /// TTL, so the rebind path is exercised.
     fn stale_session() -> SessionRecord {
         SessionRecord {
             user_id: "user-uuid".to_string(),
-            device_id: CLIENT_ID.to_string(),
+            device_id: DEVICE_ID.to_string(),
             access_token: "old.jwt.token".to_string(),
-            refresh_token: "zuid-A".to_string(),
-            cookie_label: Some("kupferdraht-user-uuid".to_string()),
+            refresh_token: "cookie-A".to_string(),
+            session_label: Some("kupferdraht-user-uuid".to_string()),
             api_version: 14,
             access_token_issued_at_ms: 0,
         }
@@ -451,17 +448,17 @@ mod refresh_stale_access_token_tests {
         HttpClient::new(base_url, true).expect("HttpClient (permit_http=true)")
     }
 
-    /// Mount the happy `/access` rebind: cookie `zuid=zuid-A` →
-    /// 200 with a fresh access token and a rotated `zuid=zuid-B`.
+    /// Mount the happy `/access` rebind: cookie `zuid=cookie-A` →
+    /// 200 with a fresh access token and a rotated `zuid=cookie-B`.
     fn mount_rebind(server: &MockServer) -> httpmock::Mock<'_> {
         server.mock(|when, then| {
             when.method(POST)
                 .path("/v14/access")
-                .query_param("client_id", CLIENT_ID)
-                .header("cookie", "zuid=zuid-A");
+                .query_param("client_id", DEVICE_ID)
+                .header("cookie", "zuid=cookie-A");
             then.status(200)
                 .header("content-type", "application/json")
-                .header("set-cookie", "zuid=zuid-B; HttpOnly; Secure; Path=/access")
+                .header("set-cookie", "zuid=cookie-B; HttpOnly; Secure; Path=/access")
                 .body(
                     r#"{"access_token":"new.jwt.token","token_type":"Bearer","expires_in":900,"user":"user-uuid"}"#,
                 );
@@ -469,7 +466,7 @@ mod refresh_stale_access_token_tests {
     }
 
     /// Stale token → cross-process rebind succeeds → fresh token +
-    /// rotated zuid land in `session` AND are re-persisted.
+    /// rotated refresh cookie land in `session` AND are re-persisted.
     #[tokio::test]
     async fn rebinds_and_persists_when_token_is_stale() {
         let server = MockServer::start();
@@ -481,7 +478,7 @@ mod refresh_stale_access_token_tests {
             &mut session,
             &http(&server.base_url()),
             &*store,
-            CLIENT_ID,
+            DEVICE_ID,
             None,
         )
         .await
@@ -493,8 +490,8 @@ mod refresh_stale_access_token_tests {
             "in-memory token must be rebound"
         );
         assert_eq!(
-            session.refresh_token, "zuid-B",
-            "rotated zuid must be captured"
+            session.refresh_token, "cookie-B",
+            "rotated refresh cookie must be captured"
         );
         assert!(
             session.access_token_issued_at_ms > 0,
@@ -511,8 +508,8 @@ mod refresh_stale_access_token_tests {
             "rebound token must be persisted"
         );
         assert_eq!(
-            persisted.refresh_token, "zuid-B",
-            "rotated zuid must be persisted"
+            persisted.refresh_token, "cookie-B",
+            "rotated refresh cookie must be persisted"
         );
     }
 
@@ -529,7 +526,7 @@ mod refresh_stale_access_token_tests {
             &mut session,
             &http(&server.base_url()),
             &*store,
-            CLIENT_ID,
+            DEVICE_ID,
             None,
         )
         .await
@@ -542,7 +539,7 @@ mod refresh_stale_access_token_tests {
         );
     }
 
-    /// Dead zuid → `/access` rejects → error surfaces (re-login), and
+    /// Dead refresh cookie → `/access` rejects → error surfaces (re-login), and
     /// the rebind was actually attempted.
     /// Step 95c: `clear_persisted_tokens` blanks the access token after
     /// `SessionExpired`; on wasm (no refresh-token guard) a resume
@@ -562,7 +559,7 @@ mod refresh_stale_access_token_tests {
             &mut session,
             &http(&server.base_url()),
             &*store,
-            CLIENT_ID,
+            DEVICE_ID,
             None,
         )
         .await
@@ -585,11 +582,11 @@ mod refresh_stale_access_token_tests {
     }
 
     /// Step 95c: the persisted device row is runtime data — a row with
-    /// an empty `client_id` (never written by a correct build, but a
+    /// an empty `device_id` (never written by a correct build, but a
     /// foreign or damaged DB can hold one) used to hit a `debug_assert!`.
     /// It is a typed storage error now, and no rebind is attempted.
     #[tokio::test]
-    async fn an_empty_persisted_client_id_is_a_storage_error() {
+    async fn an_empty_persisted_device_id_is_a_storage_error() {
         let server = MockServer::start();
         let rebind = mount_rebind(&server);
         let (_dir, store) = keyed_store();
@@ -598,7 +595,7 @@ mod refresh_stale_access_token_tests {
         let err =
             refresh_stale_access_token(&mut session, &http(&server.base_url()), &*store, "", None)
                 .await
-                .expect_err("an empty client_id cannot be resumed");
+                .expect_err("an empty device_id cannot be resumed");
 
         assert!(matches!(err, KupferdrahtError::Storage(_)), "got {err:?}");
         rebind.assert_calls(0);
@@ -611,7 +608,7 @@ mod refresh_stale_access_token_tests {
             when.method(POST).path("/v14/access");
             then.status(403)
                 .header("content-type", "application/json")
-                .body(r#"{"code":403,"label":"invalid-credentials","message":"dead zuid"}"#);
+                .body(r#"{"code":403,"label":"invalid-credentials","message":"dead cookie"}"#);
         });
         let (_dir, store) = keyed_store();
         let mut session = stale_session();
@@ -620,11 +617,11 @@ mod refresh_stale_access_token_tests {
             &mut session,
             &http(&server.base_url()),
             &*store,
-            CLIENT_ID,
+            DEVICE_ID,
             None,
         )
         .await
-        .expect_err("a dead zuid must surface an error so the caller re-logs-in");
+        .expect_err("a dead refresh cookie must surface an error so the caller re-logs-in");
 
         // Step 39: a 403 invalid-credentials on the rebind is the terminal
         // session-expiry signal, typed distinctly so the caller drives re-login.

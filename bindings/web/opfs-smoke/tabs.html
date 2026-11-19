@@ -77,7 +77,7 @@
           const viaA = await b.kupferdraht.accounts();
           say(`[B] accounts() through A: ${JSON.stringify(viaA)}`);
           verdict.readThroughA = Array.isArray(viaA);
-          const promoted = once(b, 'leader-changed', (e) => e.detail.isSelf);
+          const promoted = once(b, 'leader-changed', (e) => e.detail.isThisTab);
           const inFlight = b.kupferdraht.accounts();  // idempotent: must survive the leader change
           a.close();                             // the leader tab "closes": its worker dies, the lease is released
           say('[A] closed');

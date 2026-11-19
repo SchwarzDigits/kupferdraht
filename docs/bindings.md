@@ -42,7 +42,7 @@ consumers use the `ffi` surface below.
   managed configuration say; nothing is stored. A certificate neither covers is
   `CertificateRejected`. The browser surface has no such option: the browser
   checks with its own list.
-- `parse_user_id(id) -> QualifiedUserId`, `kupferdraht_version() -> String`.
+- `parse_user_id(id) -> UserId`, `kupferdraht_version() -> String`.
 - `initLogging(level, listener)` (Step 117) — Kupferdraht's log events at
   `level` (`LogLevel.ERROR` … `TRACE`) or above go to `listener`, a
   `LogListener` with one method `onLog(record)` (`LogRecord { level,
@@ -63,8 +63,8 @@ consumers use the `ffi` surface below.
 
 **Objects** (opaque, passed by reference; transient — compare by `id`, not
 object identity)
-- `Kupferdraht` — `home_id()` / `cookie_label()` (Step 93: the home's id from
-  `base_dir/home.id` and its Wire login label `kupferdraht-<home-id>` — one
+- `Kupferdraht` — `home_id()` / `session_label()` (Step 93: the home's id from
+  `base_dir/home.id` and its session label `kupferdraht-<home-id>` — one
   per home, so two homes of one user on one keystore keep both
   sessions), `accounts()`, `active_account()`, `login(server, email,
   password, second_factor_code?) -> PendingLogin`, `resume(account_id) ->
@@ -78,12 +78,12 @@ object identity)
   URL that starts an SSO login; `provider` `null`/`nil` takes the backend's
   default; the redirect's scheme must begin with `wire`; wasm:
   `ssoLoginUrl(apiBaseUrl, provider?)` without a redirect),
-  `login_with_sso_callback(server, callback_url, device_label?) ->
+  `login_with_sso_callback(server, callback_url, initial_device_display_name?) ->
   PendingLogin` (Step 162 — logs in from the URL the browser came back to;
   drive `register_device` as with password login; a refused login is
   `BackendRejected` with the backend's reason; wasm:
   `loginWithSsoCallback(apiBaseUrl, websocketUrl, title, message,
-  deviceLabel?)` with the `data` of the SSO page's `message` event).
+  initialDeviceDisplayName?)` with the `data` of the SSO page's `message` event).
 - `PendingClient` — `user_id()`, `email()`, `activate(code) -> Client`
   (once-only on success; a failed activation can be retried),
   `resend_activation_email()`. Activation registers the account in the
@@ -95,7 +95,7 @@ object identity)
   handle: `register_device` completes login; on the 7-device cap, free a
   slot (`devices` / `delete_device`) and call `register_device` again on
   the same handle — no second login.
-- `Client` — identity getters (`user_id() -> QualifiedUserId?`,
+- `Client` — identity getters (`user_id() -> UserId?`,
   `device_id`, `account() -> Account`, backend URLs),
   `storage_engine() -> StorageEngineInfo?` (Step 90 — the whole-DB
   encryption engine, cipher scheme and header mode read off the open
@@ -107,11 +107,11 @@ object identity)
   `leave_room`, `delete_room`, `rename_room`, `join_via_link`,
   `find_message_room`, `find_message_by_id`, `resync_room`,
   `resync_existing_rooms`, …); admin (`logout`,
-  `set_display_name`, `set_handle`, `request_email_change`, `change_password`, `devices`,
+  `set_display_name`, `set_username`, `request_email_change`, `change_password`, `devices`,
   `delete_device(device_id, password?)` — `None` for an account without a password, an
   SSO user's (Step 164),
   `feature_configs`, `file_sharing`, `receipt_mode`, …); avatars (Step 144:
-  `avatar(user_id, size) -> Avatar?`, `avatar_key(user_id)`, `team_avatar()`,
+  `avatar(user_id, size) -> Avatar?`, `avatar_version(user_id)`, `team_avatar()`,
   `upload_avatar(image)`, `remove_avatar()`; the rules are in
   [library.md](library.md)); sync + observers (below).
 - `Room` — getters (`id`, `name`, `room_type`, `counterpart`, `members`,
@@ -150,9 +150,9 @@ object identity)
   the download token and the cipher stay inside the core, and the download
   goes through the object (Step 163b).
 
-**Records / enums** — `QualifiedUserId`, `Account`, `Avatar`, `AvatarSize`,
-`RoomMember` (its `avatar_thumbnail_key` and `avatar_full_key`, Step 144; the
-version marker is the first of them, else the second),
+**Records / enums** — `UserId`, `Account` (with `username`), `Avatar`, `AvatarSize`, `AvatarSource`,
+`RoomMember` (`is_own`, `username`, and `avatar_source`, Step 144; the
+version marker is the thumbnail's id, else the full image's),
 `RoomDevice`, `DeviceCredential`, `RoomDevicesChange` (Step 95d; the
 foreign-implemented `RoomDevicesListener` sits with the other observers),
 `RoomType`, `RoomAccess` (`JoinRule`, `Joiner`), `JoinLink`, `TimelineItem`, `TimelineItemKind` (with
@@ -163,7 +163,7 @@ foreign-implemented `RoomDevicesListener` sits with the other observers),
 and `Message` carry `expires_at_ms: Option<i64>` since Step 89 — set
 only for a disappearing message), `AttachmentMeta`,
 `MessageHandle`, `Mention`, `OutgoingContent` (Step 130a — the content
-of `send_keyed`), `ReactionGroup`, `DeviceInfo`, `FeatureConfigEntry`,
+of `send_keyed`), `ReactionGroup`, `DeviceInfo` (with `DeviceKind`, Step 163d), `FeatureConfigEntry`,
 `UserPropertyEntry`, `FileSharingPolicy`, `ReceiptMode`, `AccountEntry`,
 `ServerConfig`, `SyncSettings`, `SyncTransport` (Step 62 — selects the
 receive transport; `WebSocket` also switches `start_sync` to the push
@@ -299,7 +299,7 @@ A missing value in a view crosses as `null` (Step 130c, through the one
 serializer in `wasm/js_view.rs`), as `index.d.ts` declares it, and so does a
 whole missing view (`storageEngine()`). What is no view keeps `undefined`, as
 its type declares: the getters on `Client`, the tabs' `homeId` and
-`cookieLabel`, a thrown error's details.
+`sessionLabel`, a thrown error's details.
 
 **Persistence (Step 91, ADR-0022; on sqlite-remote-vfs since Step 111,
 ADR-0035):** the same whole-DB-encrypted SQLite3MC store as native —
@@ -651,16 +651,16 @@ manager:
   `onEvicted(reason)` fires once when this instance stops — `"tab"`: a
   later tab took over; `"device"`: another browser took the account's
   databases on the storage server over; `"access"`: the token exchange no
-  longer admits the user; terminate the worker then. Getters `evicted`, `homeId` and `cookieLabel` (Step 93; since
+  longer admits the user; terminate the worker then. Getters `evicted`, `homeId` and `sessionLabel` (Step 93; since
   Step 111a the home id is the keystore entry `kupferdraht.home-id` — one origin,
-  one home — and the login label is `kupferdraht-<home-id>`).
+  one home — and the session label is `kupferdraht-<home-id>`).
 - `login(apiBaseUrl, websocketUrl, title, email, password,
-  secondFactorCode?, deviceLabel?) -> PendingLogin` — phase-1 password
+  secondFactorCode?, initialDeviceDisplayName?) -> PendingLogin` — phase-1 password
   login.
 - `ssoLoginUrl(apiBaseUrl, provider?) -> String` (Step 162) — open it in a
   popup; without a redirect the backend's page reports to the opener by
   `postMessage`. `loginWithSsoCallback(apiBaseUrl, websocketUrl, title,
-  message, deviceLabel?) -> PendingLogin` takes that `message` event's
+  message, initialDeviceDisplayName?) -> PendingLogin` takes that `message` event's
   `data` (`AUTH_SUCCESS`, or `AUTH_ERROR` → `BackendRejected` with the
   reason); the session cookie is already in the browser's jar.
 - `resume(accountId) -> Client` — resume a registered account from the
@@ -672,7 +672,7 @@ manager:
   (Step 111c): `HeldElsewhere` when another browser has the account's
   databases open; `takeOver: true` takes them over (the other browser's
   instance stops with `onEvicted("device")`).
-- `accounts() -> {accountId, server, handle, displayName,
+- `accounts() -> {accountId, server, username, displayName,
   lastActiveMs}[]` — the device registry; since Step 110 only the accounts
   whose seed this browser holds.
 - `validateNewPin(pin) -> "ok" | "tooShort" | "tooCommon"` (Step 112) —
@@ -729,10 +729,10 @@ Since Step 110 (ADR-0035):
 
 **`class Client`**:
 - Getters: `userId`, `displayName`, `email` (Step 122: the account's
-  email address, `undefined` when it has none on record), `handle`
-  (Step 125: the account's handle, `undefined` when it has none on
+  email address, `undefined` when it has none on record), `username`
+  (Step 125: the account's username, `undefined` when it has none on
   record), each as of the login, `refreshAccount()` or this session's
-  own `setDisplayName` / `setHandle` / avatar calls (Step 152),
+  own `setDisplayName` / `setUsername` / avatar calls (Step 152),
   `deviceReplaced` (Step 110: this login's device replaced the recorded
   one, which the backend no longer had — older messages are gone).
 - Getters `teamId`, `teamName` (Step 143): the user's team, `undefined` for a
@@ -740,7 +740,7 @@ Since Step 110 (ADR-0035):
   fetch it, until `refreshAccount()` does.
 - `refreshAccount(): Promise<void>` (Step 152): reads `GET /self` and, for a
   team member, `GET /teams/{tid}` again, and resolves when `displayName`,
-  `handle`, `email`, `teamId`, `teamName` and `teamAvatar()` answer the new
+  `username`, `email`, `teamId`, `teamName` and `teamAvatar()` answer the new
   values. All or nothing: on any failure it rejects and nothing changes, a
   stored team name included. Nothing calls it by itself — `team.update`
   reaches only a team's admins and is not stored, so no event could do it —
@@ -810,7 +810,7 @@ Since Step 110 (ADR-0035):
   `fileSharing() -> {policy}` (`"disabled" | "enabled"`).
 - Devices (Step 95d): `roomDevices(roomId) -> {userId, deviceId,
   credential: "basic"|"x509", thumbprint}[]` (one per MLS leaf;
-  `thumbprint` is Wire's "MLS Thumbprint"), `ownDeviceThumbprint()`.
+  `thumbprint` is the MLS thumbprint the official apps show), `ownDeviceThumbprint()`.
 - Timeline: `sendText(roomId, body)` (MLS auto-join), `messages(roomId,
   limit?, before?)` (local decrypted read, oldest-first; `before` is a
   message id, Step 98c), `sendPing(roomId, repeated)` /
@@ -872,11 +872,11 @@ Since Step 110 (ADR-0035):
   - A direct room starts with an `added` naming both users; hide it by the room's type if
     it is unwanted.
 - Avatars (Step 144): `avatar(userId, "thumbnail" | "full") -> { bytes: Uint8Array,
-  mimeType } | null`, `avatarKey(userId) -> string | null`, `teamAvatar()`,
-  `uploadAvatar(image)`, `removeAvatar()`, and `avatarKey` on each `members()` entry.
+  mimeType } | null`, `avatarVersion(userId) -> string | null`, `teamAvatar()`,
+  `uploadAvatar(image)`, `removeAvatar()`, and `avatarVersion` on each `members()` entry.
   Every image is one Kupferdraht wrote, JPEG or PNG. **Show it as `<img>` or on a
   canvas, never as a document, `iframe` or `object`.** Under tabs, `avatar`,
-  `avatarKey` and `teamAvatar` are re-issued at a leader change, `uploadAvatar` and
+  `avatarVersion` and `teamAvatar` are re-issued at a leader change, `uploadAvatar` and
   `removeAvatar` reject `LeaderChangedError`.
 - Attachments (W7): `sendFile(roomId, bytes, filename, mimeType)` (in-memory
   encrypted send), `downloadAttachment(roomId, itemId) -> bytes` (download +
@@ -884,16 +884,16 @@ Since Step 110 (ADR-0035):
   whose sender declared over 100 MiB rejects `InvalidInput` before any
   request, and more bytes than declared + 32 reject `IntegrityCheck`
   (Step 160).
-- Session admin (Step 98a): `setDisplayName(name)`, `setHandle(handle)`,
+- Session admin (Step 98a): `setDisplayName(name)`, `setUsername(username)`,
   `requestEmailChange(email)` — the last one means "confirmation mail sent", not
   "address changed". Since Step 126 the first two also write the persisted
   `self_user` row, so the next `resume` reports the new value; since
-  Step 152 the `displayName` / `handle` getters answer it right after the
+  Step 152 the `displayName` / `username` getters answer it right after the
   call, under tabs in the calling tab.
 - Devices (Step 98a): `devices() -> DeviceInfo[]`, `deleteDevice(deviceId,
   password?)` — no password (or an empty one) for an account without one, an
   SSO user's; an account with a password rejects `missing-auth` (Step 164). `DeviceInfo` is the core record field for field —
-  `{deviceId, class, label, model, registeredAt, lastActive, isSelf}`.
+  `{deviceId, kind, displayName, model, registeredAtMs, lastSeenMs, isOwn}`, `kind` one of `'phone' | 'tablet' | 'desktop' | 'legalHold' | 'other'` (Step 163d).
 - `recovery() -> Recovery` (Step 112) — the account's recovery data.
 - `serviceToken(audience) -> { token, expiresIn }` (async, Step 139) — a
   token of the named audience from the token exchange for a service of
@@ -983,17 +983,17 @@ instance" into "served to every tab". Two halves:
   classes**
   (everything but the leader-only `Kupferdraht.open`; wrapper objects come
   back as proxies whose getters `userId` / `displayName` / `email` /
-  `handle` / `teamId` / `teamName` are snapshots, so they stay synchronous;
-  `refreshAccount()`, `setDisplayName`, `setHandle`, `uploadAvatar` and
+  `username` / `teamId` / `teamName` are snapshots, so they stay synchronous;
+  `refreshAccount()`, `setDisplayName`, `setUsername`, `uploadAvatar` and
   `removeAvatar` bring the calling tab's snapshot up to date before they
   resolve (Step 152: the leader answers the getters after the call), and
   another tab calls `refreshAccount()` for itself; the `Kupferdraht` getters `homeId` /
-  `cookieLabel` ride on the leader's announcement and are `undefined`
+  `sessionLabel` ride on the leader's announcement and are `undefined`
   until one arrived). `host.state` is `electing` |
   `leader` | `thin`; `host.takeOver()` is the ADR-0023 override for a
   hung leader; `host.close()` terminates the candidate (a leader releases
   the lease). Events on the host: `leader-changed` `{leaderTabId, epoch,
-  isSelf}`, `evicted` `{epoch, reason}` — `"tab"`: this tab led and
+  isThisTab}`, `evicted` `{epoch, reason}` — `"tab"`: this tab led and
   another tab took over (the host terminated that worker and queued a
   fresh candidate); `"device"` / `"access"` (Step 111c): the leader's
   instance stopped for every tab — another browser took the account's
@@ -1052,14 +1052,14 @@ instance" into "served to every tab". Two halves:
   twice; a **mutation** in flight (`login`, `loginWithSsoCallback`,
   `registerDevice`, `recover`, `Recovery.enable` / `changePin`,
   `createRoom`, `editMessage`, `invite`, `kick`, `leave`, `deleteRoom`,
-  `createJoinLink`, `revokeJoinLink`, `joinViaLink`, `setHandle`,
+  `createJoinLink`, `revokeJoinLink`, `joinViaLink`, `setUsername`,
   `requestEmailChange`, `deleteDevice`, `logout`, …) rejects with
   `LeaderChangedError` (`name === "LeaderChanged"`) and is **never
   retried by the module** — it cannot know whether the call reached the
   backend, and a repeat is not safe; the embedder offers "try again".
   `invite`, `kick`, `leave`, `deleteRoom` and `revokeJoinLink` stay
   mutations because a repeat after a call that landed rejects (an honest
-  `LeaderChanged` beats a false error); `setHandle` until Wire's answer to
+  `LeaderChanged` beats a false error); `setUsername` until Wire's answer to
   the own handle set again is observed. The full table, class by class,
   is in `bindings/web/kupferdraht-tabs/README.md` (pinned against
   `METHODS` by `step_130a_keyed_surface_pins.rs`).
@@ -1091,7 +1091,7 @@ instance" into "served to every tab". Two halves:
   (`failedSends`, `resend`, `resendFailed`, Step 130b).
 
 Timeline items carry `deliveryStatus` (`"sending" | "submitted" | "received"
-| "failed"`) and each reaction carries `isSelf` since Step 98c.
+| "failed"`) and each reaction carries `isOwn` since Step 98c.
 
 **Not on the wasm surface** (vs. UniFFI): registration
 (`PendingClient`),

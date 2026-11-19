@@ -20,7 +20,7 @@ mod common;
 const QUALIFIED: &str = "user-uuid@example.test";
 const TEAM: &str = "6ba7b810-9dad-41d1-80b4-00c04fd430c8";
 
-fn self_body(name: &str, handle: &str, team: Option<&str>, avatar: Option<&str>) -> String {
+fn self_body(name: &str, username: &str, team: Option<&str>, avatar: Option<&str>) -> String {
     let team = team.map_or(String::new(), |t| format!(r#","team":"{t}""#));
     let assets = avatar.map_or(String::new(), |key| {
         format!(
@@ -28,7 +28,7 @@ fn self_body(name: &str, handle: &str, team: Option<&str>, avatar: Option<&str>)
         )
     });
     format!(
-        r#"{{"id":"user-uuid","qualified_id":{{"id":"user-uuid","domain":"example.test"}},"handle":"{handle}","name":"{name}","email":"{handle}@example.test"{team}{assets}}}"#
+        r#"{{"id":"user-uuid","qualified_id":{{"id":"user-uuid","domain":"example.test"}},"handle":"{username}","name":"{name}","email":"{username}@example.test"{team}{assets}}}"#
     )
 }
 
@@ -112,7 +112,7 @@ async fn login(server: &MockServer) -> Session {
 #[derive(Debug, PartialEq)]
 struct Values {
     name: String,
-    handle: Option<String>,
+    username: Option<String>,
     email: Option<String>,
     team_id: Option<String>,
     team_name: Option<String>,
@@ -124,12 +124,12 @@ fn values(client: &Client) -> Values {
     let account = client.account();
     Values {
         name: account.display_name().to_string(),
-        handle: account.handle().map(str::to_string),
+        username: account.username().map(str::to_string),
         email: account.email().map(str::to_string),
         team_id: account.team_id().map(str::to_string),
         team_name: account.team_name().map(str::to_string),
-        team_icon: account.team_avatar_key().map(str::to_string),
-        avatar: account.avatar_keys().thumbnail.clone(),
+        team_icon: account.team_avatar_version().map(str::to_string),
+        avatar: account.avatar_source().thumbnail.clone(),
     }
 }
 
@@ -160,7 +160,7 @@ async fn a_refresh_replaces_every_value_and_a_resume_keeps_them() {
 
     let expected = Values {
         name: "Alice B".to_string(),
-        handle: some("aliceb"),
+        username: some("aliceb"),
         email: some("aliceb@example.test"),
         team_id: some(TEAM),
         team_name: some("Team Renamed"),
@@ -252,7 +252,7 @@ async fn a_self_without_a_team_clears_the_team_and_asks_no_team() {
         (
             account.team_id(),
             account.team_name(),
-            account.team_avatar_key()
+            account.team_avatar_version()
         ),
         (None, None, None)
     );
@@ -275,7 +275,7 @@ async fn an_empty_icon_is_none() {
         .await
         .expect("refresh_account");
 
-    assert_eq!(session.client.account().team_avatar_key(), None);
+    assert_eq!(session.client.account().team_avatar_version(), None);
 }
 
 /// A login whose team request failed has no name; the first refresh fills it.
@@ -326,13 +326,17 @@ async fn own_writes_reach_the_account() {
         .set_display_name("Alice B")
         .await
         .expect("name");
-    session.client.set_handle("aliceb").await.expect("handle");
+    session
+        .client
+        .set_username("aliceb")
+        .await
+        .expect("username");
     session.client.remove_avatar().await.expect("remove_avatar");
 
     let account = session.client.account();
     assert_eq!(account.display_name(), "Alice B");
-    assert_eq!(account.handle(), Some("aliceb"));
-    assert_eq!(account.avatar_keys().thumbnail, None);
+    assert_eq!(account.username(), Some("aliceb"));
+    assert_eq!(account.avatar_source().thumbnail, None);
 }
 
 #[tokio::test]
@@ -366,7 +370,7 @@ fn mount_rooms(server: &MockServer) -> Mock<'_> {
     ids
 }
 
-/// A changed name or handle shows in the own `members()` row only after the
+/// A changed name or username shows in the own `members()` row only after the
 /// room list is read again, so a refresh that changed one marks it stale.
 #[tokio::test]
 async fn a_changed_profile_refreshes_the_room_list_and_an_unchanged_one_not() {

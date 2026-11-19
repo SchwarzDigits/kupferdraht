@@ -253,7 +253,7 @@ impl Client {
     }
 
     /// Blank the persisted auth tokens (`access_token` + `refresh_token`) while
-    /// keeping `device_id`, `cookie_label`, and everything else — so a later
+    /// keeping `device_id`, `session_label`, and everything else — so a later
     /// `resume` can't replay a dead `zuid`, but the device + its `mls.db` +
     /// chats survive for re-login's reuse path. Best-effort: a failure leaves
     /// the dead cookie on disk, which only means the next resume re-derives the
@@ -277,7 +277,7 @@ impl Client {
         }
     }
 
-    /// Load-then-mutate the persisted session so `cookie_label` is
+    /// Load-then-mutate the persisted session so `session_label` is
     /// preserved; build a fresh row if none exists yet.
     async fn write_refreshed_session(
         &self,
@@ -294,7 +294,7 @@ impl Client {
                 device_id: self.device_id.clone(),
                 access_token: String::new(),
                 refresh_token: String::new(),
-                cookie_label: Some(format!("kupferdraht-{}", self.user_id)),
+                session_label: Some(format!("kupferdraht-{}", self.user_id)),
                 api_version: self.api_version,
                 access_token_issued_at_ms: issued_at_ms,
             });

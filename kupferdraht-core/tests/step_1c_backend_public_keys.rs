@@ -3,13 +3,14 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 1c.4 — Fetch Wire's backend external-sender public keys at
-//! login time and expose the ECDSA-P256 `removal` entry on `Client`.
+//! login time and expose the ECDSA-P256 entry on `Client` as its external
+//! sender key.
 //!
 //! Failing tests per PLAN.md Step 1 "TDD starter tests, 1c":
 //!
 //! * The login flow invokes `GET /v14/mls/public-keys` exactly once
 //!   with the rebound access token.
-//! * `Client::backend_removal_key_ecdsa_p256` returns the raw bytes
+//! * `Client::external_sender_key` returns the raw bytes
 //!   (base64-decoded from the `removal.ecdsa_secp256r1_sha256` entry).
 //! * A malformed base64 in the response surfaces as
 //!   `KupferdrahtError::Encoding`.
@@ -74,7 +75,7 @@ fn mount_login_through_key_package_upload(server: &MockServer) {
 }
 
 /// Valid base64 that decodes to 0x70 0x32 0x35 0x36 (ASCII "p256") —
-/// used as the canonical ECDSA-P256 removal-key value in the mocks.
+/// used as the canonical external sender key in the mocks.
 const P256_B64: &str = "cDI1Ng==";
 const P256_BYTES: &[u8] = b"p256";
 
@@ -108,7 +109,7 @@ async fn login_fetches_backend_public_keys_with_rebound_bearer() {
 }
 
 #[tokio::test]
-async fn client_exposes_ecdsa_p256_removal_key_from_backend() {
+async fn client_exposes_the_external_sender_key_from_backend() {
     let server = MockServer::start();
     mount_login_through_key_package_upload(&server);
     server.mock(|when, then| {
@@ -132,14 +133,14 @@ async fn client_exposes_ecdsa_p256_removal_key_from_backend() {
         .expect("register device");
 
     assert_eq!(
-        client.backend_removal_key_ecdsa_p256(),
+        client.external_sender_key(),
         P256_BYTES,
-        "Client must expose the base64-decoded ECDSA-P256 removal key"
+        "Client must expose the base64-decoded external sender key"
     );
 }
 
 #[tokio::test]
-async fn malformed_base64_in_removal_key_surfaces_as_encoding_error() {
+async fn malformed_base64_in_the_external_sender_key_surfaces_as_encoding_error() {
     let server = MockServer::start();
     mount_login_through_key_package_upload(&server);
     server.mock(|when, then| {

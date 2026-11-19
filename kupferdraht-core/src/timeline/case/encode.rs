@@ -37,13 +37,7 @@ pub(crate) fn payload_from_snapshot(snapshot: &CaseSnapshot) -> proto::CasePaylo
         case_type: snapshot.case_type.clone(),
         state: state as i32,
         state_detail: snapshot.state_detail.clone(),
-        assignee: snapshot.assignee.as_deref().map(|qid| {
-            let (id, domain) = qid.split_once('@').unwrap_or((qid, ""));
-            proto::QualifiedUserId {
-                id: id.to_string(),
-                domain: domain.to_string(),
-            }
-        }),
+        assignee: snapshot.assignee.as_deref().map(proto::user_reference),
         due_at_ms: snapshot.due_at_ms,
         priority,
         opened_at_ms: snapshot.opened_at_ms,

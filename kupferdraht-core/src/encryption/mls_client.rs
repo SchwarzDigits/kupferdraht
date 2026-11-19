@@ -6,7 +6,7 @@
 //! `MlsClient` owns the MLS signing keypair and the credential payload
 //! used for every `KeyPackage` and group operation. Step 1c.1 covers
 //! identity creation; Step 1c.2 adds `KeyPackage` batch generation
-//! (TLS-serialized, ready for `POST /v14/mls/key-packages/self/{client_id}`
+//! (TLS-serialized, ready for `POST /v14/mls/key-packages/self/{device_id}`
 //! in 1c.3). Upload + `/v14/mls/public-keys` fetch + persistent storage
 //! land in 1c.3–1c.5.
 //!
@@ -70,7 +70,7 @@ pub(crate) fn leaf_capabilities() -> Capabilities {
 /// - the long-lived ECDSA-P256 signing keypair (also persisted in
 ///   the openmls storage table the moment the client is constructed);
 /// - the `BasicCredential` carrying Wire's
-///   `{uuid}:{client_id}@{domain}` identity;
+///   `{uuid}:{device_id}@{domain}` identity;
 /// - the [`KupferdrahtProvider`] composing `RustCrypto` (crypto + rand) with
 ///   `SqliteStorageProvider<JsonCodec, Connection>` — `KeyPackage`
 ///   private halves and future per-group epoch state are written
@@ -92,8 +92,8 @@ impl MlsClient {
     /// # Errors
     /// Same as [`Self::new_fresh_with_storage`].
     #[cfg(test)]
-    pub fn new_fresh(user_id: &str, client_id: &str) -> Result<Self, KupferdrahtError> {
-        Self::new_fresh_with_storage(KupferdrahtProvider::open_in_memory()?, user_id, client_id)
+    pub fn new_fresh(user_id: &str, device_id: &str) -> Result<Self, KupferdrahtError> {
+        Self::new_fresh_with_storage(KupferdrahtProvider::open_in_memory()?, user_id, device_id)
     }
 
     /// Create a fresh MLS identity backed by the supplied
@@ -110,11 +110,11 @@ impl MlsClient {
     pub fn new_fresh_with_storage(
         provider: KupferdrahtProvider,
         user_id: &str,
-        client_id: &str,
+        device_id: &str,
     ) -> Result<Self, KupferdrahtError> {
         debug_assert!(!user_id.is_empty(), "user_id must be non-empty");
-        debug_assert!(!client_id.is_empty(), "client_id must be non-empty");
-        let identity = wire_identity(user_id, client_id)?;
+        debug_assert!(!device_id.is_empty(), "device_id must be non-empty");
+        let identity = wire_identity(user_id, device_id)?;
         let signature_keys = SignatureKeyPair::new(MLS_SIGNATURE_SCHEME)
             .map_err(|e| KupferdrahtError::Generic(format!("MLS SignatureKeyPair: {e:?}")))?;
         provider.with_write_tx(|p| {
@@ -150,16 +150,16 @@ impl MlsClient {
     pub fn resume_with_storage(
         provider: KupferdrahtProvider,
         user_id: &str,
-        client_id: &str,
+        device_id: &str,
         signature_public_key: &[u8],
     ) -> Result<Self, KupferdrahtError> {
         debug_assert!(!user_id.is_empty(), "user_id must be non-empty");
-        debug_assert!(!client_id.is_empty(), "client_id must be non-empty");
+        debug_assert!(!device_id.is_empty(), "device_id must be non-empty");
         debug_assert!(
             !signature_public_key.is_empty(),
             "signature_public_key must be non-empty"
         );
-        let identity = wire_identity(user_id, client_id)?;
+        let identity = wire_identity(user_id, device_id)?;
         let signature_keys = provider.with_read_tx(|p| {
             SignatureKeyPair::read(p.storage(), signature_public_key, MLS_SIGNATURE_SCHEME)
                 .ok_or_else(|| {
@@ -275,7 +275,7 @@ impl MlsClient {
 
     /// Generate a batch of `count` fresh `KeyPackage`s and TLS-serialize
     /// each so it is ready to be base64-wrapped into the JSON body of
-    /// `POST /v14/mls/key-packages/self/{client_id}` (PLAN.md Step 1c.3).
+    /// `POST /v14/mls/key-packages/self/{device_id}` (PLAN.md Step 1c.3).
     ///
     /// Every `KeyPackage`:
     /// * uses [`MLS_CIPHERSUITE`] (P-256) matching Wire v14 deployments;
@@ -476,7 +476,7 @@ mod tests {
         let identity = credential.credential.serialized_content();
         assert_eq!(
             identity, b"a11ce000-0000-4000-8000-000000000001:a11ce00000000001@example.test",
-            "KeyPackage leaf must carry Wire's `<uuid>:<client_id>@<domain>` identity"
+            "KeyPackage leaf must carry Wire's `<uuid>:<device_id>@<domain>` identity"
         );
     }
 
@@ -530,12 +530,12 @@ mod tests {
     fn new_fresh_with_storage_persists_signature_keypair_to_file() {
         let dir = tempfile::tempdir().expect("tempdir");
         let user_id = "a11ce000-0000-4000-8000-000000000001@example.test";
-        let client_id = "a11ce00000000001";
+        let device_id = "a11ce00000000001";
 
         // First session: create + drop, forcing the Connection to flush.
         let public_key = {
             let provider = KupferdrahtProvider::open(open_file_conn(&dir)).expect("provider 1");
-            let client = MlsClient::new_fresh_with_storage(provider, user_id, client_id)
+            let client = MlsClient::new_fresh_with_storage(provider, user_id, device_id)
                 .expect("new_fresh_with_storage");
             client.signature_public_key().to_vec()
         };
@@ -544,7 +544,7 @@ mod tests {
         // Second session: open the same file, resume, assert the public
         // key matches the one written in session 1.
         let provider = KupferdrahtProvider::open(open_file_conn(&dir)).expect("provider 2");
-        let resumed = MlsClient::resume_with_storage(provider, user_id, client_id, &public_key)
+        let resumed = MlsClient::resume_with_storage(provider, user_id, device_id, &public_key)
             .expect("resume_with_storage must find the persisted keypair");
         assert_eq!(
             resumed.signature_public_key(),
@@ -584,10 +584,10 @@ mod tests {
         // openmls_sqlite_storage internals).
         let dir = tempfile::tempdir().expect("tempdir");
         let user_id = "a11ce000-0000-4000-8000-000000000001@example.test";
-        let client_id = "a11ce00000000001";
+        let device_id = "a11ce00000000001";
         {
             let provider = KupferdrahtProvider::open(open_file_conn(&dir)).expect("provider");
-            let client = MlsClient::new_fresh_with_storage(provider, user_id, client_id)
+            let client = MlsClient::new_fresh_with_storage(provider, user_id, device_id)
                 .expect("new_fresh_with_storage");
             let _ = client.generate_key_packages(3).expect("generate");
         }

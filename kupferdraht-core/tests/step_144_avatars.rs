@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 144 — avatars: show every user's and the team's, set the own (TDD red).
 //!
-//! The keys come from `/self`, the stored member list and, for a user in no
+//! The images come from `/self`, the stored member list and, for a user in no
 //! room, one `list-users`. A download is a public asset behind the usual `302`;
 //! what reaches the caller is an image Kupferdraht wrote
 //! (`step_144_image_rewrite`), held in a small cache per client.
@@ -209,7 +209,7 @@ async fn a_member_s_avatar_comes_from_the_stored_keys_written_anew() {
 }
 
 #[tokio::test]
-async fn avatar_key_and_the_member_entry_carry_the_version_marker() {
+async fn avatar_version_and_the_member_entry_carry_the_version_marker() {
     let server = MockServer::start();
     let session = login(&server, "[]").await;
     mount_room_with_peer(&server, &assets_json(Some(PREVIEW_KEY), Some(COMPLETE_KEY)));
@@ -217,9 +217,9 @@ async fn avatar_key_and_the_member_entry_carry_the_version_marker() {
 
     let key = session
         .client
-        .avatar_key(&peer())
+        .avatar_version(&peer())
         .await
-        .expect("avatar_key");
+        .expect("avatar_version");
 
     assert_eq!(key.as_deref(), Some(PREVIEW_KEY), "the thumbnail's key");
     let room = session
@@ -232,9 +232,9 @@ async fn avatar_key_and_the_member_entry_carry_the_version_marker() {
         .await
         .expect("members")
         .into_iter()
-        .find(|m| !m.is_self)
+        .find(|m| !m.is_own)
         .expect("the other member");
-    assert_eq!(member.avatar_key(), Some(PREVIEW_KEY));
+    assert_eq!(member.avatar_version(), Some(PREVIEW_KEY));
 }
 
 /// A profile with only the complete image: its key is the marker, and a
@@ -250,9 +250,9 @@ async fn one_size_alone_serves_both() {
     assert_eq!(
         session
             .client
-            .avatar_key(&peer())
+            .avatar_version(&peer())
             .await
-            .expect("avatar_key")
+            .expect("avatar_version")
             .as_deref(),
         Some(COMPLETE_KEY)
     );
@@ -297,7 +297,10 @@ async fn a_member_without_assets_has_no_avatar_and_no_download() {
         .expect("avatar");
 
     assert!(avatar.is_none());
-    assert_eq!(session.client.avatar_key(&peer()).await.expect("key"), None);
+    assert_eq!(
+        session.client.avatar_version(&peer()).await.expect("key"),
+        None
+    );
     any_asset.assert_calls(0);
 }
 
@@ -315,9 +318,9 @@ async fn an_unknown_asset_is_skipped() {
 
     let key = session
         .client
-        .avatar_key(&peer())
+        .avatar_version(&peer())
         .await
-        .expect("avatar_key");
+        .expect("avatar_version");
 
     assert_eq!(key.as_deref(), Some("3-1-good"));
 }
@@ -331,7 +334,7 @@ async fn the_own_avatar_comes_from_self() {
     assert_eq!(
         session
             .client
-            .avatar_key(&own())
+            .avatar_version(&own())
             .await
             .expect("key")
             .as_deref(),
@@ -593,7 +596,7 @@ async fn a_failed_team_request_leaves_no_icon() {
 }
 
 #[tokio::test]
-async fn a_resume_keeps_the_team_icon_and_the_own_keys() {
+async fn a_resume_keeps_the_team_icon_and_the_own_avatar() {
     let server = MockServer::start();
     server.mock(|when, then| {
         when.method(GET).path(format!("/v14/teams/{TEAM}"));
@@ -610,7 +613,11 @@ async fn a_resume_keeps_the_team_icon_and_the_own_keys() {
 
     assert!(resumed.team_avatar().await.expect("team_avatar").is_some());
     assert_eq!(
-        resumed.avatar_key(&own()).await.expect("key").as_deref(),
+        resumed
+            .avatar_version(&own())
+            .await
+            .expect("key")
+            .as_deref(),
         Some(PREVIEW_KEY)
     );
 }
@@ -668,7 +675,7 @@ async fn upload_avatar_writes_both_sizes_and_names_them_on_the_profile() {
     assert_eq!(
         session
             .client
-            .avatar_key(&own())
+            .avatar_version(&own())
             .await
             .expect("key")
             .as_deref(),
@@ -767,7 +774,7 @@ async fn a_refused_profile_update_keeps_the_old_avatar() {
     assert_eq!(
         session
             .client
-            .avatar_key(&own())
+            .avatar_version(&own())
             .await
             .expect("key")
             .as_deref(),
@@ -794,7 +801,11 @@ async fn a_resume_reads_the_uploaded_keys_from_the_store() {
     let resumed = session.app.resume(QUALIFIED).await.expect("resume");
 
     assert_eq!(
-        resumed.avatar_key(&own()).await.expect("key").as_deref(),
+        resumed
+            .avatar_version(&own())
+            .await
+            .expect("key")
+            .as_deref(),
         Some(COMPLETE_KEY)
     );
 }
@@ -814,7 +825,10 @@ async fn remove_avatar_empties_the_profile_and_the_state() {
     session.client.remove_avatar().await.expect("remove_avatar");
 
     profile.assert_calls(1);
-    assert_eq!(session.client.avatar_key(&own()).await.expect("key"), None);
+    assert_eq!(
+        session.client.avatar_version(&own()).await.expect("key"),
+        None
+    );
     assert_eq!(
         session
             .client
@@ -828,7 +842,7 @@ async fn remove_avatar_empties_the_profile_and_the_state() {
 
 /// `remember_self_profile` writes the row whole.
 #[tokio::test]
-async fn a_profile_write_keeps_the_avatar_keys() {
+async fn a_profile_write_keeps_the_avatar_source() {
     let server = MockServer::start();
     let session = login(&server, &assets_json(Some(PREVIEW_KEY), Some(COMPLETE_KEY))).await;
     server.mock(|when, then| {
@@ -848,8 +862,8 @@ async fn a_profile_write_keeps_the_avatar_keys() {
         .await
         .expect("load_self_user")
         .expect("self_user row present");
-    assert_eq!(row.avatar_thumbnail_key.as_deref(), Some(PREVIEW_KEY));
-    assert_eq!(row.avatar_full_key.as_deref(), Some(COMPLETE_KEY));
+    assert_eq!(row.avatar_source.thumbnail.as_deref(), Some(PREVIEW_KEY));
+    assert_eq!(row.avatar_source.full.as_deref(), Some(COMPLETE_KEY));
 }
 
 // --- storage ---------------------------------------------------------------
@@ -864,39 +878,41 @@ async fn member_keys_are_stored_and_survive_a_replace_of_the_members() {
     let room_id = format!("{ROOM}@{DOMAIN}");
     let peer_id = format!("{PEER}@{DOMAIN}");
 
-    let keys = store
-        .member_avatar_keys(&peer_id)
+    let source = store
+        .member_avatar_source(&peer_id)
         .await
-        .expect("member_avatar_keys")
+        .expect("member_avatar_source")
         .expect("a stored member");
-    assert_eq!(keys.thumbnail.as_deref(), Some(PREVIEW_KEY));
-    assert_eq!(keys.full.as_deref(), Some(COMPLETE_KEY));
+    assert_eq!(source.thumbnail.as_deref(), Some(PREVIEW_KEY));
+    assert_eq!(source.full.as_deref(), Some(COMPLETE_KEY));
 
     let member = RoomMemberRecord {
         room_id: room_id.clone(),
         user_id: peer_id.clone(),
-        is_self: false,
+        is_own: false,
         display_name: None,
-        handle: None,
+        username: None,
         role: "member".to_owned(),
-        avatar_thumbnail_key: Some("3-1-new".to_owned()),
-        avatar_full_key: None,
+        avatar_source: kupferdraht::AvatarSource {
+            thumbnail: Some("3-1-new".to_owned()),
+            full: None,
+        },
     };
     store
         .replace_room_members(&room_id, &[member])
         .await
         .expect("replace");
 
-    let keys = store
-        .member_avatar_keys(&peer_id)
+    let source = store
+        .member_avatar_source(&peer_id)
         .await
-        .expect("member_avatar_keys")
+        .expect("member_avatar_source")
         .expect("a stored member");
-    assert_eq!(keys.thumbnail.as_deref(), Some("3-1-new"));
-    assert_eq!(keys.full, None);
+    assert_eq!(source.thumbnail.as_deref(), Some("3-1-new"));
+    assert_eq!(source.full, None);
     assert_eq!(
         store
-            .member_avatar_keys("nobody@example.test")
+            .member_avatar_source("nobody@example.test")
             .await
             .expect("lookup"),
         None,
@@ -975,7 +991,7 @@ fn the_browser_surface_carries_the_five_calls() {
     // Step 152: the two writes answer the calling tab's getters.
     let calls = [
         ("avatar", "idempotent", "null"),
-        ("avatarKey", "idempotent", "null"),
+        ("avatarVersion", "idempotent", "null"),
         ("teamAvatar", "idempotent", "null"),
         ("uploadAvatar", "mutation", r#""$getters""#),
         ("removeAvatar", "mutation", r#""$getters""#),
@@ -993,8 +1009,8 @@ fn the_browser_surface_carries_the_five_calls() {
         assert!(types.contains(&format!("{call}(")), "index.d.ts has {call}");
     }
     assert!(
-        types.contains("avatarKey: string | null"),
-        "Member carries avatarKey"
+        types.contains("avatarVersion: string | null"),
+        "Member carries avatarVersion"
     );
 }
 
@@ -1003,7 +1019,7 @@ fn the_ffi_mirrors_the_five_calls() {
     let ffi = workspace_file("kupferdraht-core/src/ffi/avatars.rs");
     for call in [
         "pub async fn avatar(",
-        "pub async fn avatar_key(",
+        "pub async fn avatar_version(",
         "pub async fn team_avatar(",
         "pub async fn upload_avatar(",
         "pub async fn remove_avatar(",
@@ -1018,7 +1034,7 @@ fn the_cli_has_the_avatar_commands() {
     assert!(main.contains("Avatar"), "kupferdraht-cli avatar");
     let rooms = workspace_file("kupferdraht-cli/src/cli/rooms.rs");
     assert!(
-        rooms.contains("avatar_key()"),
-        "room-members prints the key"
+        rooms.contains("avatar_version()"),
+        "room-members prints the version"
     );
 }

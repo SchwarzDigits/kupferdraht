@@ -29,12 +29,12 @@ use crate::storage::{KeyLock, load_or_create_key_locked};
 /// picker without opening the account.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct AccountEntry {
-    /// Qualified user id (`<uuid>@<domain>`) — the registry primary key.
+    /// The user id (`<uuid>@<domain>`) — the registry primary key.
     pub account_id: String,
     /// Wire API base URL the account is homed on.
     pub server: String,
-    /// `@handle`, if known.
-    pub handle: Option<String>,
+    /// The username, if known.
+    pub username: Option<String>,
     /// Human-facing display name, if known.
     pub display_name: Option<String>,
     /// Last time this account was active (epoch ms).
@@ -165,7 +165,7 @@ impl GlobalStore for SqliteGlobalStore {
                 Ok(AccountEntry {
                     account_id: row.get(0)?,
                     server: row.get(1)?,
-                    handle: row.get(2)?,
+                    username: row.get(2)?,
                     display_name: row.get(3)?,
                     last_active_ms: row.get(4)?,
                 })
@@ -188,7 +188,7 @@ impl GlobalStore for SqliteGlobalStore {
             params![
                 entry.account_id,
                 entry.server,
-                entry.handle,
+                entry.username,
                 entry.display_name,
                 entry.last_active_ms,
             ],

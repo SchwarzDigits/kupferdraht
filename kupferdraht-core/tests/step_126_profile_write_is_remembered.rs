@@ -4,10 +4,10 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 126 — a profile write is remembered locally, not only sent.
 //!
-//! `set_handle` / `set_display_name` send the change and keep nothing, and
+//! `set_username` / `set_display_name` send the change and keep nothing, and
 //! nothing else refreshes the account: `Account` is immutable, built at login
 //! from `GET /self` and at `resume` from the persisted `self_user` row, which
-//! only the post-login persistence writes. So a changed handle is invisible
+//! only the post-login persistence writes. So a changed username is invisible
 //! until the next login. These pin that a write the backend accepted lands
 //! in the row `resume` reads.
 //!
@@ -26,7 +26,7 @@ mod common;
 
 const QUALIFIED: &str = "user-uuid@example.test";
 
-/// Log in against the mocked backend, which reports `handle: "alice"` and
+/// Log in against the mocked backend, which reports the username `alice` and
 /// `name: "Alice Example"` for the self user.
 async fn logged_in(server: &MockServer, home: &TempDir) -> Arc<kupferdraht::Client> {
     common::mount_full_login_flow(server);
@@ -49,7 +49,7 @@ async fn logged_in(server: &MockServer, home: &TempDir) -> Arc<kupferdraht::Clie
 }
 
 #[tokio::test]
-async fn set_handle_is_remembered_in_the_self_user_row() {
+async fn set_username_is_remembered_in_the_self_user_row() {
     let home = TempDir::new().expect("tempdir");
     let server = MockServer::start();
     let client = logged_in(&server, &home).await;
@@ -58,7 +58,7 @@ async fn set_handle_is_remembered_in_the_self_user_row() {
         then.status(200);
     });
 
-    client.set_handle("alice2").await.expect("set_handle");
+    client.set_username("alice2").await.expect("set_username");
 
     let store = client.store().expect("login attached a store");
     let row = store
@@ -67,9 +67,9 @@ async fn set_handle_is_remembered_in_the_self_user_row() {
         .expect("load_self_user")
         .expect("self_user row present");
     assert_eq!(
-        row.handle.as_deref(),
+        row.username.as_deref(),
         Some("alice2"),
-        "the handle the backend accepted is the handle `resume` will rebuild from"
+        "the username the backend accepted is the one `resume` will rebuild from"
     );
     assert_eq!(
         row.name, "Alice Example",
@@ -105,9 +105,9 @@ async fn set_display_name_is_remembered_in_the_self_user_row() {
         .expect("self_user row present");
     assert_eq!(row.name, "Alice Two");
     assert_eq!(
-        row.handle.as_deref(),
+        row.username.as_deref(),
         Some("alice"),
-        "the handle is not this call's business"
+        "the username is not this call's business"
     );
 }
 
@@ -128,7 +128,7 @@ async fn two_profile_writes_in_one_session_both_survive() {
         then.status(200);
     });
 
-    client.set_handle("alice2").await.expect("set_handle");
+    client.set_username("alice2").await.expect("set_username");
     client
         .set_display_name("Alice Two")
         .await
@@ -141,7 +141,7 @@ async fn two_profile_writes_in_one_session_both_survive() {
         .expect("load_self_user")
         .expect("self_user row present");
     assert_eq!(
-        row.handle.as_deref(),
+        row.username.as_deref(),
         Some("alice2"),
         "the first write stays"
     );

@@ -69,7 +69,7 @@ export class StubKupferdraht {
   }
   get evicted() { return false; }
   get homeId() { return 'stub-home-0123456789abcdef'; }
-  get cookieLabel() { return 'kupferdraht-stub-home-0123456789abcdef'; }
+  get sessionLabel() { return 'kupferdraht-stub-home-0123456789abcdef'; }
   async accounts() {
     return [{ accountId: FIXTURE_ACCOUNT, server: 'https://wire.example.test', handle: 'stub', displayName: 'Stub', lastActiveMs: 0 }];
   }

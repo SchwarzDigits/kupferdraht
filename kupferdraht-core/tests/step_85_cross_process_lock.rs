@@ -564,7 +564,7 @@ fn session_record() -> SessionRecord {
         device_id: "new-client-id".into(),
         access_token: "t".into(),
         refresh_token: "z".into(),
-        cookie_label: None,
+        session_label: None,
         api_version: 14,
         access_token_issued_at_ms: 1,
     }

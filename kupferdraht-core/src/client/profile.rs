@@ -4,12 +4,12 @@
 //! `Client` — self-profile mutators.
 //!
 //! The profile-management slice of the `Client` runtime (Step 29):
-//! `set_display_name`, `set_handle`, `request_email_change`, and
+//! `set_display_name`, `set_username`, `request_email_change`, and
 //! `change_password`. Each lives on `Client` (matching the
 //! `Client::create_room` / `Client::invite_members` pattern); the
 //! matrix-rust-sdk analogs live on `Account`.
 //!
-//! The two that change a field this SDK also stores — the handle and the
+//! The two that change a field this SDK also stores — the username and the
 //! display name — are transport **plus** the persisted `self_user` row
 //! (Step 126) and, since Step 152, the live `Account` the getters read
 //! (`own_account.rs`).
@@ -51,28 +51,28 @@ impl Client {
     }
 
     /// `PUT /v{N}/self/handle` — change the authenticated user's
-    /// handle. matrix-rust-sdk equivalent: `Account::set_handle`.
+    /// username. matrix-rust-sdk has no equivalent: a Matrix user id is
+    /// fixed.
     ///
-    /// Wire enforces global uniqueness; a collision surfaces as
-    /// `BackendRejected("update_self_handle 409: handle-exists")`.
-    /// Caller is responsible for ASCII-lowering / length validation
-    /// — Wire does its own server-side check.
+    /// The backend keeps usernames unique; one already taken surfaces as
+    /// `BackendRejected` with a `409`. Caller is responsible for
+    /// ASCII-lowering / length validation — the backend does its own
+    /// check.
     ///
     /// # Errors
-    /// * `InvalidInput` if `handle` is empty.
-    /// * `BackendRejected` on non-2xx from Wire (collision, malformed
-    ///   handle, …).
-    pub async fn set_handle(&self, handle: &str) -> Result<(), KupferdrahtError> {
-        if handle.is_empty() {
+    /// * `InvalidInput` if `username` is empty.
+    /// * `BackendRejected` on non-2xx from Wire (taken, malformed, …).
+    pub async fn set_username(&self, username: &str) -> Result<(), KupferdrahtError> {
+        if username.is_empty() {
             return Err(KupferdrahtError::InvalidInput(
-                "set_handle: handle must be non-empty".into(),
+                "set_username: username must be non-empty".into(),
             ));
         }
         let _gate = self.account_gate.lock().await;
         self.http
-            .update_self_handle(self.api_version, &self.current_access_token(), handle)
+            .update_self_handle(self.api_version, &self.current_access_token(), username)
             .await?;
-        self.apply_own_profile(|row| row.handle = Some(handle.to_owned()))
+        self.apply_own_profile(|row| row.username = Some(username.to_owned()))
             .await
     }
 

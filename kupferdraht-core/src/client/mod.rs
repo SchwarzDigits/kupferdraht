@@ -61,7 +61,7 @@ mod typing;
 pub use account::Account;
 pub(crate) use account::OwnTeam;
 pub use builder::{ClientBuilder, ServerConfig};
-pub use device::DeviceInfo;
+pub use device::{DeviceInfo, DeviceKind};
 pub use pending::PendingClient;
 pub use pending_login::PendingLogin;
 pub use server_configs::{FileSharingPolicy, ReceiptMode};
@@ -121,7 +121,7 @@ pub struct Client {
     device_id: String,
     server: ServerConfig,
     api_version: u32,
-    /// Access token + `zuid` refresh-cookie + acquisition time, behind
+    /// Access token + refresh cookie + acquisition time, behind
     /// a brief `std::sync::RwLock` so [`Client::refresh_access_token`]
     /// can swap all three atomically. Held only for a snapshot-clone
     /// (read) or a swap (write) — never across an `.await` — so a sync
@@ -140,7 +140,7 @@ pub struct Client {
     /// Serialises the own profile's request, row write and account swap
     /// (Step 152), so two writers cannot lose an update.
     account_gate: tokio::sync::Mutex<()>,
-    backend_removal_key_ecdsa_p256: Vec<u8>,
+    external_sender_key: Vec<u8>,
     mls_signature_public_key: Vec<u8>,
     /// Wire transport kept alive for post-login calls (rooms sync,
     /// message send, …). Built with the same `permit_http` opt-in the
@@ -200,11 +200,11 @@ pub struct Client {
     /// Kupferdraht-home layout the account persists under. `None` when the
     /// builder ran without a `base_dir` (in-memory tests / scratch).
     pub(super) kupferdraht_home: Option<KupferdrahtHome>,
-    /// The Wire login cookie label this session was logged in with
+    /// The session label this session was logged in with
     /// (Step 93, ADR-0025): the home's label at login, the persisted
     /// session row's on resume — `None` for a session persisted before
     /// Step 93, which still holds the old shared label on Wire's side.
-    cookie_label: Option<String>,
+    session_label: Option<String>,
     /// Per-peer mutex map used by [`Client::dm_with`] to de-duplicate
     /// concurrent 1:1 creation against the same peer (finding §42).
     /// The outer `std::sync::Mutex` only guards `HashMap` inserts /
@@ -322,13 +322,13 @@ impl Client {
         access_token: String,
         refresh_token: String,
         account: Arc<Account>,
-        backend_removal_key_ecdsa_p256: Vec<u8>,
+        external_sender_key: Vec<u8>,
         mls_signature_public_key: Vec<u8>,
         http: HttpClient,
         store: Option<Arc<dyn Store>>,
         mls_client: Option<Arc<StdMutex<MlsClient>>>,
         kupferdraht_home: Option<KupferdrahtHome>,
-        cookie_label: Option<String>,
+        session_label: Option<String>,
     ) -> Arc<Self> {
         Arc::new_cyclic(|weak| {
             // The transport layer calls back into this `Client` to
@@ -352,7 +352,7 @@ impl Client {
                 refresh_lock: tokio::sync::Mutex::new(()),
                 account: RwLock::new(account),
                 account_gate: tokio::sync::Mutex::new(()),
-                backend_removal_key_ecdsa_p256,
+                external_sender_key,
                 mls_signature_public_key,
                 http,
                 rooms: RwLock::new(Vec::new()),
@@ -365,7 +365,7 @@ impl Client {
                 device_listeners: Arc::new(StdMutex::new(std::collections::HashMap::new())),
                 weak_self: weak.clone(),
                 kupferdraht_home,
-                cookie_label,
+                session_label,
                 dm_create_lock: StdMutex::new(HashMap::new()),
                 drain_lock: tokio::sync::Mutex::new(()),
                 commit_flows: StdMutex::new(HashMap::new()),
@@ -405,10 +405,10 @@ impl Client {
         self.store.as_ref()
     }
 
-    /// The cookie label this session was logged in with (Step 93) — the
+    /// The session label this session was logged in with (Step 93) — the
     /// manager records it in the session row at login.
-    pub(crate) fn cookie_label(&self) -> Option<&str> {
-        self.cookie_label.as_deref()
+    pub(crate) fn session_label(&self) -> Option<&str> {
+        self.session_label.as_deref()
     }
 
     /// The per-account attachment-cache directory

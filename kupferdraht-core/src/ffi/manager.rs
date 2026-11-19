@@ -65,18 +65,18 @@ impl Kupferdraht {
 
     /// The id of this home (Step 93, ADR-0025): 32 lowercase hex, persisted
     /// in `base_dir/home.id`; every keystore id of the home
-    /// (`kupferdraht.<home-id>.…`) and its login cookie label carry it.
+    /// (`kupferdraht.<home-id>.…`) and its session label carry it.
     #[must_use]
     pub fn home_id(&self) -> String {
         self.inner.home_id().to_owned()
     }
 
-    /// The Wire login cookie label of this home, `kupferdraht-<home-id>`
-    /// (Step 93) — one per home, so two homes of one user never evict each
-    /// other's refresh cookie.
+    /// The session label of this home, `kupferdraht-<home-id>` (Step 93):
+    /// the backend keeps one login per user and label — one label per home,
+    /// so two homes of one user never sign each other out.
     #[must_use]
-    pub fn cookie_label(&self) -> String {
-        self.inner.cookie_label()
+    pub fn session_label(&self) -> String {
+        self.inner.session_label()
     }
 }
 
@@ -90,7 +90,7 @@ impl Kupferdraht {
         self.inner.accounts().await
     }
 
-    /// The most-recently-active account's qualified id, if any.
+    /// The most-recently-active account's id (`<uuid>@<domain>`), if any.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -104,7 +104,7 @@ impl Kupferdraht {
     /// split lets the caller recover from `TooManyDevices` without
     /// re-authenticating.
     ///
-    /// `device_label` is the human-readable name shown in the user's
+    /// `initial_device_display_name` is the human-readable name shown in the user's
     /// device list (e.g. the OS device name). When `None`, a platform
     /// default is used.
     ///
@@ -116,10 +116,16 @@ impl Kupferdraht {
         email: String,
         password: String,
         second_factor_code: Option<String>,
-        device_label: Option<String>,
+        initial_device_display_name: Option<String>,
     ) -> Result<Arc<PendingLogin>, KupferdrahtError> {
         self.inner
-            .login(server, email, password, second_factor_code, device_label)
+            .login(
+                server,
+                email,
+                password,
+                second_factor_code,
+                initial_device_display_name,
+            )
             .await
             .map(PendingLogin::wrap)
     }
@@ -155,15 +161,15 @@ impl Kupferdraht {
         &self,
         server: ServerConfig,
         callback_url: &str,
-        device_label: Option<String>,
+        initial_device_display_name: Option<String>,
     ) -> Result<Arc<PendingLogin>, KupferdrahtError> {
         self.inner
-            .login_with_sso_callback(server, callback_url, device_label)
+            .login_with_sso_callback(server, callback_url, initial_device_display_name)
             .await
             .map(PendingLogin::wrap)
     }
 
-    /// Resume a registered account by its qualified id.
+    /// Resume a registered account by its id (`<uuid>@<domain>`).
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -244,7 +250,7 @@ impl PendingLogin {
 
 #[uniffi::export]
 impl PendingLogin {
-    /// The authenticated user's qualified Wire id.
+    /// The authenticated user's id, `<uuid>@<domain>`.
     #[must_use]
     pub fn user_id(&self) -> String {
         self.inner.user_id().to_owned()
@@ -279,7 +285,7 @@ impl PendingLogin {
         self.inner.devices().await
     }
 
-    /// Remove a device by its Wire `client_id` to free a slot.
+    /// Remove a device by its id to free a slot.
     ///
     /// # Errors
     /// See `KupferdrahtError`.

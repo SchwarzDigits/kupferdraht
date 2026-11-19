@@ -42,7 +42,7 @@ use crate::storage::account_keys::AccountKeySource;
 use crate::storage::db_key::DbKey;
 use crate::storage::{
     KeyLock, KupferdrahtHome, SqliteStorageProvider, StorageProvider, Store,
-    ensure_account_keys_durable, ephemeral_cookie_label, load_or_create_key_locked,
+    ensure_account_keys_durable, ephemeral_session_label, load_or_create_key_locked,
 };
 use crate::wire::HttpClient;
 use crate::wire::dto::{LoginOutcome, NewUserRequest, SelfUser};
@@ -95,10 +95,10 @@ pub struct ClientBuilder {
     /// `resume`, which errors when this is unset; registry-based selection
     /// lives in `Kupferdraht::resume`, not here.
     account_id: Option<String>,
-    /// Human-readable device name shown in Wire's device list (Step 41),
-    /// supplied by the embedder (e.g. the OS device name). `None` → a
-    /// platform-derived default.
-    device_label: Option<String>,
+    /// The display name a new device registers with (Step 41), supplied by
+    /// the embedder (e.g. the OS device name). `None` → a platform-derived
+    /// default.
+    initial_device_display_name: Option<String>,
     /// Where a new key of an account comes from (ADR-0035): `Seed` in the
     /// browser, set by the device manager; `Random` otherwise.
     account_keys: AccountKeySource,
@@ -203,12 +203,13 @@ impl ClientBuilder {
         self
     }
 
-    /// Human-readable device name shown in Wire's device list (Step 41), e.g.
-    /// the OS device name. When unset, a platform default ("Kupferdraht (iOS)", …)
-    /// is used.
+    /// The display name a new device registers with, shown in the user's
+    /// device list (Step 41), e.g. the OS device name. When unset, a platform
+    /// default ("Kupferdraht (iOS)", …) is used. Mirrors matrix-rust-sdk's
+    /// `LoginBuilder::initial_device_display_name`.
     #[must_use]
-    pub fn device_label(mut self, label: impl Into<String>) -> Self {
-        self.device_label = Some(label.into());
+    pub fn initial_device_display_name(mut self, display_name: impl Into<String>) -> Self {
+        self.initial_device_display_name = Some(display_name.into());
         self
     }
 
@@ -239,10 +240,10 @@ impl ClientBuilder {
             KupferdrahtError::InvalidInput("ClientBuilder::server was not called".into())
         })?;
         // Step 93 (ADR-0025): the home is resolved first — its id (created
-        // under the home lock on a first open) is what the cookie label and
+        // under the home lock on a first open) is what the session label and
         // every keystore id carry. Wire keeps one refresh cookie per
         // `(user, label)`; one label per home keeps two homes of one user
-        // from invalidating each other's `zuid` (Step 41's per-install
+        // from invalidating each other's refresh cookie (Step 41's per-install
         // label was per keystore, observations §83).
         // Dedicated transport for the post-auth device-list / device-delete
         // calls `PendingLogin` exposes (`HttpClient` is not `Clone`, so it
@@ -255,8 +256,8 @@ impl ClientBuilder {
         checked_websocket_base(&server.websocket_url, self.permit_http)?;
         let home = open_home(self.base_dir.clone(), self.account_keys)?;
         let keystore = resolve_keystore(self.keystore.clone(), self.permit_http).await?;
-        let cookie_label = home_cookie_label(home.as_ref());
-        let device_label = self.device_label.clone();
+        let session_label = home_session_label(home.as_ref());
+        let initial_device_display_name = self.initial_device_display_name.clone();
         // The per-account store directory (`base/accounts/<id>/`) is not
         // known until `authenticate` returns the account id, so the
         // pipeline starts storage-less; the provider opens the (ready,
@@ -267,8 +268,8 @@ impl ClientBuilder {
             self.permit_http,
             &trust,
             None,
-            cookie_label,
-            device_label,
+            session_label,
+            initial_device_display_name,
         )
         .await?;
         let (login_outcome, self_user) = pipeline
@@ -303,12 +304,12 @@ impl ClientBuilder {
         })?;
         let http = HttpClient::with_trust(&server.api_base_url, self.permit_http, &trust)?;
         let home = open_home(self.base_dir, self.account_keys)?;
-        Ok((http, home_cookie_label(home.as_ref())))
+        Ok((http, home_session_label(home.as_ref())))
     }
 
     /// Phase 1 of an SSO login (Step 17β, 162): mint the first access token
     /// from the session cookie the login ended with (no password, no
-    /// `client_id`), fetch the self-profile, open the per-account store, and
+    /// device id), fetch the own profile, open the per-account store, and
     /// return a [`PendingLogin`] whose `register_device` runs phase 2 exactly
     /// as the password flow does. The account's email is the profile's
     /// confirmed one, empty while the backend holds it unconfirmed. In the
@@ -338,8 +339,8 @@ impl ClientBuilder {
             self.permit_http,
             &trust,
             None,
-            home_cookie_label(home.as_ref()),
-            self.device_label.clone(),
+            home_session_label(home.as_ref()),
+            self.initial_device_display_name.clone(),
         )
         .await?;
         let (login_outcome, self_user) = pipeline
@@ -363,8 +364,8 @@ impl ClientBuilder {
     /// Reconstruct a ready `Client` from a previously-persisted session
     /// without re-entering the password. Reads every artefact from the
     /// per-account store, refreshes the access token via
-    /// `POST /v{N}/access?client_id=<id>` using the persisted `zuid`
-    /// refresh-cookie, and returns an `Arc<Client>` just like `login`.
+    /// `POST /v{N}/access?client_id=<id>` using the persisted refresh
+    /// cookie, and returns an `Arc<Client>` just like `login`.
     ///
     /// Requires [`Self::base_dir`] (or a [`Self::storage_provider`]);
     /// `server_config` comes from the store.
@@ -372,7 +373,7 @@ impl ClientBuilder {
     /// # Errors
     /// * `KupferdrahtError::InvalidInput` if no storage config is set, if the
     ///   store has no persisted session / device / `self_user` /
-    ///   `server_config` / removal key, or if `device.mls_public_key`
+    ///   `server_config` / external sender key, or if `device.mls_public_key`
     ///   is missing or not base64.
     /// * `KupferdrahtError::Network` / `BackendRejected` from the
     ///   `/access` refresh.
@@ -393,7 +394,7 @@ impl ClientBuilder {
         let home = open_home(base_dir, account_keys)?;
         // The account must be named explicitly (`account(id)`); open its
         // READY per-account store via the provider, and read tokens /
-        // removal key / `self_user.email` from it. mls.db is opened with
+        // external sender key / `self_user.email` from it. mls.db is opened with
         // its own separate key (`kupferdraht.<home-id>.account-<id>-mls`).
         let account_id = resume_account(requested_account)?;
         let store =
@@ -405,15 +406,15 @@ impl ClientBuilder {
         let http = HttpClient::with_trust(&server.api_base_url, permit_http, &trust)?;
         checked_websocket_base(&server.websocket_url, permit_http)?;
         // If the persisted access token has aged out, refresh it in
-        // place with the persisted zuid instead of forcing a re-login
+        // place with the persisted refresh cookie instead of forcing a re-login
         // (see `refresh_stale_access_token`) — under the account's
         // process lock when a home is configured (Step 85).
-        let client_id = parts.device.client_id.clone();
+        let device_id = parts.device.device_id.clone();
         refresh_stale_access_token(
             &mut parts.session,
             &http,
             store.as_ref(),
-            &client_id,
+            &device_id,
             home.as_ref(),
         )
         .await?;
@@ -434,7 +435,7 @@ impl ClientBuilder {
         let mls_client = resume_mls_state(
             home.as_ref(),
             &parts.session.user_id,
-            &parts.device.client_id,
+            &parts.device.device_id,
             &mls_public_key,
             mls_db_key.as_ref(),
         )?;
@@ -609,12 +610,12 @@ async fn resolve_keystore(
     }
 }
 
-/// The login cookie label of a build (Step 93, ADR-0025): the home's
+/// The session label of a build (Step 93, ADR-0025): the home's
 /// `kupferdraht-<home-id>`, or — for a builder without a home (an in-memory
 /// session, which persists no device and never resumes a cookie) — an
 /// ephemeral one.
-fn home_cookie_label(home: Option<&KupferdrahtHome>) -> String {
-    home.map_or_else(ephemeral_cookie_label, KupferdrahtHome::cookie_label)
+fn home_session_label(home: Option<&KupferdrahtHome>) -> String {
+    home.map_or_else(ephemeral_session_label, KupferdrahtHome::session_label)
 }
 
 /// The account [`ClientBuilder::resume`] opens: named explicitly, never
@@ -788,17 +789,17 @@ mod tests {
     /// Step 93: the label is the home's; without a home it is ephemeral —
     /// a fresh one per build, never shared between two builds.
     #[test]
-    fn cookie_label_is_the_homes_or_an_ephemeral_one_without_a_home() {
+    fn session_label_is_the_homes_or_an_ephemeral_one_without_a_home() {
         let home = KupferdrahtHome::with_home_id(
             std::path::PathBuf::from("/tmp/kupferdraht-home"),
             "0123456789abcdef0123456789abcdef".to_owned(),
         );
         assert_eq!(
-            home_cookie_label(Some(&home)),
+            home_session_label(Some(&home)),
             "kupferdraht-0123456789abcdef0123456789abcdef"
         );
-        let first = home_cookie_label(None);
-        let second = home_cookie_label(None);
+        let first = home_session_label(None);
+        let second = home_session_label(None);
         assert!(first.starts_with("kupferdraht-"));
         assert_ne!(first, second, "no home, no shared label");
     }

@@ -169,7 +169,7 @@ export async function rpcRoundTrip() {
       strayResponsesOnB: onB.filter((r) => r.requestId === 'dup-1').length,
       survivedForgedResponse: again.length === 1,
       homeId: b.kupferdraht.homeId,
-      cookieLabel: b.kupferdraht.cookieLabel,
+      sessionLabel: b.kupferdraht.sessionLabel,
     };
   } finally {
     a.close();
@@ -216,7 +216,7 @@ export async function electionAndFailover() {
     const create = client.createRoom('in flight');
     const read = client.rooms();
     await wait(80); // the requests have reached A, whose stub answers slowly
-    const promoted = once(b, 'leader-changed', (e) => e.detail.isSelf);
+    const promoted = once(b, 'leader-changed', (e) => e.detail.isThisTab);
     a.close(); // terminates A's worker: the browser releases the lease
     const event = await promoted;
     const sendOutcome = await send.then((h) => h.idempotencyKey, (err) => err.name);
@@ -275,7 +275,7 @@ export async function recoveryHandleSurvivesTheLeader() {
   try {
     const client = await b.kupferdraht.resume(FIXTURE_ACCOUNT);
     const recovery = await client.recovery();
-    const promoted = once(b, 'leader-changed', (e) => e.detail.isSelf);
+    const promoted = once(b, 'leader-changed', (e) => e.detail.isThisTab);
     a.close();
     await promoted;
     const state = await recovery.state();
@@ -329,7 +329,7 @@ export async function takeOverOverride() {
   const { a, b } = await twoTabs();
   try {
     const aEvicted = once(a, 'evicted');
-    const bLeads = once(b, 'leader-changed', (e) => e.detail.isSelf);
+    const bLeads = once(b, 'leader-changed', (e) => e.detail.isThisTab);
     b.takeOver();
     await bLeads;
     await aEvicted;
@@ -354,7 +354,7 @@ export async function aStaleLeaderMessageMovesNoTab() {
   try {
     const oldEpoch = a.epoch;
     const aEvicted = once(a, 'evicted');
-    const bLeads = once(b, 'leader-changed', (e) => e.detail.isSelf);
+    const bLeads = once(b, 'leader-changed', (e) => e.detail.isThisTab);
     b.takeOver();
     await bLeads;
     await aEvicted;
@@ -406,7 +406,7 @@ export async function evictionAfterTheNewLeaderIsKnown() {
   const host = createTabHost({ worker: () => { const w = new ScriptedWorker(); workers.push(w); return w; } });
   const announcements = new BroadcastChannel(REQUEST_CHANNEL);
   try {
-    const leads = once(host, 'leader-changed', (e) => e.detail.isSelf);
+    const leads = once(host, 'leader-changed', (e) => e.detail.isThisTab);
     workers[0].send({ type: 'leader', epoch: 1 });
     await leads;
     const followsB = once(host, 'leader-changed', (e) => e.detail.leaderTabId === 'tab-b');
@@ -511,7 +511,7 @@ export async function aTabTakeOverIsReportedToTheEvictedTabOnly() {
   b.addEventListener('evicted', (e) => seenB.push(e.detail));
   try {
     const aEvicted = once(a, 'evicted');
-    const bLeads = once(b, 'leader-changed', (e) => e.detail.isSelf);
+    const bLeads = once(b, 'leader-changed', (e) => e.detail.isThisTab);
     b.takeOver();
     await bLeads;
     const detail = (await aEvicted).detail;

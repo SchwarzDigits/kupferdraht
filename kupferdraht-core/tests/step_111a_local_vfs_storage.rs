@@ -100,7 +100,7 @@ fn sample_session(account: &str) -> SessionRecord {
         device_id: "dev-browser".into(),
         access_token: MARKER_TOKEN.into(),
         refresh_token: String::new(),
-        cookie_label: Some("kupferdraht-step111a".into()),
+        session_label: Some("kupferdraht-step111a".into()),
         api_version: 14,
         access_token_issued_at_ms: 1_700_000_000_000,
     }

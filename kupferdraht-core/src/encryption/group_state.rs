@@ -23,7 +23,7 @@ use crate::error::KupferdrahtError;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GroupLeaf {
     /// Wire `{uuid}@{domain}` user id derived by stripping the
-    /// `:{client_id}` middle segment from the leaf's
+    /// `:{device_id}` middle segment from the leaf's
     /// `BasicCredential` payload.
     pub(crate) user_id: String,
     /// Raw `BasicCredential` identity bytes — kept for diagnostics
@@ -42,7 +42,7 @@ impl MlsClient {
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Encoding` if the credential payload is
-    /// not Wire's `{uuid}:{client_id}@{domain}` shape. Should not
+    /// not Wire's `{uuid}:{device_id}@{domain}` shape. Should not
     /// happen for `MlsClient` instances built via `new_fresh*` /
     /// `resume_with_storage` — those construct the identity bytes
     /// deterministically.
@@ -118,7 +118,7 @@ impl MlsClient {
     /// * `KupferdrahtError::InvalidInput` if no group with that id is in
     ///   storage.
     /// * `KupferdrahtError::Encoding` if a leaf credential is not UTF-8 or
-    ///   does not carry Wire's `{uuid}:{client_id}@{domain}` shape.
+    ///   does not carry Wire's `{uuid}:{device_id}@{domain}` shape.
     pub fn group_leaves(&self, group_id_bytes: &[u8]) -> Result<Vec<GroupLeaf>, KupferdrahtError> {
         debug_assert!(
             !group_id_bytes.is_empty(),

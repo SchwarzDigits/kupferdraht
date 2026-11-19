@@ -13,7 +13,7 @@ pub struct TaskDraft {
     pub title: String,
     /// Free text; links are plain text inside it (ADR-0014).
     pub description: Option<String>,
-    /// Qualified user id (`<uuid>@<domain>`) of the assignee.
+    /// User id (`<uuid>@<domain>`) of the assignee.
     pub assignee: Option<String>,
     pub due_at_ms: Option<i64>,
     pub priority: Option<TaskPriority>,
@@ -48,7 +48,7 @@ pub struct TaskItem {
     pub task_id: String,
     pub title: String,
     pub description: Option<String>,
-    /// Qualified user id (`<uuid>@<domain>`).
+    /// User id (`<uuid>@<domain>`).
     pub assignee: Option<String>,
     pub due_at_ms: Option<i64>,
     pub status: TaskStatus,
@@ -68,7 +68,7 @@ pub struct TaskItem {
 pub struct TaskPatch {
     pub title: Option<String>,
     pub description: Option<String>,
-    /// Qualified user id (`<uuid>@<domain>`).
+    /// User id (`<uuid>@<domain>`).
     pub assignee: Option<String>,
     pub due_at_ms: Option<i64>,
     pub priority: Option<TaskPriority>,
@@ -85,7 +85,7 @@ pub struct TaskPatch {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoldedTask {
     pub item: TaskItem,
-    /// Sender of the task's first message (qualified user id).
+    /// Sender of the task's first message (`<uuid>@<domain>`).
     pub creator_user_id: String,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
@@ -98,7 +98,7 @@ pub struct FoldedTask {
 /// aggregate over every conversation the client replicates.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoomTask {
-    /// Qualified room id (`<uuid>@<domain>`).
+    /// Room id (`<uuid>@<domain>`).
     pub room_id: String,
     pub task: FoldedTask,
 }

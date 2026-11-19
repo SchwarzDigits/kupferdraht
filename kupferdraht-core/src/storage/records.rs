@@ -17,15 +17,17 @@ use crate::storage::engine::StorageEngineInfo;
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionRecord {
     pub user_id: String,
-    /// Wire `client_id` of the device this session is bound to. Step
-    /// 7e pinning: every authenticated call routes through the
+    /// The id of the device this session is bound to. Step 7e pinning:
+    /// every authenticated call routes through the
     /// `(access_token, device_id)` pair, and `Client::resume` /
     /// `Client::resync_existing_rooms` reload the matching MLS state
     /// from `devices.mls_public_key` keyed by this id.
     pub device_id: String,
     pub access_token: String,
     pub refresh_token: String,
-    pub cookie_label: Option<String>,
+    /// The label the backend keeps this session's refresh cookie under,
+    /// one per home (ADR-0025).
+    pub session_label: Option<String>,
     pub api_version: u32,
     pub access_token_issued_at_ms: i64,
 }
@@ -38,7 +40,7 @@ impl std::fmt::Debug for SessionRecord {
             .field("device_id", &self.device_id)
             .field("access_token", &crate::redact::Hidden)
             .field("refresh_token", &crate::redact::Hidden)
-            .field("cookie_label", &self.cookie_label)
+            .field("session_label", &self.session_label)
             .field("api_version", &self.api_version)
             .field("access_token_issued_at_ms", &self.access_token_issued_at_ms)
             .finish()
@@ -48,7 +50,7 @@ impl std::fmt::Debug for SessionRecord {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeviceRecord {
     pub user_id: String,
-    pub client_id: String,
+    pub device_id: String,
     /// MLS signature public key, base64-encoded. Populated at login
     /// from Step 1c.6 onward; `None` between Step 1b registration and
     /// Step 1c `KeyPackage` upload in legacy rows.
@@ -60,21 +62,21 @@ pub struct DeviceRecord {
 /// without hitting the backend.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SelfUserRecord {
-    /// Qualified `<localpart>@<domain>` user id (Step 19). The domain is
-    /// folded in here; there is no separate (nullable) `domain` column.
+    /// The `<localpart>@<domain>` user id (Step 19). The domain is folded
+    /// in here; there is no separate (nullable) `domain` column.
     pub id: String,
-    pub handle: Option<String>,
+    pub username: Option<String>,
     pub name: String,
     pub email: Option<String>,
     /// The user's team as of the last login, lowercase (Step 143).
     pub team_id: Option<String>,
     /// The team's name as of the last login (Step 143).
     pub team_name: Option<String>,
-    /// The own avatar's image keys, thumbnail and full (Step 144).
-    pub avatar_thumbnail_key: Option<String>,
-    pub avatar_full_key: Option<String>,
-    /// The image key of the team's icon as of the last login (Step 144).
-    pub team_avatar_key: Option<String>,
+    /// Where the own avatar's images are (Step 144).
+    pub avatar_source: crate::avatar::AvatarSource,
+    /// The version marker of the team's icon as of the last login: the id
+    /// of its image (Step 144).
+    pub team_avatar_version: Option<String>,
 }
 
 /// The `ServerConfig` values Kupferdraht booted with, persisted so
@@ -129,20 +131,19 @@ pub struct RoomRecord {
 pub struct RoomMemberRecord {
     pub room_id: String,
     pub user_id: String,
-    pub is_self: bool,
+    pub is_own: bool,
     pub display_name: Option<String>,
-    pub handle: Option<String>,
+    pub username: Option<String>,
     /// Neutral role vocabulary: `"administrator"` | `"member"`
     /// (Step 72a, V26). Unknown strings read back as member. The
     /// serde default covers `IndexedDB` rows written before 72a —
     /// `SQLite` gets the same via V26's `DEFAULT 'member'`.
     #[serde(default = "default_member_role")]
     pub role: String,
-    /// The member's avatar image keys from `list-users` (Step 144).
+    /// Where the member's avatar images are, from `list-users`
+    /// (Step 144).
     #[serde(default)]
-    pub avatar_thumbnail_key: Option<String>,
-    #[serde(default)]
-    pub avatar_full_key: Option<String>,
+    pub avatar_source: crate::avatar::AvatarSource,
 }
 
 fn default_member_role() -> String {
@@ -318,7 +319,7 @@ pub struct TimelineEventRecord {
 pub struct ExpiredMessageRecord {
     pub room_id: String,
     pub message_id: String,
-    /// Qualified user id of the row's sender.
+    /// The `<localpart>@<domain>` user id of the row's sender.
     pub sender_user_id: String,
 }
 
@@ -416,7 +417,7 @@ impl std::fmt::Debug for AttachmentRecord {
 }
 
 /// How long an idempotency key answers for its call: 28 days, the
-/// lifetime of the `zuid` cookie (backend-spec §5.1) — the longest a
+/// lifetime of the refresh cookie (backend-spec §5.1) — the longest a
 /// client can sleep and still resume without a new login. Every keyed
 /// write first forgets the keys older than this (Step 130a).
 pub const SEND_KEY_RETENTION_MS: i64 = 28 * 24 * 60 * 60 * 1000;
@@ -483,11 +484,11 @@ pub trait Store: MaybeSendSync {
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
     async fn save_device(&self, device: &DeviceRecord) -> Result<(), KupferdrahtError>;
 
-    /// Load the device record for the `(user_id, client_id)` pair,
-    /// or `Ok(None)` if no row exists. The per-`client_id` lookup is
-    /// the only correct shape: a single user can own up to 7 Wire
-    /// clients (the per-user device cap), so picking "any" device by
-    /// `user_id` alone returned arbitrary rows and silently broke
+    /// Load the device record for the `(user_id, device_id)` pair,
+    /// or `Ok(None)` if no row exists. The per-device lookup is the
+    /// only correct shape: a single user can own up to 7 devices (the
+    /// backend's per-user cap), so picking "any" device by `user_id`
+    /// alone returned arbitrary rows and silently broke
     /// `Client::resume` (CHANGELOG.md §29). Callers consume
     /// `SessionRecord::device_id` to source the second argument.
     ///
@@ -496,7 +497,7 @@ pub trait Store: MaybeSendSync {
     async fn load_device(
         &self,
         user_id: &str,
-        client_id: &str,
+        device_id: &str,
     ) -> Result<Option<DeviceRecord>, KupferdrahtError>;
 
     /// Persist a backend MLS public key, replacing any existing row
@@ -651,16 +652,16 @@ pub trait Store: MaybeSendSync {
         Ok(None)
     }
 
-    /// The avatar keys of a stored member, `Ok(None)` for a user in no stored
-    /// room (Step 144). The default keeps none: a custom store's callers ask
-    /// the backend.
+    /// Where a stored member's avatar images are, `Ok(None)` for a user in
+    /// no stored room (Step 144). The default keeps none: a custom store's
+    /// callers ask the backend.
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn member_avatar_keys(
+    async fn member_avatar_source(
         &self,
         _user_id: &str,
-    ) -> Result<Option<crate::avatar::AvatarKeys>, KupferdrahtError> {
+    ) -> Result<Option<crate::avatar::AvatarSource>, KupferdrahtError> {
         Ok(None)
     }
 

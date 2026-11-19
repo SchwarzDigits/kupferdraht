@@ -21,7 +21,7 @@ use std::sync::Arc;
 use crate::encryption::ExternalRemovalOutcome;
 use crate::error::KupferdrahtError;
 use crate::rooms::{
-    Room, apply_self_profile, apply_user_profiles, non_self_qualified_ids, room_from_conversation,
+    Room, apply_own_member_profile, apply_user_profiles, other_member_ids, room_from_conversation,
     room_to_records, rooms_from_records,
 };
 use crate::storage::{RoomMemberRecord, RoomRecord};
@@ -530,7 +530,7 @@ impl Client {
         &self,
         rooms: Vec<Room>,
     ) -> Result<Vec<Room>, KupferdrahtError> {
-        let ids = non_self_qualified_ids(&rooms);
+        let ids = other_member_ids(&rooms);
         let lookup: HashMap<String, UserProfile> = if ids.is_empty() {
             HashMap::new()
         } else {
@@ -543,17 +543,17 @@ impl Client {
                 .map(|u| (u.qualified_id.to_string(), u))
                 .collect()
         };
-        // Self's name / handle come from `/v14/self` (already in
+        // The own name / username come from `/v14/self` (already in
         // the account snapshot). `list-users` deliberately excludes
-        // self, so we apply the account profile here.
+        // the own user, so we apply the account profile here.
         let account = self.account();
-        let self_name = account.display_name().to_string();
-        let self_handle = account.handle().map(str::to_string);
-        let self_avatar = self.own_avatar_keys().await?;
+        let own_name = account.display_name().to_string();
+        let own_username = account.username().map(str::to_string);
+        let own_avatar = self.own_avatar_source().await?;
         Ok(rooms
             .into_iter()
             .map(|r| apply_user_profiles(r, &lookup))
-            .map(|r| apply_self_profile(r, &self_name, self_handle.as_deref(), &self_avatar))
+            .map(|r| apply_own_member_profile(r, &own_name, own_username.as_deref(), &own_avatar))
             .collect())
     }
 

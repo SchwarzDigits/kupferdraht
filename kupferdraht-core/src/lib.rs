@@ -54,10 +54,10 @@ mod secret_debug_tests;
 pub(crate) mod time;
 pub(crate) mod wire;
 
-pub use avatar::{Avatar, AvatarSize};
+pub use avatar::{Avatar, AvatarSize, AvatarSource};
 pub use client::{
-    Account, Client, ClientBuilder, FileSharingPolicy, JoinSummary, PendingClient, ReceiptMode,
-    ResyncSummary, ServerConfig,
+    Account, Client, ClientBuilder, DeviceInfo, DeviceKind, FileSharingPolicy, JoinSummary,
+    PendingClient, ReceiptMode, ResyncSummary, ServerConfig,
 };
 pub use error::KupferdrahtError;
 pub use identity::UserId;

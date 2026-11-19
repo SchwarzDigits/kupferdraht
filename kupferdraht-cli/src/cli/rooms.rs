@@ -52,14 +52,14 @@ pub(crate) async fn rooms() -> Result<(), KupferdrahtError> {
         }
         println!("    members ({}):", members.len());
         for m in &members {
-            let marker = if m.is_self { "*" } else { " " };
+            let marker = if m.is_own { "*" } else { " " };
             let name = m.display_name.as_deref().unwrap_or("—");
-            let handle = m
-                .handle
+            let username = m
+                .username
                 .as_deref()
                 .map(|h| format!(" @{h}"))
                 .unwrap_or_default();
-            println!("      {marker} {} — {name}{handle}", m.user_id);
+            println!("      {marker} {} — {name}{username}", m.user_id);
         }
     }
     Ok(())
@@ -123,10 +123,10 @@ pub(crate) async fn room_members(room_id: String) -> Result<(), KupferdrahtError
     println!("  room_id: {room_id}");
     println!("  count:   {}", members.len());
     for m in &members {
-        let marker = if m.is_self { "*" } else { " " };
+        let marker = if m.is_own { "*" } else { " " };
         let name = m.display_name.as_deref().unwrap_or("—");
-        let handle = m
-            .handle
+        let username = m
+            .username
             .as_deref()
             .map(|h| format!(" @{h}"))
             .unwrap_or_default();
@@ -137,10 +137,10 @@ pub(crate) async fn room_members(room_id: String) -> Result<(), KupferdrahtError
             kupferdraht::RoomMemberRole::Member => "",
         };
         let avatar = m
-            .avatar_key()
-            .map(|key| format!("  avatar_key: {key}"))
+            .avatar_version()
+            .map(|version| format!("  avatar_version: {version}"))
             .unwrap_or_default();
-        println!("  {marker} {} — {name}{handle}{role}{avatar}", m.user_id);
+        println!("  {marker} {} — {name}{username}{role}{avatar}", m.user_id);
     }
     Ok(())
 }
@@ -181,8 +181,8 @@ pub(crate) async fn room_devices(room_id: String) -> Result<(), KupferdrahtError
     Ok(())
 }
 
-/// A thumbprint in 2-character groups — how the Wire apps render the
-/// "MLS Thumbprint", so the two are easy to compare. Pure, unit-tested.
+/// An MLS thumbprint in 2-character groups — how the official apps render
+/// it, so the two are easy to compare. Pure, unit-tested.
 pub(crate) fn grouped_thumbprint(thumbprint: &str) -> String {
     thumbprint
         .as_bytes()
@@ -286,14 +286,14 @@ pub(crate) async fn room_invite(
     println!("  epoch:   {}", room.epoch());
     println!("  members ({}):", members.len());
     for m in &members {
-        let marker = if m.is_self { "*" } else { " " };
+        let marker = if m.is_own { "*" } else { " " };
         let name = m.display_name.as_deref().unwrap_or("—");
-        let handle = m
-            .handle
+        let username = m
+            .username
             .as_deref()
             .map(|h| format!(" @{h}"))
             .unwrap_or_default();
-        println!("    {marker} {} — {name}{handle}", m.user_id);
+        println!("    {marker} {} — {name}{username}", m.user_id);
     }
     Ok(())
 }
@@ -309,14 +309,14 @@ pub(crate) async fn room_kick(room_id: String, users: Vec<String>) -> Result<(),
     println!("  epoch:   {}", room.epoch());
     println!("  members ({}):", members.len());
     for m in &members {
-        let marker = if m.is_self { "*" } else { " " };
+        let marker = if m.is_own { "*" } else { " " };
         let name = m.display_name.as_deref().unwrap_or("—");
-        let handle = m
-            .handle
+        let username = m
+            .username
             .as_deref()
             .map(|h| format!(" @{h}"))
             .unwrap_or_default();
-        println!("    {marker} {} — {name}{handle}", m.user_id);
+        println!("    {marker} {} — {name}{username}", m.user_id);
     }
     Ok(())
 }

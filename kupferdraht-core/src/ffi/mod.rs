@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use crate::client::{Account as CoreAccount, Client as CoreClient};
 use crate::error::KupferdrahtError;
-use crate::identity::UserId;
+use crate::identity::UserId as CoreUserId;
 use crate::storage::StorageEngineInfo;
 
 mod admin;
@@ -53,21 +53,21 @@ pub fn kupferdraht_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-/// FFI-facing structured form of a [`UserId`] — `localpart` and `domain`
-/// as separate fields.
+/// The FFI form of a user id ([`CoreUserId`](crate::identity::UserId)):
+/// `localpart` and `domain` as separate fields.
 ///
 /// Foreign (Kotlin / Swift) consumers receive the user id structured, not
 /// flattened to a string: a Kotlin `data class` / Swift `struct`. The
-/// validated newtype [`UserId`] stays the internal, invariant-carrying
-/// type; this record is the value that crosses the `UniFFI` boundary.
+/// validated core newtype stays the internal, invariant-carrying type;
+/// this record is the value that crosses the `UniFFI` boundary.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
-pub struct QualifiedUserId {
+pub struct UserId {
     pub localpart: String,
     pub domain: String,
 }
 
-impl From<&UserId> for QualifiedUserId {
-    fn from(id: &UserId) -> Self {
+impl From<&CoreUserId> for UserId {
+    fn from(id: &CoreUserId) -> Self {
         Self {
             localpart: id.localpart().to_owned(),
             domain: id.domain().to_owned(),
@@ -77,16 +77,16 @@ impl From<&UserId> for QualifiedUserId {
 
 /// Validate a flat `<localpart>@<domain>` string and return it structured.
 ///
-/// Validation (exactly one `@`, non-empty parts) happens in Rust via
-/// [`UserId::parse`], so an invalid id surfaces as
+/// Validation (exactly one `@`, non-empty parts) happens in Rust via the
+/// core's `UserId::parse`, so an invalid id surfaces as
 /// `KupferdrahtError::InvalidInput` rather than a silently-malformed record.
 ///
 /// # Errors
 /// `KupferdrahtError::InvalidInput` if `id` is not a well-formed
 /// `<localpart>@<domain>`.
 #[uniffi::export]
-pub fn parse_user_id(id: &str) -> Result<QualifiedUserId, KupferdrahtError> {
-    UserId::parse(id).map(|uid| QualifiedUserId::from(&uid))
+pub fn parse_user_id(id: &str) -> Result<UserId, KupferdrahtError> {
+    CoreUserId::parse(id).map(|uid| UserId::from(&uid))
 }
 
 /// The signed-in user's own profile snapshot — the FFI value form of the
@@ -94,12 +94,13 @@ pub fn parse_user_id(id: &str) -> Result<QualifiedUserId, KupferdrahtError> {
 ///
 /// A frozen snapshot loaded at login (`GET /v14/self`); a plain record,
 /// not an object, because it carries no behaviour. `user_id` is
-/// structured ([`QualifiedUserId`]); `domain` lives inside it.
+/// structured ([`UserId`]); `domain` lives inside it.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct Account {
-    pub user_id: QualifiedUserId,
+    pub user_id: UserId,
     pub display_name: String,
-    pub handle: Option<String>,
+    /// The user's unique username, if one is set.
+    pub username: Option<String>,
     pub email: Option<String>,
     /// The user's team as of the last login, `None` for a personal account
     /// (Step 143).
@@ -112,9 +113,9 @@ pub struct Account {
 impl From<&CoreAccount> for Account {
     fn from(account: &CoreAccount) -> Self {
         Self {
-            user_id: QualifiedUserId::from(account.user_id()),
+            user_id: UserId::from(account.user_id()),
             display_name: account.display_name().to_owned(),
-            handle: account.handle().map(str::to_owned),
+            username: account.username().map(str::to_owned),
             email: account.email().map(str::to_owned),
             team_id: account.team_id().map(str::to_owned),
             team_name: account.team_name().map(str::to_owned),
@@ -140,11 +141,11 @@ impl Client {
 
 #[uniffi::export]
 impl Client {
-    /// The user id, structured as a [`QualifiedUserId`], or `None` if not
-    /// logged in. FFI counterpart of the native `Client::user_id`.
+    /// The user id, structured as a [`UserId`], or `None` if not logged
+    /// in. FFI counterpart of the native `Client::user_id`.
     #[must_use]
-    pub fn user_id(&self) -> Option<QualifiedUserId> {
-        self.inner.user_id().map(QualifiedUserId::from)
+    pub fn user_id(&self) -> Option<UserId> {
+        self.inner.user_id().map(UserId::from)
     }
 
     /// The hex device id from `POST /v14/clients`, or `None` if not
@@ -216,22 +217,22 @@ mod tests {
     #[test]
     fn account_record_maps_every_field() {
         let core = CoreAccount::new(
-            UserId::new("user-uuid", "example.test"),
+            CoreUserId::new("user-uuid", "example.test"),
             "Alice".to_owned(),
             Some("alice".to_owned()),
             Some("alice@example.test".to_owned()),
             crate::client::OwnTeam {
                 id: Some("team-uuid".to_owned()),
                 name: Some("Fixture Team".to_owned()),
-                icon_key: None,
+                avatar_version: None,
             },
-            crate::avatar::AvatarKeys::default(),
+            crate::avatar::AvatarSource::default(),
         );
         let record = Account::from(core.as_ref());
         assert_eq!(record.user_id.localpart, "user-uuid");
         assert_eq!(record.user_id.domain, "example.test");
         assert_eq!(record.display_name, "Alice");
-        assert_eq!(record.handle.as_deref(), Some("alice"));
+        assert_eq!(record.username.as_deref(), Some("alice"));
         assert_eq!(record.email.as_deref(), Some("alice@example.test"));
         assert_eq!(record.team_id.as_deref(), Some("team-uuid"));
         assert_eq!(record.team_name.as_deref(), Some("Fixture Team"));
@@ -240,15 +241,15 @@ mod tests {
     #[test]
     fn account_record_keeps_absent_optionals_none() {
         let core = CoreAccount::new(
-            UserId::new("u", "d"),
+            CoreUserId::new("u", "d"),
             "n".to_owned(),
             None,
             None,
             crate::client::OwnTeam::default(),
-            crate::avatar::AvatarKeys::default(),
+            crate::avatar::AvatarSource::default(),
         );
         let record = Account::from(core.as_ref());
-        assert!(record.handle.is_none(), "missing handle stays None");
+        assert!(record.username.is_none(), "missing username stays None");
         assert!(record.email.is_none(), "missing email stays None");
         assert!(record.team_id.is_none(), "missing team stays None");
         assert!(record.team_name.is_none(), "missing team name stays None");

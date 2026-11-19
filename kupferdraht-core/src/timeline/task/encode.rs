@@ -165,13 +165,7 @@ pub(crate) fn payload_from_item(item: &TaskItem) -> crate::wire::proto::TaskPayl
         title: item.title.clone(),
         status: status as i32,
         description: item.description.clone(),
-        assignee: item.assignee.as_deref().map(|qid| {
-            let (id, domain) = qid.split_once('@').unwrap_or((qid, ""));
-            proto::QualifiedUserId {
-                id: id.to_string(),
-                domain: domain.to_string(),
-            }
-        }),
+        assignee: item.assignee.as_deref().map(proto::user_reference),
         due_at_ms: item.due_at_ms,
         priority,
         sort_key: item.sort_key.clone(),

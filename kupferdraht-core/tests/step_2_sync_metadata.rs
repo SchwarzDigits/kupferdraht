@@ -357,9 +357,9 @@ async fn direct_message_exposes_counterpart_with_backfilled_profile() {
     assert_eq!(rooms[0].room_type(), RoomType::DirectMessage);
     let cp = rooms[0].counterpart().expect("DM must have counterpart");
     assert_eq!(cp.user_id, "bob@example.test");
-    assert!(!cp.is_self);
+    assert!(!cp.is_own);
     assert_eq!(cp.display_name.as_deref(), Some("Bob Example"));
-    assert_eq!(cp.handle.as_deref(), Some("bobx"));
+    assert_eq!(cp.username.as_deref(), Some("bobx"));
 }
 
 #[tokio::test]
@@ -451,5 +451,5 @@ async fn sync_metadata_tolerates_list_users_failure_bucket() {
     let cp = rooms[0].counterpart().expect("DM counterpart");
     assert_eq!(cp.user_id, "remote@federated.test");
     assert!(cp.display_name.is_none(), "unresolved name stays None");
-    assert!(cp.handle.is_none(), "unresolved handle stays None");
+    assert!(cp.username.is_none(), "unresolved username stays None");
 }

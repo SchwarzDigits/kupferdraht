@@ -119,7 +119,7 @@ fn sample_session() -> SessionRecord {
         device_id: "dev-tab".into(),
         access_token: "token".into(),
         refresh_token: String::new(),
-        cookie_label: Some("step92".into()),
+        session_label: Some("step92".into()),
         api_version: 14,
         access_token_issued_at_ms: 1_700_000_000_000,
     }

@@ -7,7 +7,7 @@
 //! service's key version, the Argon2id parameters, salt, nonce, the SHA-256
 //! of the account id (not the id: a found file names no owner, and another
 //! account's file is refused before the PIN service is asked), the device's
-//! Wire client id, when the data was made and the seed's receipt key (the
+//! device id, when the data was made and the seed's receipt key (the
 //! PIN service keys its evaluation by it) — is the associated data of the
 //! sealed seed that follows it. Data of a device the account's storage slot
 //! no longer names is refused before the PIN service is asked, too.
@@ -30,10 +30,10 @@ pub(crate) const MAGIC: [u8; 4] = *b"SDRD";
 pub(crate) const FORMAT_VERSION: u8 = 3;
 /// The length of the header — the associated data.
 pub(crate) const HEADER_LEN: usize =
-    4 + 1 + 4 + 12 + 16 + 12 + 32 + CLIENT_ID_LEN + 8 + REFUND_KEY_LEN;
-/// The client id's field: its text, padded with zero bytes (Wire's ids are
+    4 + 1 + 4 + 12 + 16 + 12 + 32 + DEVICE_ID_LEN + 8 + REFUND_KEY_LEN;
+/// The device id's field: its text, padded with zero bytes (the backend's ids are
 /// at most 16 characters).
-pub(crate) const CLIENT_ID_LEN: usize = 16;
+pub(crate) const DEVICE_ID_LEN: usize = 16;
 /// The length of the sealed seed with its tag.
 pub(crate) const SEALED_LEN: usize = 32 + 16;
 
@@ -54,9 +54,9 @@ pub(crate) struct RecoveryData {
     pub(crate) salt: [u8; 16],
     pub(crate) nonce: [u8; 12],
     pub(crate) account_hash: [u8; 32],
-    /// Step 120 (ADR-0040): the device — the Wire client — the data belongs
+    /// Step 120 (ADR-0040): the device the data belongs
     /// to: its id's text, zero-padded.
-    pub(crate) client_id: [u8; CLIENT_ID_LEN],
+    pub(crate) device_id: [u8; DEVICE_ID_LEN],
     /// When the data was made, ms since the Unix epoch.
     pub(crate) created_at_ms: u64,
     /// Step 124: the seed's receipt key (compressed P-256), which the PIN
@@ -79,7 +79,7 @@ impl RecoveryData {
             &self.salt,
             &self.nonce,
             &self.account_hash,
-            &self.client_id,
+            &self.device_id,
             &self.created_at_ms.to_be_bytes(),
             &self.refund_key,
         ];
@@ -136,7 +136,7 @@ impl RecoveryData {
             salt: reader.array(),
             nonce: reader.array(),
             account_hash: reader.array(),
-            client_id: reader.array(),
+            device_id: reader.array(),
             created_at_ms: reader.u64(),
             refund_key: reader.array(),
             sealed: reader.array(),
@@ -169,27 +169,27 @@ impl Reader<'_> {
     }
 }
 
-/// A Wire client id as the header carries it: its text, zero-padded.
+/// A device id as the header carries it: its text, zero-padded.
 ///
 /// # Errors
 /// `InvalidInput` for an empty id, one longer than 16 bytes, or one with a
 /// zero byte.
-pub(crate) fn client_id_field(client_id: &str) -> Result<[u8; CLIENT_ID_LEN], KupferdrahtError> {
-    let bytes = client_id.as_bytes();
-    if bytes.is_empty() || bytes.len() > CLIENT_ID_LEN || bytes.contains(&0) {
+pub(crate) fn device_id_field(device_id: &str) -> Result<[u8; DEVICE_ID_LEN], KupferdrahtError> {
+    let bytes = device_id.as_bytes();
+    if bytes.is_empty() || bytes.len() > DEVICE_ID_LEN || bytes.contains(&0) {
         return Err(KupferdrahtError::InvalidInput(format!(
-            "{client_id:?} is not a Wire client id (1–16 bytes)"
+            "{device_id:?} is not a device id (1–16 bytes)"
         )));
     }
-    let mut field = [0u8; CLIENT_ID_LEN];
+    let mut field = [0u8; DEVICE_ID_LEN];
     field[..bytes.len()].copy_from_slice(bytes);
     Ok(field)
 }
 
 /// The client id a header carries, as text.
 #[cfg(test)]
-pub(crate) fn client_id_text(field: &[u8; CLIENT_ID_LEN]) -> String {
-    let end = field.iter().position(|&b| b == 0).unwrap_or(CLIENT_ID_LEN);
+pub(crate) fn device_id_text(field: &[u8; DEVICE_ID_LEN]) -> String {
+    let end = field.iter().position(|&b| b == 0).unwrap_or(DEVICE_ID_LEN);
     String::from_utf8_lossy(&field[..end]).into_owned()
 }
 
@@ -221,7 +221,7 @@ mod tests {
             salt: [0x11; 16],
             nonce: [0x22; 12],
             account_hash: account_hash("user-uuid@example.test"),
-            client_id: client_id_field("db8ad281d4aa66").expect("a client id"),
+            device_id: device_id_field("db8ad281d4aa66").expect("a device id"),
             created_at_ms: 1_791_000_000_000,
             refund_key: [0x44; REFUND_KEY_LEN],
             sealed: [0x33; SEALED_LEN],
@@ -249,7 +249,7 @@ mod tests {
         assert_eq!(&bytes[97..105], &1_791_000_000_000_u64.to_be_bytes());
         assert_eq!(&bytes[105..138], &[0x44; REFUND_KEY_LEN]);
         let decoded = RecoveryData::decode(&bytes).expect("decoded");
-        assert_eq!(decoded.client_id, data.client_id);
+        assert_eq!(decoded.device_id, data.device_id);
         assert_eq!(decoded.created_at_ms, data.created_at_ms);
         assert_eq!(decoded.refund_key, data.refund_key);
     }
@@ -273,18 +273,18 @@ mod tests {
     /// The id is kept as text — whatever Wire's ids look like, up to 16
     /// bytes.
     #[test]
-    fn client_ids_round_trip_as_text() {
+    fn device_ids_round_trip_as_text() {
         for id in ["db8ad281d4aa66", "fc100a0123ef263d", "1", "new-client-id"] {
-            let field = client_id_field(id).expect("a client id");
-            assert_eq!(client_id_text(&field), id);
+            let field = device_id_field(id).expect("a device id");
+            assert_eq!(device_id_text(&field), id);
         }
     }
 
     #[test]
-    fn anything_else_is_not_a_client_id() {
+    fn anything_else_is_not_a_device_id() {
         for id in ["", "fc100a0123ef263d0", "a\0b"] {
             assert!(
-                matches!(client_id_field(id), Err(KupferdrahtError::InvalidInput(_))),
+                matches!(device_id_field(id), Err(KupferdrahtError::InvalidInput(_))),
                 "{id:?}"
             );
         }

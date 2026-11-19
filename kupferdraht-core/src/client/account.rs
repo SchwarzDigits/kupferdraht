@@ -9,57 +9,58 @@
 
 use std::sync::Arc;
 
-use crate::avatar::AvatarKeys;
+use crate::avatar::AvatarSource;
 use crate::identity::UserId;
 
 /// The user's own team as a login found it (Step 143): `id` from `GET /self`,
 /// lowercase, `None` for a personal account; `name` from `GET /teams/{tid}`,
-/// `None` too when that fetch failed; `icon_key` the same request's `icon`
-/// (Step 144), `None` as well for the default icon.
+/// `None` too when that fetch failed; `avatar_version` the same request's
+/// `icon` (Step 144), the id of the icon's image, `None` as well for the
+/// default icon.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct OwnTeam {
     pub(crate) id: Option<String>,
     pub(crate) name: Option<String>,
-    pub(crate) icon_key: Option<String>,
+    pub(crate) avatar_version: Option<String>,
 }
 
 /// The user's own profile from `GET /v14/self`, as of the last login,
 /// `Client::refresh_account` or own profile call (Step 152).
 ///
 /// This is the matrix-rust-sdk-shaped public-API replacement for the
-/// internal `wire::dto::SelfUser` type. Field names follow
-/// matrix-rust-sdk conventions (`display_name`, not Wire's `name`),
-/// while their values come from Wire's `/self` response.
+/// backend's profile type. Field names follow matrix-rust-sdk conventions
+/// (`display_name`, not the backend's `name`), while their values come
+/// from the backend's `/self` response.
 #[derive(Debug, Clone)]
 pub struct Account {
     user_id: UserId,
     display_name: String,
-    handle: Option<String>,
+    username: Option<String>,
     email: Option<String>,
     team: OwnTeam,
-    avatar_keys: AvatarKeys,
+    avatar_source: AvatarSource,
 }
 
 impl Account {
     pub(crate) fn new(
         user_id: UserId,
         display_name: String,
-        handle: Option<String>,
+        username: Option<String>,
         email: Option<String>,
         team: OwnTeam,
-        avatar_keys: AvatarKeys,
+        avatar_source: AvatarSource,
     ) -> Arc<Self> {
         Arc::new(Self {
             user_id,
             display_name,
-            handle,
+            username,
             email,
             team,
-            avatar_keys,
+            avatar_source,
         })
     }
 
-    /// The user's own qualified id `<localpart>@<domain>`.
+    /// The user's own id `<localpart>@<domain>`.
     #[must_use]
     pub fn user_id(&self) -> &UserId {
         &self.user_id
@@ -77,9 +78,10 @@ impl Account {
         &self.display_name
     }
 
+    /// The user's unique username, if one is set.
     #[must_use]
-    pub fn handle(&self) -> Option<&str> {
-        self.handle.as_deref()
+    pub fn username(&self) -> Option<&str> {
+        self.username.as_deref()
     }
 
     #[must_use]
@@ -103,29 +105,18 @@ impl Account {
         self.team.name.as_deref()
     }
 
-    /// The image key of the team's icon, as of the last login or refresh
-    /// (Steps 144, 152);
+    /// The version marker of the team's icon, as of the last login or
+    /// refresh (Steps 144, 152): a changed icon has a new one;
     /// [`Client::team_avatar`](super::Client::team_avatar) fetches the image.
     #[must_use]
-    pub fn team_avatar_key(&self) -> Option<&str> {
-        self.team.icon_key.as_deref()
+    pub fn team_avatar_version(&self) -> Option<&str> {
+        self.team.avatar_version.as_deref()
     }
 
-    /// The own avatar's keys (Step 144). Since Step 152 the account follows
-    /// `refresh_account` and the client's own calls, so this is the name.
+    /// Where the own avatar's images are (Step 144). Since Step 152 the
+    /// account follows `refresh_account` and the client's own calls.
     #[must_use]
-    pub fn avatar_keys(&self) -> &AvatarKeys {
-        &self.avatar_keys
-    }
-
-    /// The former name of [`Self::avatar_keys`], from when the account was a
-    /// snapshot of the login.
-    #[deprecated(
-        since = "0.5.1",
-        note = "use `avatar_keys`: the account is no longer a login snapshot"
-    )]
-    #[must_use]
-    pub fn login_avatar_keys(&self) -> &AvatarKeys {
-        &self.avatar_keys
+    pub fn avatar_source(&self) -> &AvatarSource {
+        &self.avatar_source
     }
 }

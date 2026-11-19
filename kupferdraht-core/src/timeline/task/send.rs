@@ -194,20 +194,21 @@ impl Client {
         Ok(())
     }
 
-    /// Resolve the human-readable mention handle for the fallback text:
-    /// the room member's `handle`, else `display_name`, else the raw
-    /// qualified id (ugly but unambiguous). Step 60a.
-    async fn assignee_mention_handle(&self, room_id: &str, qualified_user_id: &str) -> String {
-        let member =
-            match self.room(room_id).await {
-                Some(room) => room.members().await.ok().and_then(|members| {
-                    members.into_iter().find(|m| m.user_id == qualified_user_id)
-                }),
-                None => None,
-            };
+    /// Resolve the human-readable mention name for the fallback text:
+    /// the room member's `username`, else `display_name`, else the raw
+    /// user id (ugly but unambiguous). Step 60a.
+    async fn assignee_mention_name(&self, room_id: &str, user_id: &str) -> String {
+        let member = match self.room(room_id).await {
+            Some(room) => room
+                .members()
+                .await
+                .ok()
+                .and_then(|members| members.into_iter().find(|m| m.user_id == user_id)),
+            None => None,
+        };
         member
-            .and_then(|m| m.handle.or(m.display_name))
-            .unwrap_or_else(|| qualified_user_id.to_string())
+            .and_then(|m| m.username.or(m.display_name))
+            .unwrap_or_else(|| user_id.to_string())
     }
 
     /// See [`Timeline::send_task`] for the caller-facing contract. Step 60a.
@@ -257,7 +258,7 @@ impl Client {
         let with_fallback = resolve_task_fallback(with_fallback, room_is_marked);
         let (fallback_text, fallback_mentions) = if with_fallback {
             let assignee = match item.assignee.as_deref() {
-                Some(qid) => Some((self.assignee_mention_handle(room_id, qid).await, qid)),
+                Some(qid) => Some((self.assignee_mention_name(room_id, qid).await, qid)),
                 None => None,
             };
             let (text, mentions) = task_fallback(

@@ -418,14 +418,14 @@ async fn sync_members_enumerates_leaves_and_backfills_profiles() {
         .iter()
         .find(|m| m.user_id == "alice-uuid@example.test")
         .expect("alice present");
-    assert!(!alice.is_self);
+    assert!(!alice.is_own);
     assert_eq!(alice.display_name.as_deref(), Some("Alice"));
-    assert_eq!(alice.handle.as_deref(), Some("alix"));
+    assert_eq!(alice.username.as_deref(), Some("alix"));
     let self_member = members
         .iter()
         .find(|m| m.user_id == "user-uuid@example.test")
         .expect("self member present");
-    assert!(self_member.is_self);
+    assert!(self_member.is_own);
     assert_eq!(self_member.display_name.as_deref(), Some("Alice Example"));
 
     // Persistence round trip: the refresh overwrote the placeholder
