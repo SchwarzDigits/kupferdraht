@@ -3364,3 +3364,29 @@ touched it.
   filters `a` and `b` by `x` too: they reported 0 tests, and the gate still said
   green. The same slip as 5.92; a target that should run something and ran nothing
   is a failure, not a pass.
+
+### 5.105 A standard's word, a matcher that reads identifiers, and a smoke that passed around a gap (Step 163d)
+
+- **A word Wire uses can be a standard's.** The plan listed `thumbprint` with the
+  Wire words and the implementation renamed it to `fingerprint`; Volker objected after
+  the fact: it is RFC 7638's JWK Thumbprint, which Wire took over, and neither MLS nor
+  openmls name the computation. The rename was reverted, the word left the check's
+  list, and the check's doc says so now. Before a rename for ADR-0009, grep the openmls
+  fork, RFC 9420 and the RFC the field cites; a term a standard owns stays, however
+  often Wire says it.
+- **The vocabulary check reads identifiers, not prose.** `tokens()` splits a line at
+  every character that is not alphanumeric or `_`, and a word's segments must sit in
+  one token: `cookie_label` and `cookieLabel` are found, "cookie label" in a doc
+  comment or help text is not. The prose pass found such places by eye, and the
+  `TEMPORARY` list counts only what the matcher sees. The matcher is the ratchet's whole
+  reach; a word written with a space in prose is outside it and stays the reviewer's.
+- **A smoke that skips a block passes.** The 163d block ran `profile-set --username`
+  only for an account that has a username; both test users on the reference machine had
+  none, so the first run said 30 ok, 0 failed with the username path unrun, and the
+  skip was one line in the log. The fixture state is the smoke's precondition (the
+  users got a username, the second run covered the round trip: 33 ok); a block a smoke
+  skips belongs in its RESULT line, not only in the log.
+- **A script the next session needs lives in a persistent place.** The session's
+  scratchpad goes with the session; the smoke scripts written there were lost twice
+  before they moved next to the hand-off notes. Anything a later session, or another
+  machine, must run again is written there from the start.

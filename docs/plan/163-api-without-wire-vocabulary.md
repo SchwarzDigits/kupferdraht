@@ -218,9 +218,16 @@ where it has a term, otherwise a plain English name.
       migrates.
     - CLI: `device-rename --name` / `-n`, `profile-set --username`; the help's
       "qualified" ids are plain ids, the `zuid` the refresh cookie.
-    - Pins: `tests/step_163d_identity_names.rs` (16), the `ClientClass` round
+    - Pins: `tests/step_163d_identity_names.rs` (15), the `ClientClass` round
       trip in `wire/dto.rs`; `tests/step_125_client_handle.rs` is
       `step_125_client_username.rs`.
+    - Merged 2026-11-22 (#112, main `d99cd31`; the step's commit `2b10240`).
+      Smoke on server 4 (Wire 5.38.9, the second Haskell reference machine) the
+      same day: the regular smoke plus the 163d block, 33 ok, 0 failed over two
+      runs — the second after users 2 and 3 got a username, so
+      `profile-set --username` there and back ran live too. The 163b/163c
+      features (ping, disappearing message, room access, join link) wait for
+      the smoke after 163e, as sketched below.
 - **163e — server settings and the store contract.**
   - Feature configs become typed settings, with the raw map internal or
     neutrally named.
