@@ -53,15 +53,18 @@ impl AvatarSize {
     }
 }
 
-/// The two image keys a profile names.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct AvatarKeys {
+/// Where a profile's two images are: the backend's ids of the thumbnail
+/// and of the full image, each `None` when the profile names none.
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, uniffi::Record,
+)]
+pub struct AvatarSource {
     pub thumbnail: Option<String>,
     pub full: Option<String>,
 }
 
-impl AvatarKeys {
-    /// The keys a profile's `assets` name. An image of another type, of an
+impl AvatarSource {
+    /// The images a profile's `assets` name. An image of another type, of an
     /// unknown size or without a key is no avatar.
     pub(crate) fn from_assets(assets: &[UserAsset]) -> Self {
         let key_of = |size: &str| {
@@ -80,8 +83,8 @@ impl AvatarKeys {
         }
     }
 
-    /// The key to fetch for `size`: its own, else the other size's, scaled to
-    /// the size asked for. A profile may name only one.
+    /// The image to fetch for `size`: its own, else the other size's, scaled
+    /// to the size asked for. A profile may name only one.
     pub(crate) fn for_size(&self, size: AvatarSize) -> Option<&str> {
         let (wanted, other) = match size {
             AvatarSize::Thumbnail => (&self.thumbnail, &self.full),
@@ -90,8 +93,8 @@ impl AvatarKeys {
         wanted.as_deref().or(other.as_deref())
     }
 
-    /// The version marker: the thumbnail's key, the full image's when a
-    /// profile has only that.
+    /// The version marker: the thumbnail's id, the full image's when a
+    /// profile has only that. A changed avatar has a new one.
     #[must_use]
     pub fn version(&self) -> Option<&str> {
         self.thumbnail.as_deref().or(self.full.as_deref())

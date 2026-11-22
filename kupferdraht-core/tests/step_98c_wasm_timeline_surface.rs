@@ -59,10 +59,10 @@ fn timeline_item_carries_delivery_status() {
 /// The core aggregates reactions as `{emoji, senders}`; collapsing that to a
 /// count loses whether the local user is among them.
 #[test]
-fn reaction_view_carries_is_self() {
+fn reaction_view_carries_is_own() {
     let src = wasm_surface::manager_source();
     let view = view_struct(&src, "ReactionView");
-    assert!(view.contains("is_self"), "ReactionView carries is_self");
+    assert!(view.contains("is_own"), "ReactionView carries is_own");
 }
 
 /// Sending a location a consumer can never read back is half a feature: the

@@ -40,7 +40,7 @@ impl Room {
 
 #[uniffi::export]
 impl Room {
-    /// Qualified room id `<uuid>@<domain>`.
+    /// Room id `<uuid>@<domain>`.
     #[must_use]
     pub fn id(&self) -> String {
         self.inner.id()
@@ -225,7 +225,7 @@ impl Room {
         self.inner.set_name(&new_name).await.map(Room::wrap)
     }
 
-    /// Invite users (qualified ids) into the room.
+    /// Invite users (`<uuid>@<domain>` each) into the room.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -233,7 +233,7 @@ impl Room {
         self.inner.invite(&user_ids).await.map(Room::wrap)
     }
 
-    /// Remove users (qualified ids) from the room.
+    /// Remove users (`<uuid>@<domain>` each) from the room.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -369,7 +369,7 @@ impl Client {
         Room::wrap_each(self.inner.invited_rooms())
     }
 
-    /// Local-cache DM lookup by qualified peer id; no network.
+    /// Local-cache DM lookup by the peer's user id; no network.
     #[must_use]
     pub fn dm_room(&self, peer: &str) -> Option<Arc<Room>> {
         self.inner.dm_room(peer).map(Room::wrap)
@@ -389,7 +389,7 @@ impl Client {
         Room::wrap_each(self.inner.rooms().await)
     }
 
-    /// Single-room lookup by qualified id.
+    /// Single-room lookup by room id.
     pub async fn room(&self, room_id: &str) -> Option<Arc<Room>> {
         self.inner.room(room_id).await.map(Room::wrap)
     }

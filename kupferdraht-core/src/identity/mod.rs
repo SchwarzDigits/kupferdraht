@@ -6,14 +6,14 @@
 //! [`UserId`] is the canonical Wire user id `<localpart>@<domain>`, a validated
 //! string newtype (the matrix-rust-sdk `OwnedUserId` equivalent). The domain is
 //! guaranteed by construction — there is no domain-less `UserId` — which closes
-//! the bare/qualified seam and the nullable-domain fragility (see
+//! the bare/domain-carrying seam and the nullable-domain fragility (see
 //! `docs/plan/archive/19-user-id-type.md` and `docs/finding-qualified-user-id.md`).
 
 use std::fmt;
 
 use crate::error::KupferdrahtError;
 
-/// A Wire user id in its canonical qualified form `<localpart>@<domain>`.
+/// A user id in its canonical form `<localpart>@<domain>`.
 ///
 /// Invariant: exactly one `@`, with a non-empty localpart and a non-empty
 /// domain. Both constructors ([`UserId::new`], [`UserId::parse`]) uphold it, so
@@ -44,8 +44,8 @@ impl UserId {
         Self(format!("{localpart}@{domain}"))
     }
 
-    /// Build from separated parts that come from runtime data (Wire's
-    /// `QualifiedId { id, domain }` in an event, a mention, a response).
+    /// Build from separated parts that come from runtime data (the
+    /// backend's id and domain in an event, a mention, a response).
     ///
     /// # Errors
     /// `KupferdrahtError::InvalidInput` when a part is empty or contains `@`.
@@ -55,7 +55,7 @@ impl UserId {
             .all(|part| !part.is_empty() && !part.contains('@'));
         if !well_formed {
             return Err(KupferdrahtError::InvalidInput(format!(
-                "malformed qualified id {localpart:?} @ {domain:?}: \
+                "malformed user id {localpart:?} @ {domain:?}: \
                  expected non-empty parts without '@'"
             )));
         }
@@ -102,7 +102,7 @@ impl UserId {
         self.0.split_once('@').map_or("", |(_, domain)| domain)
     }
 
-    /// The canonical qualified string `<localpart>@<domain>`.
+    /// The canonical string `<localpart>@<domain>`.
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0

@@ -78,7 +78,7 @@ pub struct PendingLogin {
 }
 
 impl PendingLogin {
-    /// The authenticated user's qualified Wire id (`<uuid>@<domain>`).
+    /// The authenticated user's id (`<uuid>@<domain>`).
     #[must_use]
     pub fn user_id(&self) -> &str {
         &self.user_id
@@ -259,7 +259,7 @@ impl PendingLogin {
 }
 
 /// Consume the phase-2 state into a ready [`Client`]: fetch the backend
-/// removal key and the own team with the freshly-rebound token, then
+/// external sender key and the own team with the freshly-rebound token, then
 /// finalize. A password login and an SSO login both end here. Split out so
 /// `register_device` stays within the per-function line budget.
 async fn finalize_into_client(
@@ -271,9 +271,9 @@ async fn finalize_into_client(
         mls_identity,
         replaced,
     } = identity;
-    let backend_removal_key = state
+    let external_sender_key = state
         .pipeline
-        .fetch_backend_removal_key(&registration.access_token)
+        .fetch_external_sender_key(&registration.access_token)
         .await?;
     let own_team = state
         .pipeline
@@ -291,7 +291,7 @@ async fn finalize_into_client(
         own_team,
         login_outcome,
         registration,
-        backend_removal_key,
+        external_sender_key,
         mls_identity,
         home,
     );

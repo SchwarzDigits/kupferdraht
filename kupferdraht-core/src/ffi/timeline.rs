@@ -170,7 +170,7 @@ fn status_to_core(s: TaskStatus) -> CoreTaskStatus {
 pub struct TaskPatch {
     pub title: Option<String>,
     pub description: Option<String>,
-    /// Qualified user id (`<uuid>@<domain>`).
+    /// User id (`<uuid>@<domain>`).
     pub assignee: Option<String>,
     pub due_at_ms: Option<i64>,
     pub priority: Option<TaskPriority>,
@@ -198,7 +198,7 @@ impl TaskPatch {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FoldedTask {
     pub task: TaskMeta,
-    /// Sender of the task's first message (qualified user id).
+    /// Sender of the task's first message (`<uuid>@<domain>`).
     pub creator_user_id: String,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
@@ -223,7 +223,7 @@ impl From<&CoreFoldedTask> for FoldedTask {
 /// (Step 60c, ADR-0014).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RoomTask {
-    /// Qualified room id (`<uuid>@<domain>`).
+    /// Room id (`<uuid>@<domain>`).
     pub room_id: String,
     pub task: FoldedTask,
 }
@@ -246,7 +246,7 @@ pub struct TaskMeta {
     pub task_id: String,
     pub title: String,
     pub description: Option<String>,
-    /// Qualified user id (`<uuid>@<domain>`).
+    /// User id (`<uuid>@<domain>`).
     pub assignee: Option<String>,
     pub due_at_ms: Option<i64>,
     pub status: TaskStatus,
@@ -277,7 +277,7 @@ pub struct TaskDraft {
     pub title: String,
     /// Free text; links are plain text inside it.
     pub description: Option<String>,
-    /// Qualified user id (`<uuid>@<domain>`) of the assignee.
+    /// User id (`<uuid>@<domain>`) of the assignee.
     pub assignee: Option<String>,
     pub due_at_ms: Option<i64>,
     pub priority: Option<TaskPriority>,

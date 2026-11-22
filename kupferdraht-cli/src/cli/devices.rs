@@ -4,9 +4,9 @@
 //! `kupferdraht-cli` device command handlers (devices / delete / rename /
 //! key-packages).
 
-use kupferdraht::KupferdrahtError;
+use kupferdraht::{DeviceKind, KupferdrahtError};
 
-use super::{explain_missing_password, read_device_password, resume_client};
+use super::{explain_missing_password, fmt_ms, read_device_password, resume_client};
 
 pub(crate) async fn devices() -> Result<(), KupferdrahtError> {
     let client = resume_client().await?;
@@ -14,16 +14,27 @@ pub(crate) async fn devices() -> Result<(), KupferdrahtError> {
     println!("devices ok");
     println!("  registered: {}/7", devices.len());
     for d in &devices {
-        let marker = if d.is_self { "*" } else { " " };
-        let class = d.class.as_deref().unwrap_or("?");
-        let label = d.label.as_deref().unwrap_or("—");
-        let last = d.last_active.as_deref().unwrap_or("—");
+        let marker = if d.is_own { "*" } else { " " };
+        let name = d.display_name.as_deref().unwrap_or("—");
+        let last = d.last_seen_ms.map_or_else(|| "—".to_owned(), fmt_ms);
         println!(
-            "  {marker} {} [{class}] — {label} (last_active: {last})",
-            d.device_id
+            "  {marker} {} [{}] — {name} (last_seen: {last})",
+            d.device_id,
+            kind_name(d.kind)
         );
     }
     Ok(())
+}
+
+/// How `devices` prints a device's kind.
+fn kind_name(kind: DeviceKind) -> &'static str {
+    match kind {
+        DeviceKind::Phone => "phone",
+        DeviceKind::Tablet => "tablet",
+        DeviceKind::Desktop => "desktop",
+        DeviceKind::LegalHold => "legal-hold",
+        DeviceKind::Other => "other",
+    }
 }
 
 pub(crate) async fn device_delete(
@@ -44,13 +55,13 @@ pub(crate) async fn device_delete(
 
 pub(crate) async fn device_rename(
     device_id: String,
-    label: String,
+    display_name: String,
 ) -> Result<(), KupferdrahtError> {
     let client = resume_client().await?;
-    client.rename_device(&device_id, &label).await?;
+    client.rename_device(&device_id, &display_name).await?;
     println!("device-rename ok");
-    println!("  device_id: {device_id}");
-    println!("  label:     {label}");
+    println!("  device_id:    {device_id}");
+    println!("  display_name: {display_name}");
     Ok(())
 }
 

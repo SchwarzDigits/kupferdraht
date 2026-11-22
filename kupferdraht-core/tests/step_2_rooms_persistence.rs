@@ -113,13 +113,13 @@ async fn sync_metadata_persists_rooms_into_store() {
         Some("bob@example.test")
     );
     assert_eq!(members.len(), 2);
-    // self first (ORDER BY is_self DESC)
-    assert!(members[0].is_self);
+    // the own member first
+    assert!(members[0].is_own);
     assert_eq!(members[0].user_id, "user-uuid@example.test");
-    assert!(!members[1].is_self);
+    assert!(!members[1].is_own);
     assert_eq!(members[1].user_id, "bob@example.test");
     assert_eq!(members[1].display_name.as_deref(), Some("Bob Example"));
-    assert_eq!(members[1].handle.as_deref(), Some("bobx"));
+    assert_eq!(members[1].username.as_deref(), Some("bobx"));
 }
 
 #[tokio::test]
@@ -208,7 +208,7 @@ async fn load_rooms_from_store_hydrates_in_memory_cache() {
         .expect("DM counterpart persisted across sync + hydrate");
     assert_eq!(cp.user_id, "bob@example.test");
     assert_eq!(cp.display_name.as_deref(), Some("Bob Example"));
-    assert_eq!(cp.handle.as_deref(), Some("bobx"));
+    assert_eq!(cp.username.as_deref(), Some("bobx"));
 }
 
 #[tokio::test]

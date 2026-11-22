@@ -4,7 +4,7 @@
 //! Member-remove commit (Step 6d).
 //!
 //! `MlsClient::remove_members_commit` builds an MLS Remove-commit
-//! against a locally persisted `MlsGroup`, given a list of qualified
+//! against a locally persisted `MlsGroup`, given a list of
 //! Wire `user_id`s (`<uuid>@<domain>`). Every leaf belonging to one
 //! of the listed users is collected from the local group state and
 //! fed into [`openmls::group::MlsGroup::remove_members`]. The
@@ -43,7 +43,7 @@ use crate::error::KupferdrahtError;
 impl MlsClient {
     /// Build a Remove-commit on the locally persisted MLS group
     /// keyed by `group_id_bytes` that removes every leaf whose
-    /// credential identity matches one of the qualified
+    /// credential identity matches one of the
     /// `user_ids` (`<uuid>@<domain>`). Returns the TLS-serialized
     /// commit bundle ready for `POST /v14/mls/commit-bundles`.
     ///
@@ -142,7 +142,7 @@ fn resolve_target_leaf_indices(
     Ok(indices)
 }
 
-/// The qualified `<uuid>@<domain>` of a leaf credential, `None` for a
+/// The `<uuid>@<domain>` user id of a leaf credential, `None` for a
 /// non-W-4 leaf (Step 95a: the one parser, `leaf_identity`).
 fn user_id_of(credential: &openmls::prelude::Credential) -> Option<String> {
     super::leaf_identity::parse_leaf_identity(credential)

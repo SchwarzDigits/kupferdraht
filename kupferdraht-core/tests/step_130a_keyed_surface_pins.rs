@@ -55,7 +55,7 @@ const STAY_MUTATION: [&str; 11] = [
     "leave",
     "deleteRoom",
     "revokeJoinLink",
-    "setHandle",
+    "setUsername",
     "createRoom",
     "editMessage",
     "createJoinLink",

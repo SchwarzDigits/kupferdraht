@@ -301,7 +301,7 @@ fn fixture_session() -> SessionRecord {
         device_id: "dev-native".into(),
         access_token: MARKER_TOKEN.into(),
         refresh_token: "native-refresh-cookie".into(),
-        cookie_label: Some("kupferdraht-step91".into()),
+        session_label: Some("kupferdraht-step91".into()),
         api_version: 14,
         access_token_issued_at_ms: 1_700_000_000_000,
     }

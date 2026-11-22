@@ -180,6 +180,54 @@ is no skill for it — it is this short procedure:
     `--modes` / `--roles`; `join-via-link` reads the link's URL on the TTY or
     with `--url-stdin` — it carries the link's secret, so never from argv —
     instead of `--code` / `--key-stdin`.
+- **BREAKING: identity, devices and the session have plain names** (Step 163d,
+  ADR-0009 revision 1.2):
+  - A device is typed: `DeviceInfo { device_id, kind, display_name, model,
+    registered_at_ms, last_seen_ms, is_own }` replaces `{ class, label,
+    registered_at, last_active, is_self }` of the backend's strings. `kind` is a
+    `DeviceKind` — `Phone`, `Tablet`, `Desktop`, `LegalHold` or `Other` (no kind
+    named, or one this release does not know); the times are milliseconds like
+    every other time of the API, `None` when the backend did not say.
+  - `ClientBuilder::initial_device_display_name` (matrix-rust-sdk's name)
+    replaces `device_label`, and the manager's `login` /
+    `login_with_sso_callback` take `initial_device_display_name`;
+    `Client::rename_device(device_id, display_name)`.
+  - `Account::username` and `Client::set_username` replace `handle` /
+    `set_handle`; `AccountEntry::username` replaces `handle`.
+  - `RoomMember { user_id, is_own, display_name, username, role, avatar_source }`
+    replaces `is_self`, `handle`, `avatar_thumbnail_key` and `avatar_full_key`.
+  - `AvatarSource { thumbnail, full }` replaces `AvatarKeys`;
+    `Account::avatar_source` replaces `avatar_keys`, and the deprecated
+    `login_avatar_keys` is removed. `Client::avatar_version`,
+    `RoomMember::avatar_version` and `Account::team_avatar_version` replace
+    `avatar_key` and `team_avatar_key`.
+  - `Client::external_sender_key` (the MLS term, RFC 9420's `external_senders`)
+    replaces `backend_removal_key_ecdsa_p256`.
+  - `Kupferdraht::session_label` replaces `cookie_label`.
+  - FFI: the record `UserId { localpart, domain }` replaces `QualifiedUserId`
+    (`parse_user_id`, `Client.user_id()`, `Account.user_id`); the same names as
+    above.
+  - Browser: `sessionLabel` replaces `cookieLabel`; `login` /
+    `loginWithSsoCallback` take `initialDeviceDisplayName?`; the getter
+    `username` and `setUsername(username)` replace `handle` / `setHandle`;
+    `avatarVersion(userId)` replaces `avatarKey`; a device is `{ deviceId,
+    kind, displayName, model, registeredAtMs, lastSeenMs, isOwn }` with `kind`
+    one of `'phone' | 'tablet' | 'desktop' | 'legalHold' | 'other'`; a member
+    carries `isOwn`, `username` and `avatarVersion`, a reaction `isOwn`, an
+    account entry `username`. `kupferdraht-tabs`' event
+    `leader-changed` carries `isThisTab` instead of `isSelf`.
+  - A custom store: `Store::load_device(user_id, device_id)` and
+    `member_avatar_source` (was `member_avatar_keys`); the records carry the new
+    names — `SessionRecord.session_label`, `DeviceRecord.device_id`,
+    `SelfUserRecord.username` / `avatar_source` / `team_avatar_version`,
+    `RoomMemberRecord.is_own` / `username` / `avatar_source` — so serialized
+    records carry them too. The shipped store keeps its columns; nothing is
+    migrated.
+  - CLI: `device-rename --name` / `-n` replaces `--label` / `-l`;
+    `profile-set --username` replaces `--handle`; `devices` prints the kind and
+    the last-seen time, `status` the lines `session_label` /
+    `stored_session_label`, `room-members` and `avatar upload` the
+    `avatar_version`.
 
 ### Deprecated
 

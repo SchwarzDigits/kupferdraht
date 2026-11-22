@@ -4,7 +4,7 @@
 //! `Client` room operations — the room-list accessors, room /
 //! DM creation, room-metadata mutators, and guest-link (join-link)
 //! lifecycle. Split out of [`super`] in Step 29; every item
-//! here is a method on [`Client`] (or the `unqualified_room_id` free
+//! here is a method on [`Client`] (or the `local_room_id` free
 //! helper the join-link methods share). The public surface mirrors
 //! `matrix_sdk::Client` / `matrix_sdk::Room` — see
 //! `docs/api-mapping-matrix-rust-sdk.md`.
@@ -22,16 +22,16 @@ use crate::wire::dto::QualifiedId;
 
 use super::Client;
 
-/// Split a qualified `<uuid>@<domain>` room id and return the
-/// unqualified UUID half. Step 8's code-link endpoints (`POST /
+/// Split a `<uuid>@<domain>` room id and return the
+/// UUID half. Step 8's code-link endpoints (`POST /
 /// GET / DELETE /v14/conversations/{cnv}/code`) take the local
 /// id only, unlike the rename / member-management routes which
-/// take the qualified pair.
-fn unqualified_room_id<'a>(room_id: &'a str, op: &str) -> Result<&'a str, KupferdrahtError> {
+/// take the whole pair.
+fn local_room_id<'a>(room_id: &'a str, op: &str) -> Result<&'a str, KupferdrahtError> {
     match room_id.split_once('@') {
         Some((local, domain)) if !local.is_empty() && !domain.is_empty() => Ok(local),
         _ => Err(KupferdrahtError::InvalidInput(format!(
-            "{op}: room_id `{room_id}` must be qualified <uuid>@<domain>"
+            "{op}: room_id `{room_id}` must be <uuid>@<domain>"
         ))),
     }
 }
@@ -53,7 +53,7 @@ impl Client {
     /// — verified by `Arc::ptr_eq`.
     ///
     /// # Errors
-    /// * `InvalidInput` if `room_id` is unqualified, `new_name` is
+    /// * `InvalidInput` if `room_id` has no `@<domain>`, `new_name` is
     ///   empty, or the room is not in the cache after refresh
     ///   (defensive — should not happen if the PUT succeeded).
     /// * `BackendRejected` on `403 invalid-op` (insufficient role)
@@ -94,7 +94,7 @@ impl Client {
     /// room drops out.
     ///
     /// # Errors
-    /// * `InvalidInput` if `room_id` is unqualified, Wire doesn't return
+    /// * `InvalidInput` if `room_id` has no `@<domain>`, Wire doesn't return
     ///   the conversation, or neither the conversation nor the account
     ///   has an owning team.
     /// * `BackendRejected` on `403` (insufficient role). A `404`
@@ -102,7 +102,7 @@ impl Client {
     pub async fn delete_room(&self, room_id: &str) -> Result<(), KupferdrahtError> {
         let qid = parse_room_id(room_id).ok_or_else(|| {
             KupferdrahtError::InvalidInput(format!(
-                "delete_room: room_id `{room_id}` must be qualified <uuid>@<domain>"
+                "delete_room: room_id `{room_id}` must be <uuid>@<domain>"
             ))
         })?;
         let conv_local_id = qid.id.clone();
@@ -146,7 +146,7 @@ impl Client {
         self.sync_metadata().await
     }
 
-    /// Remove a room from the in-memory cache by qualified id; returns
+    /// Remove a room from the in-memory cache by room id; returns
     /// `true` if one was removed. Used by the inbound
     /// `conversation.delete` handler so a conversation another admin
     /// deleted drops out immediately, without waiting for the next
@@ -160,7 +160,7 @@ impl Client {
     }
 
     /// Issue (or fetch) a reusable guest-link for the conversation
-    /// at `room_id` (qualified `<uuid>@<domain>`). The Kupferdraht-public
+    /// at `room_id` (`<uuid>@<domain>`). The Kupferdraht-public
     /// entrypoint `Room::create_join_link` delegates here. Step 8.
     ///
     /// `password` is `None` for an open link or `Some("…")` (≥ 8
@@ -168,7 +168,7 @@ impl Client {
     /// Wire reject the rest).
     ///
     /// # Errors
-    /// * `InvalidInput` if `room_id` is unqualified or `password`
+    /// * `InvalidInput` if `room_id` has no `@<domain>` or `password`
     ///   is `Some("")`.
     /// * `BackendRejected` / `Network` / `Encoding` from
     ///   `HttpClient::create_conversation_code`.
@@ -177,7 +177,7 @@ impl Client {
         room_id: &str,
         password: Option<&str>,
     ) -> Result<JoinLink, KupferdrahtError> {
-        let local_id = unqualified_room_id(room_id, "create_join_link")?;
+        let local_id = local_room_id(room_id, "create_join_link")?;
         if matches!(password, Some(p) if p.is_empty()) {
             return Err(KupferdrahtError::InvalidInput(
                 "create_join_link: password, when supplied, must be non-empty".into(),
@@ -203,14 +203,14 @@ impl Client {
     /// `HttpClient::get_conversation_code`.
     ///
     /// # Errors
-    /// * `InvalidInput` if `room_id` is unqualified.
+    /// * `InvalidInput` if `room_id` has no `@<domain>`.
     /// * `BackendRejected` / `Network` / `Encoding` from the HTTP
     ///   layer (other than the no-code 404 which surfaces as `None`).
     pub async fn current_join_link(
         &self,
         room_id: &str,
     ) -> Result<Option<JoinLink>, KupferdrahtError> {
-        let local_id = unqualified_room_id(room_id, "current_join_link")?;
+        let local_id = local_room_id(room_id, "current_join_link")?;
         let info = self
             .http
             .get_conversation_code(self.api_version, &self.current_access_token(), local_id)
@@ -226,10 +226,10 @@ impl Client {
     /// to `HttpClient::delete_conversation_code`.
     ///
     /// # Errors
-    /// * `InvalidInput` if `room_id` is unqualified.
+    /// * `InvalidInput` if `room_id` has no `@<domain>`.
     /// * `BackendRejected` / `Network` from the HTTP layer.
     pub async fn revoke_join_link(&self, room_id: &str) -> Result<(), KupferdrahtError> {
-        let local_id = unqualified_room_id(room_id, "revoke_join_link")?;
+        let local_id = local_room_id(room_id, "revoke_join_link")?;
         self.http
             .delete_conversation_code(self.api_version, &self.current_access_token(), local_id)
             .await
@@ -246,7 +246,7 @@ impl Client {
     /// `Arc<Room>` (now carrying the new access) is returned.
     ///
     /// # Errors
-    /// * `InvalidInput` when `room_id` is unqualified, either set
+    /// * `InvalidInput` when `room_id` has no `@<domain>`, either set
     ///   is empty, or the room is not in the cache after refresh.
     /// * `BackendRejected` / `Network` from the HTTP layer.
     pub async fn set_room_access(
@@ -281,7 +281,7 @@ impl Client {
     /// which delegates here through the `Weak<Client>` back-ref.
     ///
     /// # Errors
-    /// * `InvalidInput` when `room_id` is unqualified or Wire
+    /// * `InvalidInput` when `room_id` has no `@<domain>` or Wire
     ///   doesn't return the room.
     /// * `BackendRejected` / `Network` / `Encoding` from the HTTP
     ///   layer.
@@ -291,7 +291,7 @@ impl Client {
     ) -> Result<RoomAccess, KupferdrahtError> {
         let qid = parse_room_id(room_id).ok_or_else(|| {
             KupferdrahtError::InvalidInput(format!(
-                "list_room_access: room_id `{room_id}` must be qualified <uuid>@<domain>"
+                "list_room_access: room_id `{room_id}` must be <uuid>@<domain>"
             ))
         })?;
         let resp = self
@@ -363,7 +363,7 @@ impl Client {
     }
 
     /// Steps 1 and 2 of [`Self::join_via_link`]: the conversation the link
-    /// names (its unqualified id), then the redeem.
+    /// names (its id without the domain), then the redeem.
     async fn redeem_link(
         &self,
         code: &str,
@@ -427,7 +427,7 @@ impl Client {
         self.rooms.read().expect("rooms lock poisoned").clone()
     }
 
-    /// Look up a single room by qualified id (`<uuid>@<domain>`).
+    /// Look up a single room by room id (`<uuid>@<domain>`).
     /// `None` if the room is not in the current cache snapshot.
     ///
     /// # Panics
@@ -556,13 +556,13 @@ impl Client {
     ///
     /// Pipeline:
     /// 1. `POST /v14/conversations` with `protocol="mls"` and
-    ///    `qualified_users=[]` — Wire registers the conversation
-    ///    envelope and assigns both a `qualified_id` and an MLS
+    ///    no other members — Wire registers the conversation
+    ///    envelope and assigns both a room id and an MLS
     ///    `group_id`.
     /// 2. `MlsClient::create_group` builds the local MLS group at
     ///    epoch 0 with that `group_id`, the standard
     ///    `[Basic, X509]` leaf capabilities, and the `external_senders`
-    ///    extension carrying Wire's backend removal key.
+    ///    extension carrying the backend's external sender key.
     /// 3. `sync_metadata` re-snapshots the rooms list so the new
     ///    room appears in `Client::rooms` and the persistent
     ///    `rooms` table.
@@ -612,7 +612,7 @@ impl Client {
         {
             let _gate = self.mls_write_gate().await;
             let guard = crate::encryption::lock_mls(mls);
-            guard.create_group(&group_id, &self.backend_removal_key_ecdsa_p256)?;
+            guard.create_group(&group_id, &self.external_sender_key)?;
         }
         self.establish_group(mls, &group_id, "create_room").await?;
         // Re-sync to put the new conversation into the cache and the
@@ -685,7 +685,7 @@ impl Client {
     /// `Client::room(id)` and `Client::dm_room(peer)` will yield
     /// from then on.
     ///
-    /// `peer` is the qualified `<uuid>@<domain>` string.
+    /// `peer` is the `<uuid>@<domain>` string.
     ///
     /// # Errors
     /// * `KupferdrahtError::InvalidInput` if `peer` is malformed, the
@@ -698,7 +698,7 @@ impl Client {
     pub async fn create_dm(&self, peer: &str) -> Result<Arc<Room>, KupferdrahtError> {
         let peer_qid = QualifiedId::from(&UserId::parse(peer).map_err(|_| {
             KupferdrahtError::InvalidInput(format!(
-                "create_dm: peer must be qualified '<uuid>@<domain>', got `{peer}`"
+                "create_dm: peer must be '<uuid>@<domain>', got `{peer}`"
             ))
         })?);
         let mls = self.mls_client_required("create_dm")?;
@@ -770,7 +770,7 @@ impl Client {
         {
             let _gate = self.mls_write_gate().await;
             let guard = crate::encryption::lock_mls(mls);
-            guard.create_group(group_id, &self.backend_removal_key_ecdsa_p256)?;
+            guard.create_group(group_id, &self.external_sender_key)?;
         }
         let result = self.commit_dm_peer(group_id, peer).await;
         if result.is_err() {
@@ -790,7 +790,10 @@ impl Client {
     /// → `add_members_commit` → the staged
     /// [`Self::upload_and_merge_commit_bundle`].
     async fn commit_dm_peer(&self, group_id: &[u8], peer: &str) -> Result<(), KupferdrahtError> {
-        debug_assert!(peer.contains('@'), "commit_dm_peer: unqualified peer");
+        debug_assert!(
+            peer.contains('@'),
+            "commit_dm_peer: a peer without a domain"
+        );
         let kp_bytes_list = self
             .claim_key_packages_for_users(&[peer.to_string()])
             .await?;
@@ -813,7 +816,7 @@ impl Client {
     /// `counterpart.user_id == peer` — a group chat that happens
     /// to contain the peer as a member is not returned.
     ///
-    /// `peer` is the qualified `<uuid>@<domain>` string. Unqualified
+    /// `peer` is the `<uuid>@<domain>` string. Domain-less
     /// values produce `None` (no DM can have an `@`-less counterpart).
     ///
     /// # Panics
@@ -843,7 +846,7 @@ impl Client {
     /// guaranteeing at most one server-side 1:1 creation per
     /// `(self, peer)` pair across the process lifetime.
     ///
-    /// `peer` follows the same qualified `<uuid>@<domain>` form as
+    /// `peer` follows the same `<uuid>@<domain>` form as
     /// [`Self::create_dm`] and [`Self::dm_room`].
     ///
     /// # Errors

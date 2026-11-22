@@ -33,7 +33,7 @@ pub enum MembershipChange {
     Kicked,
 }
 
-/// One membership event of a room. `actor` and `users` are qualified user
+/// One membership event of a room. `actor` and `users` are user
 /// ids; `users` names the own user where it is one of them. The actor is the
 /// backend's statement, not authenticated by MLS.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]

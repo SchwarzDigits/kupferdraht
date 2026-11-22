@@ -20,7 +20,7 @@ use wasm_surface::{assert_bound, surface};
 fn client_binds_session_admin() {
     let s = surface();
     assert_bound(&s, "Client", "setDisplayName");
-    assert_bound(&s, "Client", "setHandle");
+    assert_bound(&s, "Client", "setUsername");
     assert_bound(&s, "Client", "requestEmailChange");
 }
 
@@ -55,12 +55,12 @@ fn device_payload_mirrors_core_device_info() {
     );
     for field in [
         "device_id",
-        "class",
-        "label",
+        "kind",
+        "display_name",
         "model",
-        "registered_at",
-        "last_active",
-        "is_self",
+        "registered_at_ms",
+        "last_seen_ms",
+        "is_own",
     ] {
         assert!(
             src.contains(field),

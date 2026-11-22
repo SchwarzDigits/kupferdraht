@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! `session` table CRUD: `save_session` and `load_session`. The
-//! `client/resume.rs` resume path loads the session by the qualified
+//! `client/resume.rs` resume path loads the session by the
 //! account id (`load_session(account_id)`) — the account is named
 //! explicitly, so no table scan is needed. Whole-DB encryption protects
 //! the token columns at rest, so they are stored and read verbatim.
@@ -40,7 +40,7 @@ pub(super) fn save_session(
             session.device_id,
             session.access_token.as_bytes(),
             session.refresh_token.as_bytes(),
-            session.cookie_label,
+            session.session_label,
             session.api_version,
             session.access_token_issued_at_ms,
         ],
@@ -77,7 +77,7 @@ struct RawSessionRow {
     device_id: String,
     access_token: Vec<u8>,
     refresh_token: Vec<u8>,
-    cookie_label: Option<String>,
+    session_label: Option<String>,
     api_version: u32,
     access_token_issued_at_ms: i64,
 }
@@ -91,7 +91,7 @@ fn read_raw_session_row_by_uid(
             device_id: row.get(0)?,
             access_token: row.get(1)?,
             refresh_token: row.get(2)?,
-            cookie_label: row.get(3)?,
+            session_label: row.get(3)?,
             api_version: row.get(4)?,
             access_token_issued_at_ms: row.get(5)?,
         })
@@ -104,7 +104,7 @@ fn assemble_session(raw: RawSessionRow) -> Result<SessionRecord, KupferdrahtErro
         device_id: raw.device_id,
         access_token: utf8_column(raw.access_token, "access_token")?,
         refresh_token: utf8_column(raw.refresh_token, "refresh_token")?,
-        cookie_label: raw.cookie_label,
+        session_label: raw.session_label,
         api_version: raw.api_version,
         access_token_issued_at_ms: raw.access_token_issued_at_ms,
     })
@@ -124,7 +124,7 @@ mod tests {
             device_id: "placeholder-device-id".to_string(),
             access_token: "placeholder.access.jwt".to_string(),
             refresh_token: "placeholder-refresh-cookie".to_string(),
-            cookie_label: Some("kupferdraht-cli".to_string()),
+            session_label: Some("kupferdraht-cli".to_string()),
             api_version: 14,
             access_token_issued_at_ms: 1_700_000_000_000,
         }

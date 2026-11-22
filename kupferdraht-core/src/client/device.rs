@@ -15,16 +15,17 @@
 //!   with the user's password (Wire's threat model treats this
 //!   as account-level).
 //! - [`Client::rename_device`] — `PUT /v14/clients/{id}` with
-//!   a new `label`.
+//!   a new display name.
 //!
 //! matrix-rust-sdk analogs: `Client::devices`,
 //! `Client::delete_devices`, `Client::rename_device`.
 
 use crate::client::Client;
 use crate::error::KupferdrahtError;
-use crate::wire::dto::WireClient;
+use crate::wire::dto::{ClientClass, WireClient};
+use crate::wire::time::parse_time_ms;
 
-/// User-visible device record. Subset of Wire's `Client` schema.
+/// A device registered for the account.
 ///
 /// matrix-rust-sdk's `Device` carries a richer surface (keys,
 /// verification state); Kupferdraht's 1d scope is intentionally narrow:
@@ -33,25 +34,61 @@ use crate::wire::dto::WireClient;
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct DeviceInfo {
     pub device_id: String,
-    pub class: Option<String>,
-    pub label: Option<String>,
+    pub kind: DeviceKind,
+    /// The name the user gave the device, if any.
+    pub display_name: Option<String>,
+    /// The device's model as it registered itself, if it named one.
     pub model: Option<String>,
-    pub registered_at: Option<String>,
-    pub last_active: Option<String>,
-    pub is_self: bool,
+    /// When the device was registered, in milliseconds since the UNIX
+    /// epoch; `None` when the backend did not say.
+    pub registered_at_ms: Option<i64>,
+    /// When the device was last seen, in milliseconds since the UNIX
+    /// epoch; `None` when the backend did not say.
+    pub last_seen_ms: Option<i64>,
+    /// Whether this is the device the `Client` runs on.
+    pub is_own: bool,
+}
+
+/// What kind of device a registered device is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum DeviceKind {
+    Phone,
+    Tablet,
+    Desktop,
+    /// A device that keeps a copy of the account's messages for a legal
+    /// hold.
+    LegalHold,
+    /// The backend named no kind, or one this release does not know.
+    Other,
+}
+
+impl From<ClientClass> for DeviceKind {
+    fn from(class: ClientClass) -> Self {
+        match class {
+            ClientClass::Phone => Self::Phone,
+            ClientClass::Tablet => Self::Tablet,
+            ClientClass::Desktop => Self::Desktop,
+            ClientClass::Legalhold => Self::LegalHold,
+        }
+    }
 }
 
 impl DeviceInfo {
-    pub(crate) fn from_wire(c: WireClient, self_device_id: &str) -> Self {
-        let is_self = c.id == self_device_id;
+    pub(crate) fn from_wire(c: WireClient, own_device_id: &str) -> Self {
+        let is_own = c.id == own_device_id;
+        let kind = c
+            .class
+            .as_deref()
+            .and_then(ClientClass::from_wire)
+            .map_or(DeviceKind::Other, DeviceKind::from);
         Self {
             device_id: c.id,
-            class: c.class,
-            label: c.label,
+            kind,
+            display_name: c.label,
             model: c.model,
-            registered_at: c.time,
-            last_active: c.last_active,
-            is_self,
+            registered_at_ms: c.time.as_deref().and_then(parse_time_ms),
+            last_seen_ms: c.last_active.as_deref().and_then(parse_time_ms),
+            is_own,
         }
     }
 }
@@ -59,7 +96,7 @@ impl DeviceInfo {
 impl Client {
     /// `GET /v14/clients` — list every device registered for the
     /// authenticated user. The current device is flagged
-    /// (`DeviceInfo::is_self == true`).
+    /// (`DeviceInfo::is_own == true`).
     ///
     /// Wire's 7-device cap means the returned `Vec` has length
     /// at most 7.
@@ -68,11 +105,11 @@ impl Client {
     /// Transport / backend errors bubble up as `KupferdrahtError::Network`
     /// / `BackendRejected` / `Encoding`.
     pub async fn devices(&self) -> Result<Vec<DeviceInfo>, KupferdrahtError> {
-        let self_id = self.device_id().unwrap_or_default().to_string();
-        let raw = self.http_list_clients(&self.current_access_token()).await?;
+        let own_id = self.device_id().unwrap_or_default().to_string();
+        let raw = self.http_list_devices(&self.current_access_token()).await?;
         Ok(raw
             .into_iter()
-            .map(|c| DeviceInfo::from_wire(c, &self_id))
+            .map(|c| DeviceInfo::from_wire(c, &own_id))
             .collect())
     }
 
@@ -114,7 +151,7 @@ impl Client {
                     .into(),
             ));
         }
-        self.http_delete_client(
+        self.http_delete_device(
             &self.current_access_token(),
             device_id,
             given_password(password),
@@ -122,29 +159,29 @@ impl Client {
         .await
     }
 
-    /// `PUT /v14/clients/{device_id}` with a `label` body — rename
-    /// a registered device. Either the current device or another
-    /// of the user's devices.
+    /// `PUT /v14/clients/{device_id}` — give a registered device a new
+    /// display name. Either the current device or another of the user's
+    /// devices.
     ///
     /// # Errors
-    /// * `InvalidInput` if `device_id` or `label` is empty.
+    /// * `InvalidInput` if `device_id` or `display_name` is empty.
     /// * `BackendRejected` on non-2xx from Wire.
     pub async fn rename_device(
         &self,
         device_id: &str,
-        label: &str,
+        display_name: &str,
     ) -> Result<(), KupferdrahtError> {
         if device_id.is_empty() {
             return Err(KupferdrahtError::InvalidInput(
                 "rename_device: device_id must be non-empty".into(),
             ));
         }
-        if label.is_empty() {
+        if display_name.is_empty() {
             return Err(KupferdrahtError::InvalidInput(
-                "rename_device: label must be non-empty".into(),
+                "rename_device: display_name must be non-empty".into(),
             ));
         }
-        self.http_update_client_label(&self.current_access_token(), device_id, label)
+        self.http_rename_device(&self.current_access_token(), device_id, display_name)
             .await
     }
 }

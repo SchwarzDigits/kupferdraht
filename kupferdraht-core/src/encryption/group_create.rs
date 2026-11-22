@@ -19,7 +19,7 @@
 //! External-senders extension: every Wire MLS group MUST embed the
 //! Wire-backend external-sender public key (ADR-0004 / W-5) so
 //! admin-driven Remove proposals signed by the backend validate.
-//! `Client::backend_removal_key_ecdsa_p256()` is fetched at login
+//! `Client::external_sender_key()` is fetched at login
 //! and threaded into the group-context extensions here.
 
 #![cfg_attr(not(test), allow(dead_code))]
@@ -38,7 +38,7 @@ use crate::error::KupferdrahtError;
 
 impl MlsClient {
     /// Create a single-member MLS group keyed by `group_id_bytes`,
-    /// with Wire's backend removal key embedded as the only entry
+    /// with the backend's external sender key embedded as the only entry
     /// in the `external_senders` extension. The group is persisted
     /// through the openmls storage provider before this returns.
     ///
@@ -50,22 +50,21 @@ impl MlsClient {
     pub fn create_group(
         &self,
         group_id_bytes: &[u8],
-        backend_removal_key_p256: &[u8],
+        external_sender_key: &[u8],
     ) -> Result<(), KupferdrahtError> {
         debug_assert!(
             !group_id_bytes.is_empty(),
             "group_id_bytes must be non-empty"
         );
         debug_assert!(
-            !backend_removal_key_p256.is_empty(),
-            "backend_removal_key_p256 must be non-empty"
+            !external_sender_key.is_empty(),
+            "external_sender_key must be non-empty"
         );
         debug!(
             group_id_len = group_id_bytes.len(),
             "create local MLS group"
         );
-        let config =
-            group_create_config(wire_external_senders_extension(backend_removal_key_p256)?);
+        let config = group_create_config(wire_external_senders_extension(external_sender_key)?);
         self.provider().with_write_tx(|provider| {
             MlsGroup::new_with_group_id(
                 provider,
@@ -202,15 +201,15 @@ fn group_create_config(extensions: Extensions<GroupContext>) -> MlsGroupCreateCo
 }
 
 /// Build the `external_senders` group-context extension carrying
-/// Wire's backend removal key. The credential identity is a
+/// The backend's external sender key. The credential identity is a
 /// fixed `"wire-backend"` `BasicCredential` — verification only
 /// touches the signature key, the identity bytes are flavor text
 /// matching what peers (other Wire clients) will see in the
 /// extension.
 fn wire_external_senders_extension(
-    backend_removal_key_p256: &[u8],
+    external_sender_key: &[u8],
 ) -> Result<Extensions<GroupContext>, KupferdrahtError> {
-    let signature_key = SignaturePublicKey::from(backend_removal_key_p256.to_vec());
+    let signature_key = SignaturePublicKey::from(external_sender_key.to_vec());
     let credential: Credential = BasicCredential::new(b"wire-backend".to_vec()).into();
     let entry = ExternalSender::new(signature_key, credential);
     Extensions::single(Extension::ExternalSenders(vec![entry]))
@@ -223,7 +222,7 @@ mod tests {
 
     /// Sanity check: `create_group` succeeds against an in-memory
     /// `MlsClient` with a plausible 65-byte uncompressed P-256 key
-    /// stand-in for the backend removal key.
+    /// stand-in for the external sender key.
     #[test]
     fn create_group_persists_single_member_group() {
         let client = MlsClient::new_fresh(
@@ -231,15 +230,15 @@ mod tests {
             "a11ce00000000001",
         )
         .expect("MlsClient");
-        // A real removal key is a 65-byte uncompressed P-256 point;
+        // A real external sender key is a 65-byte uncompressed P-256 point;
         // openmls's ExternalSender just stores the bytes verbatim
         // and only validates them at signature-verification time,
         // so a placeholder that is the right length is enough for a
         // successful group construction.
-        let placeholder_removal_key = vec![0x04u8; 65];
+        let placeholder_external_sender_key = vec![0x04u8; 65];
         let group_id = b"kupferdraht-test-group-id";
         client
-            .create_group(group_id, &placeholder_removal_key)
+            .create_group(group_id, &placeholder_external_sender_key)
             .expect("create_group must succeed");
         // The group is now in openmls storage — `group_exists`
         // returns `true` (introduced in cycle 3e).
@@ -250,7 +249,7 @@ mod tests {
     }
 
     #[test]
-    fn create_group_rejects_empty_removal_key_in_release_via_extension_build() {
+    fn create_group_rejects_empty_external_sender_key_in_release_via_extension_build() {
         // `debug_assert!` would catch empty inputs in debug builds;
         // this test instead exercises the post-assert path so a
         // release build still gets a clear error rather than a

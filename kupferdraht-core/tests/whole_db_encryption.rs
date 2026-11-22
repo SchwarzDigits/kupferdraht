@@ -40,7 +40,7 @@ fn sample_session() -> SessionRecord {
         device_id: "dev-1".into(),
         access_token: "real.access.jwt.token".into(),
         refresh_token: "real-refresh-cookie-payload".into(),
-        cookie_label: Some("kupferdraht-cli".into()),
+        session_label: Some("kupferdraht-cli".into()),
         api_version: 14,
         access_token_issued_at_ms: 1_700_000_000_000,
     }

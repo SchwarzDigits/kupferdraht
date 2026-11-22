@@ -251,9 +251,9 @@ impl Store for SqliteStore {
     async fn load_device(
         &self,
         user_id: &str,
-        client_id: &str,
+        device_id: &str,
     ) -> Result<Option<DeviceRecord>, KupferdrahtError> {
-        devices::load_device(self, user_id, client_id)
+        devices::load_device(self, user_id, device_id)
     }
 
     async fn save_backend_mls_key(&self, key: &BackendMlsKey) -> Result<(), KupferdrahtError> {
@@ -282,11 +282,11 @@ impl Store for SqliteStore {
         wipe::clear_messaging_state(self)
     }
 
-    async fn member_avatar_keys(
+    async fn member_avatar_source(
         &self,
         user_id: &str,
-    ) -> Result<Option<crate::avatar::AvatarKeys>, KupferdrahtError> {
-        rooms::member_avatar_keys(self, user_id)
+    ) -> Result<Option<crate::avatar::AvatarSource>, KupferdrahtError> {
+        rooms::member_avatar_source(self, user_id)
     }
 
     async fn replace_room_members(

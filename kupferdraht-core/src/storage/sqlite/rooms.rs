@@ -4,11 +4,12 @@
 //! `rooms` + `room_members` tables CRUD. Whole-DB encryption protects
 //! the `name` and per-member `display_name` columns at rest, so they
 //! are stored and read verbatim; the rest (`room_id`, `group_id`,
-//! `room_type`, `epoch`, `counterpart_user_id`, `is_self`, `handle`)
-//! is likewise plain.
+//! `room_type`, `epoch`, `counterpart_user_id`, the member's own flag and
+//! username) is likewise plain.
 
 use rusqlite::{Connection, params};
 
+use crate::avatar::AvatarSource;
 use crate::error::KupferdrahtError;
 use crate::storage::records::{RoomMemberRecord, RoomRecord};
 
@@ -139,12 +140,11 @@ fn assemble_room_members(
         out.push(RoomMemberRecord {
             room_id: room_id.to_string(),
             user_id: r.user_id,
-            is_self: r.is_self,
+            is_own: r.is_own,
             display_name,
-            handle: r.handle,
+            username: r.username,
             role: r.role,
-            avatar_thumbnail_key: r.avatar_thumbnail_key,
-            avatar_full_key: r.avatar_full_key,
+            avatar_source: r.avatar_source,
         });
     }
     Ok(out)
@@ -181,12 +181,12 @@ fn insert_room_member_row(tx: &Connection, m: &RoomMemberRecord) -> Result<(), K
         params![
             m.room_id,
             m.user_id,
-            i64::from(m.is_self),
+            i64::from(m.is_own),
             m.display_name.as_deref().map(str::as_bytes),
-            m.handle,
+            m.username,
             m.role,
-            m.avatar_thumbnail_key,
-            m.avatar_full_key,
+            m.avatar_source.thumbnail,
+            m.avatar_source.full,
         ],
     )
     .map_err(|e| {
@@ -235,18 +235,20 @@ fn read_raw_room_members(
     let members: Vec<RawRoomMemberRow> = stmt
         .query_map(params![room_id], |row| {
             let user_id: String = row.get(0)?;
-            let is_self: i64 = row.get(1)?;
+            let is_own: i64 = row.get(1)?;
             let display_name: Option<Vec<u8>> = row.get(2)?;
-            let handle: Option<String> = row.get(3)?;
+            let username: Option<String> = row.get(3)?;
             let role: String = row.get(4)?;
             Ok(RawRoomMemberRow {
                 user_id,
-                is_self: is_self != 0,
+                is_own: is_own != 0,
                 display_name,
-                handle,
+                username,
                 role,
-                avatar_thumbnail_key: row.get(5)?,
-                avatar_full_key: row.get(6)?,
+                avatar_source: AvatarSource {
+                    thumbnail: row.get(5)?,
+                    full: row.get(6)?,
+                },
             })
         })
         .map_err(|e| KupferdrahtError::Storage(format!("load_room_members query: {e}")))?
@@ -257,20 +259,19 @@ fn read_raw_room_members(
 
 struct RawRoomMemberRow {
     user_id: String,
-    is_self: bool,
+    is_own: bool,
     display_name: Option<Vec<u8>>,
-    handle: Option<String>,
+    username: Option<String>,
     role: String,
-    avatar_thumbnail_key: Option<String>,
-    avatar_full_key: Option<String>,
+    avatar_source: AvatarSource,
 }
 
-/// The avatar keys of a stored member (Step 144). A user in several rooms has
-/// one profile, so any of their rows answers.
-pub(super) fn member_avatar_keys(
+/// Where a stored member's avatar images are (Step 144). A user in several
+/// rooms has one profile, so any of their rows answers.
+pub(super) fn member_avatar_source(
     store: &SqliteStore,
     user_id: &str,
-) -> Result<Option<crate::avatar::AvatarKeys>, KupferdrahtError> {
+) -> Result<Option<AvatarSource>, KupferdrahtError> {
     debug_assert!(!user_id.is_empty(), "user_id must be non-empty");
     let conn = store.lock()?;
     rusqlite::OptionalExtension::optional(conn.query_row(
@@ -278,13 +279,13 @@ pub(super) fn member_avatar_keys(
          FROM room_members WHERE user_id = ?1 LIMIT 1",
         params![user_id],
         |row| {
-            Ok(crate::avatar::AvatarKeys {
+            Ok(AvatarSource {
                 thumbnail: row.get(0)?,
                 full: row.get(1)?,
             })
         },
     ))
-    .map_err(|e| KupferdrahtError::Storage(format!("member_avatar_keys: {e}")))
+    .map_err(|e| KupferdrahtError::Storage(format!("member_avatar_source: {e}")))
 }
 
 #[cfg(test)]
@@ -311,15 +312,14 @@ mod tests {
         };
         let member_records = members
             .iter()
-            .map(|(uid, is_self)| RoomMemberRecord {
+            .map(|(uid, is_own)| RoomMemberRecord {
                 room_id: room_id.to_string(),
                 user_id: (*uid).to_string(),
-                is_self: *is_self,
+                is_own: *is_own,
                 display_name: Some(format!("Name for {uid}")),
-                handle: Some(format!("h_{uid}")),
+                username: Some(format!("h_{uid}")),
                 role: "member".to_string(),
-                avatar_thumbnail_key: None,
-                avatar_full_key: None,
+                avatar_source: crate::avatar::AvatarSource::default(),
             })
             .collect();
         (room, member_records)
@@ -351,14 +351,14 @@ mod tests {
             .expect("room-a present");
         assert_eq!(room_a.0.name, "Engineering");
         assert_eq!(room_a.1.len(), 2);
-        // Members order is is_self DESC then user_id ASC → self first.
-        assert!(room_a.1[0].is_self);
+        // Members order is the own flag DESC then user_id ASC → own first.
+        assert!(room_a.1[0].is_own);
         assert_eq!(room_a.1[0].user_id, "me@example.test");
         assert_eq!(
             room_a.1[0].display_name.as_deref(),
             Some("Name for me@example.test")
         );
-        assert!(!room_a.1[1].is_self);
+        assert!(!room_a.1[1].is_own);
         assert_eq!(room_a.1[1].user_id, "bob@example.test");
     }
 

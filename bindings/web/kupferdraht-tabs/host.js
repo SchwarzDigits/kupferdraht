@@ -24,7 +24,7 @@ export function createTabHost(options = {}) {
 }
 
 /**
- * Events: `leader-changed` `{ leaderTabId, epoch, isSelf, leaderVersion, relation }`
+ * Events: `leader-changed` `{ leaderTabId, epoch, isThisTab, leaderVersion, relation }`
  * — `relation` is this tab's release against the leader's (Step 157:
  * `"newer"`, `"older"`, `"same"`, `"unknown"`), `evicted`
  * `{ epoch, reason }` — `"tab"`: this tab led and another tab took over
@@ -132,17 +132,17 @@ export class TabHost extends EventTarget {
 
   #onLeader(leaderTabId, epoch, changed, leaderVersion) {
     this.#armWatchdog();
-    const isSelf = leaderTabId === this.tabId;
+    const isThisTab = leaderTabId === this.tabId;
     // The worker's own `leader` post and the channel announcement both arrive; one event.
     if (!changed || (leaderTabId === this.#leaderTabId && epoch === this.#epoch)) return;
     this.#leaderTabId = leaderTabId;
     this.#epoch = epoch;
     this.#leaderVersion = leaderVersion ?? null;
-    this.#state = isSelf ? 'leader' : 'thin';
+    this.#state = isThisTab ? 'leader' : 'thin';
     // The candidate must announce a higher epoch than any leader this tab saw.
-    if (!isSelf) this.#worker?.postMessage({ type: 'epoch', epoch });
+    if (!isThisTab) this.#worker?.postMessage({ type: 'epoch', epoch });
     const relation = versionRelation(KUPFERDRAHT_VERSION, this.#leaderVersion);
-    this.#emit('leader-changed', { leaderTabId, epoch, isSelf, leaderVersion: this.#leaderVersion, relation });
+    this.#emit('leader-changed', { leaderTabId, epoch, isThisTab, leaderVersion: this.#leaderVersion, relation });
   }
 
   #armWatchdog() {

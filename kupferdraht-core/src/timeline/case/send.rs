@@ -102,7 +102,7 @@ impl Client {
             .members()
             .await?
             .iter()
-            .any(|m| m.is_self && m.role == RoomMemberRole::Administrator);
+            .any(|m| m.is_own && m.role == RoomMemberRole::Administrator);
         if !self_is_admin {
             return Err(KupferdrahtError::InvalidInput(
                 "set_case: only conversation administrators may change case state \

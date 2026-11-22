@@ -5,7 +5,7 @@
 //! Step 1b — `devices` table round-trip.
 //!
 //! Failing tests per PLAN.md Step 1 "TDD starter tests, 1b":
-//! * `devices` table gains one row keyed by the new `client_id` after
+//! * `devices` table gains one row keyed by the new device id after
 //!   `save_device`.
 //! * Lookup by `user_id` returns the stored device record.
 //!
@@ -31,7 +31,7 @@ fn fresh_store() -> (TempDir, SqliteStore) {
 fn sample_device() -> DeviceRecord {
     DeviceRecord {
         user_id: "user-uuid".to_string(),
-        client_id: "new-client-id".to_string(),
+        device_id: "new-client-id".to_string(),
         mls_public_key: None,
     }
 }
@@ -44,7 +44,7 @@ async fn save_and_load_device_round_trip() {
     store.save_device(&device).await.expect("save");
 
     let loaded = store
-        .load_device(&device.user_id, &device.client_id)
+        .load_device(&device.user_id, &device.device_id)
         .await
         .expect("load");
 
@@ -74,7 +74,7 @@ async fn save_device_is_upsert() {
     store.save_device(&device).await.expect("second save");
 
     let loaded = store
-        .load_device(&device.user_id, &device.client_id)
+        .load_device(&device.user_id, &device.device_id)
         .await
         .expect("load");
     assert_eq!(loaded, Some(device));

@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 // links in the moved docs below (the code reaches it via fully-qualified
 // path), so the import is doc-only — kept to preserve link resolution,
 // matching the in-scope state these docs had in `runtime.rs`.
-use crate::avatar::AvatarKeys;
+use crate::avatar::AvatarSource;
 #[allow(unused_imports)]
 use crate::encryption::MlsClient;
 use crate::error::KupferdrahtError;
@@ -56,7 +56,7 @@ impl Client {
     ///    carrying the new epoch + member list). Same handle
     ///    `Client::room(room_id)` yields — verified by `Arc::ptr_eq`.
     ///
-    /// `user_ids` are qualified `<uuid>@<domain>` strings — the same
+    /// `user_ids` are `<uuid>@<domain>` strings — the same
     /// shape `Room::members().user_id` exposes.
     ///
     /// **Invite from a fresh fold.** After the commit merges, the
@@ -297,13 +297,13 @@ impl Client {
             KupferdrahtError::InvalidInput(format!("leave_room: {room_id} not in cache"))
         })?;
         let group_id = room.group_id_bytes();
-        let self_qualified = self.user_id.as_str().to_string();
+        let own_user_id = self.user_id.as_str().to_string();
         self.http
             .delete_conversation_member(
                 self.api_version,
                 &self.current_access_token(),
                 room_id,
-                &self_qualified,
+                &own_user_id,
             )
             .await?;
         if let (Some(gid), Some(mls)) = (group_id, self.mls_client.as_ref()) {
@@ -702,7 +702,7 @@ impl Client {
                 "sync_members: Client has no MLS state; base_dir must be set".into(),
             )
         })?;
-        let (leaves, self_qualified_id) = {
+        let (leaves, own_user_id) = {
             let guard = crate::encryption::lock_mls(mls);
             (guard.group_leaves(&group_id)?, guard.own_wire_user_id()?)
         };
@@ -717,14 +717,14 @@ impl Client {
             .map(|m| (m.user_id, m.role))
             .collect();
         let members = self
-            .resolve_members(&leaves, &self_qualified_id, &prior_roles)
+            .resolve_members(&leaves, &own_user_id, &prior_roles)
             .await?;
         self.persist_room_members(room_id, &members).await?;
         self.swap_room_members(room_id, members.clone());
         Ok(members)
     }
 
-    /// The profiles of every member but this device's own user, by qualified
+    /// The profiles of every member but this device's own user, by user
     /// id, from one `POST /v14/list-users`; none asked when the group holds
     /// only the own user.
     ///
@@ -764,7 +764,7 @@ impl Client {
 
     /// Turn leaf identities into `RoomMember`s, tagging the self leaf
     /// and backfilling non-self display info via `POST /v14/list-users`.
-    /// `self_user_id` is the qualified (`{uuid}@{domain}`) id of this
+    /// `self_user_id` is the `{uuid}@{domain}` id of this
     /// device's own leaf, supplied by the caller who already locked
     /// `MlsClient`.
     async fn resolve_members(
@@ -775,22 +775,24 @@ impl Client {
     ) -> Result<Vec<RoomMember>, KupferdrahtError> {
         let lookup = self.other_members_profiles(leaves, self_user_id).await?;
         let account = self.account();
-        let self_name = account.display_name().to_string();
-        let self_handle = account.handle().map(str::to_string);
-        let self_avatar = self.own_avatar_keys().await?;
+        let own_name = account.display_name().to_string();
+        let own_username = account.username().map(str::to_string);
+        let own_avatar = self.own_avatar_source().await?;
         Ok(leaves
             .iter()
             .map(|leaf| {
-                let is_self = leaf.user_id == self_user_id;
-                let avatar = if is_self {
-                    self_avatar.clone()
+                let is_own = leaf.user_id == self_user_id;
+                let avatar_source = if is_own {
+                    own_avatar.clone()
                 } else {
                     lookup
                         .get(&leaf.user_id)
-                        .map_or_else(AvatarKeys::default, |p| AvatarKeys::from_assets(&p.assets))
+                        .map_or_else(AvatarSource::default, |p| {
+                            AvatarSource::from_assets(&p.assets)
+                        })
                 };
-                let (display_name, handle): (Option<String>, Option<String>) = if is_self {
-                    (Some(self_name.clone()), self_handle.clone())
+                let (display_name, username): (Option<String>, Option<String>) = if is_own {
+                    (Some(own_name.clone()), own_username.clone())
                 } else if let Some(p) = lookup.get(&leaf.user_id) {
                     (Some(p.name.clone()), p.handle.clone())
                 } else {
@@ -798,9 +800,9 @@ impl Client {
                 };
                 RoomMember {
                     user_id: leaf.user_id.clone(),
-                    is_self,
+                    is_own,
                     display_name,
-                    handle,
+                    username,
                     // Merged from the metadata snapshot; a leaf whose
                     // user the metadata does not know (yet) is a
                     // member until the next sync says otherwise.
@@ -808,8 +810,7 @@ impl Client {
                         .get(&leaf.user_id)
                         .copied()
                         .unwrap_or(crate::rooms::RoomMemberRole::Member),
-                    avatar_thumbnail_key: avatar.thumbnail,
-                    avatar_full_key: avatar.full,
+                    avatar_source,
                 }
             })
             .collect())
@@ -842,12 +843,11 @@ impl Client {
             .map(|m| RoomMemberRecord {
                 room_id: room_id.to_string(),
                 user_id: m.user_id.clone(),
-                is_self: m.is_self,
+                is_own: m.is_own,
                 display_name: m.display_name.clone(),
-                handle: m.handle.clone(),
+                username: m.username.clone(),
                 role: m.role.as_db_str().to_string(),
-                avatar_thumbnail_key: m.avatar_thumbnail_key.clone(),
-                avatar_full_key: m.avatar_full_key.clone(),
+                avatar_source: m.avatar_source.clone(),
             })
             .collect();
         store.replace_room_members(room_id, &records).await

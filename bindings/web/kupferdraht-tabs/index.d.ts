@@ -72,7 +72,7 @@ export interface TabHostOptions {
 export interface LeaderChangedDetail {
   leaderTabId: string;
   epoch: number;
-  isSelf: boolean;
+  isThisTab: boolean;
   /** Step 157: the leader's release; `null` when it names none. */
   leaderVersion: string | null;
   /** Step 157: this tab against the leader. */
@@ -171,7 +171,7 @@ export interface LogRecord { level: 'error' | 'warn' | 'info' | 'debug' | 'trace
 export function serveTab(options: ServeTabOptions): void;
 
 // ── payloads (the wasm view objects, camelCase) ────────────────────────────
-export interface AccountEntry { accountId: string; server: string; handle: string | null; displayName: string | null; lastActiveMs: number }
+export interface AccountEntry { accountId: string; server: string; username: string | null; displayName: string | null; lastActiveMs: number }
 export interface StorageEngineInfo { engine: string; version: string; cipher: string; plaintextHeaderSize: number; location: 'server' | 'local' }
 /** A pass's outcome (Step 146): the rooms that changed since the previous summary — re-read their `members()` and, if open, `messages()`; one missing from `rooms()` is gone. */
 export interface SyncSummary { changedRooms: string[]; eventsDispatched: number }
@@ -200,7 +200,7 @@ export interface ResendStop { messageId: string; name: string; message: string }
  * failed rows behind the stop it did not attempt — the next pass picks them up.
  */
 export interface ResendSummary { resent: MessageHandle[]; skipped: string[]; stoppedAt: ResendStop | null; remaining: number }
-export interface Reaction { emoji: string; count: number; isSelf: boolean }
+export interface Reaction { emoji: string; count: number; isOwn: boolean }
 export type DeliveryStatus = 'sending' | 'submitted' | 'received' | 'failed';
 export interface AttachmentMeta { filename: string | null; mime: string; size: number }
 export interface TimelineItem {
@@ -225,7 +225,7 @@ export interface TimelineItem {
   /** Set for `kind === 'room_name_change'`, and `kind === 'room_created'` when the room has a name. */
   name: string | null;
 }
-export interface Member { userId: string; isSelf: boolean; displayName: string | null; handle: string | null; role: string; avatarKey: string | null }
+export interface Member { userId: string; isOwn: boolean; displayName: string | null; username: string | null; role: string; avatarVersion: string | null }
 /** Which of a user's two images (Step 144). */
 export type AvatarSize = 'thumbnail' | 'full';
 /** An image Kupferdraht wrote from the pixels of the original (Step 144). */
@@ -247,12 +247,14 @@ export type Joiner = 'teamMembers' | 'nonTeamMembers' | 'guests' | 'services';
 export interface RoomAccess { joinRules: JoinRule[]; allowed: Joiner[] }
 /** A conversation's reusable guest link (Step 98b). */
 export interface JoinLink { url: string; passwordProtected: boolean }
-/** A registered device, field for field `core::DeviceInfo` (Step 98a). */
+/** What kind of device a registered device is (Step 163d). */
+export type DeviceKind = 'phone' | 'tablet' | 'desktop' | 'legalHold' | 'other';
+/** A registered device, field for field `core::DeviceInfo` (Step 98a); the times in ms since the epoch. */
 export interface DeviceInfo {
-  deviceId: string; class: string | null; label: string | null; model: string | null;
-  registeredAt: string | null; lastActive: string | null; isSelf: boolean;
+  deviceId: string; kind: DeviceKind; displayName: string | null; model: string | null;
+  registeredAtMs: number | null; lastSeenMs: number | null; isOwn: boolean;
 }
-/** One MLS leaf of a room (Step 95d); `thumbprint` is Wire's "MLS Thumbprint". */
+/** One MLS leaf of a room (Step 95d); `thumbprint` is the MLS thumbprint the official apps show. */
 export interface RoomDevice {
   userId: string | null; deviceId: string | null;
   credential: 'basic' | 'x509'; thumbprint: string | null;
@@ -266,13 +268,13 @@ export class KupferdrahtProxy {
   readonly evicted: boolean;
   /** The leader's home id (Step 93); `undefined` until a leader has announced itself. */
   readonly homeId: string | undefined;
-  /** The leader's login cookie label (Step 93); `undefined` until a leader has announced itself. */
-  readonly cookieLabel: string | undefined;
-  login(apiBaseUrl: string, websocketUrl: string, title: string, email: string, password: string, secondFactorCode?: string, deviceLabel?: string): Promise<PendingLoginProxy>;
+  /** The leader's session label (Step 93); `undefined` until a leader has announced itself. */
+  readonly sessionLabel: string | undefined;
+  login(apiBaseUrl: string, websocketUrl: string, title: string, email: string, password: string, secondFactorCode?: string, initialDeviceDisplayName?: string): Promise<PendingLoginProxy>;
   /** Open the URL in a popup; its page posts the outcome back. `provider` omitted: the backend's default. */
   ssoLoginUrl(apiBaseUrl: string, provider?: string): Promise<string>;
   /** `message` is the `data` of the SSO page's `message` event; a refusal rejects with `BackendRejected`. */
-  loginWithSsoCallback(apiBaseUrl: string, websocketUrl: string, title: string, message: unknown, deviceLabel?: string): Promise<PendingLoginProxy>;
+  loginWithSsoCallback(apiBaseUrl: string, websocketUrl: string, title: string, message: unknown, initialDeviceDisplayName?: string): Promise<PendingLoginProxy>;
   /** `takeOver` takes the account's databases over from another browser that holds them (`HeldElsewhere` otherwise; Step 111c). */
   resume(accountId: string, options?: { takeOver?: boolean }): Promise<ClientProxy>;
   accounts(): Promise<AccountEntry[]>;
@@ -322,8 +324,8 @@ export class ClientProxy {
   readonly displayName: string;
   /** The account's email address; `undefined` when it has none on record. */
   readonly email: string | undefined;
-  /** The account's handle; `undefined` when it has none on record (Step 125). */
-  readonly handle: string | undefined;
+  /** The account's username; `undefined` when it has none on record (Step 125). */
+  readonly username: string | undefined;
   /** The user's team as of the last login; `undefined` for a personal account (Step 143). */
   readonly teamId: string | undefined;
   /** The team's name as of the last login; `undefined` for a personal account, or when the login could not fetch it (Step 143). */
@@ -338,7 +340,7 @@ export class ClientProxy {
   /** Step 152: read the own account and team again; the getters answer the new values when this resolves — in the calling tab, another tab calls it for itself. Rejects and changes nothing on any failure. */
   refreshAccount(): Promise<void>;
   setDisplayName(name: string): Promise<void>;
-  setHandle(handle: string): Promise<void>;
+  setUsername(username: string): Promise<void>;
   /** The backend mails a confirmation link; the address changes once confirmed. */
   requestEmailChange(email: string): Promise<void>;
   devices(): Promise<DeviceInfo[]>;
@@ -396,8 +398,8 @@ export class ClientProxy {
   members(roomId: string): Promise<Member[]>;
   /** A user's avatar, an image Kupferdraht wrote (Step 144). Show it as `<img>` or on a canvas, never as a document. */
   avatar(userId: string, size: AvatarSize): Promise<Avatar | null>;
-  /** The version marker of a user's avatar: a changed avatar has a new key (Step 144). */
-  avatarKey(userId: string): Promise<string | null>;
+  /** The version marker of a user's avatar: a changed avatar has a new one (Step 144). */
+  avatarVersion(userId: string): Promise<string | null>;
   /** The icon of the account's team as of the last login (Step 144). */
   teamAvatar(): Promise<Avatar | null>;
   /** Set the own avatar from one image: JPEG, PNG, GIF or WebP, at most 4 MiB and 4096 × 4096 pixels (Step 144). */

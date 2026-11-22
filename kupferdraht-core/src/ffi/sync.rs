@@ -153,7 +153,7 @@ impl From<&CoreMessage> for Message {
 /// The current set of users typing in a room, delivered to
 /// [`EventHandler::on_typing`]. Carries the *current* set — an empty
 /// `typing_users` means nobody is typing (clear the indicator).
-/// `typing_users` are qualified id strings, matching
+/// `typing_users` are `<uuid>@<domain>` strings, matching
 /// [`Message::sender_user_id`]'s flat form.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct TypingEvent {
@@ -279,7 +279,7 @@ pub trait SyncListener: Send + Sync {
     /// (e.g. a manual `sync_once` racing the loop) surfaces here too
     /// and recovers on the next retry.
     fn on_error(&self, description: String) -> bool;
-    /// The session is permanently invalid — the refresh token (`zuid`) is dead
+    /// The session is permanently invalid — the refresh token is dead
     /// (`KupferdrahtError::SessionExpired`), so no refresh can recover it. The loop
     /// has already **stopped**; this fires at most once instead of `on_error`.
     /// The consumer must drive a re-login — the device's MLS state + chats are
@@ -398,8 +398,8 @@ impl Client {
         )
     }
 
-    /// This device's MLS thumbprint (Step 95d) — Wire's "MLS
-    /// Thumbprint", comparable with the official apps.
+    /// This device's MLS thumbprint (Step 95d), comparable with what
+    /// the official apps show for it.
     ///
     /// # Errors
     /// See `KupferdrahtError`.

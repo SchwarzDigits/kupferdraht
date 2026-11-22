@@ -107,7 +107,7 @@ impl Timeline {
 
     /// Send a text message that mentions one or more users
     /// (Step 6-II-g). `mentions` declares UTF-16 spans of the
-    /// body that point at qualified user-ids; Wire's UI renders
+    /// body that point at user ids; Wire's UI renders
     /// each span as a clickable mention pill. matrix-rust-sdk
     /// analog: included in `Timeline::send` content.
     ///

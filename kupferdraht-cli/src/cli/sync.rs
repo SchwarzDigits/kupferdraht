@@ -14,7 +14,7 @@ pub(crate) async fn sync() -> Result<(), KupferdrahtError> {
     let (client, store) = resume_client_and_store().await?;
     // The resume may have refreshed the access token; persist the current
     // tokens so a follow-up `status` shows them — load-then-mutate, so the
-    // row keeps what the login recorded (`cookie_label`, Step 93).
+    // row keeps what the login recorded (`session_label`, Step 93).
     let user_id = client
         .user_id()
         .map_or_else(String::new, |u| u.as_str().to_string());
@@ -138,7 +138,7 @@ impl EventHandler for CliEventHandler {
 }
 
 /// Prints a room's device-set change (Step 95d) — the signal for a device
-/// nobody expected; compare its thumbprint with the Wire app.
+/// nobody expected; compare its thumbprint with the other apps.
 struct CliDevicesListener;
 
 impl kupferdraht::RoomDevicesListener for CliDevicesListener {

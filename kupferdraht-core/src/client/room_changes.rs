@@ -118,12 +118,11 @@ mod tests {
     fn member(user: &str, name: &str) -> RoomMember {
         RoomMember {
             user_id: user.into(),
-            is_self: false,
+            is_own: false,
             display_name: Some(name.into()),
-            handle: None,
+            username: None,
             role: RoomMemberRole::Member,
-            avatar_thumbnail_key: None,
-            avatar_full_key: None,
+            avatar_source: crate::avatar::AvatarSource::default(),
         }
     }
 
@@ -180,7 +179,7 @@ mod tests {
     #[test]
     fn a_members_new_avatar_is_a_change() {
         let mut changed = member("bob@d", "Bob");
-        changed.avatar_thumbnail_key = Some("3-1-new".into());
+        changed.avatar_source.thumbnail = Some("3-1-new".into());
 
         assert_eq!(
             changed_room_ids(

@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Avatars on the client (Step 144): whose keys, the cached images written
-//! anew, and setting the own. The own keys are the `self_user` row's, with the
-//! login's snapshot where there is no row (the Step 126 pattern): `Account` is
-//! frozen, and an upload changes them.
+//! Avatars on the client (Step 144): where whose images are, the cached images
+//! written anew, and setting the own. The own source is the `self_user` row's,
+//! with the login's snapshot where there is no row (the Step 126 pattern): an
+//! upload changes it.
 
 use std::sync::PoisonError;
 
 use tracing::warn;
 
-use crate::avatar::{self, AVATAR_MAX_INPUT_BYTES, Avatar, AvatarKeys, AvatarSize};
+use crate::avatar::{self, AVATAR_MAX_INPUT_BYTES, Avatar, AvatarSize, AvatarSource};
 use crate::client::Client;
 use crate::error::KupferdrahtError;
 use crate::identity::UserId;
@@ -29,23 +29,24 @@ impl Client {
         user: &UserId,
         size: AvatarSize,
     ) -> Result<Option<Avatar>, KupferdrahtError> {
-        let keys = self.avatar_keys_of(user).await?;
-        match keys.for_size(size) {
+        let source = self.avatar_source_of(user).await?;
+        match source.for_size(size) {
             Some(key) => self.written_avatar(user.domain(), key, size).await,
             None => Ok(None),
         }
     }
 
-    /// The version marker of a user's avatar: the thumbnail's image key, the
-    /// full image's when the profile has only that. A changed avatar has a new
-    /// key, so an embedder keys its own store by it. A method, not a snapshot:
-    /// the own key changes with [`Self::upload_avatar`].
+    /// The version marker of a user's avatar: the id of the thumbnail's
+    /// image, the full image's when the profile has only that. A changed
+    /// avatar has a new one, so an embedder keys its own store by it. A
+    /// method, not a snapshot: the own one changes with
+    /// [`Self::upload_avatar`].
     ///
     /// # Errors
     /// `BackendRejected` and `Network` for a failed lookup.
-    pub async fn avatar_key(&self, user: &UserId) -> Result<Option<String>, KupferdrahtError> {
-        let keys = self.avatar_keys_of(user).await?;
-        Ok(keys.version().map(str::to_owned))
+    pub async fn avatar_version(&self, user: &UserId) -> Result<Option<String>, KupferdrahtError> {
+        let source = self.avatar_source_of(user).await?;
+        Ok(source.version().map(str::to_owned))
     }
 
     /// The icon of the account's team, as of the last login, an image
@@ -56,7 +57,7 @@ impl Client {
     /// `BackendRejected` and `Network` for a failed download.
     pub async fn team_avatar(&self) -> Result<Option<Avatar>, KupferdrahtError> {
         let account = self.account();
-        match account.team_avatar_key() {
+        match account.team_avatar_version() {
             Some(key) => {
                 self.written_avatar(account.domain(), key, AvatarSize::Full)
                     .await
@@ -85,7 +86,7 @@ impl Client {
         self.http
             .update_self_assets(self.api_version, &self.current_access_token(), &assets)
             .await?;
-        self.remember_own_avatar(AvatarKeys {
+        self.remember_own_avatar(AvatarSource {
             thumbnail: Some(thumbnail_key),
             full: Some(full_key),
         })
@@ -101,31 +102,28 @@ impl Client {
         self.http
             .update_self_assets(self.api_version, &self.current_access_token(), &[])
             .await?;
-        self.remember_own_avatar(AvatarKeys::default()).await
+        self.remember_own_avatar(AvatarSource::default()).await
     }
 
-    /// The own keys as they are now: a write of this session is in the row.
-    pub(super) async fn own_avatar_keys(&self) -> Result<AvatarKeys, KupferdrahtError> {
+    /// The own source as it is now: a write of this session is in the row.
+    pub(super) async fn own_avatar_source(&self) -> Result<AvatarSource, KupferdrahtError> {
         let Some(store) = self.store_handle() else {
-            return Ok(self.account().avatar_keys().clone());
+            return Ok(self.account().avatar_source().clone());
         };
         let row = self.current_self_row(store.as_ref()).await?;
-        Ok(AvatarKeys {
-            thumbnail: row.avatar_thumbnail_key,
-            full: row.avatar_full_key,
-        })
+        Ok(row.avatar_source)
     }
 
-    /// A user's keys: the own, a stored member's, else one `list-users` for a
-    /// user in no stored room.
-    async fn avatar_keys_of(&self, user: &UserId) -> Result<AvatarKeys, KupferdrahtError> {
+    /// Where a user's images are: the own, a stored member's, else one
+    /// `list-users` for a user in no stored room.
+    async fn avatar_source_of(&self, user: &UserId) -> Result<AvatarSource, KupferdrahtError> {
         if user == self.account().user_id() {
-            return self.own_avatar_keys().await;
+            return self.own_avatar_source().await;
         }
         if let Some(store) = self.store_handle()
-            && let Some(keys) = store.member_avatar_keys(user.as_str()).await?
+            && let Some(source) = store.member_avatar_source(user.as_str()).await?
         {
-            return Ok(keys);
+            return Ok(source);
         }
         let found = self
             .http
@@ -139,8 +137,8 @@ impl Client {
         Ok(found
             .iter()
             .find(|profile| profile.qualified_id.to_string() == user.as_str())
-            .map_or_else(AvatarKeys::default, |profile| {
-                AvatarKeys::from_assets(&profile.assets)
+            .map_or_else(AvatarSource::default, |profile| {
+                AvatarSource::from_assets(&profile.assets)
             }))
     }
 
@@ -153,7 +151,7 @@ impl Client {
         key: &str,
         size: AvatarSize,
     ) -> Result<Option<Avatar>, KupferdrahtError> {
-        debug_assert!(!key.is_empty(), "AvatarKeys holds no empty key");
+        debug_assert!(!key.is_empty(), "AvatarSource holds no empty id");
         if let Some(cached) = self.avatar_cache().get(key, size) {
             return Ok(Some(cached));
         }
@@ -203,14 +201,11 @@ impl Client {
         Ok(uploaded.key)
     }
 
-    /// Remember keys the backend accepted, in the row `resume` reads and the
-    /// live account (Step 152).
-    async fn remember_own_avatar(&self, keys: AvatarKeys) -> Result<(), KupferdrahtError> {
-        self.apply_own_profile(|row| {
-            row.avatar_thumbnail_key = keys.thumbnail;
-            row.avatar_full_key = keys.full;
-        })
-        .await
+    /// Remember images the backend accepted, in the row `resume` reads and
+    /// the live account (Step 152).
+    async fn remember_own_avatar(&self, source: AvatarSource) -> Result<(), KupferdrahtError> {
+        self.apply_own_profile(|row| row.avatar_source = source)
+            .await
     }
 }
 

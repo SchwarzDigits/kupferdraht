@@ -24,7 +24,7 @@ fn kupferdraht_version_reports_crate_version() {
 #[test]
 fn parse_user_id_returns_structured_parts() {
     // The exported `parse_user_id` validates a flat id string and hands
-    // foreign callers the structured `QualifiedUserId` — `localpart` and
+    // foreign callers the structured `UserId` — `localpart` and
     // `domain` as separate fields, never a flattened string.
     let id = kupferdraht::ffi::parse_user_id("alice@example.test").expect("well-formed id");
     assert_eq!(id.localpart, "alice");

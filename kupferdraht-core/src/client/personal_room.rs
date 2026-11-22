@@ -84,7 +84,7 @@ impl Client {
         {
             let _gate = self.mls_write_gate().await;
             let guard = crate::encryption::lock_mls(mls);
-            guard.create_group(&group_id, &self.backend_removal_key_ecdsa_p256)?;
+            guard.create_group(&group_id, &self.external_sender_key)?;
         }
         if let Err(establish_err) = self
             .establish_group(mls, &group_id, "establish_personal_room")

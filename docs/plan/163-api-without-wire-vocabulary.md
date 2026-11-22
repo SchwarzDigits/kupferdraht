@@ -180,6 +180,47 @@ where it has a term, otherwise a plain English name.
   - Avatar keys become an avatar source.
   - `thumbprint` becomes `fingerprint`, `backend_removal_key_ecdsa_p256` becomes
     `external_sender_key`.
+  - **Done 2026-11-19 (Volker: "alles wie vorgeschlagen, Avatar (b)"):**
+    - The FFI record `UserId { localpart, domain }` (core `UserId` imported
+      as `CoreUserId` in `ffi/`). The protobuf assignee is built by
+      `wire::proto::user_reference`, so its type name stays in `wire/`.
+    - `DeviceInfo { device_id, kind: DeviceKind, display_name, model,
+      registered_at_ms, last_seen_ms, is_own }`, `DeviceKind { Phone, Tablet,
+      Desktop, LegalHold, Other }`: Wire's classes are
+      `wire::dto::ClientClass`, the device layer maps them; no class or an
+      unknown one is `Other`, the times read with `wire::time::parse_time_ms`.
+    - `ClientBuilder::initial_device_display_name`, `rename_device(id,
+      display_name)`; `username` / `set_username` (Account, the FFI record,
+      `AccountEntry`, `RoomMember`, the browser's getter and `setUsername`);
+      `is_own` (members, devices, reactions); the tabs' leader event says
+      `isThisTab` — `isOwn` does not fit a tab.
+    - Avatar (b): `AvatarSource { thumbnail, full }` (serde and UniFFI),
+      `Account::avatar_source`; the version marker is `avatar_version`
+      (`Client`, `RoomMember`, browser `avatarVersion`) and
+      `team_avatar_version`; `login_avatar_keys` (deprecated since 0.5.1) is
+      removed rather than renamed.
+    - `external_sender_key` — the MLS term (RFC 9420's `external_senders`,
+      openmls' `ExternalSendersExtension`); `session_label` (the CLI's
+      `status` prints `session_label` and `stored_session_label`).
+    - `thumbprint` stays (Volker, 2026-11-19, after the implementation): it
+      is RFC 7638's name for the computation (JWK Thumbprint), which Wire took
+      over — neither MLS nor openmls name it, and a standard's term is no Wire
+      word. The word left `tests/public_vocabulary.rs`; the code keeps
+      `own_device_thumbprint` and `RoomDevice::thumbprint`. Checked at the
+      same time against openmls (sources and book): no other 163b–d name
+      replaced an MLS term; `MlsClient` keeps MLS's "client", and the
+      renamed `client_id` was always the backend's device id.
+    - Internally every `client_id` outside `wire/` is `device_id` — the
+      recovery data's field names included, its format unchanged; the SQL
+      columns and the backend's query parameters keep theirs. The mention
+      resolver speaks of usernames.
+    - The store records' serde names follow; the columns stay, nothing
+      migrates.
+    - CLI: `device-rename --name` / `-n`, `profile-set --username`; the help's
+      "qualified" ids are plain ids, the `zuid` the refresh cookie.
+    - Pins: `tests/step_163d_identity_names.rs` (16), the `ClientClass` round
+      trip in `wire/dto.rs`; `tests/step_125_client_handle.rs` is
+      `step_125_client_username.rs`.
 - **163e — server settings and the store contract.**
   - Feature configs become typed settings, with the raw map internal or
     neutrally named.
@@ -187,6 +228,12 @@ where it has a term, otherwise a plain English name.
   - The store's records and methods follow, so the Rust names change and the SQL
     columns stay.
   - The JSDoc and the error texts are reworded.
+  - Standard terms stay (Volker, 2026-11-19): `BackendMlsKey` holds the
+    backend's external sender key, so its neutral name is MLS's
+    ("external sender key"), not a new one; `signature_scheme` in it stays
+    (TLS / RFC 9420). The check's word "ephemeral" (Wire's ephemeral
+    messages, 163b) must not hit the cryptographic term (an HPKE ephemeral
+    key): the matcher learns that before 163e relies on it.
 - **Every sub-step:**
   - FFI and browser parity, the tabs `index.d.ts`, the Kotlin and Swift binding
     tests, and the CLI verbs (`knock`, `self-room`, `room-access`, `join-via-link`,

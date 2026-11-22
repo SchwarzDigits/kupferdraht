@@ -40,7 +40,7 @@ fn print_session(command: &str, client: &Client) {
         client.user_id().map_or("—", UserId::as_str)
     );
     println!("  device_id:   {}", client.device_id().unwrap_or("—"));
-    println!("  handle:      {}", account.handle().unwrap_or("—"));
+    println!("  username:    {}", account.username().unwrap_or("—"));
     println!(
         "  team:        {}",
         team_line(account.team_name(), account.team_id())
@@ -151,9 +151,9 @@ pub(crate) async fn recover_device_limit(
             println!("device limit reached — too many registered devices. Registered devices:");
             for d in pending.devices().await? {
                 println!(
-                    "  {}  label={}  model={}",
+                    "  {}  name={}  model={}",
                     d.device_id,
-                    d.label.as_deref().unwrap_or("—"),
+                    d.display_name.as_deref().unwrap_or("—"),
                     d.model.as_deref().unwrap_or("—"),
                 );
             }
@@ -180,13 +180,13 @@ pub(crate) async fn accounts() -> Result<(), KupferdrahtError> {
             "  "
         };
         println!("{marker}{}", entry.account_id);
-        if let Some(handle) = &entry.handle {
-            println!("    handle:  @{handle}");
+        if let Some(username) = &entry.username {
+            println!("    username: {username}");
         }
         if let Some(name) = &entry.display_name {
-            println!("    name:    {name}");
+            println!("    name:     {name}");
         }
-        println!("    server:  {}", entry.server);
+        println!("    server:   {}", entry.server);
     }
     Ok(())
 }
@@ -200,7 +200,7 @@ pub(crate) async fn persist_session_state(
     client: &Arc<Client>,
     store: &Arc<dyn Store>,
     server_config: &ServerConfig,
-    cookie_label: Option<String>,
+    session_label: Option<String>,
 ) -> Result<(), KupferdrahtError> {
     let user_id = client
         .user_id()
@@ -212,28 +212,27 @@ pub(crate) async fn persist_session_state(
         device_id: device_id.clone(),
         access_token: client.access_token().unwrap_or_default(),
         refresh_token: client.refresh_token().unwrap_or_default(),
-        cookie_label,
+        session_label,
         api_version: client.api_version(),
         access_token_issued_at_ms: now_ms(),
     };
     store.save_session(&session).await?;
     let device = DeviceRecord {
         user_id: user_id.clone(),
-        client_id: device_id.clone(),
+        device_id: device_id.clone(),
         mls_public_key: Some(base64_encode(client.mls_signature_public_key())),
     };
     store.save_device(&device).await?;
     store
         .save_self_user(&SelfUserRecord {
             id: user_id,
-            handle: account.handle().map(str::to_string),
+            username: account.username().map(str::to_string),
             name: account.display_name().to_string(),
             email: account.email().map(str::to_string),
             team_id: account.team_id().map(str::to_string),
             team_name: account.team_name().map(str::to_string),
-            avatar_thumbnail_key: account.avatar_keys().thumbnail.clone(),
-            avatar_full_key: account.avatar_keys().full.clone(),
-            team_avatar_key: account.team_avatar_key().map(str::to_string),
+            avatar_source: account.avatar_source().clone(),
+            team_avatar_version: account.team_avatar_version().map(str::to_string),
         })
         .await?;
     store
@@ -243,12 +242,12 @@ pub(crate) async fn persist_session_state(
             title: server_config.title.clone(),
         })
         .await?;
-    let backend_removal_key = BackendMlsKey {
+    let external_sender_key = BackendMlsKey {
         purpose: "removal".to_string(),
         signature_scheme: "ecdsa_secp256r1_sha256".to_string(),
-        public_key: client.backend_removal_key_ecdsa_p256().to_vec(),
+        public_key: client.external_sender_key().to_vec(),
     };
-    store.save_backend_mls_key(&backend_removal_key).await?;
+    store.save_backend_mls_key(&external_sender_key).await?;
     Ok(())
 }
 
@@ -301,8 +300,8 @@ pub(crate) async fn activate(
         .store()
         .ok_or_else(|| KupferdrahtError::Storage("activate: default store missing".into()))?;
     // Step 93: the session row records the home's label it logged in with.
-    let cookie_label = open_manager()?.cookie_label();
-    persist_session_state(&client, &store, &server_config, Some(cookie_label)).await?;
+    let session_label = open_manager()?.session_label();
+    persist_session_state(&client, &store, &server_config, Some(session_label)).await?;
     let account = client.account();
     println!("activate ok");
     println!(
@@ -310,7 +309,7 @@ pub(crate) async fn activate(
         client.user_id().map_or("—", UserId::as_str)
     );
     println!("  device_id:   {}", client.device_id().unwrap_or("—"));
-    println!("  handle:      {}", account.handle().unwrap_or("—"));
+    println!("  username:    {}", account.username().unwrap_or("—"));
     println!(
         "  team:        {}",
         team_line(account.team_name(), account.team_id())
@@ -429,10 +428,10 @@ pub(crate) async fn status() -> Result<(), KupferdrahtError> {
     let device = store.load_device(user_id, device_id).await?;
     // Step 93: the label the persisted session was logged in with — `—`
     // for a session that predates its home's own label.
-    let session_label = store
+    let stored_label = store
         .load_session(user_id)
         .await?
-        .and_then(|session| session.cookie_label);
+        .and_then(|session| session.session_label);
     let engine = client.storage_engine().await?;
     println!("session:");
     println!("  user_id:                   {user_id}");
@@ -449,7 +448,7 @@ pub(crate) async fn status() -> Result<(), KupferdrahtError> {
     } else {
         println!("  mls_public_key_prefix:     —");
     }
-    // Step 95d: the device's MLS thumbprint, grouped like the Wire apps.
+    // Step 95d: the device's MLS thumbprint, grouped as the official apps show it.
     println!(
         "  mls_thumbprint:            {}",
         client.own_device_thumbprint().map_or_else(
@@ -459,7 +458,7 @@ pub(crate) async fn status() -> Result<(), KupferdrahtError> {
     );
     println!(
         "{}",
-        home_lines(app.home_id(), &app.cookie_label(), session_label.as_deref())
+        home_lines(app.home_id(), &app.session_label(), stored_label.as_deref())
     );
     println!("{}", storage_line(engine.as_ref()));
     Ok(())
@@ -475,7 +474,7 @@ pub(crate) async fn account_refresh() -> Result<(), KupferdrahtError> {
     let account = client.account();
     println!("account-refresh ok");
     println!("  display_name:  {}", account.display_name());
-    println!("  handle:        {}", account.handle().unwrap_or("—"));
+    println!("  username:      {}", account.username().unwrap_or("—"));
     println!("  email:         {}", account.email().unwrap_or("—"));
     println!(
         "  team:          {}",
@@ -492,18 +491,18 @@ fn team_line(name: Option<&str>, id: Option<&str>) -> String {
     }
 }
 
-/// The `status` home lines (Step 93): the home id, the cookie label in
+/// The `status` home lines (Step 93): the home id, the session label in
 /// effect for this home and the label the persisted session was logged in
 /// with (`—` for a session that predates Step 93 — it still holds the old
-/// shared label on Wire's side until its next login). Pure, so the format
-/// is unit-tested.
-pub(crate) fn home_lines(home_id: &str, cookie_label: &str, session_label: Option<&str>) -> String {
+/// shared label on the backend's side until its next login). Pure, so the
+/// format is unit-tested.
+pub(crate) fn home_lines(home_id: &str, session_label: &str, stored_label: Option<&str>) -> String {
     format!(
-        "  {:<27}{home_id}\n  {:<27}{cookie_label}\n  {:<27}{}",
+        "  {:<27}{home_id}\n  {:<27}{session_label}\n  {:<27}{}",
         "home_id:",
-        "cookie_label:",
         "session_label:",
-        session_label.unwrap_or("—")
+        "stored_session_label:",
+        stored_label.unwrap_or("—")
     )
 }
 
@@ -571,12 +570,12 @@ mod tests {
 
     /// Step 93: three aligned lines like the rest of `status`.
     #[test]
-    fn home_lines_name_home_id_cookie_label_and_session_label() {
+    fn home_lines_name_home_id_session_label_and_stored_label() {
         assert_eq!(
             home_lines("0123abcd", "kupferdraht-0123abcd", Some("kupferdraht-old")),
             "  home_id:                   0123abcd\n  \
-             cookie_label:              kupferdraht-0123abcd\n  \
-             session_label:             kupferdraht-old"
+             session_label:             kupferdraht-0123abcd\n  \
+             stored_session_label:      kupferdraht-old"
         );
     }
 
@@ -621,7 +620,7 @@ mod tests {
     fn home_lines_show_a_dash_for_a_session_without_a_label() {
         assert!(
             home_lines("0123abcd", "kupferdraht-0123abcd", None)
-                .ends_with("session_label:             —")
+                .ends_with("stored_session_label:      —")
         );
     }
 }

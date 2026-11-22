@@ -57,8 +57,8 @@ pub(crate) async fn upload(path: PathBuf) -> Result<(), KupferdrahtError> {
     let own = client.account().user_id().clone();
     println!("avatar upload ok");
     println!(
-        "  avatar_key: {}",
-        client.avatar_key(&own).await?.as_deref().unwrap_or("—")
+        "  avatar_version: {}",
+        client.avatar_version(&own).await?.as_deref().unwrap_or("—")
     );
     Ok(())
 }

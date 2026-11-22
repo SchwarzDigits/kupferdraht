@@ -3,7 +3,7 @@
 
 //! Step 95a (ADR-0027) — the one parse path for a leaf's Wire identity.
 //!
-//! Wire packs `{uuid}:{client_id}@{domain}` into a leaf's
+//! Wire packs `{uuid}:{device_id}@{domain}` into a leaf's
 //! `BasicCredential.identity` (mls-deviations W-4). The sender of an
 //! inbound application message is the leaf openmls authenticated, so
 //! this module turns that leaf's credential into the qualified user id
@@ -24,7 +24,7 @@ use crate::error::KupferdrahtError;
 pub(crate) struct LeafIdentity {
     /// Qualified user id, `{uuid}@{domain}`.
     pub(crate) user_id: String,
-    /// Wire `client_id` of the device — the same string the API uses.
+    /// The device id — the same string the API uses.
     pub(crate) device_id: String,
 }
 
@@ -40,7 +40,7 @@ pub(crate) enum LeafIdentityError {
     Malformed(&'static str),
 }
 
-/// Upper bound on a leaf identity: a UUID, a client id and a domain fit
+/// Upper bound on a leaf identity: a UUID, a device id and a domain fit
 /// well within it.
 const MAX_IDENTITY_LEN: usize = 512;
 
@@ -49,7 +49,7 @@ const MAX_IDENTITY_LEN: usize = 512;
 /// # Errors
 /// [`LeafIdentityError::Unsupported`] for a non-Basic credential,
 /// [`LeafIdentityError::Malformed`] for a Basic credential that is not
-/// exactly `{uuid}:{client_id}@{domain}` with three non-empty parts, is
+/// exactly `{uuid}:{device_id}@{domain}` with three non-empty parts, is
 /// longer than 512 bytes, or contains control characters.
 pub(crate) fn parse_leaf_identity(
     credential: &Credential,
@@ -96,18 +96,18 @@ pub(crate) fn parse_leaf_identity(
 }
 
 /// Build this device's W-4 identity bytes from its qualified user id
-/// and Wire `client_id` — the inverse of [`parse_leaf_identity`].
+/// and device id — the inverse of [`parse_leaf_identity`].
 ///
 /// # Errors
 /// `KupferdrahtError::InvalidInput` when `user_id` is not `<uuid>@<domain>`.
-pub(crate) fn wire_identity(user_id: &str, client_id: &str) -> Result<Vec<u8>, KupferdrahtError> {
+pub(crate) fn wire_identity(user_id: &str, device_id: &str) -> Result<Vec<u8>, KupferdrahtError> {
     let (uuid, domain) = user_id.split_once('@').ok_or_else(|| {
         KupferdrahtError::InvalidInput(format!(
-            "user_id must be qualified '<uuid>@<domain>' format (got: '{user_id}'); \
+            "user_id must be in the '<uuid>@<domain>' format (got: '{user_id}'); \
              see docs/library.md §Identifiers"
         ))
     })?;
-    Ok(format!("{uuid}:{client_id}@{domain}").into_bytes())
+    Ok(format!("{uuid}:{device_id}@{domain}").into_bytes())
 }
 
 /// Map a leaf's identity defect onto the crate error for callers that

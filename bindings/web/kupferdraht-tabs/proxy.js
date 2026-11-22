@@ -38,7 +38,7 @@ export class TabTransport {
     this.onEvicted = onEvicted;
     /** @type {{ tabId: string, epoch: number, key: string } | null} */
     this.leader = null;
-    /** The current leader's `Kupferdraht` getters (`homeId`, `cookieLabel`, …), from its announcement. */
+    /** The current leader's `Kupferdraht` getters (`homeId`, `sessionLabel`, …), from its announcement. */
     this.leaderGetters = {};
     /** Step 157: the current leader's release, from its announcement; `null` when it names none. */
     this.leaderVersion = null;
@@ -284,15 +284,15 @@ export class KupferdrahtProxy {
   /** The leader's home id (Step 93) — `undefined` until a leader has announced itself. */
   get homeId() { return this.#t.leaderGetters.homeId; }
   /** The leader's login cookie label (Step 93) — `undefined` until a leader has announced itself. */
-  get cookieLabel() { return this.#t.leaderGetters.cookieLabel; }
-  login(apiBaseUrl, websocketUrl, title, email, password, secondFactorCode, deviceLabel) {
-    return this.#call('login', [apiBaseUrl, websocketUrl, title, email, password, secondFactorCode, deviceLabel], 'PendingLogin');
+  get sessionLabel() { return this.#t.leaderGetters.sessionLabel; }
+  login(apiBaseUrl, websocketUrl, title, email, password, secondFactorCode, initialDeviceDisplayName) {
+    return this.#call('login', [apiBaseUrl, websocketUrl, title, email, password, secondFactorCode, initialDeviceDisplayName], 'PendingLogin');
   }
   ssoLoginUrl(apiBaseUrl, provider) {
     return this.#call('ssoLoginUrl', [apiBaseUrl, provider]);
   }
-  loginWithSsoCallback(apiBaseUrl, websocketUrl, title, message, deviceLabel) {
-    return this.#call('loginWithSsoCallback', [apiBaseUrl, websocketUrl, title, message, deviceLabel], 'PendingLogin');
+  loginWithSsoCallback(apiBaseUrl, websocketUrl, title, message, initialDeviceDisplayName) {
+    return this.#call('loginWithSsoCallback', [apiBaseUrl, websocketUrl, title, message, initialDeviceDisplayName], 'PendingLogin');
   }
   resume(accountId, options) { return this.#call('resume', [accountId, options], 'Client'); }
   accounts() { return this.#call('accounts', []); }
@@ -325,7 +325,7 @@ export class ClientProxy extends HandleProxy {
   get userId() { return this.getters.userId; }
   get displayName() { return this.getters.displayName; }
   get email() { return this.getters.email; }
-  get handle() { return this.getters.handle; }
+  get username() { return this.getters.username; }
   get teamId() { return this.getters.teamId; }
   get teamName() { return this.getters.teamName; }
   get deviceReplaced() { return this.getters.deviceReplaced; }
@@ -343,7 +343,7 @@ export class ClientProxy extends HandleProxy {
   /** Step 152: resolves once this tab's getters answer the new values; another tab calls it for itself. */
   refreshAccount() { return this.#callTakingGetters('refreshAccount', []); }
   setDisplayName(name) { return this.#callTakingGetters('setDisplayName', [name]); }
-  setHandle(handle) { return this.#callTakingGetters('setHandle', [handle]); }
+  setUsername(username) { return this.#callTakingGetters('setUsername', [username]); }
   requestEmailChange(email) { return this.#call('requestEmailChange', [email]); }
   devices() { return this.#call('devices', []); }
   deleteDevice(deviceId, password) { return this.#call('deleteDevice', [deviceId, password]); }
@@ -398,7 +398,7 @@ export class ClientProxy extends HandleProxy {
   createDm(peer) { return this.#call('createDm', [peer]); }
   members(roomId) { return this.#call('members', [roomId]); }
   avatar(userId, size) { return this.#call('avatar', [userId, size]); }
-  avatarKey(userId) { return this.#call('avatarKey', [userId]); }
+  avatarVersion(userId) { return this.#call('avatarVersion', [userId]); }
   teamAvatar() { return this.#call('teamAvatar', []); }
   uploadAvatar(image) { return this.#callTakingGetters('uploadAvatar', [image]); }
   removeAvatar() { return this.#callTakingGetters('removeAvatar', []); }
