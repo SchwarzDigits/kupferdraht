@@ -1048,7 +1048,7 @@ impl Client {
             .map_err(|e| to_js(&e))
     }
 
-    /// Run one sync pass — drain notifications + refresh the conversations list,
+    /// Run one sync pass — drain notifications + refresh the room list,
     /// applying everything to the account's store. Returns
     /// `{ changedRooms, eventsDispatched }`: the rooms that changed since the
     /// previous summary (Step 146).
@@ -1141,7 +1141,7 @@ impl Client {
             opts = opts.with_limit(n);
         }
         // Step 98c: the cursor. Without it a browser can only ever read the
-        // newest page of a conversation, however long it is.
+        // newest page of a room, however long it is.
         opts.before = before;
         let items = room.messages(&opts).await.map_err(|e| to_js(&e))?;
         let me = self.inner.user_id().map(ToString::to_string);
@@ -1353,14 +1353,14 @@ impl Client {
         Ok(())
     }
 
-    /// Create a new group conversation named `name`. Returns `{ roomId, name }`.
+    /// Create a new group room named `name`. Returns `{ roomId, name }`.
     #[wasm_bindgen(js_name = createRoom)]
     pub async fn create_room(&self, name: String) -> Result<JsValue, JsValue> {
         let room = self.inner.create_room(&name).await.map_err(|e| to_js(&e))?;
         room_to_js(&room).await
     }
 
-    /// Open (or reuse) a 1:1 conversation with the `peer` user id (`<uuid>@<domain>`).
+    /// Open (or reuse) a 1:1 room with the `peer` user id (`<uuid>@<domain>`).
     /// Returns `{ roomId, name }`.
     #[wasm_bindgen(js_name = createDm)]
     pub async fn create_dm(&self, peer: String) -> Result<JsValue, JsValue> {
@@ -1647,15 +1647,15 @@ impl Client {
             .map_err(|e| to_js(&e))
     }
 
-    /// The team's server-administered feature configs (Step 98d), as
+    /// The server's settings for the account's team (Step 98d), as
     /// `{name, status, configJson, lastSyncedAtMs}[]`. Read from the local
     /// store, refreshed at login and by events — no network call here.
-    #[wasm_bindgen(js_name = featureConfigs)]
-    pub async fn feature_configs(&self) -> Result<JsValue, JsValue> {
-        let entries = self.inner.feature_configs().await.map_err(|e| to_js(&e))?;
-        let view: Vec<FeatureConfigView> = entries
+    #[wasm_bindgen(js_name = serverSettings)]
+    pub async fn server_settings(&self) -> Result<JsValue, JsValue> {
+        let entries = self.inner.server_settings().await.map_err(|e| to_js(&e))?;
+        let view: Vec<ServerSettingView> = entries
             .into_iter()
-            .map(|e| FeatureConfigView {
+            .map(|e| ServerSettingView {
                 name: e.name,
                 status: e.status,
                 config_json: e.config_json,
@@ -1913,12 +1913,12 @@ struct JoinLinkView {
     password_protected: bool,
 }
 
-/// Plain, JS-serializable view of a server-administered feature config
+/// Plain, JS-serializable view of a server setting
 /// (Step 98d). `config_json` stays raw: Wire's per-feature shapes differ,
 /// and reshaping them here would age badly.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct FeatureConfigView {
+struct ServerSettingView {
     name: String,
     status: Option<String>,
     config_json: String,

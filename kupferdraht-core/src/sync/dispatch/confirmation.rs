@@ -17,14 +17,14 @@ impl SyncService {
     /// `DELIVERED` (Step 25b) to its sibling table (`read_receipts` /
     /// `delivery_receipts`). Wire batches a confirmation: one event carries
     /// one `first_message_id` plus N `more_message_ids` — all from the same
-    /// confirmer. READ and DELIVERED are independent lists; the two share the
+    /// reader. READ and DELIVERED are independent lists; the two share the
     /// id-resolution + `UpdateAt` emit, differing only in which table is
     /// written and the field it overlays.
     pub(crate) async fn dispatch_inbound_confirmation(
         &self,
         client: &Arc<Client>,
         room_id: &str,
-        confirmer_user_id: &str,
+        reader_user_id: &str,
         confirmation_event_id: &str,
         conf: crate::wire::proto::Confirmation,
     ) -> Result<(), KupferdrahtError> {
@@ -42,12 +42,12 @@ impl SyncService {
         let message_ids = collect_confirmation_ids(conf);
         info!(
             confirmation_event_id,
-            confirmer = confirmer_user_id,
+            reader = reader_user_id,
             count = message_ids.len(),
             kind = if is_read { "READ" } else { "DELIVERED" },
             "Confirmation received"
         );
-        apply_confirmation_receipts(client, room_id, confirmer_user_id, &message_ids, is_read).await
+        apply_confirmation_receipts(client, room_id, reader_user_id, &message_ids, is_read).await
     }
 }
 
@@ -58,7 +58,7 @@ impl SyncService {
 async fn apply_confirmation_receipts(
     client: &Arc<Client>,
     room_id: &str,
-    confirmer_user_id: &str,
+    reader_user_id: &str,
     message_ids: &[String],
     is_read: bool,
 ) -> Result<(), KupferdrahtError> {
@@ -73,11 +73,11 @@ async fn apply_confirmation_receipts(
     let confirmed_at_ms = now_ms();
     let inserted = if is_read {
         store
-            .apply_read_receipts(room_id, confirmer_user_id, &canonical_ids, confirmed_at_ms)
+            .apply_read_receipts(room_id, reader_user_id, &canonical_ids, confirmed_at_ms)
             .await?
     } else {
         store
-            .apply_delivery_receipts(room_id, confirmer_user_id, &canonical_ids, confirmed_at_ms)
+            .apply_delivery_receipts(room_id, reader_user_id, &canonical_ids, confirmed_at_ms)
             .await?
     };
     debug!(inserted, "applied confirmation receipts");

@@ -47,7 +47,7 @@ use crate::wire::dto::{LoginOutcome, SelfUser};
 struct ConsumableState {
     pipeline: LoginPipeline,
     login_outcome: LoginOutcome,
-    self_user: SelfUser,
+    own_user: SelfUser,
     mls_db_key: Option<DbKey>,
     home: Option<KupferdrahtHome>,
 }
@@ -144,7 +144,7 @@ impl PendingLogin {
     /// # Errors
     /// * `TooManyDevices` when the per-user device cap is reached (retryable
     ///   after freeing a slot).
-    /// * Whatever the device-registration / MLS / removal-key steps surface.
+    /// * Whatever the device-registration / MLS / external-sender-key steps surface.
     /// * `InvalidInput` if the login was already completed.
     pub async fn register_device(&self) -> Result<Arc<Client>, KupferdrahtError> {
         debug_assert!(
@@ -166,7 +166,7 @@ impl PendingLogin {
         match establish_device_identity(
             &state.pipeline,
             &state.login_outcome,
-            &state.self_user,
+            &state.own_user,
             password,
             state.mls_db_key.as_ref(),
         )
@@ -277,17 +277,17 @@ async fn finalize_into_client(
         .await?;
     let own_team = state
         .pipeline
-        .fetch_own_team(&state.self_user, &registration.access_token)
+        .fetch_own_team(&state.own_user, &registration.access_token)
         .await;
     let ConsumableState {
         pipeline,
         login_outcome,
-        self_user,
+        own_user,
         home,
         ..
     } = state;
     let client = pipeline.finalize(
-        self_user,
+        own_user,
         own_team,
         login_outcome,
         registration,
@@ -322,7 +322,7 @@ impl std::fmt::Debug for PendingLogin {
 /// outputs; `http` is the dedicated device-ops transport.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn new_pending_login(
-    self_user: SelfUser,
+    own_user: SelfUser,
     email: String,
     login_outcome: LoginOutcome,
     pipeline: LoginPipeline,
@@ -332,7 +332,7 @@ pub(super) fn new_pending_login(
     home: Option<KupferdrahtHome>,
     storage_open: bool,
 ) -> Arc<PendingLogin> {
-    let user_id = self_user.qualified_id.to_string();
+    let user_id = own_user.qualified_id.to_string();
     let api_version = pipeline.api_version();
     let access_token = Zeroizing::new(login_outcome.access_token.clone());
     Arc::new(PendingLogin {
@@ -346,7 +346,7 @@ pub(super) fn new_pending_login(
         consumable: Mutex::new(Some(ConsumableState {
             pipeline,
             login_outcome,
-            self_user,
+            own_user,
             mls_db_key,
             home,
         })),

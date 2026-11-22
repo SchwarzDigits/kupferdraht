@@ -85,7 +85,7 @@ impl Client {
     ///
     /// # Errors
     /// * `KupferdrahtError::InvalidInput` if the caller is not a
-    ///   conversation administrator (client-side mirror of the
+    ///   room administrator (client-side mirror of the
     ///   receive-side fold gate), the room is unknown, or the room
     ///   has no local MLS group.
     /// * Encode / MLS / transport / storage errors from the send.

@@ -1,21 +1,21 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! `backend_mls_keys` table CRUD. The `public_key` column holds raw MLS
-//! public-key bytes; whole-DB encryption protects it at rest, so the bytes
-//! are stored and read verbatim. `purpose` and `signature_scheme` form the
-//! composite primary key.
+//! The persisted external sender keys, CRUD. The `public_key` column holds
+//! raw MLS public-key bytes; whole-DB encryption protects it at rest, so
+//! the bytes are stored and read verbatim. `purpose` and `signature_scheme`
+//! form the composite primary key.
 
 use rusqlite::{OptionalExtension, params};
 
 use crate::error::KupferdrahtError;
-use crate::storage::records::BackendMlsKey;
+use crate::storage::records::ExternalSenderKey;
 
 use super::SqliteStore;
 
-pub(super) fn save_backend_mls_key(
+pub(super) fn save_external_sender_key(
     store: &SqliteStore,
-    key: &BackendMlsKey,
+    key: &ExternalSenderKey,
 ) -> Result<(), KupferdrahtError> {
     debug_assert!(!key.purpose.is_empty(), "purpose must be non-empty");
     debug_assert!(
@@ -32,15 +32,15 @@ pub(super) fn save_backend_mls_key(
              public_key = excluded.public_key",
         params![key.purpose, key.signature_scheme, key.public_key],
     )
-    .map_err(|e| KupferdrahtError::Storage(format!("save_backend_mls_key: {e}")))?;
+    .map_err(|e| KupferdrahtError::Storage(format!("save_external_sender_key: {e}")))?;
     Ok(())
 }
 
-pub(super) fn load_backend_mls_key(
+pub(super) fn load_external_sender_key(
     store: &SqliteStore,
     purpose: &str,
     signature_scheme: &str,
-) -> Result<Option<BackendMlsKey>, KupferdrahtError> {
+) -> Result<Option<ExternalSenderKey>, KupferdrahtError> {
     debug_assert!(!purpose.is_empty(), "purpose must be non-empty");
     debug_assert!(
         !signature_scheme.is_empty(),
@@ -56,12 +56,12 @@ pub(super) fn load_backend_mls_key(
             |row| row.get::<_, Vec<u8>>(0),
         )
         .optional()
-        .map_err(|e| KupferdrahtError::Storage(format!("load_backend_mls_key: {e}")))?
+        .map_err(|e| KupferdrahtError::Storage(format!("load_external_sender_key: {e}")))?
     };
     let Some(public_key) = public_key else {
         return Ok(None);
     };
-    Ok(Some(BackendMlsKey {
+    Ok(Some(ExternalSenderKey {
         purpose: purpose.to_string(),
         signature_scheme: signature_scheme.to_string(),
         public_key,
@@ -72,40 +72,40 @@ pub(super) fn load_backend_mls_key(
 mod tests {
     use super::super::fresh_store;
     use crate::storage::Store as _;
-    use crate::storage::records::BackendMlsKey;
+    use crate::storage::records::ExternalSenderKey;
 
     #[tokio::test]
-    async fn save_and_load_backend_mls_key_round_trip() {
+    async fn save_and_load_external_sender_key_round_trip() {
         let (_dir, store) = fresh_store();
-        let key = BackendMlsKey {
+        let key = ExternalSenderKey {
             purpose: "removal".to_string(),
             signature_scheme: "ecdsa_secp256r1_sha256".to_string(),
             public_key: vec![0x04, 0xDE, 0xAD, 0xBE, 0xEF],
         };
 
-        store.save_backend_mls_key(&key).await.expect("save");
+        store.save_external_sender_key(&key).await.expect("save");
         let loaded = store
-            .load_backend_mls_key(&key.purpose, &key.signature_scheme)
+            .load_external_sender_key(&key.purpose, &key.signature_scheme)
             .await
             .expect("load");
         assert_eq!(loaded, Some(key));
     }
 
     #[tokio::test]
-    async fn load_backend_mls_key_returns_none_for_unknown_pair() {
+    async fn load_external_sender_key_returns_none_for_unknown_pair() {
         let (_dir, store) = fresh_store();
         let loaded = store
-            .load_backend_mls_key("removal", "ecdsa_secp256r1_sha256")
+            .load_external_sender_key("removal", "ecdsa_secp256r1_sha256")
             .await
             .expect("load");
         assert!(loaded.is_none());
     }
 
     #[tokio::test]
-    async fn save_backend_mls_key_is_upsert_on_same_pair() {
+    async fn save_external_sender_key_is_upsert_on_same_pair() {
         let (_dir, store) = fresh_store();
         store
-            .save_backend_mls_key(&BackendMlsKey {
+            .save_external_sender_key(&ExternalSenderKey {
                 purpose: "removal".to_string(),
                 signature_scheme: "ecdsa_secp256r1_sha256".to_string(),
                 public_key: vec![0x01],
@@ -113,7 +113,7 @@ mod tests {
             .await
             .expect("save #1");
         store
-            .save_backend_mls_key(&BackendMlsKey {
+            .save_external_sender_key(&ExternalSenderKey {
                 purpose: "removal".to_string(),
                 signature_scheme: "ecdsa_secp256r1_sha256".to_string(),
                 public_key: vec![0x02, 0x03],
@@ -122,7 +122,7 @@ mod tests {
             .expect("save #2 (upsert)");
 
         let loaded = store
-            .load_backend_mls_key("removal", "ecdsa_secp256r1_sha256")
+            .load_external_sender_key("removal", "ecdsa_secp256r1_sha256")
             .await
             .expect("load");
         assert_eq!(loaded.expect("row").public_key, vec![0x02, 0x03]);

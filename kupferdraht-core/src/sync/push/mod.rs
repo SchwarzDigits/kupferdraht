@@ -8,15 +8,15 @@
 //! * every connection cycle first asks
 //!   `Client::server_supports_push_events()`;
 //! * `true` → the `/v14/events` ConsumableNotifications loop below
-//!   (Step 62b, ADR-0017 — acked frames, sync marker);
+//!   (Step 62b, ADR-0017 — acked frames, sync token);
 //! * `false` (every current wire-server, observations §68) or a
 //!   failed feature read → the legacy `/await` cycle in [`legacy`]
 //!   (Bearer connect, then the socket as a doorbell for the REST
 //!   drain — ADR-0030; client keepalive pings).
 //!
 //! Everything below this paragraph describes the `/v14/events`
-//! dialect. One connection cycle = fresh `sync_marker` →
-//! conversations-metadata refresh when the room list is stale (Step 118)
+//! dialect. One connection cycle = fresh sync token →
+//! room-metadata refresh when the room list is stale (Step 118)
 //! → WebSocket upgrade → frame loop.
 //! Per `event` frame the order is load-bearing and MUST NOT be
 //! reordered:
@@ -167,7 +167,7 @@ where
 }
 
 /// One `/v14/events` connection cycle (ADR-0017 dialect): connect
-/// with the per-connection sync marker and drive until close/Break.
+/// with the per-connection sync token and drive until close/Break.
 /// A failed connect is `Continue(NoSocket)` — the caller drains without it.
 async fn run_events_cycle<F>(
     client: &Arc<Client>,
@@ -180,14 +180,14 @@ where
 {
     // Fresh per-connection sentinel (§11.5); the backend echoes it
     // in the synchronization frame once the backlog has drained.
-    let sync_marker = uuid::Uuid::new_v4().to_string();
+    let sync_token = uuid::Uuid::new_v4().to_string();
     let access_token = client.access_token().unwrap_or_default();
     crate::wire::http::checked_websocket_base(client.websocket_url(), client.permit_http())?;
     let url = events_url(
         client.websocket_url(),
         client.api_version(),
         device_id,
-        &sync_marker,
+        &sync_token,
         &access_token,
     )?;
     let mut socket =
@@ -202,8 +202,8 @@ where
             }
         };
     stamp_last_connected(client).await?;
-    debug!(sync_marker = %sync_marker, "push: connected to /events");
-    drive_connection(client, service, &mut socket, &sync_marker, on_frame).await
+    debug!(sync_token = %sync_token, "push: connected to /events");
+    drive_connection(client, service, &mut socket, &sync_token, on_frame).await
 }
 
 /// Read one connection until it ends. `Break` = the consumer stopped
@@ -213,7 +213,7 @@ async fn drive_connection<F>(
     client: &Arc<Client>,
     service: &SyncService,
     socket: &mut EventSocket,
-    sync_marker: &str,
+    sync_token: &str,
     on_frame: &mut F,
 ) -> Result<ControlFlow<(), Ended>, KupferdrahtError>
 where
@@ -263,12 +263,12 @@ where
                     warn!(error = %e, "push: marker ack failed; reconnecting");
                     return Ok(ControlFlow::Continue(Ended::Closed));
                 }
-                if marker_id == sync_marker {
-                    persist_sync_marker(client, &marker_id).await?;
+                if marker_id == sync_token {
+                    persist_sync_token(client, &marker_id).await?;
                     debug!(marker = %marker_id, "push: caught up (synchronization frame)");
                 } else {
                     debug!(
-                        expected = %sync_marker,
+                        expected = %sync_token,
                         received = %marker_id,
                         "push: acked stale synchronization marker from an earlier connection"
                     );
@@ -376,16 +376,13 @@ async fn load_sync_state(
 
 /// Persist the backend's `synchronization` echo (§11.2) so the next
 /// process start can tell how far this device had caught up.
-async fn persist_sync_marker(
-    client: &Arc<Client>,
-    marker_id: &str,
-) -> Result<(), KupferdrahtError> {
+async fn persist_sync_token(client: &Arc<Client>, marker_id: &str) -> Result<(), KupferdrahtError> {
     debug_assert!(!marker_id.is_empty(), "marker echo must be non-empty");
     let Some(store) = client.store_handle() else {
         return Ok(());
     };
     let mut state = store.load_sync_state().await?.unwrap_or_default();
-    state.sync_marker_uuid = Some(marker_id.to_string());
+    state.sync_token = Some(marker_id.to_string());
     state.last_connected_at_ms = Some(now_ms());
     store.save_sync_state(&state).await
 }

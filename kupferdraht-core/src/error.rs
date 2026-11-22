@@ -66,14 +66,14 @@ pub enum KupferdrahtError {
     /// so callers can match the specific case and recover (e.g.
     /// `Timeline::send_text_auto_join` calls `join_room` and
     /// retries). Step 14g.
-    #[error("MLS group not loaded for this conversation; call `Client::join_room` first")]
+    #[error("MLS group not loaded for this room; call `Client::join_room` first")]
     MlsGroupMissing,
-    /// A send targeted a stale MLS epoch — the conversation advanced (a commit
+    /// A send targeted a stale MLS epoch — the room advanced (a commit
     /// the client has not processed yet) and Wire rejected the message with
     /// `409 mls-stale-message`. Distinct from `BackendRejected` so the send
     /// path can match it, resync the room to the current epoch, and retry.
     /// Step 37.
-    #[error("MLS message epoch is stale; resync the conversation and retry")]
+    #[error("MLS message epoch is stale; resync the room and retry")]
     MlsStaleMessage,
     /// An **inbound** MLS message could not be processed because its epoch
     /// differs from the local group's (openmls `ValidationError::WrongEpoch`):

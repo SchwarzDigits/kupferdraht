@@ -6,8 +6,8 @@
 //!
 //! `Client::file_sharing()` projects `fileSharing` into the
 //! `FileSharingPolicy` enum (`Disabled` / `Enabled`);
-//! `Client::receipt_mode()` projects
-//! `WIRE_RECEIPT_MODE` into `ReceiptMode` (`Off` / `On`). Both return
+//! `Client::read_receipt_setting()` projects
+//! `WIRE_RECEIPT_MODE` into `ReadReceiptSetting` (`Off` / `On`). Both return
 //! the safest default (`Enabled`, `On`) when the underlying entry
 //! is missing — see ADR-0012 §Decision.
 //!
@@ -17,14 +17,14 @@
 
 use httpmock::Method::GET;
 use httpmock::MockServer;
-use kupferdraht::{FileSharingPolicy, ReceiptMode};
+use kupferdraht::{FileSharingPolicy, ReadReceiptSetting};
 
 mod common;
 
 #[tokio::test]
 async fn file_sharing_disabled_status_yields_disabled() {
     let server = MockServer::start();
-    mount_login_with_feature_configs(&server, r#"{"fileSharing":{"status":"disabled"}}"#);
+    mount_login_with_server_settings(&server, r#"{"fileSharing":{"status":"disabled"}}"#);
     let (client, _) = common::run_login(&server).await;
     assert!(matches!(
         client.file_sharing().await.expect("file_sharing"),
@@ -38,7 +38,7 @@ async fn file_sharing_enabled_with_empty_config_yields_enabled_all() {
     // `fileSharing: { status: "enabled", config: {} }`. No
     // config object → the policy stays `Enabled`.
     let server = MockServer::start();
-    mount_login_with_feature_configs(
+    mount_login_with_server_settings(
         &server,
         r#"{"fileSharing":{"status":"enabled","config":{}}}"#,
     );
@@ -54,7 +54,7 @@ async fn file_sharing_enabled_ignores_any_config_object() {
     // Wire's `fileSharing` feature carries no `config` the client acts
     // on; whatever a backend puts there must not change the policy.
     let server = MockServer::start();
-    mount_login_with_feature_configs(
+    mount_login_with_server_settings(
         &server,
         r#"{"fileSharing":{"status":"enabled","config":{"someFutureField":true}}}"#,
     );
@@ -71,7 +71,7 @@ async fn file_sharing_missing_entry_defaults_to_enabled_all() {
     // Enabled per ADR-0012 §Decision (safest default: permit; let
     // any later 403 surface in the action's error path).
     let server = MockServer::start();
-    mount_login_with_feature_configs(&server, "{}");
+    mount_login_with_server_settings(&server, "{}");
     let (client, _) = common::run_login(&server).await;
     assert!(matches!(
         client.file_sharing().await.expect("file_sharing"),
@@ -85,8 +85,11 @@ async fn receipt_mode_zero_yields_off() {
     mount_login_with_property(&server, "WIRE_RECEIPT_MODE", "0");
     let (client, _) = common::run_login(&server).await;
     assert!(matches!(
-        client.receipt_mode().await.expect("receipt_mode"),
-        ReceiptMode::Off
+        client
+            .read_receipt_setting()
+            .await
+            .expect("read_receipt_setting"),
+        ReadReceiptSetting::Off
     ));
 }
 
@@ -96,8 +99,11 @@ async fn receipt_mode_one_yields_on() {
     mount_login_with_property(&server, "WIRE_RECEIPT_MODE", "1");
     let (client, _) = common::run_login(&server).await;
     assert!(matches!(
-        client.receipt_mode().await.expect("receipt_mode"),
-        ReceiptMode::On
+        client
+            .read_receipt_setting()
+            .await
+            .expect("read_receipt_setting"),
+        ReadReceiptSetting::On
     ));
 }
 
@@ -109,8 +115,11 @@ async fn receipt_mode_quoted_value_strips_quotes() {
     mount_login_with_property(&server, "WIRE_RECEIPT_MODE", r#""0""#);
     let (client, _) = common::run_login(&server).await;
     assert!(matches!(
-        client.receipt_mode().await.expect("receipt_mode"),
-        ReceiptMode::Off
+        client
+            .read_receipt_setting()
+            .await
+            .expect("read_receipt_setting"),
+        ReadReceiptSetting::Off
     ));
 }
 
@@ -120,14 +129,17 @@ async fn receipt_mode_missing_entry_defaults_to_on() {
     mount_login_with_no_properties(&server);
     let (client, _) = common::run_login(&server).await;
     assert!(matches!(
-        client.receipt_mode().await.expect("receipt_mode"),
-        ReceiptMode::On
+        client
+            .read_receipt_setting()
+            .await
+            .expect("read_receipt_setting"),
+        ReadReceiptSetting::On
     ));
 }
 
 // ---- fixture helpers ------------------------------------------------
 
-fn mount_login_with_feature_configs(server: &MockServer, body: &str) {
+fn mount_login_with_server_settings(server: &MockServer, body: &str) {
     common::mount_full_login_flow(server);
     server.mock(|when, then| {
         when.method(GET).path("/v14/feature-configs");

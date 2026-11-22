@@ -146,7 +146,7 @@ pub enum MessageBody {
         zoom: Option<i32>,
     },
     /// Full case snapshot (`CasePayload`, ADR-0018). `sender_authorized`
-    /// reports whether the sender was a conversation administrator at
+    /// reports whether the sender was a room administrator at
     /// receive time — consumers should render unauthorized updates
     /// as attempts, not as case state (the fold ignores their core).
     /// Step 72b.

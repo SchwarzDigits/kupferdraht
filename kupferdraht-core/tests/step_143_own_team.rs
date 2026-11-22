@@ -8,7 +8,7 @@
 //! asks for it once, an enrichment like the feature configs (ADR-0012): any
 //! failure is a warning and the login stands, with the id and without the
 //! name. `Account` is a snapshot, so the values come back from the
-//! `self_user` row at `resume` and a profile write must not drop them.
+//! `own_user` row at `resume` and a profile write must not drop them.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -245,7 +245,7 @@ async fn an_uppercase_team_id_is_stored_lowercase() {
     team.assert_calls(1);
     let store = session.client.store().expect("login attached a store");
     let row = store
-        .load_self_user(QUALIFIED)
+        .load_own_user(QUALIFIED)
         .await
         .expect("load_self_user")
         .expect("self_user row present");
@@ -285,7 +285,7 @@ async fn a_profile_write_keeps_the_team() {
 
     let store = session.client.store().expect("login attached a store");
     let row = store
-        .load_self_user(QUALIFIED)
+        .load_own_user(QUALIFIED)
         .await
         .expect("load_self_user")
         .expect("self_user row present");

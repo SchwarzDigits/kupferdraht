@@ -33,7 +33,7 @@ pub(crate) fn case_payload_is_valid(case: &crate::wire::proto::CasePayload) -> b
 
 impl SyncService {
     /// Step 72b: dispatch an inbound case message. Captures whether
-    /// the sender is a conversation administrator **now** (the
+    /// the sender is a room administrator **now** (the
     /// Step-72a metadata roles — ADR-0018's receive-time
     /// authorization) into the persisted row, so later role changes
     /// never re-evaluate history. A sender the metadata does not

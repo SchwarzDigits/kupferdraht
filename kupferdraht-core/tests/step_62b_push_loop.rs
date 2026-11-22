@@ -19,7 +19,7 @@
 //! * Ack follows durable processing: when the server holds the ack,
 //!   the `last_event_id` cursor is already persisted.
 //! * The `synchronization` frame persists the connection's
-//!   `sync_marker` echo into `sync_state.sync_marker_uuid`.
+//!   `sync_marker` echo into `sync_state.sync_token`.
 //! * A redelivered notification (same `id`, new `delivery_tag`) is
 //!   acked but not re-dispatched.
 //! * A dropped connection reconnects with a **fresh** `sync_marker`
@@ -489,7 +489,7 @@ async fn websocket_synchronization_frame_persists_connection_marker() {
         .expect("sync_state readable")
         .expect("sync_state row exists");
     assert_eq!(
-        state.sync_marker_uuid.as_deref(),
+        state.sync_token.as_deref(),
         Some(marker.as_str()),
         "the synchronization echo must land in sync_state.sync_marker_uuid"
     );
@@ -557,7 +557,7 @@ async fn stale_tagged_synchronization_marker_is_acked_but_not_persisted() {
         .expect("sync_state readable")
         .expect("sync_state row exists (cursor was persisted)");
     assert_eq!(
-        state.sync_marker_uuid, None,
+        state.sync_token, None,
         "a foreign marker must never be persisted as our catch-up point"
     );
 }

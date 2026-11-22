@@ -86,7 +86,7 @@ kupferdraht-core/src/
 │   │                          resume.rs, session.rs, sync.rs, rooms.rs,
 │   │                          membership.rs, timeline_read.rs, profile.rs,
 │   │                          typing.rs, mentions.rs, message_lookup.rs,
-│   │                          server_configs.rs, device.rs, http_calls.rs,
+│   │                          server_settings.rs, device.rs, http_calls.rs,
 │   │                          pending*.rs
 │   └── mod.rs                — the Client struct + cross-module accessors
 ├── rooms/                   — Room, RoomType, RoomMember, RoomAccess (JoinRule, Joiner), JoinLink;
@@ -139,7 +139,7 @@ kupferdraht-core/src/
 The public re-exports from `lib.rs` are the supported API surface —
 nine `pub use` statements re-exporting roughly 30 symbols:
 
-- `client::{Account, Client, ClientBuilder, FileSharingPolicy, JoinSummary, PendingClient, ReceiptMode, ResyncSummary, ServerConfig}`
+- `client::{Account, Client, ClientBuilder, FileSharingPolicy, JoinSummary, PendingClient, ReadReceiptSetting, ResyncSummary, ServerConfig}`
 - `error::KupferdrahtError`
 - `identity::UserId`
 - `manager::{PendingAccount, PendingLogin, Kupferdraht, KupferdrahtBuilder}`
@@ -153,10 +153,10 @@ A second tier is `pub` inside `storage::` without a crate-root
 re-export — reachable as `kupferdraht::storage::X`, not `kupferdraht::X` —
 because the CLI and integration tests persist / restore through them
 explicitly: `Store`, `SqliteStore`, `SessionRecord`,
-`DeviceRecord`, `BackendMlsKey`, `SelfUserRecord`, `ServerConfigRecord`,
+`DeviceRecord`, `ExternalSenderKey`, `OwnUserRecord`, `ServerConfigRecord`,
 `SyncStateRecord`, `MentionRecord`, `TimelineEventRecord`,
 `AttachmentRecord`, `RoomRecord`, `RoomMemberRecord`,
-`FeatureConfigEntry`, `UserPropertyEntry`, `ReactionRecord`,
+`ServerSetting`, `AccountDataEntry`, `ReactionRecord`,
 `ReadReceiptRecord`, `DeliveryReceiptRecord`, `MaybeSendSync`; the
 standalone openers `open_default_store` / `open_default_global_store`;
 and the `db_key` submodule (`DbKey`, `generate_db_key`,
@@ -198,7 +198,7 @@ See `docs/ARCHITECTURE.md` §8 for the architecture-level summary.
 | Identifier   | Format                          | Notes |
 |--------------|---------------------------------|-------|
 | User id      | `<uuid>@<domain>` (typed: [`UserId`](#userid)) | With its domain. UUID is RFC 4122; domain is the deployment's domain (e.g. `example.com`). `UserId::new` / `UserId::parse` guarantee the domain is always present — there is no bare/domain-less `UserId`. |
-| Room id      | `<uuid>@<domain>` (plain `&str`/`String`) | Same shape as user id but distinct namespace (Wire conversations); not wrapped in a typed newtype. |
+| Room id      | `<uuid>@<domain>` (plain `&str`/`String`) | Same shape as user id but distinct namespace; not wrapped in a typed newtype. |
 | Device id    | hex string (Wire-defined), plain `&str`/`String` | The backend's device id. Not a UUID — currently a 16-char hex blob. |
 | Message id   | UUID (Wire convention), plain `&str`/`String` | `GenericMessage.message_id`. No schema constraint server-side. |
 
@@ -886,7 +886,7 @@ client.sync(SyncSettings::default()).await?; // push on native targets
 ```
 
 `server_supports_push_events()` remains public — it reads the cached
-`consumableNotifications` feature config (login fetch +
+`consumableNotifications` server setting (login fetch +
 `feature-config.update` events, ADR-0012; an absent entry reports
 `false`) and now also drives the per-connection negotiation; the CLI
 prints which socket a `sync-stream` session negotiated. The
@@ -937,12 +937,12 @@ scheduler** (the core has no lifecycle to hang one on):
 
 | Method                                                | Returns                               | Notes |
 |---|---|---|
-| `sync_once(SyncSettings)`                             | `Result<SyncSummary, KupferdrahtError>`    | **Step 14b.** One iteration of the matrix-rust-sdk-shaped sync family. Composes a conversations-metadata refresh + one `/v14/notifications` drain + cursor advance, dispatches every queued event through the registered `EventHandler`s. **Step 118:** the metadata refresh runs only when the room list is stale — on the first pass, after a drain that handed over an event Kupferdraht does not process itself (then in the same pass, after the drain) or a Welcome (then at once, inside the drain, so the messages after it in the same page find their room — Step 137), and when the queue was drained elsewhere or the backend lost the cursor — and, as a safety net, when the list is older than 5 minutes; an idle pass is the drain alone. Returns `SyncSummary { changed_rooms, events_dispatched }`. `poll_interval` is ignored — one-shot never sleeps. Concurrent invocations return `KupferdrahtError::SyncAlreadyRunning`. **Step 146:** `SyncSummary::changed_rooms` names the rooms that changed since the previous summary, in order: a name or what `members()` shows, a new or gone room, a room event or a deletion, the client's own calls included; not messages, not read state. A new device's first summary names every room, a resumed one what changed while it was away; a failed pass leaves them for the next. |
+| `sync_once(SyncSettings)`                             | `Result<SyncSummary, KupferdrahtError>`    | **Step 14b.** One iteration of the matrix-rust-sdk-shaped sync family. Composes a room-metadata refresh + one `/v14/notifications` drain + cursor advance, dispatches every queued event through the registered `EventHandler`s. **Step 118:** the metadata refresh runs only when the room list is stale — on the first pass, after a drain that handed over an event Kupferdraht does not process itself (then in the same pass, after the drain) or a Welcome (then at once, inside the drain, so the messages after it in the same page find their room — Step 137), and when the queue was drained elsewhere or the backend lost the cursor — and, as a safety net, when the list is older than 5 minutes; an idle pass is the drain alone. Returns `SyncSummary { changed_rooms, events_dispatched }`. `poll_interval` is ignored — one-shot never sleeps. Concurrent invocations return `KupferdrahtError::SyncAlreadyRunning`. **Step 146:** `SyncSummary::changed_rooms` names the rooms that changed since the previous summary, in order: a name or what `members()` shows, a new or gone room, a room event or a deletion, the client's own calls included; not messages, not read state. A new device's first summary names every room, a resumed one what changed while it was away; a failed pass leaves them for the next. |
 | `sync(SyncSettings)`                                  | `Result<(), KupferdrahtError>`             | **Step 14b.** Loops `sync_once` with `poll_interval` backoff between empty drains (10 s when unset — one value without a socket on every target since Step 118 — `Duration::ZERO` for none; a `429` is waited out). Returns only on hard error; the caller drives termination by dropping the future. Replaces the Step-5d `Client::sync().await?.run_polling(...)` pattern. **Step 62:** `SyncSettings.transport` selects `Polling` (default) or the live `/v14/events` WebSocket — see "Choosing the receive transport" below. |
 | `sync_with_callback<F>(SyncSettings, F)`              | `Result<(), KupferdrahtError>`             | **Step 14b.** Same loop as `sync`, plus a per-iteration callback `F: Fn(SyncSummary) -> ControlFlow<()>`. UDL-friendly entry point — UniFFI exports `Fn` closures but not `impl Stream`. Returning `ControlFlow::Break(())` exits the loop. |
 | `sync_stream(SyncSettings)`                           | `BoxStream<'static, Result<SyncSummary, KupferdrahtError>>` | **Step 14b.** Same loop surfaced as an async `Stream` of `SyncSummary`. Dropping the stream cancels the underlying polling task. Rust-side ergonomic; UDL surface deferred (callers from foreign code use `sync_with_callback`). |
 | `add_event_handler(Arc<dyn EventHandler>)`            | `()`                                   | **Step 5c.** Register an `EventHandler` to receive per-event callbacks once a `sync*` iteration is running. Handlers added before `sync()` are honored on every future service run; handlers added after are picked up by the next frame the running service dispatches (the snapshot is reloaded per frame). matrix-rust-sdk analog: `Client::add_event_handler`. |
-| `sync_metadata()`                                     | `Result<(), KupferdrahtError>`             | **Lightweight metadata-only sync** — hits `POST /v14/conversations/list-ids` + `POST /v14/conversations/list` + `POST /v14/list-users` and replaces the in-memory rooms snapshot, **without** draining `/v14/notifications`. Since Step 99 a conversation of a kind Kupferdraht does not know (a new `type` or `protocol`) or a user profile that does not decode is logged and skipped — it no longer fails the whole sync. Use over `sync_once` when battery / latency matters, or in background-startup paths where the per-event MLS-decrypt loop is too expensive — typically followed by a `sync_once` once foreground attention arrives. Originally Step 2's public sync surface; retained alongside the matrix-rust-sdk-shaped family as a deliberate Kupferdraht addition for three-tier composability (`load_rooms_from_store` / `sync_metadata` / `sync_once`). matrix-rust-sdk has no analog — Wire extension. CLI surface: `kupferdraht-cli sync-metadata`. |
+| `sync_metadata()`                                     | `Result<(), KupferdrahtError>`             | **Lightweight metadata-only sync** — hits `POST /v14/conversations/list-ids` + `POST /v14/conversations/list` + `POST /v14/list-users` and replaces the in-memory rooms snapshot, **without** draining `/v14/notifications`. Since Step 99 a room of a kind Kupferdraht does not know (a new `type` or `protocol`) or a user profile that does not decode is logged and skipped — it no longer fails the whole sync. Use over `sync_once` when battery / latency matters, or in background-startup paths where the per-event MLS-decrypt loop is too expensive — typically followed by a `sync_once` once foreground attention arrives. Originally Step 2's public sync surface; retained alongside the matrix-rust-sdk-shaped family as a deliberate Kupferdraht addition for three-tier composability (`load_rooms_from_store` / `sync_metadata` / `sync_once`). matrix-rust-sdk has no analog — Wire extension. CLI surface: `kupferdraht-cli sync-metadata`. |
 | `rooms()`                                             | `Vec<Arc<Room>>`                      | In-memory snapshot; a never-filled cache (right after `resume`, or a second client on the account) is hydrated from the store first (Step 132). A cache a sync or a discard emptied stays empty. |
 | `joined_rooms()`                                      | `Vec<Arc<Room>>`                      | **Step 14c.** Rooms the caller has joined. In Kupferdraht's current model every cached room is joined, so this is semantically equivalent to `rooms()`; the two methods are distinguished for forward-compatibility once invitation materialization lands. Sync (`std::sync::RwLock`). matrix-rust-sdk analog: `Client::joined_rooms`. |
 | `invited_rooms()`                                     | `Vec<Arc<Room>>`                      | **Step 14c.** Rooms the caller has been invited to but has not yet joined. Returns an empty `Vec` today — Kupferdraht does not yet materialize pending invitations as `Room` objects (Kupferdraht-current limitation, tracked outside 14c). Sync. matrix-rust-sdk analog: `Client::invited_rooms`. |
@@ -950,13 +950,13 @@ scheduler** (the core has no lifecycle to hang one on):
 | `personal_room()`                                     | `Option<Arc<Room>>`                   | **Step 86.** Local-cache lookup of the caller's personal room (`room_type == Personal` — the notes-to-self room, one MLS group of the user's own devices; the private cross-device channel later features ride: personal task list, `LastRead`, drafts). Sync, no network; `None` before the first sync / hydrate. The room may still be at epoch 0 (nobody established it) — `join_room` / `join_all_rooms` bring it online. No matrix-rust-sdk analog (Matrix has no personal room). Was `self_room` before Step 163c. |
 | `room(&str)`                                          | `Option<Arc<Room>>`                   | Single-room lookup by room id. **Step 15:** migrated from `room_id: String` to `&str` to drop the caller-side `.clone()` ceremony (closes `v1-api-ergonomics-audit.md §4.1`). |
 | `room_or_load(&str)`                                  | `Option<Arc<Room>>`                   | **Step 14g.** Cache-first lookup with lazy store-hydrate fallback. Tries `room` first; on `None`, calls `load_rooms_from_store` and retries. **Step 15:** migrated from `String` to `&str`. |
-| `unread_counts()`                                     | `Result<HashMap<String, u32>, KupferdrahtError>` | **Step 67.** Per-room unread counts in one grouped query — built for room lists (no n+1). Unread = inbound, not redacted, newer than the device-local read marker; **no marker → everything inbound counts**. Rooms without unread messages are absent (treat missing as 0). `Room::unread_count()` is the scoped sibling; `Timeline::mark_as_read` advances the marker (also when `ReceiptMode::Off` suppresses the outbound confirmation — the gate governs the wire signal, not the local read position). Cross-device read-position sync rides the self-conversation (later step). matrix-rust-sdk analog: `Room::unread_notification_counts` (Kupferdraht: single total, no mention split yet). |
-| `create_room(name: &str)`                             | `Result<Arc<Room>, KupferdrahtError>`      | **Step 6a.** Create a new MLS conversation on Wire (`POST /v14/conversations` with `protocol="mls"`, no invitees) and the matching local MLS group. Builds the group at epoch 0, then immediately establishes it to epoch 1 with one commit (Wire rejects application messages at epoch 0). Refreshes the rooms cache via `sync_metadata` and returns the freshly-cached `Arc<Room>`. Zero-invitee path only — see `Client::invite_members` (below) to add members afterwards. `name` must be non-empty. |
+| `unread_counts()`                                     | `Result<HashMap<String, u32>, KupferdrahtError>` | **Step 67.** Per-room unread counts in one grouped query — built for room lists (no n+1). Unread = inbound, not redacted, newer than the device-local read marker; **no marker → everything inbound counts**. Rooms without unread messages are absent (treat missing as 0). `Room::unread_count()` is the scoped sibling; `Timeline::mark_as_read` advances the marker (also when `ReadReceiptSetting::Off` suppresses the outbound confirmation — the gate governs the wire signal, not the local read position). Cross-device read-position sync rides the personal room (later step). matrix-rust-sdk analog: `Room::unread_notification_counts` (Kupferdraht: single total, no mention split yet). |
+| `create_room(name: &str)`                             | `Result<Arc<Room>, KupferdrahtError>`      | **Step 6a.** Create a new MLS room on Wire (`POST /v14/conversations` with `protocol="mls"`, no invitees) and the matching local MLS group. Builds the group at epoch 0, then immediately establishes it to epoch 1 with one commit (Wire rejects application messages at epoch 0). Refreshes the rooms cache via `sync_metadata` and returns the freshly-cached `Arc<Room>`. Zero-invitee path only — see `Client::invite_members` (below) to add members afterwards. `name` must be non-empty. |
 | `find_message_room(&str)`                             | `Result<Vec<String>, KupferdrahtError>`    | Reverse lookup — given a `message_id` or edit-event id, return the rooms it lives in. Reads `timeline_events` only; returns empty when the message hasn't been synced locally. Powers the CLI's optional-`--id` sugar on `mark-read` / `react` / `delete-message` / `edit` / `reply`. Composite-PK schema permits multi-room matches but UUIDv4 makes that astronomically unlikely. |
 | `find_message_by_id(message_id: &str)`                | `Result<Option<TimelineItem>, KupferdrahtError>` | **Step 34.** Resolve a single timeline item by id (stable `message_id` or edit-event id, same resolution as `find_message_room`) from the local store — no Wire call. Lightweight: the returned item's overlay collections (`reactions`, `read_by`, `delivered_to`) are empty; use `Room::messages` for a fully hydrated item. Primary use: resolving a reply's parent for a quote preview. `None` when the id isn't stored locally or no store is attached. |
 | `load_rooms_from_store()`                             | `Result<(), KupferdrahtError>`             | Hydrate the in-memory cache from `kupferdraht.db` without hitting Wire. Requires `ClientBuilder::base_dir`. |
 | `join_room(&str)`                                     | `Result<(), KupferdrahtError>`             | **Step 3.** External-commit join for one room. Fetches `GroupInfo`, runs openmls's `ExternalCommitBuilder`, uploads the commit bundle to `/v14/mls/commit-bundles`, and bumps the room's epoch to `server_epoch + 1` both in the cache and in `kupferdraht.db`. Requires `ClientBuilder::base_dir` so the MLS state persists across process restarts. **Step 86:** the never-established personal room (`RoomType::Personal` at `epoch == 0`) is **established** instead — Wire serves no `GroupInfo` before a member's first commit (`404 mls-missing-group-info`, live 2026-09-24): local group under the snapshot's `group_id`, the user's other devices Added (their Welcome rides the bundle, Step 69 absorbs it) or a self-update commit when this is the only device, epoch taken from openmls. A rejected bundle discards the local group so a later `join_all_rooms` retries (stale-snapshot race: another device established first → the next sync shows `epoch > 0` → external join). Non-self rooms are unchanged. |
-| `sync_members(&str)`                                  | `Result<Vec<RoomMember>, KupferdrahtError>` | **Step 3** (renamed in **Step 14b** from `refresh_members` per finding §41). Re-derives the member list from the local MLS group's leaves, backfills `display_name` / `username` via `/list-users`, and swaps the result into the in-memory and persisted `room_members` snapshot. Since Step 72a the rebuild merges each member's `RoomMemberRole` from the conversation-metadata snapshot (leaves carry no role) — a resync never strips administrators. Available the moment `join_room` has populated the group. matrix-rust-sdk uses this exact name. |
+| `sync_members(&str)`                                  | `Result<Vec<RoomMember>, KupferdrahtError>` | **Step 3** (renamed in **Step 14b** from `refresh_members` per finding §41). Re-derives the member list from the local MLS group's leaves, backfills `display_name` / `username` via `/list-users`, and swaps the result into the in-memory and persisted `room_members` snapshot. Since Step 72a the rebuild merges each member's `RoomMemberRole` from the room-metadata snapshot (leaves carry no role) — a resync never strips administrators. Available the moment `join_room` has populated the group. matrix-rust-sdk uses this exact name. |
 | `join_all_rooms()`                                    | `Result<JoinSummary, KupferdrahtError>`    | **Step 3.** Iterates the cached rooms, skips ones whose `group_id` is already in openmls storage (cheap local probe), and runs `join_room` on the rest. Per-room failures go into `JoinSummary.failed` rather than aborting the outer call. **Step 86:** through `join_room`'s branch a fresh device heals the personal room automatically — established when it is at epoch 0, external-joined otherwise; either way it counts under `joined`. |
 | `resync_existing_rooms()`                             | `Result<ResyncSummary, KupferdrahtError>`  | **Step 7e.** Walk every cached room whose `group_id` is already known locally and re-join any whose persisted MLS leaf belongs to a *prior* `device_id` of the same `user_id` (the failure mode after an interactive re-`login`, CHANGELOG.md §29). Rooms with no local group at all are out of scope (that's `join_all_rooms`). Per-room failures land in `ResyncSummary.failed`. |
 | `resync_room(room_id: &str)`                          | `Result<(), KupferdrahtError>`             | **Step 7e.** Per-room recovery primitive `resync_existing_rooms` drives: discard the stale local MLS group state for `room_id` and re-join it via the unchanged Step-3 external-commit path (`join_room`). `InvalidInput` if `room_id` is not cached, has no `group_id`, or has no local MLS group to discard. |
@@ -981,10 +981,10 @@ Wire-side, a kick emits `conversation.mls-message-add` to the removed
 devices' notification streams plus `member-leave` to the rest of the
 room; consumers handle both through their existing event handlers.
 
-### Conversation access (Step 8b / Step 14d)
+### Room access (Step 8b / Step 14d)
 
-Wire's `access` / `access_role` conversation fields — which join
-modes a conversation permits and which user classes may use them.
+Wire's `access` / `access_role` fields of a room — which join
+modes a room permits and which user classes may use them.
 matrix-rust-sdk has no direct analog: Matrix' room access is
 state-event-driven (`m.room.join_rules`), while Wire's `access` /
 `access_role` are first-class `Conversation` fields.
@@ -1291,7 +1291,7 @@ pub struct ResyncSummary {
 
 | Method                                                  | Returns                          | Notes |
 |---|---|---|
-| `Timeline::mark_as_read(item_id: String, receipt: ReceiptType)` | `Result<Option<MessageHandle>>` | **Step 138** (BREAKING: the second argument). Move the device-local read position to `item_id` (forward only, Step 67) and clear the room's hand-set unread flag, then — with `ReceiptType::Read` — send a `Confirmation { type: READ, first_message_id }` for the message; with `ReceiptType::ReadPrivate` nothing leaves the device and the result is always `None` (the position and the flag are device-local, another device of the same user sees neither). **Step 10f gate**: with `Client::receipt_mode()` `Off` a `Read` sends nothing either and returns `Ok(None)` — peers respect the same setting account-wide. An item unknown locally moves no position and still clears the flag. One id per call. matrix-rust-sdk analog: `Timeline::send_single_receipt`. |
+| `Timeline::mark_as_read(item_id: String, receipt: ReceiptType)` | `Result<Option<MessageHandle>>` | **Step 138** (BREAKING: the second argument). Move the device-local read position to `item_id` (forward only, Step 67) and clear the room's hand-set unread flag, then — with `ReceiptType::Read` — send a `Confirmation { type: READ, first_message_id }` for the message; with `ReceiptType::ReadPrivate` nothing leaves the device and the result is always `None` (the position and the flag are device-local, another device of the same user sees neither). **Step 10f gate**: with `Client::read_receipt_setting()` `Off` a `Read` sends nothing either and returns `Ok(None)` — peers respect the same setting account-wide. An item unknown locally moves no position and still clears the flag. One id per call. matrix-rust-sdk analog: `Timeline::send_single_receipt`. |
 | `ReceiptType { Read, ReadPrivate }`                     | (enum)                           | **Step 138.** Whether a read is confirmed to the room. `Read`: the position moves and Wire's `Confirmation { READ }` leaves (unless the account's receipts are off); `ReadPrivate`: the position moves, the room learns nothing. After matrix-rust-sdk's `ReceiptType` (no `FullyRead`: Wire has no second position). |
 | `Store::apply_read_receipts(room_id, reader_user_id, message_ids, confirmed_at_ms)` | `Result<usize>` | Per-batch `INSERT OR IGNORE` into `read_receipts`. Returns the count of fresh inserts. Idempotent on redelivery. |
 | `Store::load_read_receipts_for_room(room_id)`           | `Result<Vec<ReadReceiptRecord>>` | All receipts for a room. `Client::messages` calls this once per call and overlays per-message `read_by` lists. |
@@ -1325,9 +1325,9 @@ Best-effort: a failed confirmation never breaks receiving the message. The
 
 | Method / field                                          | Returns                          | Notes |
 |---|---|---|
-| `Store::apply_delivery_receipts(room_id, confirmer_user_id, message_ids, confirmed_at_ms)` | `Result<usize>` | Per-batch `INSERT OR IGNORE` into `delivery_receipts`. Idempotent. |
+| `Store::apply_delivery_receipts(room_id, reader_user_id, message_ids, confirmed_at_ms)` | `Result<usize>` | Per-batch `INSERT OR IGNORE` into `delivery_receipts`. Idempotent. |
 | `Store::load_delivery_receipts_for_room(room_id)`       | `Result<Vec<DeliveryReceiptRecord>>` | Overlaid onto per-message `delivered_to` lists, like `read_by`. |
-| `TimelineItem::delivered_to: Vec<String>`               | (field)                          | Confirmer user-ids that have confirmed DELIVERED on this item, sorted + deduplicated. Empty in group rooms. |
+| `TimelineItem::delivered_to: Vec<String>`               | (field)                          | User ids that have confirmed DELIVERED on this item, sorted + deduplicated. Empty in group rooms. |
 
 **Consumer mapping.** Kupferdraht exposes the raw lists; the consumer composes a
 scalar bubble status with an "any" rule: `Failed` → `Sending` → `Read`
@@ -1366,7 +1366,7 @@ for the `Text` inner arm in both directions. The contract:
 | `Timeline::send_disappearing_text(body, ttl)` | Send side — see the Timeline table above. |
 | `TimelineItem::expires_at_ms: Option<i64>` / `Message::expires_at_ms: Option<i64>` | Set only for a disappearing message: the wall-clock (ms) at which the local timer elapses. The body stays an ordinary `TimelineItemKind::Text` / `MessageBody::Text` — the TTL is a decoration, so consumers that render text keep working; a countdown UI reads the stamp. |
 | Timer start (V1) | **Dispatch/send time.** Receive: `received_at_ms + ttl`, stamped when the row is inserted; send: `sent_at_ms + ttl` once the upload succeeded. Official Wire receivers start the countdown only when the message is actually *viewed* (viewport), which a headless SDK cannot observe — Kupferdraht therefore starts earlier, never later: it may tombstone a message an official client would still show, never the reverse (observations §74, `docs/wire/message-types.md`). A view-triggered start (e.g. on `mark_as_read`) is a possible V2. |
-| Expiry | **Local tombstone, plus a receiver-side broadcast.** When the stamp passes, the row is tombstoned exactly like an inbound `MessageDelete` (`Store::expire_disappearing_messages`: body cleared, `redacted_at_ms` stamped, `expires_at_ms` kept) and every subscriber receives a `TimelineDiff::UpdateAt` whose item is `redacted == true`, `kind == Redacted`, `expires_at_ms == Some(..)`. Reply chains keep resolving. For an **inbound** row Kupferdraht then sends one `MessageDelete` for the message into the room — the delete official senders wait for before purging their own copy (observations §74) — best-effort: a rejected upload is logged and not retried, the local tombstone is the contract. An expired **own** row sends nothing (official senders rely on the receiver's delete; Kupferdraht's own copy is already tombstoned). Not mirrored: the `DeleteForMe` into the self-conversation for the receiver's other devices (Step 86). |
+| Expiry | **Local tombstone, plus a receiver-side broadcast.** When the stamp passes, the row is tombstoned exactly like an inbound `MessageDelete` (`Store::expire_disappearing_messages`: body cleared, `redacted_at_ms` stamped, `expires_at_ms` kept) and every subscriber receives a `TimelineDiff::UpdateAt` whose item is `redacted == true`, `kind == Redacted`, `expires_at_ms == Some(..)`. Reply chains keep resolving. For an **inbound** row Kupferdraht then sends one `MessageDelete` for the message into the room — the delete official senders wait for before purging their own copy (observations §74) — best-effort: a rejected upload is logged and not retried, the local tombstone is the contract. An expired **own** row sends nothing (official senders rely on the receiver's delete; Kupferdraht's own copy is already tombstoned). Not mirrored: the `DeleteForMe` into the personal room for the receiver's other devices (Step 86). |
 | When the sweep runs | (1) a per-message native `tokio` timer armed at send / receive / resume; (2) at the end of every dispatch cycle (REST drain or push frame) — so a polling consumer is at most one interval late; (3) on `Client::load_rooms_from_store` (resume), which also re-arms the timers of still-pending rows. On wasm32 only (2) and (3) run — there is no task spawner; the sweep itself is the same SQLite sweep since Step 91; see `docs/bindings.md`. |
 | Failed send + resend (Step 79) | A rejected disappearing send persists the body **and the chosen TTL** (`TimelineEventRecord::ttl_ms`, V28) but no stamp. `Timeline::resend` re-wraps the row in the same `Ephemeral` envelope with that TTL — never as a permanent text — and stamps `expires_at_ms = resend instant + ttl` on success, arming the timer then. Inbound rows carry no TTL column (their stamp is derived at dispatch; an inbound row is never resent). |
 | `Store::expire_disappearing_messages(now_ms)` / `Store::pending_disappearing_expiries(now_ms)` | The two storage primitives behind the sweep and the resume re-arm (default no-op for custom `Store` backends; the shipped store implements them on every target). `timeline_events.expires_at_ms` is the V27 column, with a partial index over live disappearing rows. |
@@ -1617,7 +1617,7 @@ abandoned `Sending` row as `Failed` like every other reader.
 
 | Method                                                | Returns                                  | Notes |
 |---|---|---|
-| `Client::create_dm(peer: &str)`                       | `Result<Arc<Room>, KupferdrahtError>`         | `GET /v{N}/one2one-conversations/{domain}/{uuid}` — server-side idempotent: first call against a fresh `(self, peer)` pair registers the 1:1, subsequent calls return the existing one. `peer` is `<uuid>@<domain>` (single string per finding §42), split at the HTTP boundary. The fetch only reserves the conversation (hidden from `list-ids` until established, Step 68 — `docs/wire/api-notes.md`), so the call branches: local group present → resume; `epoch == 0` → establish (claim the peer's key packages, Add-commit, bundle upload; any failure discards the local group so a retry starts clean); `epoch > 0` → external-commit join. Then refreshes the local rooms snapshot so the returned `Arc<Room>` is the same handle `Client::room(id)` and `Client::dm_room(peer)` will yield. A `peer` without a domain (no `@`) is rejected as `InvalidInput`. The swagger lists a separate POST `/one2one-conversations` route; deployed wire-server does not serve it (nginx 404, recorded in `docs/wire/api-notes.md`) — Kupferdraht uses GET as the canonical surface. matrix-rust-sdk analog: `Client::create_dm`. |
+| `Client::create_dm(peer: &str)`                       | `Result<Arc<Room>, KupferdrahtError>`         | `GET /v{N}/one2one-conversations/{domain}/{uuid}` — server-side idempotent: first call against a fresh `(self, peer)` pair registers the 1:1, subsequent calls return the existing one. `peer` is `<uuid>@<domain>` (single string per finding §42), split at the HTTP boundary. The fetch only reserves the room (hidden from `list-ids` until established, Step 68 — `docs/wire/api-notes.md`), so the call branches: local group present → resume; `epoch == 0` → establish (claim the peer's key packages, Add-commit, bundle upload; any failure discards the local group so a retry starts clean); `epoch > 0` → external-commit join. Then refreshes the local rooms snapshot so the returned `Arc<Room>` is the same handle `Client::room(id)` and `Client::dm_room(peer)` will yield. A `peer` without a domain (no `@`) is rejected as `InvalidInput`. The swagger lists a separate POST `/one2one-conversations` route; deployed wire-server does not serve it (nginx 404, recorded in `docs/wire/api-notes.md`) — Kupferdraht uses GET as the canonical surface. matrix-rust-sdk analog: `Client::create_dm`. |
 | `Client::dm_room(peer: &str)`                         | `Option<Arc<Room>>`                      | Local-cache lookup — no network. Returns the cached `Arc<Room>` whose `room_type == DirectMessage` AND whose `counterpart.user_id == peer`. A group room that happens to include the peer as a member is **not** returned. Sync method (no `await`) — Step 14a switched the rooms-cache from `tokio::sync::RwLock` to `std::sync::RwLock` so `dm_room` matches matrix-rust-sdk's sync `get_room`/`get_dm_room` signature without breaking other accessors. No `get_` prefix per Rust API Guidelines C-GETTER (finding §41 verb taxonomy). matrix-rust-sdk analog: `Client::get_dm_room` (renamed). |
 | `Client::dm_with(peer: &str)`                         | `Result<Arc<Room>, KupferdrahtError>`         | Wire-extension convenience: calls `dm_room(peer)` first; on `Some`, returns it without any HTTP traffic; on `None`, falls through to `create_dm(peer)`. Two concurrent `dm_with(peer)` calls against the same peer de-duplicate via a per-peer `tokio::sync::Mutex` map: the second caller waits for the in-flight POST, then observes the freshly-cached room when it re-checks `dm_room`. Exactly one POST per `(self, peer)` pair regardless of concurrent caller count. matrix-rust-sdk has no analog — the lookup-or-create pattern is dominant for Wire's first-class 1:1 endpoint (finding §42). |
 
@@ -1627,7 +1627,7 @@ abandoned `Sending` row as `Failed` like every other reader.
 |---|---|---|
 | `Client::leave_room(room_id: &str)`                   | `Result<(), KupferdrahtError>` | **Step 6e-1.** `DELETE /v{N}/conversations/{domain}/{id}/members/{self_d}/{self_uuid}`. Wire's external-sender produces the MLS Remove commit server-side; the leaving client never builds a self-Remove (openmls's `CannotRemoveSelf` is a hard guard rail — see observations.md §31). Locally discards the persisted MLS group via `MlsClient::discard_group` and re-syncs metadata. matrix-rust-sdk analog: `Room::leave`. |
 | `Room::leave()`                                       | `Result<(), KupferdrahtError>` | Thin Weak<Client> wrapper that delegates to `Client::leave_room`. |
-| `Client::delete_room(room_id: &str)`                  | `Result<(), KupferdrahtError>` | Delete a team conversation for **all** members (team-admin action, distinct from leaving). `DELETE /v{N}/teams/{tid}/conversations/{cid}`. The owning team id is read from the conversation's `team` field (fetched via `list_conversations`), falling back to the signed-in user's own team (`GET /self`) since Wire's conversation-list response often omits `team`. An account in no team yields `InvalidInput`. `403` surfaces as `BackendRejected`; a `404` (already gone) is idempotent success. Refreshes the cache via `sync_metadata` so the room drops out. No matrix-rust-sdk analog (Wire extension). |
+| `Client::delete_room(room_id: &str)`                  | `Result<(), KupferdrahtError>` | Delete a team room for **all** members (team-admin action, distinct from leaving). `DELETE /v{N}/teams/{tid}/conversations/{cid}`. The owning team id is read from the room's `team` field (fetched via `list_conversations`), falling back to the signed-in user's own team (`GET /self`) since the backend's room-list response often omits `team`. An account in no team yields `InvalidInput`. `403` surfaces as `BackendRejected`; a `404` (already gone) is idempotent success. Refreshes the cache via `sync_metadata` so the room drops out. No matrix-rust-sdk analog (Wire extension). |
 | `Room::delete()`                                      | `Result<(), KupferdrahtError>` | Thin Weak<Client> wrapper that delegates to `Client::delete_room`. |
 | `Client::logout(purge_device: bool, password: Option<&str>)` | `Result<(), KupferdrahtError>` | **Step 6e-2.** `POST /v{N}/access/logout` to revoke the refresh cookie. If `purge_device == true`, **first** issues `DELETE /v{N}/clients/{device_id}` with the password — none for `None` or an empty one, as `delete_device` (Step 164); the trailing cookie revocation is then **best-effort** — deleting the device invalidates the session server-side, so Wire rejects the still-held token ("Invalid zauth token", live-verified 2026-07-19) and that failure is logged, not returned. Without `purge_device` a failing `/access/logout` stays an error. Caller is responsible for any local-state cleanup (the library does not own the SqliteStore lifetime via `&self`). matrix-rust-sdk analog: `Client::logout`. |
 
@@ -1648,7 +1648,7 @@ abandoned `Sending` row as `Failed` like every other reader.
 | `devices()`                                           | `Result<Vec<DeviceInfo>, KupferdrahtError>` | `GET /v{N}/clients`. Lists every device registered for the authenticated user (max 7). Each entry has `device_id`, `kind`, `display_name`, `model`, `registered_at_ms`, `last_seen_ms`, `is_own`. matrix-rust-sdk analog: `Client::devices`. |
 | `delete_device(&str device_id, Option<&str> password)` | `Result<(), KupferdrahtError>`              | `DELETE /v{N}/clients/{id}`, with `{"password": "..."}` when one is given. Wire re-authenticates the delete by the account's password, and an account without one — an SSO user's — by nothing (`kalium-readings.md` #31). **Step 164:** `None` or an empty password sends none and the backend decides: an account with a password answers `BackendRejected` naming `missing-auth`, one without it `invalid-credentials` for a password sent anyway. BREAKING: the password was `&str`. **Refuses** to delete the current device (use `Client::logout(purge_device=true)` once Step 6e ships). matrix-rust-sdk analog: `Client::delete_devices`. |
 | `rename_device(&str device_id, &str display_name)`    | `Result<(), KupferdrahtError>`              | `PUT /v{N}/clients/{id}`. Gives the device a new display name. matrix-rust-sdk analog: `Client::rename_device`. |
-| `key_package_count()`                                 | `Result<u64, KupferdrahtError>`             | **Step 63.** Remaining unclaimed MLS key packages for this device (`GET /v{N}/mls/key-packages/self/{client}/count`). Peers claim one per invite; at zero the device can no longer be added to new conversations (existing rooms keep working). Wire extension — matrix-rust-sdk has no key-package pool. |
+| `key_package_count()`                                 | `Result<u64, KupferdrahtError>`             | **Step 63.** Remaining unclaimed MLS key packages for this device (`GET /v{N}/mls/key-packages/self/{client}/count`). Peers claim one per invite; at zero the device can no longer be added to new rooms (existing rooms keep working). Wire extension — matrix-rust-sdk has no key-package pool. |
 | `replenish_key_packages()`                            | `Result<u32, KupferdrahtError>`             | **Step 63.** Tops the pool back up to 100 when it has fallen below 50 (the halving heuristic Wire clients use); returns the number uploaded, `0` = healthy. The sync surface runs this automatically at most once per 24 h (stamp in `sync_state`, warn-and-continue — a failing check never breaks sync); call directly to force it. |
 
 ### DeviceInfo
@@ -1716,43 +1716,43 @@ this is a Kupferdraht addition, local only, invisible to other clients. A
 local "verified" trust store (mark a device verified, room shield,
 key-change warning) is deliberately not part of this step.
 
-### Server-administered configuration (Step 10c + 10e)
+### Server settings and account data (Step 10c + 10e)
 
 **Raw accessors** (Step 10c):
 
 | Method                                       | Returns                                            | Notes |
 |---|---|---|
-| `feature_configs()`                          | `Result<Vec<FeatureConfigEntry>, KupferdrahtError>`     | Snapshot of every team-feature config persisted to the V18 `feature_configs` table at the last successful login (`LoginPipeline::fetch_server_configs`) or `feature-config.update` event. Empty when no `SqliteStore` is attached. matrix-rust-sdk analog: `Account::data_settings`. |
-| `feature_config(name: &str)`                 | `Result<Option<FeatureConfigEntry>, KupferdrahtError>`  | Look up one config by Wire's exact key (`fileSharing`, `mls`, `mlsE2EId`, …). `Ok(None)` when the key is absent or no store is attached. |
-| `user_properties()`                          | `Result<Vec<UserPropertyEntry>, KupferdrahtError>`      | Snapshot of every user-property entry in V18's `user_properties` table. Wire keys are open-ended (`WIRE_RECEIPT_MODE`, `labels`, `webapp`, …). |
-| `user_property(key: &str)`                   | `Result<Option<UserPropertyEntry>, KupferdrahtError>`   | One property by Wire's exact key. `Ok(None)` when absent. |
+| `server_settings()`                          | `Result<Vec<ServerSetting>, KupferdrahtError>`          | Snapshot of every server-administered setting persisted to the V18 `feature_configs` table at the last successful login (`LoginPipeline::fetch_server_configs`) or `feature-config.update` event. Empty when no `SqliteStore` is attached. |
+| `server_setting(name: &str)`                 | `Result<Option<ServerSetting>, KupferdrahtError>`       | Look up one setting by the backend's exact key (`fileSharing`, `mls`, `mlsE2EId`, …). `Ok(None)` when the key is absent or no store is attached. |
+| `account_data()`                             | `Result<Vec<AccountDataEntry>, KupferdrahtError>`       | Snapshot of every account-data entry in V18's `user_properties` table. The keys are open-ended (`WIRE_RECEIPT_MODE`, `labels`, `webapp`, …). matrix-rust-sdk analog: `Client::account().account_data::<T>()`. |
+| `account_data_entry(key: &str)`              | `Result<Option<AccountDataEntry>, KupferdrahtError>`    | One entry by the backend's exact key. `Ok(None)` when absent. matrix-rust-sdk analog: `account_data::<T>()` for one event type. |
 
 **Typed getters** (Step 10e) — projections of the most-consumed raw entries:
 
 | Method                       | Returns                                       | Notes |
 |---|---|---|
-| `file_sharing()`             | `Result<FileSharingPolicy, KupferdrahtError>`       | Project `feature_configs.fileSharing` into [`FileSharingPolicy`]. Returns `Enabled` when the entry is missing. Backs the Step 11 file-attachment pre-flight check. |
-| `receipt_mode()`             | `Result<ReceiptMode, KupferdrahtError>`             | Project `user_properties.WIRE_RECEIPT_MODE` into [`ReceiptMode`]. Returns `On` when the property is unset. Backs Step 10f's `Timeline::mark_as_read` gate. |
+| `file_sharing()`             | `Result<FileSharingPolicy, KupferdrahtError>`       | Project the `fileSharing` setting into [`FileSharingPolicy`]. Returns `Enabled` when the entry is missing. Backs the Step 11 file-attachment pre-flight check. |
+| `read_receipt_setting()`     | `Result<ReadReceiptSetting, KupferdrahtError>`      | Project the account-data entry `WIRE_RECEIPT_MODE` into [`ReadReceiptSetting`]. Returns `On` when the entry is unset. Backs Step 10f's `Timeline::mark_as_read` gate. |
 
 `PUT /v{N}/properties/{key}` and `DELETE /v{N}/properties/{key}` are
 intentionally **not** exposed in V1 per ADR-0012 §Out of scope —
 Kupferdraht reads server-administered configuration; the user sets and
-clears properties via Wire's other clients. Step 10d's
+clears account data via Wire's other clients. Step 10d's
 `user.properties-set` / `user.properties-delete` event handlers keep
 the persisted snapshot fresh.
 
-### FeatureConfigEntry / UserPropertyEntry
+### ServerSetting / AccountDataEntry
 
 ```rust
-pub struct FeatureConfigEntry {
-    pub name: String,             // Wire's exact key — "fileSharing", "mls", ...
-    pub status: Option<String>,   // "enabled" | "disabled" | None when feature is config-only
+pub struct ServerSetting {
+    pub name: String,             // the backend's exact key — "fileSharing", "mls", ...
+    pub status: Option<String>,   // "enabled" | "disabled" | None when the setting is config-only
     pub config_json: String,      // raw `config` object as JSON; "{}" when absent
     pub last_synced_at_ms: i64,
 }
 
-pub struct UserPropertyEntry {
-    pub key: String,              // Wire's exact key — "WIRE_RECEIPT_MODE", "labels", ...
+pub struct AccountDataEntry {
+    pub key: String,              // the backend's exact key — "WIRE_RECEIPT_MODE", "labels", ...
     pub value: String,            // raw response body, opaque to Kupferdraht
     pub last_synced_at_ms: i64,
 }
@@ -1766,7 +1766,7 @@ pub enum FileSharingPolicy {
     Enabled,
 }
 
-pub enum ReceiptMode {
+pub enum ReadReceiptSetting {
     /// User has read receipts disabled in their Wire settings.
     /// `Timeline::mark_as_read` skips outbound `Confirmation`
     /// emission.
@@ -2072,9 +2072,9 @@ current variants:
 | `CertificateRejected(String)` | The server's TLS certificate was not trusted (Step 156): an issuer neither the built-in list nor `add_root_certificates` names, an expired certificate, or one for another host. Raised where a connection to a host is first made — the API version, a login, an authenticated call, the attachment store's redirect, the push WebSocket. |
 | `IncompatibleStore { database, reason }` | The database does not fit this build (Step 157): its schema is `"newer"` than the code, or its applied migrations are `"divergent"` from the code's. `database` is `kupferdraht.db`, `mls.db` or `global.db`. Nothing is written; the build that fits the data — usually a newer one — opens it. An older database is migrated forward and opens. |
 | `InvalidInput`         | Caller-supplied argument violates a precondition. |
-| `MlsGroupMissing`      | No MLS group loaded for the conversation — `Client::join_room` first. |
-| `CiphersuiteMismatch { backend, ours }` | The backend's team default MLS ciphersuite (`mls.config.defaultCipherSuite`, an RFC 9420 suite id) is not the one Kupferdraht runs (`0x0002`, NG-25). Raised wherever the feature configs are fetched — both login paths and the `feature-config.update` refetch — so a differing backend fails at the gate, not on the first group add with "no KeyPackages" (live: observations §94). The operator sets the team default to `2`. (Step 132) |
-| `MlsStaleMessage`      | Outbound MLS epoch is stale — resync the conversation and retry. (Step 37) |
+| `MlsGroupMissing`      | No MLS group loaded for the room — `Client::join_room` first. |
+| `CiphersuiteMismatch { backend, ours }` | The backend's team default MLS ciphersuite (`mls.config.defaultCipherSuite`, an RFC 9420 suite id) is not the one Kupferdraht runs (`0x0002`, NG-25). Raised wherever the server settings are fetched — both login paths and the `feature-config.update` refetch — so a differing backend fails at the gate, not on the first group add with "no KeyPackages" (live: observations §94). The operator sets the team default to `2`. (Step 132) |
+| `MlsStaleMessage`      | Outbound MLS epoch is stale — resync the room and retry. (Step 37) |
 | `MlsOutOfOrder`        | Inbound MLS message epoch mismatch — the room resyncs to the current epoch when the backend confirms it fell behind (heal, not retry; the message itself is not re-processed); otherwise the message is skipped. (Steps 38/64/106) |
 | `Storage`              | SQLite or migration failure. |
 | `Environment`          | Filesystem, missing env var, etc. |
@@ -2213,7 +2213,7 @@ before the message and picks it up on a later sync; a pending commit
 that holds the drain back for 60 s is cleared and the message heals as
 before. A message from an older epoch (e.g. a redelivered commit) is
 skipped, never healed. A message from a later epoch heals the room only
-when the backend's conversation record confirms the local group fell
+when the backend's room record confirms the local group fell
 behind; otherwise it is skipped and reported through `on_sync_error`. A
 storage error while processing an MLS message never heals — the sync
 returns it and the next one retries the notification (Step 106,
@@ -2280,14 +2280,14 @@ pub trait Store: MaybeSendSync {
 ```
 
 The trait has grown well beyond the original session/device/rooms core;
-its method families cover: sessions, devices, backend MLS keys,
+its method families cover: sessions, devices, the external sender key,
 rooms + members, timeline events (incl. edits/redactions and the
 Step-79 resend flip `mark_message_resent`, guarded to live `failed`
 rows), idempotency keys (`send_key`, `insert_timeline_event_keyed`,
 `replace_user_reactions_keyed` — Step 130a; default bodies keep no key,
 see "Keyed sends"), mentions, reactions, read + delivery receipts, sync-state
-cursors, self-user and server-config snapshots, feature configs, user
-properties, attachments, and the browser's recovery state
+cursors, own-user and server-config snapshots, server settings, account
+data, attachments, and the browser's recovery state
 (`save_recovery_state` / `load_recovery_state`, Step 112: when the current
 recovery data was made and the PIN's local verifier — one row, V30; no
 default bodies, a custom store implements them), and `close` (Step 114:
@@ -2346,10 +2346,10 @@ pub struct DeviceRecord {
 }
 ```
 
-### `SelfUserRecord`
+### `OwnUserRecord`
 
 ```rust
-pub struct SelfUserRecord {
+pub struct OwnUserRecord {
     pub id: String,               // <localpart>@<domain> (Step 19) — no separate domain column
     pub username: Option<String>,
     pub name: String,
@@ -2361,8 +2361,9 @@ pub struct SelfUserRecord {
 }
 ```
 
-Serialized records carry these field names (Step 163d); the shipped
-store keeps its SQL columns.
+Serialized records carry these names (Steps 163d, 163e) — the record's own
+included; the shipped store keeps its SQL tables and columns (this one is
+`self_user`).
 
 The user's own profile as loaded at login from `GET /v14/self`,
 persisted so a later process can reconstruct `Account` without
@@ -2386,7 +2387,7 @@ re-told which backend to talk to. Singleton row.
 
 ```rust
 pub struct SyncStateRecord {
-    pub sync_marker_uuid: Option<String>,
+    pub sync_token: Option<String>,
     pub last_event_id: Option<String>,
     pub last_connected_at_ms: Option<i64>,
 }
@@ -2395,6 +2396,8 @@ pub struct SyncStateRecord {
 Singleton row, one per device — Step 5b reads / writes this around
 the notifications-drain loop so a reconnect resumes from the last
 persisted Wire cursor instead of re-reading already-acked events.
+`sync_token` is the cursor of the events stream (Step 163e); the shipped
+store keeps its column, `sync_state.sync_marker_uuid`.
 
 ### `MentionRecord`
 
@@ -2499,7 +2502,7 @@ values decode to `Open`/`None` so newer-client snapshots stay
 visible. **Read API (Step 72b):** `Room::case() ->
 Result<Option<CaseSnapshot>>` — fold-on-read over the room's
 persisted case rows: admin-authorized snapshots (sender was a
-conversation administrator at receive time; flag captured in the
+room administrator at receive time; flag captured in the
 row) last-writer-win by `revision`, non-admin rows contribute
 display-only `extensions` (wholesale replace), redacted rows drop
 out. Case rows surface as `TimelineItemKind::Case` in `messages()`
@@ -2554,22 +2557,22 @@ pub enum RoomType { DirectMessage, Group, Channel, Personal }
 `RoomType` has stable stringification via `as_str` /
 `from_str_persisted` for the `rooms.room_type` column. An unknown
 value on read is skipped silently so a schema extension can't break
-an older binary. `Channel` is a regular conversation flagged
+an older binary. `Channel` is a regular room flagged
 `group_conv_type: "channel"` by the backend (Step 132; a backend without
-channels never sets it). Wire's conversation `type` 3 is a *pending
+channels never sets it). The backend's room `type` 3 is a *pending
 connection*, not a channel — a 1:1 that exists while a connection
 request is open (live shape: observations §95); it maps to
-`DirectMessage` and, being a Proteus conversation, never reaches the
+`DirectMessage` and, being a Proteus room, never reaches the
 room list.
 
-### `BackendMlsKey`
+### `ExternalSenderKey`
 
-Per-backend MLS public key, keyed by `(purpose, signature_scheme)`.
-Today Kupferdraht stores exactly one row, `("removal", "ecdsa_secp256r1_sha256")`,
+The backend's MLS external sender key (RFC 9420 `external_senders`), keyed
+by `(purpose, signature_scheme)`. Today Kupferdraht stores exactly one row, `("removal", "ecdsa_secp256r1_sha256")`,
 populated at login from `GET /v14/mls/public-keys` (ADR-0004).
 
 ```rust
-pub struct BackendMlsKey {
+pub struct ExternalSenderKey {
     pub purpose: String,           // "removal"
     pub signature_scheme: String,  // "ecdsa_secp256r1_sha256"
     pub public_key: Vec<u8>,       // raw bytes, base64-decoded from Wire
@@ -2634,7 +2637,7 @@ is skipped, and never panics:
   user id, or an empty task id is `InvalidInput` at the entry point.
   `FileKeyStore` also refuses a path-unsafe keystore id (`../x`).
 - **Backend responses.** An empty token, client id, removal key or
-  `/self` id is `Encoding`. A conversation without an id is skipped, an
+  `/self` id is `Encoding`. A room without an id is skipped, an
   empty `group_id` means no MLS group, and an empty team means none.
   `conversations/list` is fetched in chunks of Wire's 1000-id cap.
 - **Peer payloads.** A task without `task_id` is ignored (its text
@@ -2674,7 +2677,7 @@ Kupferdraht-public projection of Wire's `ConversationCodeInfo`. `url` is
 the link the backend issues — its operator's account page with the
 link's `key` and `code` in the query
 (`https://account.<operator>/conversation-join/?key=…&code=…`; the
-conversation's domain is not in it); `password_protected` mirrors Wire's
+room's domain is not in it); `password_protected` mirrors Wire's
 `has_password`.
 
 ### `Room::create_join_link`
@@ -2701,7 +2704,7 @@ impl Room {
 }
 ```
 
-Fetches the conversation's current link or `Ok(None)` when none is
+Fetches the room's current link or `Ok(None)` when none is
 on file. Routes to `GET /v{N}/conversations/{cnv}/code`. Wire's
 `404 no-conversation-code` surfaces as `Ok(None)` so callers don't
 need to special-case it.
@@ -2728,8 +2731,8 @@ an `Arc<Room>`:
 | Method | Returns | Notes |
 |---|---|---|
 | `Client::create_join_link(room_id: &str, password: Option<&str>)` | `Result<JoinLink, KupferdrahtError>` | Issue (or fetch the existing) reusable guest-link for `room_id` via `POST /v{N}/conversations/{cnv}/code`. `password` is `None` for an open link or `Some("…")` (≥ 8 chars per Wire's schema; Kupferdraht only enforces non-empty and lets Wire reject the rest). `InvalidInput` if `room_id` has no `@<domain>` or `password` is `Some("")`. |
-| `Client::current_join_link(room_id: &str)` | `Result<Option<JoinLink>, KupferdrahtError>` | Fetch the conversation's current guest link via `GET /v{N}/conversations/{cnv}/code`, or `Ok(None)` when none is on file (Wire's `404 no-conversation-code` is absorbed). `InvalidInput` if `room_id` has no `@<domain>`. |
-| `Client::revoke_join_link(room_id: &str)` | `Result<(), KupferdrahtError>` | Revoke the conversation's current guest link via `DELETE /v{N}/conversations/{cnv}/code`. Idempotent — revoking a non-existent code is `Ok(())`. `InvalidInput` if `room_id` has no `@<domain>`. |
+| `Client::current_join_link(room_id: &str)` | `Result<Option<JoinLink>, KupferdrahtError>` | Fetch the room's current guest link via `GET /v{N}/conversations/{cnv}/code`, or `Ok(None)` when none is on file (Wire's `404 no-conversation-code` is absorbed). `InvalidInput` if `room_id` has no `@<domain>`. |
+| `Client::revoke_join_link(room_id: &str)` | `Result<(), KupferdrahtError>` | Revoke the room's current guest link via `DELETE /v{N}/conversations/{cnv}/code`. Idempotent — revoking a non-existent code is `Ok(())`. `InvalidInput` if `room_id` has no `@<domain>`. |
 
 All three take the `<uuid>@<domain>` `room_id` and split
 off the UUID internally — Wire's code-link endpoints take
@@ -2752,14 +2755,14 @@ impl Client {
 URL that is no join link is `InvalidInput`, before any request. The
 redeem (Steps 8, 122, 163c):
 
-1. `GET /v{N}/conversations/join?key&code` — the conversation the
+1. `GET /v{N}/conversations/join?key&code` — the room the
    link names (its id). A link the backend does not know — another
    operator's, or a revoked one — fails here with
    `BackendRejected(404 no-conversation-code)`, before anything is
    redeemed: a redeem only ever reaches the own backend's
-   conversations.
+   rooms.
 2. `POST /v{N}/conversations/join` with `{key, code, password?}` —
-   Wire adds the caller to the conversation member list (`204` for a
+   Wire adds the caller to the room member list (`204` for a
    member already).
 3. `Client::sync_metadata` — the room list now holds the room; the
    call returns the room with the id from step 1.
@@ -2770,7 +2773,7 @@ redeem (Steps 8, 122, 163c):
 A room list that lacks the room after the redeem is `Generic` (the
 join happened; it is not the caller's input). **Breaking (Step 122):**
 the `domain` parameter is gone — the link does not carry it, and the
-conversation id finds the room.
+id from step 1 finds the room.
 
 `password` is `Some("…")` when the link is password-protected and
 must be supplied; mismatch surfaces as

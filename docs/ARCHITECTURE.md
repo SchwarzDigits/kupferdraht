@@ -90,7 +90,7 @@ The real layout, by responsibility:
 | Module | Responsibility |
 |---|---|
 | `lib.rs`, `error.rs` | crate root + re-exports; `KupferdrahtError` |
-| `client/` | authentication, session lifecycle, **login pipeline**, `Client`, `ClientBuilder`, `Account` (live since Step 152: `own_account.rs` writes the `self_user` row, then swaps it); `token_refresh.rs` is the in-session access-token refresh and its cross-process critical section (Steps 39 + 85); `input.rs` checks the app's arguments at the public entry points (Step 95c) |
+| `client/` | authentication, session lifecycle, **login pipeline**, `Client`, `ClientBuilder`, `Account` (live since Step 152: `own_account.rs` writes the own-user record — the `self_user` table — then swaps it); `token_refresh.rs` is the in-session access-token refresh and its cross-process critical section (Steps 39 + 85); `input.rs` checks the app's arguments at the public entry points (Step 95c) |
 | `rooms/` | room state and membership (`Room`); `rooms/devices.rs` the device verification surface (`RoomDevice`, `RoomDevicesChange`, the diff — Step 95d); `rooms/typing.rs` `Room::typing_notice`, whose send side (dedupe, 11-s auto-stop) is `client/typing.rs` (Step 162) |
 | `timeline/` | message send/receive, the `Timeline` read/send surface, per-interaction send files (text, reaction, confirmation, delete, ping, location, attachment, disappearing — the latter also owns the local expiry sweep + timers, Step 89; `keyed.rs` — `send_keyed`, the one entry for retryable sends, Step 130a); `timeline/task/` is the task vertical slice split by responsibility (`types` / `fold` / `order` / `views` / `cache` / `encode` / `send`) |
 | `sync/` + `sync/dispatch/` | the event-stream loop and the inbound dispatcher (one handler per interaction; `room_event` turns four backend events into timeline items, Step 145, through `wire/room_event.rs` and `timeline/room_event.rs`) |
@@ -153,7 +153,7 @@ This is the "how it works" heart of the system.
 3. Establish the MLS identity (P-256, BasicCredential), generate and
    upload KeyPackages (`POST /v14/mls/key-packages/self/{client}`),
    fetch and cache the backend's public keys (`GET /v14/mls/public-keys`).
-4. Fetch **all** feature configs and user properties and persist them
+4. Fetch **all** server settings and account data and persist them
    (ADR-0012, `rules/0012-server-feature-configs.md`); a fetch failure
    is non-fatal (warn + continue on safe defaults).
 
@@ -711,7 +711,12 @@ columns: `session.cookie_label`, `devices.client_id`, the `handle` and
 `is_self` of `self_user` / `room_members`, their `avatar_*_key` and
 `team_avatar_key` columns keep their names and are read into
 `session_label`, `device_id`, `username`, `is_own`, `avatar_source` and
-`team_avatar_version`. The current
+`team_avatar_version`. Step 163e did the same for the server's settings
+and the store contract: the tables `feature_configs`, `user_properties`,
+`backend_mls_keys` and `self_user`, `sync_state.sync_marker_uuid` and
+`delivery_receipts.confirmer_user_id` keep their names and are read into
+`ServerSetting`, `AccountDataEntry`, `ExternalSenderKey`, `OwnUserRecord`,
+`SyncStateRecord.sync_token` and `DeliveryReceiptRecord.reader_user_id`. The current
 schema version is **V38**
 (`V38__step_163c_personal_room.sql` — the stored type of the account's
 personal room takes the library's own name, `self_room` → `personal`,
@@ -742,10 +747,10 @@ Step-40 new-device wipe; V28
 `timeline_events.expires_at_ms`, the disappearing timer stamp, plus a
 partial index over live disappearing rows for the sweep; V26 `room_members.role`, the neutral
 `administrator`/`member` vocabulary behind `RoomMemberRole`;
-V24 key-package check, V25 device-local read markers). Per ADR-0012,
-feature-config and user-property tables are intentionally **not**
-field-encrypted (the whole-DB encryption layer already protects them, and
-they are policy-/user-public).
+V24 key-package check, V25 device-local read markers). Per ADR-0012, the
+server-settings and account-data tables (`feature_configs`, `user_properties`)
+are intentionally **not** field-encrypted (the whole-DB encryption layer
+already protects them, and they are policy-/user-public).
 
 **Case state is fold-on-read (Step 72b, ADR-0018)** — deliberately
 *no* materialized table: `Room::case()` folds the room's

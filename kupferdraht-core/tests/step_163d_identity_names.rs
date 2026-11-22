@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use httpmock::Method::GET;
 use httpmock::MockServer;
-use kupferdraht::storage::{DeviceRecord, RoomMemberRecord, SelfUserRecord, SessionRecord};
+use kupferdraht::storage::{DeviceRecord, OwnUserRecord, RoomMemberRecord, SessionRecord};
 use kupferdraht::{DeviceInfo, DeviceKind};
 use serde_json::json;
 
@@ -519,7 +519,7 @@ fn the_store_records_carry_the_plain_names() {
         "role": "member",
         "avatar_source": { "thumbnail": "t", "full": "f" }
     }));
-    round_trip::<SelfUserRecord>(&json!({
+    round_trip::<OwnUserRecord>(&json!({
         "id": "alice@example.test",
         "username": "alice",
         "name": "Alice",

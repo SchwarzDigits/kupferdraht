@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! `kupferdraht-cli` server-config command handlers (profile-set / features / properties).
+//! `kupferdraht-cli` profile and server-settings command handlers
+//! (profile-set / email-change / settings / account-data).
 
 use kupferdraht::KupferdrahtError;
 
@@ -52,18 +53,18 @@ pub(crate) async fn email_change(email: String) -> Result<(), KupferdrahtError> 
     Ok(())
 }
 
-pub(crate) async fn features(name: Option<String>) -> Result<(), KupferdrahtError> {
+pub(crate) async fn settings(name: Option<String>) -> Result<(), KupferdrahtError> {
     let client = resume_client().await?;
     if let Some(n) = name {
-        match client.feature_config(&n).await? {
-            Some(entry) => print_feature_config_detail(&entry),
-            None => println!("(no feature config named \"{n}\")"),
+        match client.server_setting(&n).await? {
+            Some(entry) => print_server_setting_detail(&entry),
+            None => println!("(no server setting named \"{n}\")"),
         }
         return Ok(());
     }
-    let entries = client.feature_configs().await?;
+    let entries = client.server_settings().await?;
     if entries.is_empty() {
-        println!("no feature configs — run `kupferdraht-cli login` first");
+        println!("no server settings — run `kupferdraht-cli login` first");
         return Ok(());
     }
     let mut sorted = entries;
@@ -75,7 +76,7 @@ pub(crate) async fn features(name: Option<String>) -> Result<(), KupferdrahtErro
     Ok(())
 }
 
-pub(crate) fn print_feature_config_detail(entry: &kupferdraht::storage::FeatureConfigEntry) {
+pub(crate) fn print_server_setting_detail(entry: &kupferdraht::storage::ServerSetting) {
     println!("name:               {}", entry.name);
     println!(
         "status:             {}",
@@ -88,29 +89,29 @@ pub(crate) fn print_feature_config_detail(entry: &kupferdraht::storage::FeatureC
     println!("config_json:        {}", entry.config_json);
 }
 
-pub(crate) async fn properties(key: Option<String>) -> Result<(), KupferdrahtError> {
+pub(crate) async fn account_data(key: Option<String>) -> Result<(), KupferdrahtError> {
     let client = resume_client().await?;
     if let Some(k) = key {
-        match client.user_property(&k).await? {
-            Some(entry) => print_user_property_detail(&entry),
-            None => println!("(no user property named \"{k}\")"),
+        match client.account_data_entry(&k).await? {
+            Some(entry) => print_account_data_detail(&entry),
+            None => println!("(no account-data entry named \"{k}\")"),
         }
         return Ok(());
     }
-    let entries = client.user_properties().await?;
+    let entries = client.account_data().await?;
     if entries.is_empty() {
-        println!("no user properties — none set on the backend, or login has not run");
+        println!("no account data — none set on the backend, or login has not run");
         return Ok(());
     }
     let mut sorted = entries;
     sorted.sort_by(|a, b| a.key.cmp(&b.key));
     for e in &sorted {
-        println!("{:<24} {}", e.key, brief_property_value(&e.value));
+        println!("{:<24} {}", e.key, brief_value(&e.value));
     }
     Ok(())
 }
 
-pub(crate) fn print_user_property_detail(entry: &kupferdraht::storage::UserPropertyEntry) {
+pub(crate) fn print_account_data_detail(entry: &kupferdraht::storage::AccountDataEntry) {
     println!("key:                {}", entry.key);
     println!(
         "last_synced_at:     {}",
@@ -119,10 +120,10 @@ pub(crate) fn print_user_property_detail(entry: &kupferdraht::storage::UserPrope
     println!("value:              {}", entry.value);
 }
 
-/// Truncate large opaque property values (e.g. Wire-Web's `webapp`
+/// Truncate large opaque account-data values (e.g. Wire-Web's `webapp`
 /// blob can be multiple KB) for the brief listing — full value is
-/// reachable via `properties --key <k>`.
-pub(crate) fn brief_property_value(value: &str) -> String {
+/// reachable via `account-data --key <k>`.
+pub(crate) fn brief_value(value: &str) -> String {
     const MAX_INLINE: usize = 80;
     if value.len() <= MAX_INLINE {
         return value.replace('\n', " ");

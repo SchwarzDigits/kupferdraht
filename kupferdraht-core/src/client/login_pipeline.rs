@@ -36,7 +36,7 @@ use crate::encryption::{
 use crate::error::KupferdrahtError;
 use crate::identity::UserId;
 use crate::storage::db_key::DbKey;
-use crate::storage::{KupferdrahtHome, Store, UserPropertyEntry};
+use crate::storage::{AccountDataEntry, KupferdrahtHome, Store};
 use crate::wire::HttpClient;
 use crate::wire::dto::{LoginOutcome, SelfUser};
 use crate::wire::select_api_version;
@@ -273,11 +273,11 @@ impl LoginPipeline {
                 &self.session_label,
             )
             .await?;
-        let self_user = self
+        let own_user = self
             .http
             .fetch_self(self.api_version, &login_outcome.access_token)
             .await?;
-        Ok((login_outcome, self_user))
+        Ok((login_outcome, own_user))
     }
 
     /// SSO analogue of [`authenticate`](Self::authenticate) (Step 17β, 162):
@@ -294,11 +294,11 @@ impl LoginPipeline {
             .http
             .access_from_sso_cookie(self.api_version, session_cookie)
             .await?;
-        let self_user = self
+        let own_user = self
             .http
             .fetch_self(self.api_version, &login_outcome.access_token)
             .await?;
-        Ok((login_outcome, self_user))
+        Ok((login_outcome, own_user))
     }
 
     /// Fresh MLS identity + 100 `KeyPackage`s → upload to
@@ -316,11 +316,11 @@ impl LoginPipeline {
     /// state; no messaging flow depends on it before 1c.5.
     pub(super) async fn upload_initial_key_packages(
         &self,
-        self_user: &SelfUser,
+        own_user: &SelfUser,
         registration: &RegistrationOutcome,
         mls_key: Option<&DbKey>,
     ) -> Result<MlsIdentityArtifacts, KupferdrahtError> {
-        let user_id = self_user.qualified_id.to_string();
+        let user_id = own_user.qualified_id.to_string();
         let provider = open_mls_provider(self.home.as_ref(), &user_id, mls_key)?;
         let mls_client =
             MlsClient::new_fresh_with_storage(provider, &user_id, &registration.device_id)?;
@@ -418,7 +418,7 @@ impl LoginPipeline {
     pub(super) async fn reuse_existing_device_if_valid(
         &self,
         login: &LoginOutcome,
-        self_user: &SelfUser,
+        own_user: &SelfUser,
     ) -> Result<DeviceReuse, KupferdrahtError> {
         // Every target reuses: `open_mls_provider` reopens the account's
         // `mls.db` (a file on native, an OPFS pool file in the browser), so a
@@ -428,11 +428,11 @@ impl LoginPipeline {
         };
         // Session/device rows key on the **qualified** `<uuid>@<domain>` user id
         // (Step 19) — `persist_session` writes them via `UserId::as_str()`. Look
-        // up by the qualified form (`self_user.qualified_id`), NOT the bare
-        // `self_user.id`: the bare uuid never matches, so `load_session` returns
+        // up by the qualified form (`own_user.qualified_id`), NOT the bare
+        // `own_user.id`: the bare uuid never matches, so `load_session` returns
         // `None`, the reuse path bails, and **every re-login registers a fresh
         // device** (piling up devices + orphaning MLS state). Step 40.
-        let user_id = self_user.qualified_id.to_string();
+        let user_id = own_user.qualified_id.to_string();
         let Some(session) = store.load_session(&user_id).await? else {
             return Ok(DeviceReuse::Fresh);
         };
@@ -507,7 +507,7 @@ impl LoginPipeline {
     /// * `KupferdrahtError::Storage` for openmls or `SQLite` failures.
     pub(super) async fn resume_existing_mls_state(
         &self,
-        self_user: &SelfUser,
+        own_user: &SelfUser,
         registration: &RegistrationOutcome,
         mls_key: Option<&DbKey>,
     ) -> Result<MlsIdentityArtifacts, KupferdrahtError> {
@@ -523,9 +523,9 @@ impl LoginPipeline {
                 "resume_existing_mls_state: no Store attached — set ClientBuilder::base_dir".into(),
             ));
         };
-        let qualified_user_id = self_user.qualified_id.to_string();
+        let qualified_user_id = own_user.qualified_id.to_string();
         // Step 40: the devices row keys on the qualified user id too — load the
-        // persisted MLS public key by `qualified_user_id`, not bare `self_user.id`.
+        // persisted MLS public key by `qualified_user_id`, not bare `own_user.id`.
         let mls_public_key =
             load_persisted_mls_public_key(store, &qualified_user_id, &registration.device_id)
                 .await?;
@@ -582,7 +582,7 @@ impl LoginPipeline {
     /// has produced a client-bound token.
     ///
     /// Error posture is **warn-and-continue** for HTTP failures per
-    /// ADR-0012 §Login pipeline integration: feature configs are an
+    /// ADR-0012 §Login pipeline integration: server settings are an
     /// enrichment, not a login blocker. A transient outage on
     /// `/feature-configs` lets login proceed; the next sync cycle (10d)
     /// or the next login refreshes the cached values. Storage failures
@@ -600,18 +600,18 @@ impl LoginPipeline {
             debug!("fetch_server_configs: no store attached, skipping");
             return Ok(());
         };
-        self.fetch_and_persist_feature_configs(store, access_token)
+        self.fetch_and_persist_server_settings(store, access_token)
             .await?;
-        self.fetch_and_persist_user_properties(store, access_token)
+        self.fetch_and_persist_account_data(store, access_token)
             .await?;
         Ok(())
     }
 
-    /// 10c phase 1: `/v14/feature-configs` → `replace_feature_configs`.
+    /// 10c phase 1: `/v14/feature-configs` → `replace_server_settings`.
     /// HTTP failure logs at warn and leaves the table untouched (the
     /// previously cached snapshot, if any, is preserved). Storage
     /// failure propagates.
-    async fn fetch_and_persist_feature_configs(
+    async fn fetch_and_persist_server_settings(
         &self,
         store: &Arc<dyn Store>,
         access_token: &str,
@@ -626,7 +626,7 @@ impl LoginPipeline {
                 // refused here, before anything else is persisted.
                 crate::client::ensure_default_ciphersuite(&raw)?;
                 store
-                    .replace_feature_configs(&raw.into_entries(now_ms()))
+                    .replace_server_settings(&raw.into_entries(now_ms()))
                     .await?;
             }
             Err(e) => warn!(
@@ -638,12 +638,12 @@ impl LoginPipeline {
     }
 
     /// 10c phase 2: `/v14/properties` → per-key
-    /// `/v14/properties/{key}` → `replace_user_properties`. The keys
+    /// `/v14/properties/{key}` → `replace_account_data`. The keys
     /// list itself failing logs warn + skips the whole phase. A
     /// per-key value fetch failing logs warn + skips that one key;
     /// the rest are still persisted via a single replace-all
     /// transaction.
-    async fn fetch_and_persist_user_properties(
+    async fn fetch_and_persist_account_data(
         &self,
         store: &Arc<dyn Store>,
         access_token: &str,
@@ -669,7 +669,7 @@ impl LoginPipeline {
                 .fetch_property_value(self.api_version, access_token, &k)
                 .await
             {
-                Ok(v) => entries.push(UserPropertyEntry {
+                Ok(v) => entries.push(AccountDataEntry {
                     key: k,
                     value: v,
                     last_synced_at_ms: now_ms(),
@@ -681,17 +681,17 @@ impl LoginPipeline {
                 ),
             }
         }
-        store.replace_user_properties(&entries).await?;
+        store.replace_account_data(&entries).await?;
         Ok(())
     }
 
     /// The user's own team for the account snapshot (Step 143): the id from
     /// `/self`, the name by one `GET /teams/{tid}`. An enrichment like the
-    /// feature configs (ADR-0012): any failure is a warning and the login goes
+    /// server settings (ADR-0012): any failure is a warning and the login goes
     /// on without the name. A personal account makes no request, and an empty
     /// `team` is no team.
-    pub(super) async fn fetch_own_team(&self, self_user: &SelfUser, access_token: &str) -> OwnTeam {
-        let Some(id) = super::own_account::own_team_id(self_user) else {
+    pub(super) async fn fetch_own_team(&self, own_user: &SelfUser, access_token: &str) -> OwnTeam {
+        let Some(id) = super::own_account::own_team_id(own_user) else {
             return OwnTeam::default();
         };
         match self
@@ -724,7 +724,7 @@ impl LoginPipeline {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn finalize(
         self,
-        self_user: SelfUser,
+        own_user: SelfUser,
         own_team: OwnTeam,
         login: LoginOutcome,
         registration: RegistrationOutcome,
@@ -733,13 +733,13 @@ impl LoginPipeline {
         home: Option<KupferdrahtHome>,
     ) -> Arc<Client> {
         let localpart = login.user;
-        let user_id = UserId::new(&localpart, &self_user.qualified_id.domain);
-        let avatar_source = AvatarSource::from_assets(&self_user.assets);
+        let user_id = UserId::new(&localpart, &own_user.qualified_id.domain);
+        let avatar_source = AvatarSource::from_assets(&own_user.assets);
         let account = Account::new(
             user_id.clone(),
-            self_user.name,
-            self_user.handle,
-            self_user.email,
+            own_user.name,
+            own_user.handle,
+            own_user.email,
             own_team,
             avatar_source,
         );

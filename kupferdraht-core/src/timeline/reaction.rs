@@ -75,10 +75,10 @@ impl Client {
             .resolve_room_group_id(room_id, "toggle_reaction")
             .await?;
         let store = self.reaction_store()?;
-        let self_user_id = self.own_qualified_user_id();
+        let own_user_id = self.own_qualified_user_id();
         let canonical_id = self.reaction_target(room_id, item_id).await?;
         let new_set = self
-            .toggle_user_reaction_set(room_id, &canonical_id, &self_user_id, emoji)
+            .toggle_user_reaction_set(room_id, &canonical_id, &own_user_id, emoji)
             .await?;
         let csv = new_set.join(",");
         // Wire-side: canonical PK for stability across edit chains.
@@ -93,7 +93,7 @@ impl Client {
         let own_set = OwnReactionSet {
             room_id,
             canonical_id: &canonical_id,
-            sender_user_id: &self_user_id,
+            sender_user_id: &own_user_id,
             emojis: &new_set,
         };
         store_own_reaction_set(store.as_ref(), &own_set, &handle, key).await?;

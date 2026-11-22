@@ -1,17 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! `Client` accessors for Wire's server-administered configuration.
+//! `Client` accessors for the server's settings and the account data.
 //!
 //! Two layers:
 //!
-//! - **Raw accessors (Step 10c)** — `feature_configs` /
-//!   `feature_config(name)` / `user_properties` /
-//!   `user_property(key)` return the persisted V18-table rows
-//!   verbatim.
-//! - **Typed getters (Step 10e)** — `file_sharing` /
-//!   `receipt_mode` project the raw entries into
-//!   [`FileSharingPolicy`] / [`ReceiptMode`] so reactive code
+//! - **Raw accessors (Step 10c)** — `server_settings()` /
+//!   `server_setting(name)` / `account_data()` /
+//!   `account_data_entry(key)` return the persisted rows verbatim.
+//! - **Typed getters (Step 10e)** — `file_sharing()` /
+//!   `read_receipt_setting()` project the raw entries into
+//!   [`FileSharingPolicy`] / [`ReadReceiptSetting`] so reactive code
 //!   doesn't re-parse JSON on every call. Both return the safest
 //!   default (`Enabled`, `On`) when the underlying entry is
 //!   missing per ADR-0012 §Decision: a permissive default that
@@ -22,16 +21,16 @@
 //! Both surfaces are seeded at login by
 //! [`crate::client::login_pipeline::LoginPipeline::fetch_server_configs`]
 //! (Step 10c) and refreshed live by Step 10d's notification dispatch.
-//! These accessors read from the persisted V18 tables — no Wire
+//! These accessors read from the persisted rows — no Wire
 //! round-trip per call.
 
 use tracing::warn;
 
 use crate::client::Client;
 use crate::error::KupferdrahtError;
-use crate::storage::{FeatureConfigEntry, UserPropertyEntry};
+use crate::storage::{AccountDataEntry, ServerSetting};
 
-/// Team-policy projection of `feature_configs.fileSharing`. Step 10e.
+/// Team-policy projection of the `fileSharing` server setting. Step 10e.
 ///
 /// Wire's `fileSharing` feature carries a `status` and nothing else the
 /// client acts on (the v14 Swagger's `FileSharingConfig` has `status`,
@@ -54,7 +53,7 @@ impl FileSharingPolicy {
     ///   row's `config` object is ignored: the feature defines none.
     /// - Any other status string is logged at warn and treated as
     ///   `Enabled` — the safest forward-compat default.
-    pub(crate) fn from_entry(entry: &FeatureConfigEntry) -> Self {
+    pub(crate) fn from_entry(entry: &ServerSetting) -> Self {
         match entry.status.as_deref() {
             Some("disabled") => Self::Disabled,
             Some("enabled") | None => Self::Enabled,
@@ -69,20 +68,20 @@ impl FileSharingPolicy {
     }
 }
 
-/// User-property projection of `user_properties.WIRE_RECEIPT_MODE`.
-/// Step 10e. Step 10f's `Timeline::mark_as_read` consults this to
-/// suppress outbound `Confirmation { type: READ }` emission when
-/// the user has read receipts disabled in their Wire settings.
+/// The read-receipt setting, projected from the account data. Step 10e.
+/// Step 10f's `Timeline::mark_as_read` consults this to suppress
+/// outbound `Confirmation { type: READ }` emission when the user has
+/// read receipts disabled in their Wire settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum ReceiptMode {
+pub enum ReadReceiptSetting {
     Off,
     On,
 }
 
-impl ReceiptMode {
-    /// Parse a Wire `WIRE_RECEIPT_MODE` value into `ReceiptMode`.
+impl ReadReceiptSetting {
+    /// Parse the backend's `WIRE_RECEIPT_MODE` value into `ReadReceiptSetting`.
     ///
-    /// Wire stores the property as either a bare numeric (`0` /
+    /// Wire stores the entry as either a bare numeric (`0` /
     /// `1`) or a JSON-encoded string (`"0"` / `"1"`) depending on
     /// which client wrote it. The parser strips optional surrounding
     /// double quotes before matching. Any value other than a stripped
@@ -96,74 +95,74 @@ impl ReceiptMode {
 }
 
 impl Client {
-    /// Snapshot of every team-feature-config entry the server has
-    /// reported for this account's team. Empty when no `SqliteStore`
+    /// Snapshot of every server setting the backend has reported
+    /// for this account's team. Empty when no `SqliteStore`
     /// is attached (e.g. an in-memory test client) or when login's
-    /// `fetch_server_configs` could not populate the table — the
+    /// settings fetch could not populate them — the
     /// warn-and-continue posture per ADR-0012 §Login pipeline
     /// integration deliberately treats this as "use defaults".
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` when the underlying `SQLite` read fails
     /// (e.g. corrupt database).
-    pub async fn feature_configs(&self) -> Result<Vec<FeatureConfigEntry>, KupferdrahtError> {
+    pub async fn server_settings(&self) -> Result<Vec<ServerSetting>, KupferdrahtError> {
         let Some(store) = self.store_handle() else {
             return Ok(Vec::new());
         };
-        store.list_feature_configs().await
+        store.list_server_settings().await
     }
 
-    /// Look up a single feature config by Wire's exact key
+    /// Look up a single server setting by the backend's exact name
     /// (`fileSharing`, `mls`, `mlsE2EId`, …). `Ok(None)` when the
-    /// key is absent from the persisted set or when no `SqliteStore`
+    /// name is absent from the persisted set or when no `SqliteStore`
     /// is attached.
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` on `SQLite` read failure.
-    pub async fn feature_config(
+    pub async fn server_setting(
         &self,
         name: &str,
-    ) -> Result<Option<FeatureConfigEntry>, KupferdrahtError> {
+    ) -> Result<Option<ServerSetting>, KupferdrahtError> {
         let Some(store) = self.store_handle() else {
             return Ok(None);
         };
-        store.get_feature_config(name).await
+        store.get_server_setting(name).await
     }
 
-    /// Snapshot of every user-property entry this account has set.
+    /// Snapshot of every account-data entry this account has set.
     /// Empty when no `SqliteStore` is attached or when login's
-    /// `/properties` fetch could not populate the table.
+    /// `/properties` fetch could not populate them.
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` on `SQLite` read failure.
-    pub async fn user_properties(&self) -> Result<Vec<UserPropertyEntry>, KupferdrahtError> {
+    pub async fn account_data(&self) -> Result<Vec<AccountDataEntry>, KupferdrahtError> {
         let Some(store) = self.store_handle() else {
             return Ok(Vec::new());
         };
-        store.list_user_properties().await
+        store.list_account_data().await
     }
 
-    /// Look up a single user property by Wire's exact key
-    /// (`WIRE_RECEIPT_MODE`, `labels`, …). `Ok(None)` when the key
-    /// is absent or no `SqliteStore` is attached.
+    /// Look up a single account-data entry by the backend's exact key
+    /// (`labels`, …). `Ok(None)` when the key is absent or no
+    /// `SqliteStore` is attached.
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` on `SQLite` read failure.
-    pub async fn user_property(
+    pub async fn account_data_entry(
         &self,
         key: &str,
-    ) -> Result<Option<UserPropertyEntry>, KupferdrahtError> {
+    ) -> Result<Option<AccountDataEntry>, KupferdrahtError> {
         let Some(store) = self.store_handle() else {
             return Ok(None);
         };
-        store.get_user_property(key).await
+        store.get_account_data_entry(key).await
     }
 
-    /// Typed projection of `feature_configs.fileSharing` — Step 10e.
+    /// Typed projection of the `fileSharing` server setting — Step 10e.
     /// Backs the Step 11 file-attachment pre-flight check.
     ///
     /// Returns [`FileSharingPolicy::Enabled`] when the entry is
-    /// absent (login-time fetch failed, or the team config does not
+    /// absent (login-time fetch failed, or the team's settings do not
     /// expose `fileSharing` at all). The permissive default is the
     /// safer error mode — see ADR-0012 §Decision.
     ///
@@ -171,14 +170,14 @@ impl Client {
     /// `KupferdrahtError::Storage` on `SQLite` read failure.
     pub async fn file_sharing(&self) -> Result<FileSharingPolicy, KupferdrahtError> {
         Ok(self
-            .feature_config("fileSharing")
+            .server_setting("fileSharing")
             .await?
             .map_or(FileSharingPolicy::Enabled, |e| {
                 FileSharingPolicy::from_entry(&e)
             }))
     }
 
-    /// Typed projection of `feature_configs.consumableNotifications` —
+    /// Typed projection of the `consumableNotifications` server setting —
     /// Step 62c. `true` iff the server reports the RabbitMQ-backed
     /// `/v14/events` delivery as enabled; the transport-choice input
     /// for [`SyncTransport`](crate::sync::SyncTransport) consumers.
@@ -189,41 +188,43 @@ impl Client {
     /// that never publishes into the consumable queue silently breaks
     /// receive (observations §66), while the polling fallback always
     /// works. Kept fresh by the same login fetch +
-    /// `feature-config.update` pipeline as every feature config
+    /// `feature-config.update` pipeline as every server setting
     /// (ADR-0012).
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` on `SQLite` read failure.
     pub async fn server_supports_push_events(&self) -> Result<bool, KupferdrahtError> {
         Ok(self
-            .feature_config("consumableNotifications")
+            .server_setting("consumableNotifications")
             .await?
             .is_some_and(|e| e.status.as_deref() == Some("enabled")))
     }
 
-    /// Typed projection of `user_properties.WIRE_RECEIPT_MODE` —
+    /// Typed projection of the account's read-receipt entry —
     /// Step 10e. Backs Step 10f's `Timeline::mark_as_read` gate:
-    /// when this returns [`ReceiptMode::Off`], outbound
+    /// when this returns [`ReadReceiptSetting::Off`], outbound
     /// `Confirmation { type: READ }` emission is suppressed.
     ///
-    /// Returns [`ReceiptMode::On`] when the property is absent
+    /// Returns [`ReadReceiptSetting::On`] when the entry is absent
     /// (Wire's default for accounts that haven't toggled the
     /// setting). See ADR-0012 §Decision for the default rationale.
     ///
     /// # Errors
     /// `KupferdrahtError::Storage` on `SQLite` read failure.
-    pub async fn receipt_mode(&self) -> Result<ReceiptMode, KupferdrahtError> {
+    pub async fn read_receipt_setting(&self) -> Result<ReadReceiptSetting, KupferdrahtError> {
         Ok(self
-            .user_property("WIRE_RECEIPT_MODE")
+            .account_data_entry("WIRE_RECEIPT_MODE")
             .await?
-            .map_or(ReceiptMode::On, |p| ReceiptMode::from_raw(&p.value)))
+            .map_or(ReadReceiptSetting::On, |p| {
+                ReadReceiptSetting::from_raw(&p.value)
+            }))
     }
 }
 
 /// Refuse a backend whose team default MLS ciphersuite is not ours (Step
 /// 132, NG-25): one suite, not negotiated — on another default the first
 /// group add would fail with `no KeyPackages` (live: observations §94).
-/// Runs wherever the feature configs are fetched: both login paths and the
+/// Runs wherever the server settings are fetched: both login paths and the
 /// `feature-config.update` refetch. A backend that names no default passes.
 ///
 /// # Errors
@@ -244,8 +245,8 @@ pub(crate) fn ensure_default_ciphersuite(
 mod tests {
     use super::*;
 
-    fn fc(status: Option<&str>, config_json: &str) -> FeatureConfigEntry {
-        FeatureConfigEntry {
+    fn fc(status: Option<&str>, config_json: &str) -> ServerSetting {
+        ServerSetting {
             name: "fileSharing".into(),
             status: status.map(str::to_string),
             config_json: config_json.into(),
@@ -298,33 +299,39 @@ mod tests {
     }
 
     #[test]
-    fn receipt_mode_zero_is_off() {
-        assert_eq!(ReceiptMode::from_raw("0"), ReceiptMode::Off);
+    fn read_receipt_setting_zero_is_off() {
+        assert_eq!(ReadReceiptSetting::from_raw("0"), ReadReceiptSetting::Off);
     }
 
     #[test]
-    fn receipt_mode_one_is_on() {
-        assert_eq!(ReceiptMode::from_raw("1"), ReceiptMode::On);
+    fn read_receipt_setting_one_is_on() {
+        assert_eq!(ReadReceiptSetting::from_raw("1"), ReadReceiptSetting::On);
     }
 
     #[test]
-    fn receipt_mode_quoted_zero_is_off() {
+    fn read_receipt_setting_quoted_zero_is_off() {
         // Wire stores some property values as JSON-encoded strings
         // (`"\"0\""` rather than `"0"`); the parser strips outer
         // quotes before matching.
-        assert_eq!(ReceiptMode::from_raw(r#""0""#), ReceiptMode::Off);
+        assert_eq!(
+            ReadReceiptSetting::from_raw(r#""0""#),
+            ReadReceiptSetting::Off
+        );
     }
 
     #[test]
-    fn receipt_mode_quoted_one_is_on() {
-        assert_eq!(ReceiptMode::from_raw(r#""1""#), ReceiptMode::On);
+    fn read_receipt_setting_quoted_one_is_on() {
+        assert_eq!(
+            ReadReceiptSetting::from_raw(r#""1""#),
+            ReadReceiptSetting::On
+        );
     }
 
     #[test]
-    fn receipt_mode_unknown_value_defaults_to_on() {
+    fn read_receipt_setting_unknown_value_defaults_to_on() {
         // Forward-compat: any value that isn't `0` (or `"0"`) is
         // treated as On — the safer default per ADR-0012.
-        assert_eq!(ReceiptMode::from_raw("yes"), ReceiptMode::On);
-        assert_eq!(ReceiptMode::from_raw(""), ReceiptMode::On);
+        assert_eq!(ReadReceiptSetting::from_raw("yes"), ReadReceiptSetting::On);
+        assert_eq!(ReadReceiptSetting::from_raw(""), ReadReceiptSetting::On);
     }
 }

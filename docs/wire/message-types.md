@@ -128,8 +128,8 @@ local-only. Not mirrored yet: the `DeleteForMe` official receivers
 send into their self-conversation for their other devices (Step 86).
 
 **`Confirmation` — READ and DELIVERED are asymmetric.** READ is emitted
-by `Timeline::mark_as_read`, gated by the server-administered receipt
-mode (`receipt_mode()` Off → no send), and self-applied locally so
+by `Timeline::mark_as_read`, gated by the account's read-receipt
+setting (`read_receipt_setting()` Off → no send), and self-applied locally so
 `read_by` includes the reader immediately. DELIVERED is the recipient's
 auto-acknowledgement (Step 25b): emitted per *fresh* inbound content
 message in 1:1 rooms only (group delivery would be N² traffic for little

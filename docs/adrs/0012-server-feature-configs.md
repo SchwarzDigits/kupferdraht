@@ -67,13 +67,13 @@ For each config Kupferdraht intends to read (`fileSharing`, `mls`, `mlsE2EId` in
 
 Fetch the entire `/v14/feature-configs` response as a single JSON blob and persist it as one row per feature with `name`, `status`, `config` (JSON). Same pattern for `/v14/properties` — one row per property with `key`, `value`. Subscribe to all three notification-event types and re-fetch the affected entry on each.
 
-On top of the generic store, add typed Rust getters only for the configs Kupferdraht actively reacts to today. In V1: `Client::file_sharing() -> FileSharingPolicy` for Step 11. Other configs are reachable as `Client::feature_config(name) -> Option<RawFeatureConfig>` returning the persisted JSON, parsed lazily by callers if and when they need it.
+On top of the generic store, add typed Rust getters only for the configs Kupferdraht actively reacts to today. In V1: `Client::file_sharing() -> FileSharingPolicy` for Step 11. Other configs are reachable as `Client::server_setting(name) -> Option<ServerSetting>` returning the persisted JSON, parsed lazily by callers if and when they need it.
 
 - **Pro:** "Fetch all" satisfied — every config Wire returns is persisted, regardless of whether Kupferdraht reads it today.
 - **Pro:** Adding a typed getter for a previously-untyped config is a Rust-only change against existing data; no schema migration, no new endpoint coverage, no LoginPipeline edit.
 - **Pro:** Wire schema evolution doesn't break Kupferdraht — new fields appear in the JSON blob automatically.
 - **Pro:** Single canonical re-fetch path for every event (`feature-config.update` re-fetches that one entry; the typed-getter layer reads from the persisted blob).
-- **Pro:** Diagnostics surface (`kupferdraht-cli features`, `kupferdraht-cli properties`) becomes a one-command answer to "what does the server say about this team / user?".
+- **Pro:** Diagnostics surface (`kupferdraht-cli settings`, `kupferdraht-cli account-data`) becomes a one-command answer to "what does the server say about this team / user?".
 - **Con:** Loses compile-time field safety for non-typed configs. Mitigated by the convention that Kupferdraht only ever *reacts* to a config through a typed getter; raw access is for diagnostics and future work.
 - **Con:** JSON-blob columns are slightly less queryable than typed columns (no `WHERE config.defaultProtocol = …` SQL). Acceptable — feature-config queries are rare, and the typed-getter layer covers reactive paths.
 
@@ -100,7 +100,7 @@ Two:
 
 1. `Client::file_sharing() -> FileSharingPolicy` where `FileSharingPolicy` is `enum { Disabled, Enabled }` (revision 1.3) keyed off `feature_configs.fileSharing.status` — required by Step 11.
 
-2. `Client::receipt_mode() -> ReceiptMode` where `ReceiptMode` is `enum { Off, On }` keyed off `user_properties.WIRE_RECEIPT_MODE` (`"0"` → Off, `"1"` → On). Kupferdraht's outbound read-receipt path (Step 6-II-f, merged) currently always emits; respecting the user's own toggle is a one-line gate that this ADR makes possible.
+2. `Client::read_receipt_setting() -> ReadReceiptSetting` where `ReadReceiptSetting` is `enum { Off, On }` keyed off `user_properties.WIRE_RECEIPT_MODE` (`"0"` → Off, `"1"` → On). Kupferdraht's outbound read-receipt path (Step 6-II-f, merged) currently always emits; respecting the user's own toggle is a one-line gate that this ADR makes possible.
 
 Tier-2 configs (`mls`, `mlsE2EId`, `mlsMigration`) and all other configs are persisted but not typed in V1. Adding typed getters for them is a future commit per use-case; ADR-0012's foundation makes those commits trivial.
 
@@ -111,7 +111,7 @@ After `LoginPipeline::register_and_rebind` succeeds (i.e. the access-token is bo
 1. Calls `GET /v14/feature-configs` — full response.
 2. Calls `GET /v14/properties` — list of property keys.
 3. For each key, calls `GET /v14/properties/{key}` — value.
-4. Persists everything via the new `Store::replace_feature_configs` and `Store::replace_user_properties` methods (both replace-all-or-nothing).
+4. Persists everything via the new `Store::replace_server_settings` and `Store::replace_account_data` methods (both replace-all-or-nothing).
 5. On any HTTP error other than 200, logs at warn level and continues — feature-configs failure is not a login blocker. Kupferdraht operates with its hardcoded defaults until the next successful fetch.
 
 The pipeline failure mode here is a deliberate choice: a Wire backend that briefly cannot serve `/feature-configs` should not prevent the user from logging in to receive messages. The trade-off is that a transient outage could land Kupferdraht in a state where it sends a file the team policy disallows; the resulting Wire 403 then surfaces as a clean error in the asset send path. That is the better failure mode than "user cannot log in".
@@ -155,35 +155,35 @@ impl Client {
     /// Caller iterates and matches on `name` for diagnostics or
     /// for accessing configs Kupferdraht does not yet have a typed
     /// getter for.
-    pub fn feature_configs(&self) -> Vec<FeatureConfigEntry>;
+    pub fn server_settings(&self) -> Vec<ServerSetting>;
 
-    /// One feature config by name (Wire's exact field key —
+    /// One server setting by name (the backend's exact key —
     /// "fileSharing", "mls", "mlsE2EId", ...).
-    pub fn feature_config(&self, name: &str) -> Option<FeatureConfigEntry>;
+    pub fn server_setting(&self, name: &str) -> Option<ServerSetting>;
 
-    /// All user-property entries.
-    pub fn user_properties(&self) -> Vec<UserPropertyEntry>;
+    /// All account-data entries.
+    pub fn account_data(&self) -> Vec<AccountDataEntry>;
 
-    /// One user property by key (Wire's exact key —
+    /// One account-data entry by key (the backend's exact key —
     /// "WIRE_RECEIPT_MODE", "WIRE_TYPING_INDICATOR_MODE", ...).
-    pub fn user_property(&self, key: &str) -> Option<UserPropertyEntry>;
+    pub fn account_data_entry(&self, key: &str) -> Option<AccountDataEntry>;
 
     /// Typed getter — Step 11 entry point.
     pub fn file_sharing(&self) -> FileSharingPolicy;
 
     /// Typed getter — refines Step 6-II-f's mark_as_read behaviour
     /// to respect the user's own preference.
-    pub fn receipt_mode(&self) -> ReceiptMode;
+    pub fn read_receipt_setting(&self) -> ReadReceiptSetting;
 }
 
-pub struct FeatureConfigEntry {
+pub struct ServerSetting {
     pub name: String,
     pub status: Option<String>,    // "enabled" | "disabled" | None
     pub config_json: String,        // raw config object as JSON
     pub last_synced_at_ms: i64,
 }
 
-pub struct UserPropertyEntry {
+pub struct AccountDataEntry {
     pub key: String,
     pub value: String,              // raw response body, opaque
     pub last_synced_at_ms: i64,
@@ -194,13 +194,13 @@ pub enum FileSharingPolicy {
     Enabled,
 }
 
-pub enum ReceiptMode {
+pub enum ReadReceiptSetting {
     Off,
     On,
 }
 ```
 
-The two typed getters return defaults when the underlying entry is missing (e.g. Wire didn't send the config, or login-time fetch failed): `FileSharingPolicy::Enabled` and `ReceiptMode::On`. These are the safest defaults — permitting an action that turns out to be server-disallowed surfaces as a clean Wire error; suppressing an action that is in fact allowed silently breaks features.
+The two typed getters return defaults when the underlying entry is missing (e.g. Wire didn't send the config, or login-time fetch failed): `FileSharingPolicy::Enabled` and `ReadReceiptSetting::On`. These are the safest defaults — permitting an action that turns out to be server-disallowed surfaces as a clean Wire error; suppressing an action that is in fact allowed silently breaks features.
 
 ---
 
@@ -212,7 +212,7 @@ The two typed getters return defaults when the underlying entry is missing (e.g.
 - Future steps add typed getters as one-line additions over the existing data — no schema migration, no LoginPipeline edit, no new endpoint coverage.
 - Wire schema evolution (new fields on existing configs) is zero-effort to absorb. New configs entirely (Wire adds `featureFoo`) appear as a new row at the next login or `feature-config.update` event.
 - Step 11 (Asset content support) becomes implementable cleanly, with a typed `Client::file_sharing()` that the CLI can also surface for diagnostics.
-- Step 6-II-f (read receipts, merged) gains a one-line gate against `Client::receipt_mode()`, refining its outbound emission to respect the user's own preference.
+- Step 6-II-f (read receipts, merged) gains a one-line gate against `Client::read_receipt_setting()`, refining its outbound emission to respect the user's own preference.
 - Wire-API-NOTES.md gains entries for `/feature-configs` and `/properties`, closing two of its existing "Endpoints Kupferdraht does not yet use" markers.
 
 ### Negative
@@ -220,7 +220,7 @@ The two typed getters return defaults when the underlying entry is missing (e.g.
 - Two new SQLite tables in the per-account database. Their combined size is on the order of a few KB even on busy team accounts — negligible.
 - The `user_properties` row may end up large for keys like `webapp` (Wire-Web's UI-state JSON, multiple KB). This is fine; SQLite handles it transparently. Kupferdraht does not interpret these values, only persists them.
 - A small login-time cost: one HTTP call for feature-configs, one for the property-keys list, plus N for each property value. In practice ≤ 5 properties on a typical user; each call is small.
-- New error class to surface in `Client::feature_configs` / `Client::user_properties`: returning the cached value vs. signalling staleness. Decision: getters return cached values without a freshness flag; consumers who care about freshness can read `last_synced_at_ms` on the entry.
+- New error class to surface in `Client::server_settings` / `Client::account_data`: returning the cached value vs. signalling staleness. Decision: getters return cached values without a freshness flag; consumers who care about freshness can read `last_synced_at_ms` on the entry.
 
 ### Neutral
 
@@ -237,19 +237,19 @@ The two typed getters return defaults when the underlying entry is missing (e.g.
 New files:
 
 - `kupferdraht-core/src/wire/http/feature_configs.rs` — `HttpClient::fetch_feature_configs`, `HttpClient::fetch_property_keys`, `HttpClient::fetch_property_value`. Pure transport.
-- `kupferdraht-core/src/client/server_config.rs` — typed-getter logic (`FileSharingPolicy::from_raw`, `ReceiptMode::from_raw`).
+- `kupferdraht-core/src/client/server_settings.rs` — the accessors and the typed-getter logic (`FileSharingPolicy::from_entry`, `ReadReceiptSetting::from_raw`).
 - `kupferdraht-core/src/storage/migrations/V18__step_10_server_configs.sql` — the two new tables. (V17 is taken by Step 7b's `meta.schema_version` migration; the next free slot is V18.)
 
 Extended files:
 
-- `kupferdraht-core/src/storage/records.rs` — `FeatureConfigEntry`, `UserPropertyEntry`.
-- `kupferdraht-core/src/storage/sqlite/...` — `Store` trait methods (`replace_feature_configs`, `replace_user_properties`, `upsert_user_property`, `delete_user_property`, getters).
+- `kupferdraht-core/src/storage/records.rs` — `ServerSetting`, `AccountDataEntry`.
+- `kupferdraht-core/src/storage/sqlite/...` — `Store` trait methods (`replace_server_settings`, `replace_account_data`, `upsert_account_data_entry`, `delete_account_data_entry`, getters).
 - `kupferdraht-core/src/client/login_pipeline.rs` — new `fetch_server_configs` phase.
 - `kupferdraht-core/src/sync/dispatch.rs` — three new event arms.
 - `kupferdraht-core/src/client/builder.rs` — re-export new `Client` methods.
 - `kupferdraht-core/src/lib.rs` — public-API re-exports for the new types.
 - `kupferdraht-core/src/kupferdraht.udl` — UniFFI surface for the new methods + types.
-- `kupferdraht-cli/src/main.rs` — `features` and `properties` subcommands.
+- `kupferdraht-cli/src/main.rs` — `settings` and `account-data` subcommands.
 - `docs/library.md` — public API documentation.
 - `docs/wire/api-notes.md` — promote `/feature-configs` and `/properties` from "does not yet use" to documented.
 
@@ -257,7 +257,7 @@ Extended files:
 
 - **Unit tests** in `feature_configs.rs` for HTTP request shape and response parsing against `httpmock` fixtures.
 - **Round-trip tests** for the two new Store methods against an in-memory SQLite.
-- **Live-smoke against a live Wire v14 backend**: `kupferdraht-cli login` followed by `kupferdraht-cli features` lists at least 5 feature configs (Wire's standard team config has more), `kupferdraht-cli features --name fileSharing` shows the parsed status. `kupferdraht-cli properties` lists the user's existing properties (typically 0–3 entries).
+- **Live-smoke against a live Wire v14 backend**: `kupferdraht-cli login` followed by `kupferdraht-cli settings` lists at least 5 feature configs (Wire's standard team config has more), `kupferdraht-cli settings --name fileSharing` shows the parsed status. `kupferdraht-cli account-data` lists the user's existing properties (typically 0–3 entries).
 - **Notification-event smoke**: change a user property via Wire-Web (e.g. toggle read-receipts), observe Kupferdraht's sync stream picks up the `user.properties-set` event and re-fetches; `kupferdraht-cli properties --key WIRE_RECEIPT_MODE` reflects the new value within one sync cycle.
 
 ### Out of scope for this ADR
@@ -289,3 +289,4 @@ Extended files:
 | 1.2 | 2026-10-09 | Amendment, not a supersession — `Client::wire_receipt_mode()` renamed to `Client::receipt_mode()`. Why: the public API carries no Wire terminology (ADR-0009); the server property key `WIRE_RECEIPT_MODE` it projects is unchanged. The decision is untouched. |
 | 1.3 | 2026-10-20 | `FileSharingPolicy` reduced to `Disabled \| Enabled`. Wire's `fileSharing` feature carries only a `status` (the v14 Swagger's `FileSharingConfig`: `status`, `lockStatus`, `ttl`); the former `EnabledSome(Vec<String>)` variant and the `config.allowedTypes` field it read exist on no Wire backend. The shape had been carried over from the Q7 survey of Kalium's `FileSharingStatus` (a build-time flag there), which the provenance audit after counsel's opinion identified as the one place where a Kalium reading shaped a Kupferdraht type. Decision otherwise unchanged. |
 | 1.4 | 2026-11-18 | Naming only, per ADR-0009 (revision 1.2): the generic store's public surface — `feature_configs()` / `feature_config(name)` / `FeatureConfigEntry` keyed by Wire's feature names, `user_properties()` / `UserPropertyEntry` by Wire's property keys, `ReceiptMode` — passes Wire's names and raw values through; Step 163e types the settings it reads and names the rest neutrally. Persisting the configs and reacting to their events stand. |
+| 1.5 | 2026-11-22 | Amendment, not a supersession: naming per ADR-0009 part 4, done by Step 163e. The generic store's public surface passes Wire's names through no longer: `Client::server_settings()` / `server_setting(name)` with `ServerSetting` replace `feature_configs()` / `feature_config(name)` and `FeatureConfigEntry`; `Client::account_data()` / `account_data_entry(key)` with `AccountDataEntry` replace `user_properties()` / `user_property(key)` and `UserPropertyEntry`; `Client::read_receipt_setting()` with `ReadReceiptSetting` replaces `receipt_mode()` and `ReceiptMode`; the `Store` methods, the CLI (`settings`, `account-data`) and the browser (`serverSettings()`) follow, the SQL tables keep their names. The typed getters (`file_sharing()`, `read_receipt_setting()`) and their permissive defaults, the raw accessor (it stays public), "fetch all" and the read-only posture are unchanged. Decided by Volker on 2026-11-22. |

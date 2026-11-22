@@ -103,7 +103,7 @@ async fn login_with_second_factor_required_propagates_typed_variant() {
 }
 
 #[tokio::test]
-async fn successful_login_fetches_self_and_parses_into_self_user() {
+async fn successful_login_fetches_self_and_parses_into_own_user() {
     // Happy path end-to-end: /api-version → /v14/login → /v14/self →
     // /v14/clients (register) → /v14/access?client_id= (rebind).
     // Tests in step_1b_* cover the 1b-specific assertions; this test

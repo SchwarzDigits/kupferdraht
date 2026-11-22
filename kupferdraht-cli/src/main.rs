@@ -413,8 +413,8 @@ enum Command {
     /// Refresh the rooms snapshot in `kupferdraht.db` from a persisted
     /// session — no password required.
     ///
-    /// Loads the latest session, server config, device, self-user,
-    /// and backend removal key from `kupferdraht.db`, refreshes the
+    /// Loads the latest session, server config, device, own user,
+    /// and external sender key from `kupferdraht.db`, refreshes the
     /// access token via `POST /v14/access?client_id=<id>` using the
     /// persisted refresh cookie, then drives
     /// `Client::sync_metadata` through
@@ -563,10 +563,10 @@ enum Command {
         #[arg(long, default_value = "websocket")]
         transport: String,
     },
-    /// Create a new MLS conversation (Step 6a, zero-invitee). The
+    /// Create a new MLS room (Step 6a, zero-invitee). The
     /// group is registered server-side via `POST /v14/conversations`
     /// and the local MLS state is built at epoch 0 with Wire's
-    /// backend removal key in the `external_senders` extension.
+    /// external sender key in the `external_senders` extension.
     /// Print the `room_id` so subsequent `send` /
     /// `room-join` / `room-members` calls can target it.
     RoomCreate {
@@ -608,7 +608,7 @@ enum Command {
     /// reserves Wire's first-class 1:1 (idempotent server-side —
     /// calling against an existing 1:1 returns it). epoch 0 → claim
     /// the peer's key packages + upload the establishing Add-commit
-    /// (only then does wire-server list the conversation); epoch > 0
+    /// (only then does wire-server list the room); epoch > 0
     /// → external-commit join; local group present → resume. Runs
     /// `sync_metadata` and prints the resulting `room_id`.
     /// matrix-rust-sdk analog: `Client::create_dm`.
@@ -617,7 +617,7 @@ enum Command {
         #[arg(long)]
         peer: String,
     },
-    /// Look up the cached 1:1 conversation with the named peer
+    /// Look up the cached 1:1 room with the named peer
     /// (Step 14a). Strict local-cache lookup — no network, no
     /// authentication. Prints the room id when one is on file,
     /// exits with status 2 otherwise (mirrors `room` /
@@ -629,7 +629,7 @@ enum Command {
         peer: String,
     },
     /// "Look up first, create if missing" convenience for 1:1
-    /// conversations (Step 14a). Cache hit prints the existing
+    /// rooms (Step 14a). Cache hit prints the existing
     /// room id without any HTTP traffic; cache miss falls through
     /// to `dm-create`. Concurrent invocations against the same
     /// peer de-duplicate the POST. Kupferdraht-specific (no
@@ -639,7 +639,7 @@ enum Command {
         #[arg(long)]
         peer: String,
     },
-    /// Look up the caller's personal room — the notes-to-self room, an
+    /// Look up the caller's personal room — notes to self, an
     /// MLS group of the user's own devices (Step 86). Strict local-cache
     /// lookup: no network, no authentication. Prints `room_id` + `epoch`
     /// when the last sync's snapshot carries it, exits with status 2
@@ -654,7 +654,7 @@ enum Command {
     Devices,
     /// Show this device's server-side MLS key-package pool (Step 63).
     /// Peers claim one package per invite; an empty pool means the
-    /// device can no longer be added to new conversations. The sync
+    /// device can no longer be added to new rooms. The sync
     /// loop tops the pool up automatically once per day.
     KeyPackages {
         /// Force a top-up now instead of waiting for the daily
@@ -733,14 +733,14 @@ enum Command {
     /// Wire invalidates every device's session, so all devices must
     /// re-login; registered devices and MLS group state survive.
     ChangePassword,
-    /// Rename a conversation server-side (Step 2g). Sends
+    /// Rename a room server-side (Step 2g). Sends
     /// `PUT /v{N}/conversations/{domain}/{id}/name`. Wire emits a
     /// `conversation.rename` event to all members.
     RoomRename {
         /// Room id (`<uuid>@<domain>`).
         #[arg(long)]
         id: String,
-        /// New conversation name.
+        /// New room name.
         #[arg(short = 'n', long)]
         name: String,
     },
@@ -753,10 +753,10 @@ enum Command {
         #[arg(long)]
         id: String,
     },
-    /// Delete a team conversation for everyone (Step 23, team-admin
-    /// action — distinct from `room-leave`). `DELETE /v{N}/teams/{tid}/
-    /// conversations/{cid}`; the owning team id is read from the
-    /// conversation's `team` field. Only valid for team conversations —
+    /// Delete a team room for everyone (Step 23, team-admin
+    /// action — distinct from `room-leave`).
+    /// `DELETE /v{N}/teams/{tid}/conversations/{cid}`; the owning team id
+    /// is read from the room's `team` field. Only valid for team rooms —
     /// a 1:1 / non-team group is rejected (leave it instead).
     RoomDelete {
         /// Room id (`<uuid>@<domain>`).
@@ -1012,28 +1012,28 @@ enum Command {
         #[arg(short = 'p', long)]
         password: bool,
     },
-    /// List Wire's team-feature configs as persisted at the last
+    /// List the server settings as persisted at the last
     /// successful login or `feature-config.update` event (Step 10c).
     /// Reads from the local store only — no network call. With
-    /// `--name <key>` prints one entry's full detail (status,
+    /// `--name <name>` prints one entry's full detail (status,
     /// `last_synced_at_ms`, raw `config_json`); without flags lists
     /// every persisted entry one per line. Empty when login has not
-    /// yet populated the V18 `feature_configs` table.
-    Features {
-        /// Show only the feature config matching this Wire key
+    /// yet populated the persisted server settings.
+    Settings {
+        /// Show only the server setting matching this name
         /// (`fileSharing`, `mls`, `mlsE2EId`, …).
         #[arg(long)]
         name: Option<String>,
     },
-    /// List the authenticated user's properties as persisted at the
-    /// last login or `user.properties-set` event (Step 10c). Reads
+    /// List the account data as persisted at the last login or
+    /// `user.properties-set` event (Step 10c). Reads
     /// from the local store only — no network call. With
-    /// `--key <name>` prints one property's full detail (value,
+    /// `--key <key>` prints one entry's full detail (value,
     /// `last_synced_at_ms`); without flags lists every persisted
-    /// property one per line.
-    Properties {
-        /// Show only the property matching this Wire key
-        /// (`WIRE_RECEIPT_MODE`, `labels`, …).
+    /// entry one per line.
+    AccountData {
+        /// Show only the account-data entry matching this key
+        /// (`labels`, …).
         #[arg(long)]
         key: Option<String>,
     },
@@ -1103,7 +1103,7 @@ enum Command {
     /// Create or update the room's case (Step 72c,
     /// ADR-0018): patches the folded state and sends the resulting
     /// full CasePayload snapshot (no text fallback; requires the
-    /// caller to be a conversation administrator). Unset flags keep
+    /// caller to be a room administrator). Unset flags keep
     /// their current values.
     CaseSet {
         /// Room id (`<uuid>@<domain>`).
@@ -1414,8 +1414,8 @@ async fn async_main() -> ExitCode {
             };
             cli::access::join_via_link(url, pw).await
         }
-        Command::Features { name } => cli::config::features(name).await,
-        Command::Properties { key } => cli::config::properties(key).await,
+        Command::Settings { name } => cli::config::settings(name).await,
+        Command::AccountData { key } => cli::config::account_data(key).await,
         Command::SendFile { id, path, mime } => cli::attachments::send_file(id, path, mime).await,
         Command::Avatar { action } => match action {
             AvatarCommand::Get {

@@ -6,7 +6,7 @@
 //! `src/storage/migrations/`.
 //!
 //! Per-table CRUD lives in sibling submodules (`session`,
-//! `self_user`, `server_config`, `devices`, `backend_mls_keys`,
+//! `own_user`, `server_config`, `devices`, `external_sender_keys`,
 //! `rooms`, `timeline_events`, `mentions`, `reactions`,
 //! `read_receipts`, `sync_state`). Each submodule is a focused
 //! ~50-200 LOC unit with its own `#[cfg(test)]` block colocated
@@ -27,14 +27,15 @@
 //! then a file name in the OPFS `sahpool` pool, and the journal stays a
 //! rollback journal (the VFS has no shared-memory WAL).
 
+mod account_data;
 mod attachments;
-mod backend_mls_keys;
 mod delivery_receipts;
 mod devices;
 mod engine;
 mod event_writes;
-mod feature_configs;
+mod external_sender_keys;
 mod mentions;
+mod own_user;
 mod page;
 mod reactions;
 mod read_markers;
@@ -42,14 +43,13 @@ mod read_receipts;
 mod recovery_state;
 mod room_devices;
 mod rooms;
-mod self_user;
 mod send_keys;
 mod server_config;
+mod server_settings;
 mod session;
 mod sync_state;
 mod tasks;
 mod timeline_events;
-mod user_properties;
 mod wipe;
 mod write_tx;
 
@@ -62,10 +62,10 @@ use rusqlite::Connection;
 use crate::error::KupferdrahtError;
 use crate::storage::StorageEngineInfo;
 use crate::storage::records::{
-    AttachmentRecord, BackendMlsKey, DeliveryReceiptRecord, DeviceRecord, ExpiredMessageRecord,
-    FeatureConfigEntry, MentionRecord, ReactionRecord, ReadReceiptRecord, RecoveryStateRecord,
-    RoomMemberRecord, RoomRecord, SelfUserRecord, SendKeyRecord, ServerConfigRecord, SessionRecord,
-    Store, SyncStateRecord, TimelineEventRecord, UserPropertyEntry,
+    AccountDataEntry, AttachmentRecord, DeliveryReceiptRecord, DeviceRecord, ExpiredMessageRecord,
+    ExternalSenderKey, MentionRecord, OwnUserRecord, ReactionRecord, ReadReceiptRecord,
+    RecoveryStateRecord, RoomMemberRecord, RoomRecord, SendKeyRecord, ServerConfigRecord,
+    ServerSetting, SessionRecord, Store, SyncStateRecord, TimelineEventRecord,
 };
 use crate::storage::schema::run_migrations;
 
@@ -256,17 +256,20 @@ impl Store for SqliteStore {
         devices::load_device(self, user_id, device_id)
     }
 
-    async fn save_backend_mls_key(&self, key: &BackendMlsKey) -> Result<(), KupferdrahtError> {
+    async fn save_external_sender_key(
+        &self,
+        key: &ExternalSenderKey,
+    ) -> Result<(), KupferdrahtError> {
         let _permit = self.write_permit().await;
-        backend_mls_keys::save_backend_mls_key(self, key)
+        external_sender_keys::save_external_sender_key(self, key)
     }
 
-    async fn load_backend_mls_key(
+    async fn load_external_sender_key(
         &self,
         purpose: &str,
         signature_scheme: &str,
-    ) -> Result<Option<BackendMlsKey>, KupferdrahtError> {
-        backend_mls_keys::load_backend_mls_key(self, purpose, signature_scheme)
+    ) -> Result<Option<ExternalSenderKey>, KupferdrahtError> {
+        external_sender_keys::load_external_sender_key(self, purpose, signature_scheme)
     }
 
     async fn replace_rooms(
@@ -313,13 +316,13 @@ impl Store for SqliteStore {
         rooms::load_rooms(self)
     }
 
-    async fn save_self_user(&self, user: &SelfUserRecord) -> Result<(), KupferdrahtError> {
+    async fn save_own_user(&self, user: &OwnUserRecord) -> Result<(), KupferdrahtError> {
         let _permit = self.write_permit().await;
-        self_user::save_self_user(self, user)
+        own_user::save_own_user(self, user)
     }
 
-    async fn load_self_user(&self, id: &str) -> Result<Option<SelfUserRecord>, KupferdrahtError> {
-        self_user::load_self_user(self, id)
+    async fn load_own_user(&self, id: &str) -> Result<Option<OwnUserRecord>, KupferdrahtError> {
+        own_user::load_own_user(self, id)
     }
 
     async fn save_server_config(
@@ -400,16 +403,16 @@ impl Store for SqliteStore {
     async fn unread_count_for_room(
         &self,
         room_id: &str,
-        self_user_id: &str,
+        own_user_id: &str,
     ) -> Result<u32, KupferdrahtError> {
-        read_markers::unread_count_for_room(self, room_id, self_user_id)
+        read_markers::unread_count_for_room(self, room_id, own_user_id)
     }
 
     async fn unread_counts(
         &self,
-        self_user_id: &str,
+        own_user_id: &str,
     ) -> Result<std::collections::HashMap<String, u32>, KupferdrahtError> {
-        read_markers::unread_counts(self, self_user_id)
+        read_markers::unread_counts(self, own_user_id)
     }
 
     async fn insert_timeline_event(
@@ -641,7 +644,7 @@ impl Store for SqliteStore {
     async fn apply_delivery_receipts(
         &self,
         room_id: &str,
-        confirmer_user_id: &str,
+        reader_user_id: &str,
         message_ids: &[String],
         confirmed_at_ms: i64,
     ) -> Result<usize, KupferdrahtError> {
@@ -649,7 +652,7 @@ impl Store for SqliteStore {
         delivery_receipts::apply_delivery_receipts(
             self,
             room_id,
-            confirmer_user_id,
+            reader_user_id,
             message_ids,
             confirmed_at_ms,
         )
@@ -759,63 +762,60 @@ impl Store for SqliteStore {
         )
     }
 
-    async fn replace_feature_configs(
+    async fn replace_server_settings(
         &self,
-        entries: &[FeatureConfigEntry],
+        entries: &[ServerSetting],
     ) -> Result<(), KupferdrahtError> {
         let _permit = self.write_permit().await;
-        feature_configs::replace_feature_configs(self, entries)
+        server_settings::replace_server_settings(self, entries)
     }
 
-    async fn upsert_feature_config(
-        &self,
-        entry: &FeatureConfigEntry,
-    ) -> Result<(), KupferdrahtError> {
+    async fn upsert_server_setting(&self, entry: &ServerSetting) -> Result<(), KupferdrahtError> {
         let _permit = self.write_permit().await;
-        feature_configs::upsert_feature_config(self, entry)
+        server_settings::upsert_server_setting(self, entry)
     }
 
-    async fn list_feature_configs(&self) -> Result<Vec<FeatureConfigEntry>, KupferdrahtError> {
-        feature_configs::list_feature_configs(self)
+    async fn list_server_settings(&self) -> Result<Vec<ServerSetting>, KupferdrahtError> {
+        server_settings::list_server_settings(self)
     }
 
-    async fn get_feature_config(
+    async fn get_server_setting(
         &self,
         name: &str,
-    ) -> Result<Option<FeatureConfigEntry>, KupferdrahtError> {
-        feature_configs::get_feature_config(self, name)
+    ) -> Result<Option<ServerSetting>, KupferdrahtError> {
+        server_settings::get_server_setting(self, name)
     }
 
-    async fn replace_user_properties(
+    async fn replace_account_data(
         &self,
-        entries: &[UserPropertyEntry],
+        entries: &[AccountDataEntry],
     ) -> Result<(), KupferdrahtError> {
         let _permit = self.write_permit().await;
-        user_properties::replace_user_properties(self, entries)
+        account_data::replace_account_data(self, entries)
     }
 
-    async fn upsert_user_property(
+    async fn upsert_account_data_entry(
         &self,
-        entry: &UserPropertyEntry,
+        entry: &AccountDataEntry,
     ) -> Result<(), KupferdrahtError> {
         let _permit = self.write_permit().await;
-        user_properties::upsert_user_property(self, entry)
+        account_data::upsert_account_data_entry(self, entry)
     }
 
-    async fn delete_user_property(&self, key: &str) -> Result<(), KupferdrahtError> {
+    async fn delete_account_data_entry(&self, key: &str) -> Result<(), KupferdrahtError> {
         let _permit = self.write_permit().await;
-        user_properties::delete_user_property(self, key)
+        account_data::delete_account_data_entry(self, key)
     }
 
-    async fn list_user_properties(&self) -> Result<Vec<UserPropertyEntry>, KupferdrahtError> {
-        user_properties::list_user_properties(self)
+    async fn list_account_data(&self) -> Result<Vec<AccountDataEntry>, KupferdrahtError> {
+        account_data::list_account_data(self)
     }
 
-    async fn get_user_property(
+    async fn get_account_data_entry(
         &self,
         key: &str,
-    ) -> Result<Option<UserPropertyEntry>, KupferdrahtError> {
-        user_properties::get_user_property(self, key)
+    ) -> Result<Option<AccountDataEntry>, KupferdrahtError> {
+        account_data::get_account_data_entry(self, key)
     }
 
     async fn insert_attachment(&self, record: &AttachmentRecord) -> Result<(), KupferdrahtError> {

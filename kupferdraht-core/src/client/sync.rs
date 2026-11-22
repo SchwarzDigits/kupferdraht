@@ -5,8 +5,8 @@
 //!
 //! Split out of `client/runtime.rs` (Step 29): the
 //! matrix-rust-sdk-shaped `sync*` family (`sync`, `sync_once`,
-//! `sync_with_callback`, `sync_stream`), the conversation-metadata
-//! refresh (`sync_metadata`, `collect_conversation_ids`,
+//! `sync_with_callback`, `sync_stream`), the room-metadata
+//! refresh (`sync_metadata`, `collect_room_ids`,
 //! `backfill_user_profiles`), the `SqliteStore` rooms-cache
 //! round-trip (`persist_rooms`, `load_rooms_from_store`), event-handler
 //! registration, and the inbound external-removal commit driver.
@@ -114,13 +114,13 @@ impl Client {
             .push(handler);
     }
 
-    /// Fetch the user's conversation list from Wire and cache it in
+    /// Fetch the user's room list from Wire and cache it in
     /// memory. Mirrors `matrix_sdk::Client::sync_once` (one-shot;
     /// the event-stream-based live sync is Step 5).
     ///
     /// Pages through `POST /v14/conversations/list-ids` until
     /// `has_more` is `false`, then bulk-fetches metadata via
-    /// `POST /v14/conversations/list`. `proteus`-only conversations
+    /// `POST /v14/conversations/list`. `proteus`-only rooms
     /// are filtered out at the `wire::dto` → `Room` boundary
     /// (ADR-0001: Kupferdraht is MLS-only). Cycle 2d wires this cache
     /// through `SqliteStore` so a process restart can skip the
@@ -136,7 +136,7 @@ impl Client {
     /// write guard, which is itself a bug.
     pub async fn sync_metadata(&self) -> Result<(), KupferdrahtError> {
         let before = self.known_room_list().await?;
-        let all_ids = self.collect_conversation_ids().await?;
+        let all_ids = self.collect_room_ids().await?;
         let conversations = self.list_conversations_chunked(&all_ids).await?;
         let rooms = if conversations.is_empty() {
             Vec::new()
@@ -177,7 +177,7 @@ impl Client {
     }
 
     /// Step 14b — one iteration of the matrix-rust-sdk-shaped sync
-    /// surface. Composes a conversations-metadata refresh + one
+    /// surface. Composes a room-metadata refresh + one
     /// `/v14/notifications` drain + cursor advance, dispatching every
     /// queued event through the registered `EventHandler`s. Since
     /// Step 118 the metadata refresh runs only when the room list is
@@ -220,7 +220,7 @@ impl Client {
         // outcome never affects the iteration — warn-and-continue.
         self.maybe_replenish_key_packages().await;
 
-        // Phase 1: the conversations-metadata refresh, when the room list
+        // Phase 1: the room-metadata refresh, when the room list
         // is stale (Step 118).
         self.refresh_rooms_if_stale().await?;
         // Step 95d: every room gets its device baseline before the drain
@@ -410,7 +410,7 @@ impl Client {
 
     /// Steps 62b/73 — the long-lived push loop behind
     /// [`SyncTransport::WebSocket`](crate::sync::SyncTransport): one
-    /// conversations-metadata refresh per connection, then the
+    /// room-metadata refresh per connection, then the
     /// ADR-0019 negotiation picks the socket dialect —
     /// `/v14/events` (frames acked after the cursor persist) when
     /// the server enables ConsumableNotifications, the legacy
@@ -558,7 +558,7 @@ impl Client {
     }
 
     /// Fetch the metadata of `ids` in requests of at most Wire's cap
-    /// (Step 95c: an account in more than 1000 conversations used to
+    /// (Step 95c: an account in more than 1000 rooms used to
     /// send one oversized request, rejected on every cycle).
     async fn list_conversations_chunked(
         &self,
@@ -575,7 +575,7 @@ impl Client {
         Ok(found)
     }
 
-    async fn collect_conversation_ids(&self) -> Result<Vec<QualifiedId>, KupferdrahtError> {
+    async fn collect_room_ids(&self) -> Result<Vec<QualifiedId>, KupferdrahtError> {
         let mut all_ids: Vec<QualifiedId> = Vec::new();
         let mut paging_state: Option<String> = None;
         loop {

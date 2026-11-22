@@ -117,7 +117,7 @@ export const METHODS = Object.freeze([
   ["Client", "requestEmailChange", "mutation", null],
   ["Client", "devices", "idempotent", null],
   ["Client", "deleteDevice", "mutation", null],
-  ["Client", "featureConfigs", "idempotent", null],
+  ["Client", "serverSettings", "idempotent", null],
   ["Client", "fileSharing", "idempotent", null],
   ["Client", "serviceToken", "idempotent", null],
   ["Client", "logout", "mutation", null],

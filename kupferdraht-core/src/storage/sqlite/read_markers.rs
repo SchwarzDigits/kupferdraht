@@ -126,7 +126,7 @@ pub(super) fn read_states(
 pub(super) fn unread_count_for_room(
     store: &SqliteStore,
     room_id: &str,
-    self_user_id: &str,
+    own_user_id: &str,
 ) -> Result<u32, KupferdrahtError> {
     let conn = store.lock()?;
     conn.query_row(
@@ -138,7 +138,7 @@ pub(super) fn unread_count_for_room(
            AND e.arrived_at_ms > COALESCE(
                (SELECT m.last_read_at_ms FROM room_read_markers m
                  WHERE m.room_id = ?1), ?3)",
-        params![room_id, self_user_id, NO_MARKER],
+        params![room_id, own_user_id, NO_MARKER],
         |row| row.get(0),
     )
     .map_err(|e| KupferdrahtError::Storage(format!("unread_count_for_room: {e}")))
@@ -146,7 +146,7 @@ pub(super) fn unread_count_for_room(
 
 pub(super) fn unread_counts(
     store: &SqliteStore,
-    self_user_id: &str,
+    own_user_id: &str,
 ) -> Result<HashMap<String, u32>, KupferdrahtError> {
     let conn = store.lock()?;
     let mut stmt = conn
@@ -161,7 +161,7 @@ pub(super) fn unread_counts(
         )
         .map_err(|e| KupferdrahtError::Storage(format!("unread_counts prepare: {e}")))?;
     let rows = stmt
-        .query_map(params![self_user_id, NO_MARKER], |row| {
+        .query_map(params![own_user_id, NO_MARKER], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
         })
         .map_err(|e| KupferdrahtError::Storage(format!("unread_counts query: {e}")))?;

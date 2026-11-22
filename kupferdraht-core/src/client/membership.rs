@@ -413,7 +413,7 @@ impl Client {
     ///
     /// A room is considered "already joined" when the local MLS group
     /// keyed by its `group_id` is present in openmls's storage. This
-    /// is the canonical source — Wire's conversation metadata cannot
+    /// is the canonical source — Wire's room metadata cannot
     /// distinguish "I am a member" from "I have been added but never
     /// rehydrated locally", which is exactly the state a fresh
     /// Kupferdraht install boots into (LEARNINGS §2.1).
@@ -706,7 +706,7 @@ impl Client {
             let guard = crate::encryption::lock_mls(mls);
             (guard.group_leaves(&group_id)?, guard.own_wire_user_id()?)
         };
-        // Step 72a: the leaf rebuild must MERGE the conversation-level
+        // Step 72a: the leaf rebuild must MERGE the room-level
         // roles from the cached metadata snapshot — leaves carry no
         // role, and resetting every member to `Member` would silently
         // strip admins (starving ADR-0018's case-fold gate).
@@ -733,11 +733,11 @@ impl Client {
     async fn other_members_profiles(
         &self,
         leaves: &[crate::encryption::GroupLeaf],
-        self_user_id: &str,
+        own_user_id: &str,
     ) -> Result<HashMap<String, UserProfile>, KupferdrahtError> {
         let non_self_qids: Vec<QualifiedId> = leaves
             .iter()
-            .filter(|l| l.user_id != self_user_id)
+            .filter(|l| l.user_id != own_user_id)
             .filter_map(|l| {
                 UserId::parse(&l.user_id)
                     .ok()
@@ -764,16 +764,16 @@ impl Client {
 
     /// Turn leaf identities into `RoomMember`s, tagging the self leaf
     /// and backfilling non-self display info via `POST /v14/list-users`.
-    /// `self_user_id` is the `{uuid}@{domain}` id of this
+    /// `own_user_id` is the `{uuid}@{domain}` id of this
     /// device's own leaf, supplied by the caller who already locked
     /// `MlsClient`.
     async fn resolve_members(
         &self,
         leaves: &[crate::encryption::GroupLeaf],
-        self_user_id: &str,
+        own_user_id: &str,
         prior_roles: &HashMap<String, crate::rooms::RoomMemberRole>,
     ) -> Result<Vec<RoomMember>, KupferdrahtError> {
-        let lookup = self.other_members_profiles(leaves, self_user_id).await?;
+        let lookup = self.other_members_profiles(leaves, own_user_id).await?;
         let account = self.account();
         let own_name = account.display_name().to_string();
         let own_username = account.username().map(str::to_string);
@@ -781,7 +781,7 @@ impl Client {
         Ok(leaves
             .iter()
             .map(|leaf| {
-                let is_own = leaf.user_id == self_user_id;
+                let is_own = leaf.user_id == own_user_id;
                 let avatar_source = if is_own {
                     own_avatar.clone()
                 } else {

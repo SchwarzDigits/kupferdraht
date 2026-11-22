@@ -6,7 +6,7 @@
 //! device starts from a clean slate and re-joins every room fresh, so the old
 //! device's rooms, history, sync cursor and idempotency keys are dropped —
 //! nothing the old device sent answers a key (Step 130a). Session / device /
-//! self-user / server-config / feature-config rows are left intact (login
+//! own-user / server-config / server-setting rows are left intact (login
 //! re-establishes them); MLS group state lives in the separate `mls.db` and is
 //! discarded by the caller via `discard_group`.
 
@@ -69,7 +69,7 @@ mod tests {
             .expect("seed rooms");
         store
             .save_sync_state(&SyncStateRecord {
-                sync_marker_uuid: None,
+                sync_token: None,
                 last_event_id: Some("ev-1".to_string()),
                 last_connected_at_ms: None,
                 last_key_package_check_at_ms: None,

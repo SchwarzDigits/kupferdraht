@@ -8,9 +8,9 @@
 //! - an edit applies only when its sender's user is the target's sender
 //!   (any device of that user);
 //! - a delete applies when its sender's user is the target's sender, or
-//!   the target is disappearing and either its sender is the self user
+//!   the target is disappearing and either its sender is the own user
 //!   (another own device syncing a receiver-side expiry) or the target
-//!   is the self user's own message (receivers enforce the sender's
+//!   is the own user's message (receivers enforce the sender's
 //!   timer by deleting it) — observations §74, §91. A self-sent delete
 //!   of another member's ordinary message is rejected, as the official
 //!   webapp does (§91).
@@ -35,9 +35,9 @@ fn may_edit(target: &TimelineEventRecord, sender_user_id: &str) -> bool {
 fn may_delete(
     target: &TimelineEventRecord,
     sender_user_id: &str,
-    self_user_id: Option<&str>,
+    own_user_id: Option<&str>,
 ) -> bool {
-    let is_own = |user: &str| self_user_id == Some(user);
+    let is_own = |user: &str| own_user_id == Some(user);
     let is_disappearing = target.expires_at_ms.is_some() || target.ttl_ms.is_some();
     target.sender_user_id == sender_user_id
         || (is_disappearing && (is_own(sender_user_id) || is_own(&target.sender_user_id)))
@@ -87,10 +87,10 @@ pub(super) async fn target_op_is_authorized(
         );
         return Ok(false);
     }
-    let self_user = client.user_id().map(crate::identity::UserId::as_str);
+    let own_user = client.user_id().map(crate::identity::UserId::as_str);
     let allowed = match op {
         TargetOp::Edit => may_edit(&target, sender_user_id),
-        TargetOp::Delete => may_delete(&target, sender_user_id, self_user),
+        TargetOp::Delete => may_delete(&target, sender_user_id, own_user),
     };
     if !allowed {
         warn!(
@@ -125,7 +125,7 @@ mod tests {
     fn only_the_original_user_may_edit() {
         assert!(may_edit(&row(BOB, false), BOB));
         assert!(!may_edit(&row(BOB, false), CAROL));
-        assert!(!may_edit(&row(BOB, false), ME), "not even the self user");
+        assert!(!may_edit(&row(BOB, false), ME), "not even the own user");
     }
 
     #[test]
@@ -143,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn the_self_user_may_delete_a_foreign_disappearing_only() {
+    fn the_own_user_may_delete_a_foreign_disappearing_only() {
         assert!(
             may_delete(&row(BOB, true), ME, Some(ME)),
             "own-device sync of a receiver-side expiry"
@@ -155,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn anyone_may_delete_the_self_users_own_disappearing() {
+    fn anyone_may_delete_the_own_users_own_disappearing() {
         assert!(may_delete(&row(ME, true), CAROL, Some(ME)));
         assert!(
             !may_delete(&row(ME, false), CAROL, Some(ME)),
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn without_a_known_self_user_only_the_original_sender_may_delete() {
+    fn without_a_known_own_user_only_the_original_sender_may_delete() {
         assert!(!may_delete(&row(ME, true), CAROL, None));
         assert!(may_delete(&row(BOB, false), BOB, None));
     }

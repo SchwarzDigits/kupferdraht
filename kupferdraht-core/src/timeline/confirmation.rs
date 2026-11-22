@@ -22,8 +22,8 @@ use crate::timeline::{MessageHandle, Timeline};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum ReceiptType {
     /// Move the device-local read marker and send
-    /// `Confirmation { type: READ }` — unless the account's receipt mode
-    /// is off (ADR-0012).
+    /// `Confirmation { type: READ }` — unless the account's read-receipt
+    /// setting is off (ADR-0012).
     Read,
     /// Move the device-local read marker only; the room learns nothing.
     ReadPrivate,
@@ -43,10 +43,10 @@ impl Timeline {
     /// A room event's item (Step 145) moves the position and tells nobody:
     /// its id names no message of the room. To confirm a message, name it.
     ///
-    /// **Step 10f gate**: with the account's `WIRE_RECEIPT_MODE` off a
+    /// **Step 10f gate**: with the account's read-receipt setting off a
     /// `Read` sends no `Confirmation` either and returns `Ok(None)` — the
     /// other Wire clients respect the same setting, so peers expect no
-    /// receipt (ADR-0012 §Decision, `Client::receipt_mode`).
+    /// receipt (ADR-0012 §Decision, `Client::read_receipt_setting`).
     ///
     /// An item unknown locally anchors no position: the marker stays,
     /// the flag still clears — the caller's "this room is read" holds.
@@ -77,8 +77,8 @@ impl Timeline {
                 .is_room_event_item(&self.room_id, &item_id)
                 .await?
             || matches!(
-                self.client.receipt_mode().await?,
-                crate::client::ReceiptMode::Off
+                self.client.read_receipt_setting().await?,
+                crate::client::ReadReceiptSetting::Off
             )
         {
             return Ok(None);
@@ -133,11 +133,11 @@ impl Client {
         // Local mirror: we are the reader. Resolve canonical ids
         // and apply our own receipt so `read_by` shows ourselves
         // immediately.
-        let self_user_id = self.own_qualified_user_id();
+        let own_user_id = self.own_qualified_user_id();
         if let Some(store) = self.store_handle() {
             let canonical_ids = self.resolve_canonical_ids(room_id, message_ids).await?;
             store
-                .apply_read_receipts(room_id, &self_user_id, &canonical_ids, confirmed_at_ms)
+                .apply_read_receipts(room_id, &own_user_id, &canonical_ids, confirmed_at_ms)
                 .await?;
             for canonical in &canonical_ids {
                 self.emit_message_update_at(room_id, canonical).await?;

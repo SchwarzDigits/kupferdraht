@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 10f code-side — the `Timeline::mark_as_read` receipt-gate.
 //!
-//! ADR-0012 §Decision: when `Client::receipt_mode()` returns
+//! ADR-0012 §Decision: when `Client::read_receipt_setting()` returns
 //! `Off`, outbound `Confirmation { type: READ }` emission is
 //! suppressed — other Wire clients respect the same setting, so
 //! peers don't expect a receipt. The gate fires before

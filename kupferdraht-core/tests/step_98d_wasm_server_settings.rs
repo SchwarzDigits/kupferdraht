@@ -4,7 +4,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 //! Step 98d — the wasm surface must expose the server-administered config.
 //!
-//! `feature_configs` and `file_sharing` tell a client what the team allows.
+//! `server_settings` and `file_sharing` tell a client what the team allows.
 //! Without them a browser cannot say *why* a send was refused — it can only
 //! report a generic failure — and cannot grey out an attachment button it
 //! already knows the team has disabled.
@@ -18,7 +18,7 @@ use wasm_surface::{assert_bound, surface};
 #[test]
 fn client_binds_server_administered_config() {
     let s = surface();
-    assert_bound(&s, "Client", "featureConfigs");
+    assert_bound(&s, "Client", "serverSettings");
     assert_bound(&s, "Client", "fileSharing");
 }
 

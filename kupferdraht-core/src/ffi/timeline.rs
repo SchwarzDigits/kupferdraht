@@ -763,7 +763,7 @@ impl Timeline {
 
     /// Mark a message as read (Step 138). `Read` moves the device-local
     /// marker and sends a `READ` receipt — `None` when the account's
-    /// receipt mode is off; `ReadPrivate` moves the marker only and is
+    /// read-receipt setting is off; `ReadPrivate` moves the marker only and is
     /// always `None`. Either clears the room's unread flag.
     ///
     /// # Errors

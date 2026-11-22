@@ -8,8 +8,8 @@
 //! `wire/` with their docs (the core, the FFI, the browser exports and their
 //! `js_name`s, the custom-store contract), the commands and help of the CLI,
 //! and `index.d.ts`. Every word of [`WORDS`] found there must be accounted
-//! for: in [`TEMPORARY`], today's occurrences, which the Step 163 sub-step
-//! of the word removes; or in [`APPROVED`], a spot kept for an interface to
+//! for: in [`TEMPORARY`], a spot a step still has to say in matrix-rust-sdk's
+//! terms; or in [`APPROVED`], a spot kept for an interface to
 //! Wire, approved beforehand and marked in the code with a comment that
 //! contains [`MARK`]. On a mismatch the test prints the list as it is now.
 //! Never add a row to make it pass: rename instead.
@@ -28,6 +28,9 @@ struct Word {
     segments: &'static [&'static str],
     /// Only a whole identifier in code: the word is plain English too.
     whole_in_code_only: bool,
+    /// Segments that make the match another term: `ephemeral` before `key` is
+    /// HPKE's ephemeral key (RFC 9180), not Wire's ephemeral message.
+    not_before: &'static [&'static str],
     /// The Step 163 sub-step that removes it.
     step: &'static str,
 }
@@ -37,6 +40,22 @@ const fn word(name: &'static str, segments: &'static [&'static str], step: &'sta
         name,
         segments,
         whole_in_code_only: false,
+        not_before: &[],
+        step,
+    }
+}
+
+const fn term_word(
+    name: &'static str,
+    segments: &'static [&'static str],
+    not_before: &'static [&'static str],
+    step: &'static str,
+) -> Word {
+    Word {
+        name,
+        segments,
+        whole_in_code_only: false,
+        not_before,
         step,
     }
 }
@@ -50,6 +69,7 @@ const fn code_word(
         name,
         segments,
         whole_in_code_only: true,
+        not_before: &[],
         step,
     }
 }
@@ -60,7 +80,7 @@ const fn code_word(
 /// `thumbprint` stay.
 const WORDS: &[Word] = &[
     word("knock", &["knock"], "163b"),
-    word("ephemeral", &["ephemeral"], "163b"),
+    term_word("ephemeral", &["ephemeral"], &["key"], "163b"),
     word("asset", &["asset"], "163b"),
     word("otr", &["otr"], "163b"),
     word("encryption algo", &["encryption", "algo"], "163b"),
@@ -89,98 +109,11 @@ const WORDS: &[Word] = &[
     word("conversation", &["conversation"], "163e"),
 ];
 
-/// Today's occurrences, `(file, word, count)`. Each Step 163 sub-step removes
-/// the rows of its words; after 163e the list is empty.
-const TEMPORARY: &[(&str, &str, usize)] = &[
-    // 163e
-    (
-        "bindings/web/kupferdraht-tabs/index.d.ts",
-        "conversation",
-        1,
-    ),
-    (
-        "bindings/web/kupferdraht-tabs/index.d.ts",
-        "feature config",
-        3,
-    ),
-    ("kupferdraht-cli/src/main.rs", "conversation", 12),
-    ("kupferdraht-cli/src/main.rs", "feature config", 1),
-    ("kupferdraht-cli/src/main.rs", "receipt mode", 1),
-    ("kupferdraht-core/src/client/builder.rs", "conversation", 1),
-    ("kupferdraht-core/src/client/builder.rs", "self user", 1),
-    (
-        "kupferdraht-core/src/client/membership.rs",
-        "conversation",
-        1,
-    ),
-    ("kupferdraht-core/src/client/mod.rs", "conversation", 1),
-    ("kupferdraht-core/src/client/mod.rs", "receipt mode", 1),
-    ("kupferdraht-core/src/client/rooms.rs", "conversation", 23),
-    (
-        "kupferdraht-core/src/client/server_configs.rs",
-        "feature config",
-        6,
-    ),
-    (
-        "kupferdraht-core/src/client/server_configs.rs",
-        "receipt mode",
-        8,
-    ),
-    (
-        "kupferdraht-core/src/client/server_configs.rs",
-        "user property",
-        5,
-    ),
-    ("kupferdraht-core/src/client/sync.rs", "conversation", 3),
-    ("kupferdraht-core/src/error.rs", "conversation", 3),
-    ("kupferdraht-core/src/ffi/admin.rs", "feature config", 3),
-    ("kupferdraht-core/src/ffi/admin.rs", "receipt mode", 2),
-    ("kupferdraht-core/src/ffi/admin.rs", "user property", 3),
-    ("kupferdraht-core/src/ffi/room.rs", "conversation", 9),
-    ("kupferdraht-core/src/ffi/sync.rs", "conversation", 1),
-    ("kupferdraht-core/src/rooms/room.rs", "conversation", 16),
-    (
-        "kupferdraht-core/src/storage/records.rs",
-        "backend mls key",
-        6,
-    ),
-    ("kupferdraht-core/src/storage/records.rs", "confirmer", 4),
-    (
-        "kupferdraht-core/src/storage/records.rs",
-        "feature config",
-        15,
-    ),
-    ("kupferdraht-core/src/storage/records.rs", "receipt mode", 2),
-    ("kupferdraht-core/src/storage/records.rs", "self user", 8),
-    ("kupferdraht-core/src/storage/records.rs", "sync marker", 1),
-    (
-        "kupferdraht-core/src/storage/records.rs",
-        "user property",
-        18,
-    ),
-    (
-        "kupferdraht-core/src/sync/event_handler.rs",
-        "conversation",
-        1,
-    ),
-    (
-        "kupferdraht-core/src/timeline/confirmation.rs",
-        "receipt mode",
-        2,
-    ),
-    (
-        "kupferdraht-core/src/timeline/task/send.rs",
-        "conversation",
-        1,
-    ),
-    (
-        "kupferdraht-core/src/timeline/task/types.rs",
-        "conversation",
-        1,
-    ),
-    ("kupferdraht-core/src/wasm/manager.rs", "conversation", 3),
-    ("kupferdraht-core/src/wasm/manager.rs", "feature config", 2),
-];
+/// Spots a step still has to say in matrix-rust-sdk's terms, `(file, word,
+/// count)`, with the step that empties them: Step 163's sub-steps emptied
+/// the list. A row is temporary by definition; a spot that stays is an
+/// approved one in [`APPROVED`].
+const TEMPORARY: &[(&str, &str, usize)] = &[];
 
 /// Spots kept for an interface to Wire, approved by the maintainer and marked
 /// with [`MARK`]: `(file, word, count, interface)`.
@@ -191,12 +124,15 @@ const APPROVED: &[(&str, &str, usize, &str)] = &[];
 /// Prose without its citations of Wire's interface: a backticked endpoint
 /// path (`PUT /v{N}/…`), event type (`conversation.rename`) or status label
 /// (`404 no-conversation`) names Wire's REST API and stays (ADR-0009, where
-/// compatibility binds). A backticked field name (`client_id`) is no citation.
+/// compatibility binds). A backticked field name (`client_id`) is no citation;
+/// a backticked Rust path (`Self::room`) is code, whose words the code lines
+/// carry, and leaves the prose too.
 fn without_citations(line: &str) -> String {
     let mut out = String::new();
     for (i, part) in line.split('`').enumerate() {
         let quoted = i % 2 == 1;
         let citation = part.contains('/')
+            || part.contains("::")
             || part.starts_with(|c: char| c.is_ascii_digit())
             || (part.contains('.')
                 && part
@@ -236,28 +172,67 @@ fn segments(token: &str) -> Vec<String> {
     parts
 }
 
-fn found_in(token: &[String], word: &Word, prose: bool) -> bool {
+/// `word` starts at `segments[at]`: every segment but the last equal, the
+/// last a prefix, and the segment after it none of `not_before`.
+fn matches_at(segments: &[String], at: usize, word: &Word) -> bool {
+    let n = word.segments.len();
+    let Some(window) = segments.get(at..at + n) else {
+        return false;
+    };
+    let found = window
+        .iter()
+        .zip(word.segments)
+        .enumerate()
+        .all(|(i, (have, want))| {
+            if i + 1 == n {
+                have.starts_with(want)
+            } else {
+                have == want
+            }
+        });
+    found
+        && !segments
+            .get(at + n)
+            .is_some_and(|next| word.not_before.iter().any(|stop| next.starts_with(stop)))
+}
+
+/// How often `word` occurs in one identifier of code.
+fn code_hits(token: &[String], word: &Word) -> usize {
     if word.whole_in_code_only {
-        return !prose
-            && token
+        return usize::from(
+            token
                 .iter()
                 .map(String::as_str)
-                .eq(word.segments.iter().copied());
+                .eq(word.segments.iter().copied()),
+        );
     }
-    let n = word.segments.len();
-    token.windows(n).any(|window| {
-        window
+    (0..token.len())
+        .filter(|&at| matches_at(token, at, word))
+        .count()
+}
+
+/// How often `word` occurs in a line of prose, where its segments may be
+/// words of their own (`cookie label`) or one identifier (`cookie_label`).
+fn prose_hits(text: &str, word: &Word) -> usize {
+    if word.whole_in_code_only {
+        return 0;
+    }
+    let segments: Vec<String> = tokens(text).into_iter().flatten().collect();
+    (0..segments.len())
+        .filter(|&at| matches_at(&segments, at, word))
+        .count()
+}
+
+/// How often `word` occurs in `text`, read as code or as prose.
+fn hits(text: &str, word: &Word, prose: bool) -> usize {
+    if prose {
+        prose_hits(text, word)
+    } else {
+        tokens(text)
             .iter()
-            .zip(word.segments)
-            .enumerate()
-            .all(|(i, (have, want))| {
-                if i + 1 == n {
-                    have.starts_with(want)
-                } else {
-                    have == want
-                }
-            })
-    })
+            .map(|token| code_hits(token, word))
+            .sum()
+    }
 }
 
 // ---- what a consumer sees ---------------------------------------------
@@ -422,17 +397,19 @@ fn count(file: &str, lines: &[Line<'_>], loose: &mut Tally, marked: &mut Tally) 
         } else {
             line.text.to_owned()
         };
-        for token in tokens(&text) {
-            for word in WORDS.iter().filter(|w| found_in(&token, w, line.prose)) {
-                let into = if line.marked {
-                    &mut *marked
-                } else {
-                    &mut *loose
-                };
-                *into
-                    .entry((file.to_owned(), word.name.to_owned()))
-                    .or_default() += 1;
+        for word in WORDS {
+            let found = hits(&text, word, line.prose);
+            if found == 0 {
+                continue;
             }
+            let into = if line.marked {
+                &mut *marked
+            } else {
+                &mut *loose
+            };
+            *into
+                .entry((file.to_owned(), word.name.to_owned()))
+                .or_default() += found;
         }
     }
 }
@@ -536,7 +513,7 @@ fn the_matcher_finds_wire_words_and_leaves_plain_english_alone() {
             .iter()
             .find(|w| w.name == name)
             .expect("a listed word");
-        tokens(text).iter().any(|t| found_in(t, w, prose))
+        hits(text, w, prose) > 0
     };
     assert!(hit("pub struct AssetSummary", "asset", false));
     assert!(hit("downloadAsset(roomId)", "asset", false));
@@ -572,7 +549,64 @@ fn a_citation_of_wires_interface_is_no_wire_word_in_prose() {
     assert!(!prose("/// Wire emits a `conversation.rename` event").contains("conversation.rename"));
     assert!(!prose("/// or `404 no-conversation` (unknown room)").contains("no-conversation"));
     assert!(prose("/// by its Wire `client_id`").contains("client_id"));
+    assert!(!prose("/// as [`Self::room`] answers it").contains("room"));
     assert!(prose("/// the conversation's members").contains("conversation"));
+}
+
+#[test]
+fn the_temporary_list_is_empty_after_step_163() {
+    assert!(
+        TEMPORARY.is_empty(),
+        "{} spots still to say in matrix-rust-sdk's terms:\n{}",
+        TEMPORARY.len(),
+        rows(&listed(TEMPORARY.iter().copied()))
+    );
+}
+
+/// An HPKE "ephemeral key" is the cryptographic term (RFC 9180), not Wire's
+/// ephemeral message: the word followed by `key` is no hit, in code or prose.
+#[test]
+fn an_ephemeral_key_is_the_cryptographic_term() {
+    let hit = |text: &str, prose: bool| {
+        let w = WORDS
+            .iter()
+            .find(|w| w.name == "ephemeral")
+            .expect("a listed word");
+        hits(text, w, prose) > 0
+    };
+    assert!(hit(
+        "/// an ephemeral message disappears after its TTL",
+        true
+    ));
+    assert!(hit("pub fn send_ephemeral_text(&self)", false));
+    assert!(!hit("/// the HPKE ephemeral key of the Welcome", true));
+    assert!(!hit("pub ephemeral_key: Vec<u8>", false));
+    assert!(!hit("ephemeralKey: Uint8Array", false));
+}
+
+/// A word of several segments is found in prose when it is written with a
+/// space, as a doc comment or a help text writes it.
+#[test]
+fn a_word_written_with_a_space_in_prose_is_found() {
+    let hit = |text: &str, name: &str| {
+        let w = WORDS
+            .iter()
+            .find(|w| w.name == name)
+            .expect("a listed word");
+        prose_hits(text, w) > 0
+    };
+    assert!(hit("/// the cookie label of a login", "cookie label"));
+    assert!(hit(
+        "/// each feature config as the backend sent it",
+        "feature config"
+    ));
+    assert!(hit(
+        "/// the backend MLS key of the domain",
+        "backend mls key"
+    ));
+    assert!(!hit("/// the label of the cookie", "cookie label"));
+    assert!(!hit("/// a config of the feature", "feature config"));
+    assert!(!hit("/// an HPKE ephemeral key", "ephemeral"));
 }
 
 #[test]

@@ -62,7 +62,7 @@ async fn login_persists_feature_configs_and_user_properties_on_success() {
     let store = run_login_against(&server).await;
 
     let configs = store
-        .list_feature_configs()
+        .list_server_settings()
         .await
         .expect("list_feature_configs");
     assert_eq!(
@@ -90,7 +90,7 @@ async fn login_persists_feature_configs_and_user_properties_on_success() {
     );
 
     let properties = store
-        .list_user_properties()
+        .list_account_data()
         .await
         .expect("list_user_properties");
     assert_eq!(properties.len(), 2, "both property keys must persist");
@@ -133,14 +133,14 @@ async fn login_succeeds_when_feature_configs_endpoint_returns_500() {
 
     assert!(
         store
-            .list_feature_configs()
+            .list_server_settings()
             .await
             .expect("list_feature_configs")
             .is_empty(),
         "feature-configs 500 must leave the table untouched (warn-and-continue)"
     );
     let properties = store
-        .list_user_properties()
+        .list_account_data()
         .await
         .expect("list_user_properties");
     assert_eq!(
@@ -171,7 +171,7 @@ async fn login_succeeds_when_property_keys_endpoint_returns_500() {
     let store = run_login_against(&server).await;
 
     let configs = store
-        .list_feature_configs()
+        .list_server_settings()
         .await
         .expect("list_feature_configs");
     assert_eq!(
@@ -181,7 +181,7 @@ async fn login_succeeds_when_property_keys_endpoint_returns_500() {
     );
     assert!(
         store
-            .list_user_properties()
+            .list_account_data()
             .await
             .expect("list_user_properties")
             .is_empty(),
@@ -218,10 +218,10 @@ async fn client_accessors_surface_persisted_configs_and_properties() {
 
     let (client, _) = common::run_login(&server).await;
 
-    let configs = client.feature_configs().await.expect("feature_configs");
+    let configs = client.server_settings().await.expect("server_settings");
     assert_eq!(configs.len(), 3);
     let one = client
-        .feature_config("fileSharing")
+        .server_setting("fileSharing")
         .await
         .expect("feature_config")
         .expect("fileSharing must be present");
@@ -229,15 +229,15 @@ async fn client_accessors_surface_persisted_configs_and_properties() {
     assert_eq!(one.status.as_deref(), Some("enabled"));
 
     let missing = client
-        .feature_config("doesNotExist")
+        .server_setting("doesNotExist")
         .await
         .expect("feature_config none");
     assert!(missing.is_none());
 
-    let properties = client.user_properties().await.expect("user_properties");
+    let properties = client.account_data().await.expect("account_data");
     assert_eq!(properties.len(), 1);
     let one = client
-        .user_property("WIRE_RECEIPT_MODE")
+        .account_data_entry("WIRE_RECEIPT_MODE")
         .await
         .expect("user_property")
         .expect("WIRE_RECEIPT_MODE must be present");
@@ -278,7 +278,7 @@ async fn login_persists_partial_properties_when_one_value_fetch_fails() {
     let store = run_login_against(&server).await;
 
     let properties = store
-        .list_user_properties()
+        .list_account_data()
         .await
         .expect("list_user_properties");
     assert_eq!(

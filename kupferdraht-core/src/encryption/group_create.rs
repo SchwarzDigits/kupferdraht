@@ -9,7 +9,7 @@
 //! openmls storage provider, ready for subsequent
 //! `Client::send_text` / `Client::join_room` operations against it.
 //!
-//! Why server-assigned `group_id`: Wire's conversation envelope and
+//! Why server-assigned `group_id`: Wire's room envelope and
 //! the local MLS group must agree on the same id, otherwise the
 //! commit-bundle uploads in Steps 6b–6d hit
 //! `mls-group-conversation-mismatch`. Wire generates the id at the

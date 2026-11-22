@@ -228,6 +228,47 @@ is no skill for it — it is this short procedure:
     the last-seen time, `status` the lines `session_label` /
     `stored_session_label`, `room-members` and `avatar upload` the
     `avatar_version`.
+- **BREAKING: the server's settings, the account data and the store contract
+  have plain names** (Step 163e, ADR-0009 revision 1.2):
+  - `Client::server_settings()` / `server_setting(name)` and the record
+    `ServerSetting { name, status, config_json, last_synced_at_ms }` replace
+    `feature_configs()` / `feature_config(name)` and `FeatureConfigEntry`.
+  - `Client::account_data()` / `account_data_entry(key)` and the record
+    `AccountDataEntry { key, value, last_synced_at_ms }` replace
+    `user_properties()` / `user_property(key)` and `UserPropertyEntry`;
+    matrix-rust-sdk's account data (`Client::account().account_data::<T>()`)
+    is the nearest concept.
+  - `Client::read_receipt_setting()` and `ReadReceiptSetting { Off, On }`
+    replace `receipt_mode()` and `ReceiptMode`. `Client::file_sharing()`,
+    `FileSharingPolicy` and `Client::server_supports_push_events()` keep their
+    names.
+  - The texts of `KupferdrahtError::MlsGroupMissing` ("MLS group not loaded for
+    this room; call `Client::join_room` first") and `MlsStaleMessage` ("MLS
+    message epoch is stale; resync the room and retry") say "room" where they
+    said "conversation".
+  - FFI: the same method names; the records `ServerSetting` and
+    `AccountDataEntry`; the enum `ReadReceiptSetting`.
+  - Browser: `serverSettings()` replaces `featureConfigs()`; `index.d.ts`
+    declares `ServerSetting` instead of `FeatureConfig`, and the
+    `kupferdraht-tabs` protocol and `ClientProxy` follow.
+  - A custom store: the records `ServerSetting`, `AccountDataEntry`,
+    `ExternalSenderKey` (the MLS term, RFC 9420's `external_senders`; was
+    `BackendMlsKey`) and `OwnUserRecord` (was `SelfUserRecord`), the fields
+    `SyncStateRecord::sync_token` (was `sync_marker_uuid`) and
+    `DeliveryReceiptRecord::reader_user_id` (was `confirmer_user_id`), and the
+    `Store` methods `save_external_sender_key` / `load_external_sender_key`,
+    `save_own_user` / `load_own_user`, `replace_server_settings` /
+    `upsert_server_setting` / `list_server_settings` / `get_server_setting` and
+    `replace_account_data` / `upsert_account_data_entry` /
+    `delete_account_data_entry` / `list_account_data` /
+    `get_account_data_entry`. The records' serde names follow the Rust names, so
+    a custom store that persists their JSON reads and writes the new names. The
+    shipped store keeps its tables and columns (`feature_configs`,
+    `user_properties`, `backend_mls_keys`, `self_user`,
+    `sync_state.sync_marker_uuid`, `delivery_receipts.confirmer_user_id`);
+    nothing is migrated.
+  - CLI: `settings [--name <key>]` replaces `features`, and `account-data [--key
+    <key>]` replaces `properties`.
 
 ### Deprecated
 

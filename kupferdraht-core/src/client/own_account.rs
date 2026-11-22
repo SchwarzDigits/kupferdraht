@@ -3,7 +3,7 @@
 
 //! Step 152 — the own account, live: read again on request, and written by
 //! the client's own profile calls. One path for both: the request, then the
-//! `self_user` row, then the `Account` the getters read. `team.update` reaches
+//! own user's row, then the `Account` the getters read. `team.update` reaches
 //! only a team's admins and is not stored (`docs/observations.md` §99), so the
 //! embedder reads on request and decides when.
 
@@ -11,7 +11,7 @@ use std::sync::{Arc, PoisonError};
 
 use crate::avatar::AvatarSource;
 use crate::error::KupferdrahtError;
-use crate::storage::SelfUserRecord;
+use crate::storage::OwnUserRecord;
 use crate::wire::dto::{SelfUser, Team};
 
 use super::{Account, Client};
@@ -25,8 +25,8 @@ pub(super) fn team_avatar_version(team: &Team) -> Option<String> {
 }
 
 /// The own team id of a `/self`, lowercase; an empty `team` is no team.
-pub(super) fn own_team_id(self_user: &SelfUser) -> Option<String> {
-    self_user
+pub(super) fn own_team_id(own_user: &SelfUser) -> Option<String> {
+    own_user
         .team
         .as_deref()
         .filter(|team| !team.is_empty())
@@ -46,17 +46,17 @@ impl Client {
     pub async fn refresh_account(&self) -> Result<(), KupferdrahtError> {
         let _gate = self.account_gate.lock().await;
         let token = self.current_access_token();
-        let self_user = self.http.fetch_self(self.api_version, &token).await?;
+        let own_user = self.http.fetch_self(self.api_version, &token).await?;
         let fetched = format!(
             "{}@{}",
-            self_user.qualified_id.id, self_user.qualified_id.domain
+            own_user.qualified_id.id, own_user.qualified_id.domain
         );
         if fetched != self.account().user_id().as_str() {
             return Err(KupferdrahtError::BackendRejected(
                 "refresh_account: GET /self answered another user".into(),
             ));
         }
-        let team = match own_team_id(&self_user) {
+        let team = match own_team_id(&own_user) {
             Some(id) => Some((
                 id.clone(),
                 self.http.get_team(self.api_version, &token, &id).await?,
@@ -64,7 +64,7 @@ impl Client {
             None => None,
         };
         let before = self.account();
-        self.apply_own_profile(|row| fill_from_backend(row, &self_user, team.as_ref()))
+        self.apply_own_profile(|row| fill_from_backend(row, &own_user, team.as_ref()))
             .await?;
         let after = self.account();
         if (
@@ -82,7 +82,7 @@ impl Client {
         Ok(())
     }
 
-    /// Change the own profile: `change` edits the `self_user` row, which is
+    /// Change the own profile: `change` edits the own user's row, which is
     /// written, and the account the getters read is rebuilt from it. A failed
     /// row write leaves the account; a session without a store keeps the
     /// account alone. Callers hold `account_gate` across their request and
@@ -92,7 +92,7 @@ impl Client {
     /// `Storage` from reading or writing the row.
     pub(super) async fn apply_own_profile(
         &self,
-        change: impl FnOnce(&mut SelfUserRecord),
+        change: impl FnOnce(&mut OwnUserRecord),
     ) -> Result<(), KupferdrahtError> {
         let mut row = match self.store_handle() {
             Some(store) => self.current_self_row(store.as_ref()).await?,
@@ -100,7 +100,7 @@ impl Client {
         };
         change(&mut row);
         if let Some(store) = self.store_handle() {
-            store.save_self_user(&row).await?;
+            store.save_own_user(&row).await?;
         }
         let account = super::resume::account_from_row(&row)?;
         debug_assert_eq!(
@@ -114,23 +114,19 @@ impl Client {
 }
 
 /// Every value of the row from what the backend answered.
-fn fill_from_backend(
-    row: &mut SelfUserRecord,
-    self_user: &SelfUser,
-    team: Option<&(String, Team)>,
-) {
-    row.avatar_source = AvatarSource::from_assets(&self_user.assets);
-    row.name.clone_from(&self_user.name);
-    row.username.clone_from(&self_user.handle);
-    row.email.clone_from(&self_user.email);
+fn fill_from_backend(row: &mut OwnUserRecord, own_user: &SelfUser, team: Option<&(String, Team)>) {
+    row.avatar_source = AvatarSource::from_assets(&own_user.assets);
+    row.name.clone_from(&own_user.name);
+    row.username.clone_from(&own_user.handle);
+    row.email.clone_from(&own_user.email);
     row.team_id = team.map(|(id, _)| id.clone());
     row.team_name = team.map(|(_, team)| team.name.clone());
     row.team_avatar_version = team.and_then(|(_, team)| team_avatar_version(team));
 }
 
 /// The row an account would be stored as.
-pub(super) fn row_of(account: &Arc<Account>) -> SelfUserRecord {
-    SelfUserRecord {
+pub(super) fn row_of(account: &Arc<Account>) -> OwnUserRecord {
+    OwnUserRecord {
         id: account.user_id().as_str().to_string(),
         username: account.username().map(str::to_owned),
         name: account.display_name().to_owned(),

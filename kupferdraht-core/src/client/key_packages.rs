@@ -3,7 +3,7 @@
 
 //! Key-package pool replenishment (Step 63, `open.md` gap-B.7).
 //!
-//! Every peer that adds this device to a conversation *claims* one of
+//! Every peer that adds this device to a room *claims* one of
 //! its uploaded key packages; the pool starts at
 //! [`INITIAL_KEY_PACKAGE_COUNT`] (login upload) and only ever
 //! shrinks. At zero the device can no longer be added to anything

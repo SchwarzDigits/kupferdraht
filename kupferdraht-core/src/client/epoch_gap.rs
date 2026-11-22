@@ -6,7 +6,7 @@
 //! A message from a later epoch than the local group looks like a missed
 //! commit, but the epoch of a message the client cannot decrypt is not
 //! authenticated. The backend, as delivery service, knows the
-//! conversation's current epoch; only when it is ahead of the local group
+//! room's current epoch; only when it is ahead of the local group
 //! is the room healed.
 
 use crate::error::KupferdrahtError;
@@ -16,12 +16,12 @@ use super::Client;
 
 impl Client {
     /// Whether the backend's current epoch for `room_id` is ahead of the
-    /// local MLS group's — read fresh from the conversation record, not
+    /// local MLS group's — read fresh from the room record, not
     /// from the rooms cache, which can be stale.
     ///
     /// # Errors
     /// `InvalidInput` for a room id without a domain or an uncached room, a room without
-    /// a group id, or a conversation the backend does not return; the
+    /// a group id, or a room the backend does not return; the
     /// local group's and the HTTP layer's errors otherwise.
     pub(crate) async fn backend_epoch_ahead(
         &self,
@@ -54,7 +54,7 @@ impl Client {
             .map(|conversation| conversation.epoch)
             .ok_or_else(|| {
                 KupferdrahtError::InvalidInput(format!(
-                    "epoch check: the backend returned no conversation for {room_id}"
+                    "epoch check: the backend returned no room for {room_id}"
                 ))
             })?;
         tracing::debug!(room_id, local, remote, "epoch gap check");

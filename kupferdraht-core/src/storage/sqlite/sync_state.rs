@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! `sync_state` table CRUD. Singleton row (PK = 1) tracking the
-//! Wire `synchronization` cursor across `/v14/notifications`
-//! drains. No encrypted columns.
+//! sync token across `/v14/notifications` drains. No encrypted columns.
 
 use rusqlite::{OptionalExtension, params};
 
@@ -28,7 +27,7 @@ pub(super) fn save_sync_state(
             last_connected_at_ms         = excluded.last_connected_at_ms,
             last_key_package_check_at_ms = excluded.last_key_package_check_at_ms",
         params![
-            state.sync_marker_uuid,
+            state.sync_token,
             state.last_event_id,
             state.last_connected_at_ms,
             state.last_key_package_check_at_ms,
@@ -49,7 +48,7 @@ pub(super) fn load_sync_state(
         [],
         |row| {
             Ok(SyncStateRecord {
-                sync_marker_uuid: row.get(0)?,
+                sync_token: row.get(0)?,
                 last_event_id: row.get(1)?,
                 last_connected_at_ms: row.get(2)?,
                 last_key_package_check_at_ms: row.get(3)?,

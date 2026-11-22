@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! `self_user` table CRUD. Whole-DB encryption protects the
+//! The own user's profile row, CRUD. Whole-DB encryption protects the
 //! `email` column at rest, so it is stored and read verbatim like
 //! the rest (`id`, the username, `name`). `id` holds the
 //! `<localpart>@<domain>` user id (Step 19).
@@ -10,15 +10,15 @@ use rusqlite::{OptionalExtension, params};
 
 use crate::avatar::AvatarSource;
 use crate::error::KupferdrahtError;
-use crate::storage::records::SelfUserRecord;
+use crate::storage::records::OwnUserRecord;
 
 use super::{SqliteStore, utf8_column};
 
-pub(super) fn save_self_user(
+pub(super) fn save_own_user(
     store: &SqliteStore,
-    user: &SelfUserRecord,
+    user: &OwnUserRecord,
 ) -> Result<(), KupferdrahtError> {
-    debug_assert!(!user.id.is_empty(), "self_user.id must be non-empty");
+    debug_assert!(!user.id.is_empty(), "own user id must be non-empty");
     let conn = store.lock()?;
     conn.execute(
         "INSERT INTO self_user (
@@ -46,14 +46,14 @@ pub(super) fn save_self_user(
             user.team_avatar_version,
         ],
     )
-    .map_err(|e| KupferdrahtError::Storage(format!("save_self_user: {e}")))?;
+    .map_err(|e| KupferdrahtError::Storage(format!("save_own_user: {e}")))?;
     Ok(())
 }
 
-pub(super) fn load_self_user(
+pub(super) fn load_own_user(
     store: &SqliteStore,
     id: &str,
-) -> Result<Option<SelfUserRecord>, KupferdrahtError> {
+) -> Result<Option<OwnUserRecord>, KupferdrahtError> {
     debug_assert!(!id.is_empty(), "id must be non-empty");
     let raw = {
         let conn = store.lock()?;
@@ -78,14 +78,14 @@ pub(super) fn load_self_user(
             },
         )
         .optional()
-        .map_err(|e| KupferdrahtError::Storage(format!("load_self_user: {e}")))?
+        .map_err(|e| KupferdrahtError::Storage(format!("load_own_user: {e}")))?
     };
     let Some((username, name, email, team_id, team_name, avatar_source, team_avatar_version)) = raw
     else {
         return Ok(None);
     };
     let email = email.map(|b| utf8_column(b, "email")).transpose()?;
-    Ok(Some(SelfUserRecord {
+    Ok(Some(OwnUserRecord {
         id: id.to_string(),
         username,
         name,

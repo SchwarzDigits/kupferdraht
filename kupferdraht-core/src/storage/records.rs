@@ -61,7 +61,7 @@ pub struct DeviceRecord {
 /// and persisted so a subsequent process can reconstruct `Account`
 /// without hitting the backend.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SelfUserRecord {
+pub struct OwnUserRecord {
     /// The `<localpart>@<domain>` user id (Step 19). The domain is folded
     /// in here; there is no separate (nullable) `domain` column.
     pub id: String,
@@ -98,12 +98,12 @@ pub struct ResentTimes {
     pub expires_at_ms: Option<i64>,
 }
 
-/// One row of `backend_mls_keys` — a Wire-backend-scoped public key
-/// for a specific `(purpose, signature_scheme)` pair. Today Kupferdraht
+/// One external sender key — the backend's public key for a specific
+/// `(purpose, signature_scheme)` pair. Today Kupferdraht
 /// uses exactly one entry, `("removal", "ecdsa_secp256r1_sha256")`,
 /// for the `external_senders` extension in every MLS group.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BackendMlsKey {
+pub struct ExternalSenderKey {
     pub purpose: String,
     pub signature_scheme: String,
     pub public_key: Vec<u8>,
@@ -152,11 +152,11 @@ fn default_member_role() -> String {
 
 /// Singleton `sync_state` row — one per device. Step 5b reads /
 /// writes this around the WebSocket loop so a reconnect resumes
-/// from the last persisted Wire `synchronization` marker without
-/// re-reading already-acked events.
+/// from the last persisted sync token without re-reading
+/// already-acked events.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncStateRecord {
-    pub sync_marker_uuid: Option<String>,
+    pub sync_token: Option<String>,
     pub last_event_id: Option<String>,
     pub last_connected_at_ms: Option<i64>,
     /// Unix-ms of the last key-package pool check (Step 63) — the
@@ -229,7 +229,7 @@ pub struct ReadStateRecord {
 }
 
 /// One row of `delivery_receipts`. Step 25b — represents one
-/// `(message, confirmer)` ack that the recipient's device received the
+/// `(message, reader)` ack that the recipient's device received the
 /// message. Wire's `Confirmation { type: DELIVERED }` event fans out into
 /// N rows when it carries N `message_ids` in a single batch. Mirror of
 /// [`ReadReceiptRecord`]; the two lists are independent.
@@ -237,7 +237,7 @@ pub struct ReadStateRecord {
 pub struct DeliveryReceiptRecord {
     pub message_id: String,
     pub room_id: String,
-    pub confirmer_user_id: String,
+    pub reader_user_id: String,
     pub confirmed_at_ms: i64,
 }
 
@@ -323,35 +323,36 @@ pub struct ExpiredMessageRecord {
     pub sender_user_id: String,
 }
 
-/// One row of `feature_configs` — a single Wire team-feature-config
-/// entry. Persisted by Step 10's login pipeline integration and by the
-/// `feature-config.update` event arm; consumed by `Client::feature_config`
-/// and the typed getters layered over it (`Client::file_sharing`, …).
+/// One server setting — a single entry of the settings the backend
+/// reports for the account's team. Persisted by Step 10's login pipeline
+/// integration and by the `feature-config.update` event arm; consumed by
+/// `Client::server_setting` and the typed getters layered over it
+/// (`Client::file_sharing`, …).
 ///
-/// `status` is nullable because not every Wire feature config carries a
+/// `status` is nullable because not every server setting carries a
 /// `status` field — some are config-only. `config_json` is the raw
-/// `config` object as a JSON string, or `"{}"` when the feature ships
+/// `config` object as a JSON string, or `"{}"` when the setting ships
 /// status-only.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record, Serialize, Deserialize)]
-pub struct FeatureConfigEntry {
+pub struct ServerSetting {
     pub name: String,
     pub status: Option<String>,
     pub config_json: String,
     pub last_synced_at_ms: i64,
 }
 
-/// One row of `user_properties` — a single Wire user-property entry.
-/// Persisted by Step 10's login pipeline integration and by the
-/// `user.properties-set` / `user.properties-delete` event arms;
-/// consumed by `Client::user_property` and the typed getters layered
-/// over it (`Client::receipt_mode`, …).
+/// One account-data entry — a single key/value the backend keeps for
+/// the account. Persisted by Step 10's login pipeline integration and by
+/// the `user.properties-set` / `user.properties-delete` event arms;
+/// consumed by `Client::account_data_entry` and the typed getters
+/// layered over it (`Client::read_receipt_setting`, …).
 ///
 /// `value` is the raw response body of `GET /v14/properties/{key}` —
 /// opaque to the storage layer. Wire mixes JSON-encoded strings (e.g.
 /// `"\"on\""`) with raw numeric strings (e.g. `"1"`) here; typed
 /// getters strip optional surrounding quotes before parsing.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record, Serialize, Deserialize)]
-pub struct UserPropertyEntry {
+pub struct AccountDataEntry {
     pub key: String,
     pub value: String,
     pub last_synced_at_ms: i64,
@@ -500,24 +501,27 @@ pub trait Store: MaybeSendSync {
         device_id: &str,
     ) -> Result<Option<DeviceRecord>, KupferdrahtError>;
 
-    /// Persist a backend MLS public key, replacing any existing row
+    /// Persist an external sender key, replacing any existing row
     /// for the same `(purpose, signature_scheme)` pair.
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn save_backend_mls_key(&self, key: &BackendMlsKey) -> Result<(), KupferdrahtError>;
+    async fn save_external_sender_key(
+        &self,
+        key: &ExternalSenderKey,
+    ) -> Result<(), KupferdrahtError>;
 
-    /// Load the backend MLS key for the given
+    /// Load the external sender key for the given
     /// `(purpose, signature_scheme)` pair, or `Ok(None)` if no row
     /// exists.
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn load_backend_mls_key(
+    async fn load_external_sender_key(
         &self,
         purpose: &str,
         signature_scheme: &str,
-    ) -> Result<Option<BackendMlsKey>, KupferdrahtError>;
+    ) -> Result<Option<ExternalSenderKey>, KupferdrahtError>;
 
     /// Replace the entire rooms snapshot atomically. Every existing
     /// row in `rooms` and `room_members` is dropped and the supplied
@@ -536,7 +540,7 @@ pub trait Store: MaybeSendSync {
     /// idempotency keys — nothing the old device sent answers a key, Step
     /// 130a). Used when a re-login registers a new device that supersedes a gone one
     /// (Step 40): the new device starts clean and re-joins every room. Leaves
-    /// session / device / self-user / server-config / feature-config rows
+    /// session / device / own-user / server-config / server-setting rows
     /// intact — login re-establishes those.
     ///
     /// # Errors
@@ -865,13 +869,13 @@ pub trait Store: MaybeSendSync {
     async fn unread_count_for_room(
         &self,
         _room_id: &str,
-        _self_user_id: &str,
+        _own_user_id: &str,
     ) -> Result<u32, KupferdrahtError> {
         Ok(0)
     }
 
     /// Per-room unread counts in one grouped query (Step 67): inbound
-    /// rows (`sender_user_id != self_user_id`, not redacted) newer
+    /// rows (sent by anyone but the own user, not redacted) newer
     /// than each room's marker; rooms without unread rows are absent.
     /// Default empty (custom-store pattern).
     ///
@@ -879,7 +883,7 @@ pub trait Store: MaybeSendSync {
     /// `KupferdrahtError::Storage` on backend failure.
     async fn unread_counts(
         &self,
-        _self_user_id: &str,
+        _own_user_id: &str,
     ) -> Result<std::collections::HashMap<String, u32>, KupferdrahtError> {
         Ok(std::collections::HashMap::new())
     }
@@ -1061,7 +1065,7 @@ pub trait Store: MaybeSendSync {
     ) -> Result<Vec<ReadReceiptRecord>, KupferdrahtError>;
 
     /// Apply an inbound `Confirmation { type: DELIVERED }` batch — one row
-    /// per `(message_id, confirmer_user_id)`, `INSERT OR IGNORE`. Step 25b.
+    /// per `(message_id, reader_user_id)`, `INSERT OR IGNORE`. Step 25b.
     /// Returns the number of rows actually inserted.
     ///
     /// # Errors
@@ -1069,7 +1073,7 @@ pub trait Store: MaybeSendSync {
     async fn apply_delivery_receipts(
         &self,
         room_id: &str,
-        confirmer_user_id: &str,
+        reader_user_id: &str,
         message_ids: &[String],
         confirmed_at_ms: i64,
     ) -> Result<usize, KupferdrahtError>;
@@ -1267,15 +1271,15 @@ pub trait Store: MaybeSendSync {
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn save_self_user(&self, user: &SelfUserRecord) -> Result<(), KupferdrahtError>;
+    async fn save_own_user(&self, user: &OwnUserRecord) -> Result<(), KupferdrahtError>;
 
-    /// Load the self-user profile for the given `id`, or `Ok(None)`.
+    /// Load the own user's profile for the given `id`, or `Ok(None)`.
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure and
     /// `KupferdrahtError::Encoding` if a `_ct` column holds non-UTF-8
     /// bytes.
-    async fn load_self_user(&self, id: &str) -> Result<Option<SelfUserRecord>, KupferdrahtError>;
+    async fn load_own_user(&self, id: &str) -> Result<Option<OwnUserRecord>, KupferdrahtError>;
 
     /// Persist the singleton `server_config` row.
     ///
@@ -1291,105 +1295,104 @@ pub trait Store: MaybeSendSync {
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
     async fn load_server_config(&self) -> Result<Option<ServerConfigRecord>, KupferdrahtError>;
 
-    /// Replace the entire `feature_configs` snapshot atomically.
+    /// Replace the entire server-settings snapshot atomically.
     /// Every existing row is dropped and `entries` inserted in its
     /// place — matches the `GET /v14/feature-configs` whole-team
     /// response shape that Step 10c's login pipeline and Step 10d's
     /// `feature-config.update` event arm both use. An empty slice
-    /// clears the table.
+    /// clears the snapshot.
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn replace_feature_configs(
+    async fn replace_server_settings(
         &self,
-        entries: &[FeatureConfigEntry],
+        entries: &[ServerSetting],
     ) -> Result<(), KupferdrahtError>;
 
-    /// Upsert one feature-config row keyed by `entry.name`. Used
-    /// when a future event ships a single named feature config
-    /// without forcing a whole-table refresh. Step 10d uses
-    /// `replace_feature_configs` for `feature-config.update`
+    /// Upsert one server setting keyed by `entry.name`. Used
+    /// when a future event ships a single named setting
+    /// without forcing a whole-snapshot refresh. Step 10d uses
+    /// `replace_server_settings` for `feature-config.update`
     /// because Wire's API is whole-response — `upsert` is included
-    /// for symmetry with `upsert_user_property`.
+    /// for symmetry with `upsert_account_data_entry`.
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn upsert_feature_config(
-        &self,
-        entry: &FeatureConfigEntry,
-    ) -> Result<(), KupferdrahtError>;
+    async fn upsert_server_setting(&self, entry: &ServerSetting) -> Result<(), KupferdrahtError>;
 
-    /// Load every persisted feature-config row. Order is unspecified
+    /// Load every persisted server setting. Order is unspecified
     /// — callers index by `name`. Used by Step 10e's
-    /// `Client::feature_configs`.
+    /// `Client::server_settings`.
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn list_feature_configs(&self) -> Result<Vec<FeatureConfigEntry>, KupferdrahtError>;
+    async fn list_server_settings(&self) -> Result<Vec<ServerSetting>, KupferdrahtError>;
 
-    /// Load one feature-config row by `name`, or `Ok(None)` if no
-    /// row matches. Used by Step 10e's `Client::feature_config`
+    /// Load one server setting by `name`, or `Ok(None)` if no
+    /// row matches. Used by Step 10e's `Client::server_setting`
     /// and the typed getters layered over it
     /// (`Client::file_sharing`).
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn get_feature_config(
+    async fn get_server_setting(
         &self,
         name: &str,
-    ) -> Result<Option<FeatureConfigEntry>, KupferdrahtError>;
+    ) -> Result<Option<ServerSetting>, KupferdrahtError>;
 
-    /// Replace the entire `user_properties` snapshot atomically.
+    /// Replace the entire account-data snapshot atomically.
     /// Step 10c's login pipeline calls this once after fetching
     /// `GET /v14/properties` + per-key values. An empty slice
-    /// clears the table.
+    /// clears the snapshot.
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn replace_user_properties(
+    async fn replace_account_data(
         &self,
-        entries: &[UserPropertyEntry],
+        entries: &[AccountDataEntry],
     ) -> Result<(), KupferdrahtError>;
 
-    /// Upsert one user-property row keyed by `entry.key`. Step
+    /// Upsert one account-data entry keyed by `entry.key`. Step
     /// 10d's `user.properties-set` event arm calls this after
     /// re-fetching the new value from `GET /v14/properties/{key}`.
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn upsert_user_property(&self, entry: &UserPropertyEntry)
-    -> Result<(), KupferdrahtError>;
+    async fn upsert_account_data_entry(
+        &self,
+        entry: &AccountDataEntry,
+    ) -> Result<(), KupferdrahtError>;
 
-    /// Delete the `user_properties` row for `key`. Idempotent on a
+    /// Delete the account-data entry for `key`. Idempotent on a
     /// missing key — Wire's `user.properties-delete` event arm
     /// (Step 10d) routes to this method, and the local store may
     /// already be in sync (e.g. the row was cleared by an earlier
-    /// `replace_user_properties` call). Returning an error in that
+    /// `replace_account_data` call). Returning an error in that
     /// case would force the dispatch to log noise.
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn delete_user_property(&self, key: &str) -> Result<(), KupferdrahtError>;
+    async fn delete_account_data_entry(&self, key: &str) -> Result<(), KupferdrahtError>;
 
-    /// Load every persisted user-property row. Order is unspecified
+    /// Load every persisted account-data entry. Order is unspecified
     /// — callers index by `key`. Used by Step 10e's
-    /// `Client::user_properties`.
+    /// `Client::account_data`.
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn list_user_properties(&self) -> Result<Vec<UserPropertyEntry>, KupferdrahtError>;
+    async fn list_account_data(&self) -> Result<Vec<AccountDataEntry>, KupferdrahtError>;
 
-    /// Load one user-property row by `key`, or `Ok(None)` if no
-    /// row matches. Used by Step 10e's `Client::user_property`
+    /// Load one account-data entry by `key`, or `Ok(None)` if no
+    /// row matches. Used by Step 10e's `Client::account_data_entry`
     /// and the typed getters layered over it
-    /// (`Client::receipt_mode`).
+    /// (`Client::read_receipt_setting`).
     ///
     /// # Errors
     /// Returns `KupferdrahtError::Storage` on `SQLite` failure.
-    async fn get_user_property(
+    async fn get_account_data_entry(
         &self,
         key: &str,
-    ) -> Result<Option<UserPropertyEntry>, KupferdrahtError>;
+    ) -> Result<Option<AccountDataEntry>, KupferdrahtError>;
 
     /// Insert an attachment row, anchored to its parent
     /// `timeline_events` row by `(message_id, room_id)`. Caller is

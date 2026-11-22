@@ -322,11 +322,11 @@ impl SyncService {
     ) -> Result<(), KupferdrahtError> {
         match ty {
             "feature-config.update" => {
-                self.dispatch_feature_config_update();
+                self.dispatch_server_setting_update();
                 Ok(())
             }
-            "user.properties-set" => self.dispatch_user_property_set(ev),
-            "user.properties-delete" => self.dispatch_user_property_delete(client, ev).await,
+            "user.properties-set" => self.dispatch_account_data_set(ev),
+            "user.properties-delete" => self.dispatch_account_data_delete(client, ev).await,
             "conversation.typing" => {
                 dispatch_inbound_typing(client, ev);
                 Ok(())
@@ -723,7 +723,7 @@ fn dispatch_inbound_typing(client: &Arc<Client>, ev: &serde_json::Value) {
     });
 }
 
-/// Handle an inbound `conversation.delete` event: a conversation was
+/// Handle an inbound `conversation.delete` event: a room was
 /// deleted for everyone (by an admin). Prune it from the in-memory room
 /// cache right away instead of waiting for the next metadata refresh;
 /// the persisted snapshot self-corrects on the next `sync_metadata`.

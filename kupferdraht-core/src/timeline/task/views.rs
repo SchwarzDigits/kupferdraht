@@ -11,13 +11,13 @@ use super::{
 };
 
 /// Cross-room "my open work" view (Step 60c, ADR-0014): tasks
-/// assigned to `self_user_id` that still need doing (`Open` or
+/// assigned to `own_user_id` that still need doing (`Open` or
 /// `InProgress`), across all rooms.
-pub(crate) fn filter_my_tasks(tasks: &[RoomTask], self_user_id: &str) -> Vec<RoomTask> {
+pub(crate) fn filter_my_tasks(tasks: &[RoomTask], own_user_id: &str) -> Vec<RoomTask> {
     tasks
         .iter()
         .filter(|t| {
-            t.task.item.assignee.as_deref() == Some(self_user_id)
+            t.task.item.assignee.as_deref() == Some(own_user_id)
                 && matches!(
                     t.task.item.status,
                     TaskStatus::Open | TaskStatus::InProgress
@@ -28,19 +28,19 @@ pub(crate) fn filter_my_tasks(tasks: &[RoomTask], self_user_id: &str) -> Vec<Roo
 }
 
 /// Cross-room "what I delegated" view (Step 60c, ADR-0014): tasks
-/// `self_user_id` created and assigned to someone else — any status,
+/// `own_user_id` created and assigned to someone else — any status,
 /// so the creator sees progress (`done` included). Unassigned tasks
 /// are not delegated.
-pub(crate) fn filter_delegated_tasks(tasks: &[RoomTask], self_user_id: &str) -> Vec<RoomTask> {
+pub(crate) fn filter_delegated_tasks(tasks: &[RoomTask], own_user_id: &str) -> Vec<RoomTask> {
     tasks
         .iter()
         .filter(|t| {
-            t.task.creator_user_id == self_user_id
+            t.task.creator_user_id == own_user_id
                 && t.task
                     .item
                     .assignee
                     .as_deref()
-                    .is_some_and(|assignee| assignee != self_user_id)
+                    .is_some_and(|assignee| assignee != own_user_id)
         })
         .cloned()
         .collect()

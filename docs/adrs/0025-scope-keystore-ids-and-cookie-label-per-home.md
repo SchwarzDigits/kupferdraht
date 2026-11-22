@@ -330,3 +330,4 @@ Step 93 (`docs/plan/archive/93-home-scoped-keystore-ids.md`):
   keeps the figure it was decided with.
 - 2026-11-10: The link to the plan `93-home-scoped-keystore-ids` follows it to `docs/plan/archive/`, where it was archived when its step merged. No change of decision.
 - 2026-11-18: Naming only, per ADR-0009 (revision 1.2): the public name `cookie_label` (`cookieLabel` in the browser) carries Wire's term for the session's label; Step 163d names it neutrally. One label per home stands.
+- 2026-11-22: Step 163d landed the neutral name: `session_label` (`sessionLabel` in the browser, `SessionRecord.session_label`, `KupferdrahtHome::session_label`, CLI `status`); `rules/0025` follows. The body above keeps the names of the step that implemented it. No change of decision.

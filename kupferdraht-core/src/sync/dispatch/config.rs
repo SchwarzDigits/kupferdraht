@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::client::Client;
 use crate::error::KupferdrahtError;
-use crate::storage::UserPropertyEntry;
+use crate::storage::AccountDataEntry;
 use crate::sync::follow_ups::FollowUp;
 use crate::sync::service::SyncService;
 use crate::time::now_ms;
@@ -19,7 +19,7 @@ impl SyncService {
     /// and replaces the persisted whole-team snapshot. ADR-0012
     /// §Notification dispatch. The re-fetch is network, so it runs as a
     /// follow-up after the drain lock (Step 97d, ADR-0031).
-    pub(crate) fn dispatch_feature_config_update(&self) {
+    pub(crate) fn dispatch_server_setting_update(&self) {
         self.queue_follow_up(FollowUp::RefetchFeatureConfigs);
     }
 
@@ -27,7 +27,7 @@ impl SyncService {
     /// the affected `key` only — the dispatcher re-fetches
     /// `/v14/properties/{key}` and upserts the row — as a follow-up
     /// after the drain lock (Step 97d, ADR-0031).
-    pub(crate) fn dispatch_user_property_set(
+    pub(crate) fn dispatch_account_data_set(
         &self,
         ev: &serde_json::Value,
     ) -> Result<(), KupferdrahtError> {
@@ -46,7 +46,7 @@ impl SyncService {
     /// `DELETE /v14/properties/{key}`; Wire is the source of truth
     /// for the deletion in the first place, and re-issuing the call
     /// would produce another `user.properties-delete` event.
-    pub(crate) async fn dispatch_user_property_delete(
+    pub(crate) async fn dispatch_account_data_delete(
         &self,
         client: &Arc<Client>,
         ev: &serde_json::Value,
@@ -60,7 +60,7 @@ impl SyncService {
                 )
             })?;
         if let Some(store) = client.store_handle() {
-            store.delete_user_property(key).await?;
+            store.delete_account_data_entry(key).await?;
         }
         Ok(())
     }
@@ -68,16 +68,16 @@ impl SyncService {
 
 /// Re-fetch `/v14/feature-configs` and replace the persisted snapshot —
 /// the follow-up of a `feature-config.update` event (Step 10d).
-pub(in crate::sync) async fn refetch_feature_configs(
+pub(in crate::sync) async fn refetch_server_settings(
     client: &Arc<Client>,
 ) -> Result<(), KupferdrahtError> {
-    let raw = client.http_fetch_feature_configs().await?;
+    let raw = client.http_fetch_server_settings().await?;
     // Step 132 (NG-25): a backend reconfigured to another default suite
     // surfaces at its next refetch, not on the next group add.
     crate::client::ensure_default_ciphersuite(&raw)?;
     if let Some(store) = client.store_handle() {
         store
-            .replace_feature_configs(&raw.into_entries(now_ms()))
+            .replace_server_settings(&raw.into_entries(now_ms()))
             .await?;
     }
     Ok(())
@@ -85,7 +85,7 @@ pub(in crate::sync) async fn refetch_feature_configs(
 
 /// Re-fetch `/v14/properties/{key}` and upsert the row — the follow-up
 /// of a `user.properties-set` event (Step 10d).
-pub(in crate::sync) async fn refetch_user_property(
+pub(in crate::sync) async fn refetch_account_data_entry(
     client: &Arc<Client>,
     key: &str,
 ) -> Result<(), KupferdrahtError> {
@@ -94,7 +94,7 @@ pub(in crate::sync) async fn refetch_user_property(
     let value = client.http_fetch_property_value(key).await?;
     if let Some(store) = client.store_handle() {
         store
-            .upsert_user_property(&UserPropertyEntry {
+            .upsert_account_data_entry(&AccountDataEntry {
                 key: key.to_string(),
                 value,
                 last_synced_at_ms: now_ms(),

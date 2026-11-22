@@ -128,7 +128,7 @@ fn feature_configs_with_default_suite(suite: u8) -> String {
     )
 }
 
-fn mount_feature_configs(server: &MockServer, suite: u8) -> httpmock::Mock<'_> {
+fn mount_server_settings(server: &MockServer, suite: u8) -> httpmock::Mock<'_> {
     server.mock(|when, then| {
         when.method(GET).path("/v14/feature-configs");
         then.status(200)
@@ -144,7 +144,7 @@ fn mount_feature_configs(server: &MockServer, suite: u8) -> httpmock::Mock<'_> {
 async fn login_refuses_a_backend_whose_default_ciphersuite_differs() {
     let server = MockServer::start_async().await;
     common::mount_full_login_flow(&server);
-    let _configs = mount_feature_configs(&server, 1);
+    let _configs = mount_server_settings(&server, 1);
     let dir = tempfile::tempdir().expect("tempdir");
     let keystore: Arc<dyn SecureKeyStore> = Arc::new(InMemoryKeyStore::new());
     let outcome = ClientBuilder::new()
@@ -181,7 +181,7 @@ async fn login_refuses_a_backend_whose_default_ciphersuite_differs() {
 async fn relogin_on_a_reused_device_refuses_a_backend_whose_default_ciphersuite_differs() {
     let server = MockServer::start_async().await;
     common::mount_full_login_flow(&server);
-    let mut ours = mount_feature_configs(&server, 2);
+    let mut ours = mount_server_settings(&server, 2);
     let dir = tempfile::tempdir().expect("tempdir");
     let keystore: Arc<dyn SecureKeyStore> = Arc::new(InMemoryKeyStore::new());
     let app = kupferdraht::Kupferdraht::open(dir.path().to_path_buf(), keystore)
@@ -203,7 +203,7 @@ async fn relogin_on_a_reused_device_refuses_a_backend_whose_default_ciphersuite_
     let device_id = first.device_id().expect("device id").to_string();
     drop(first);
     ours.delete();
-    let _theirs = mount_feature_configs(&server, 1);
+    let _theirs = mount_server_settings(&server, 1);
     server.mock(|when, then| {
         when.method(GET).path(format!("/v14/clients/{device_id}"));
         then.status(200)

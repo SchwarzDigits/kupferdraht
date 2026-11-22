@@ -95,7 +95,7 @@ pub struct FoldedTask {
 
 /// One task with the room it lives in — the cross-room view element
 /// (Step 60c): `Client::my_tasks()` / `Client::delegated_tasks()`
-/// aggregate over every conversation the client replicates.
+/// aggregate over every room the client replicates.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoomTask {
     /// Room id (`<uuid>@<domain>`).

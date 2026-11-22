@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use kupferdraht::storage::{
-    BackendMlsKey, DeviceRecord, SelfUserRecord, ServerConfigRecord, SessionRecord,
+    DeviceRecord, ExternalSenderKey, OwnUserRecord, ServerConfigRecord, SessionRecord,
     StorageEngineInfo, Store,
 };
 use kupferdraht::{
@@ -224,7 +224,7 @@ pub(crate) async fn persist_session_state(
     };
     store.save_device(&device).await?;
     store
-        .save_self_user(&SelfUserRecord {
+        .save_own_user(&OwnUserRecord {
             id: user_id,
             username: account.username().map(str::to_string),
             name: account.display_name().to_string(),
@@ -242,12 +242,12 @@ pub(crate) async fn persist_session_state(
             title: server_config.title.clone(),
         })
         .await?;
-    let external_sender_key = BackendMlsKey {
+    let external_sender_key = ExternalSenderKey {
         purpose: "removal".to_string(),
         signature_scheme: "ecdsa_secp256r1_sha256".to_string(),
         public_key: client.external_sender_key().to_vec(),
     };
-    store.save_backend_mls_key(&external_sender_key).await?;
+    store.save_external_sender_key(&external_sender_key).await?;
     Ok(())
 }
 

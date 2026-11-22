@@ -21,7 +21,7 @@ use super::timeline::{Timeline, TimelineItem, build_options, map_items};
 use crate::error::KupferdrahtError;
 use crate::rooms::{JoinLink, Room as CoreRoom, RoomAccess, RoomMember};
 
-/// A conversation — the FFI wrapper around the native
+/// A room — the FFI wrapper around the native
 /// [`kupferdraht::Room`](crate::rooms::Room).
 #[derive(uniffi::Object)]
 pub struct Room {
@@ -52,7 +52,7 @@ impl Room {
         self.inner.name()
     }
 
-    /// The conversation kind.
+    /// The room kind.
     #[must_use]
     pub fn room_type(&self) -> crate::rooms::RoomType {
         self.inner.room_type()
@@ -162,7 +162,7 @@ impl Room {
     }
 
     /// Create or update this room's case via a set-only patch
-    /// (Step 72c, ADR-0018); requires conversation-admin role.
+    /// (Step 72c, ADR-0018); requires room-admin role.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -197,8 +197,8 @@ impl Room {
         self.inner.leave().await
     }
 
-    /// Delete this conversation for everyone (team-admin action,
-    /// distinct from `leave`). Only valid for team conversations.
+    /// Delete this room for everyone (team-admin action,
+    /// distinct from `leave`). Only valid for team rooms.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -399,7 +399,7 @@ impl Client {
         self.inner.room_or_load(room_id).await.map(Room::wrap)
     }
 
-    /// Create a fresh group conversation.
+    /// Create a fresh group room.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -407,7 +407,7 @@ impl Client {
         self.inner.create_room(name).await.map(Room::wrap)
     }
 
-    /// Look up (or establish) the MLS 1:1 conversation with `peer`.
+    /// Look up (or establish) the MLS 1:1 room with `peer`.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
@@ -439,8 +439,8 @@ impl Client {
         self.inner.leave_room(room_id).await
     }
 
-    /// Delete a team conversation for everyone, by id (team-admin
-    /// action). Only valid for team conversations.
+    /// Delete a team room for everyone, by id (team-admin
+    /// action). Only valid for team rooms.
     ///
     /// # Errors
     /// See `KupferdrahtError`.

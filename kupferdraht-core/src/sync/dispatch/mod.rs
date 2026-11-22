@@ -10,9 +10,9 @@
 //! - `sync/dispatch.rs` (this file) carries the per-event handlers:
 //!   the `GenericMessage`-variant ones from Step 6-II
 //!   (`dispatch_inbound_text` / `_confirmation` / `_reaction` / `_delete`
-//!   / `_edit`) plus the Step-10d server-administered-config arms
-//!   (`dispatch_feature_config_update`, `dispatch_user_property_set`,
-//!   `dispatch_user_property_delete`).
+//!   / `_edit`) plus the Step-10d server-settings arms
+//!   (`dispatch_server_setting_update`, `dispatch_account_data_set`,
+//!   `dispatch_account_data_delete`).
 //!
 //! Reviewers landing on a 6-II-c regression don't have to page
 //! through the WebSocket-shaped drain loop, and vice-versa.
@@ -33,7 +33,7 @@ mod room_event;
 pub(super) mod task;
 mod text;
 
-pub(super) use config::{refetch_feature_configs, refetch_user_property};
+pub(super) use config::{refetch_account_data_entry, refetch_server_settings};
 pub(super) use room_event::dispatch_room_event;
 
 use std::sync::Arc;

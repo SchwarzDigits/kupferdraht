@@ -47,7 +47,7 @@ use crate::identity::UserId;
 use crate::keystore::SecureKeyStore;
 use crate::storage::account_keys::{self, AccountKeySource};
 use crate::storage::{
-    AccountEntry, BackendMlsKey, DeviceRecord, GlobalStore, KupferdrahtHome, SelfUserRecord,
+    AccountEntry, DeviceRecord, ExternalSenderKey, GlobalStore, KupferdrahtHome, OwnUserRecord,
     ServerConfigRecord, SessionRecord, SqliteStorageProvider, StorageProvider,
 };
 
@@ -578,7 +578,7 @@ async fn persist_session(
         })
         .await?;
     store
-        .save_self_user(&SelfUserRecord {
+        .save_own_user(&OwnUserRecord {
             id: user_id,
             username: account.username().map(str::to_string),
             name: account.display_name().to_string(),
@@ -597,7 +597,7 @@ async fn persist_session(
         })
         .await?;
     store
-        .save_backend_mls_key(&BackendMlsKey {
+        .save_external_sender_key(&ExternalSenderKey {
             purpose: "removal".to_string(),
             signature_scheme: "ecdsa_secp256r1_sha256".to_string(),
             public_key: client.external_sender_key().to_vec(),
