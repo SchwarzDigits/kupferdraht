@@ -39,6 +39,20 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.6.0] - 2026-11-22
+
+### Added
+
 - **A self-hosted backend under its own certificate authority** (Step 156,
   ADR-0044): `add_root_certificates` on `ClientBuilder` and on
   `KupferdrahtBuilder` (FFI
@@ -269,10 +283,6 @@ is no skill for it — it is this short procedure:
     nothing is migrated.
   - CLI: `settings [--name <key>]` replaces `features`, and `account-data [--key
     <key>]` replaces `properties`.
-
-### Deprecated
-
-### Removed
 
 ### Fixed
 
