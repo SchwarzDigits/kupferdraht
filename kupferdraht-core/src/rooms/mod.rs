@@ -6,7 +6,7 @@
 //!
 //! Public surface (cycle 2b):
 //!
-//! * [`Room`] — a single conversation, read-only snapshot. Richer
+//! * [`Room`] — a single room, read-only snapshot. Richer
 //!   behaviour (send / receive / timeline) comes in Steps 4 – 6.
 //! * [`RoomType`] — `DirectMessage` / `Group` / `Channel` / `Personal`.
 //!   Cycle 2b maps Wire's numeric `ConvType` onto this enum.

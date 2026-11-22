@@ -26,9 +26,9 @@ pub(crate) enum FollowUp {
     HealRoomIfBehind(String),
     /// Acknowledge an inbound 1:1 message as delivered (Step 25b).
     ConfirmDelivery { room_id: String, message_id: String },
-    /// Re-fetch the team feature configs (Step 10d).
+    /// Re-fetch the server settings (Step 10d).
     RefetchFeatureConfigs,
-    /// Re-fetch one user property (Step 10d).
+    /// Re-fetch one account-data entry (Step 10d).
     RefetchProperty(String),
 }
 
@@ -71,12 +71,14 @@ impl SyncService {
                     .await;
                 Ok(())
             }
-            FollowUp::RefetchFeatureConfigs => super::dispatch::refetch_feature_configs(client)
+            FollowUp::RefetchFeatureConfigs => super::dispatch::refetch_server_settings(client)
                 .await
                 .map_err(|e| format!("drain: {e}")),
-            FollowUp::RefetchProperty(key) => super::dispatch::refetch_user_property(client, &key)
-                .await
-                .map_err(|e| format!("drain: {e}")),
+            FollowUp::RefetchProperty(key) => {
+                super::dispatch::refetch_account_data_entry(client, &key)
+                    .await
+                    .map_err(|e| format!("drain: {e}"))
+            }
         };
         if let Err(description) = outcome {
             warn!(%description, "dispatch follow-up failed");

@@ -57,7 +57,7 @@ pub(crate) mod wire;
 pub use avatar::{Avatar, AvatarSize, AvatarSource};
 pub use client::{
     Account, Client, ClientBuilder, DeviceInfo, DeviceKind, FileSharingPolicy, JoinSummary,
-    PendingClient, ReceiptMode, ResyncSummary, ServerConfig,
+    PendingClient, ReadReceiptSetting, ResyncSummary, ServerConfig,
 };
 pub use error::KupferdrahtError;
 pub use identity::UserId;

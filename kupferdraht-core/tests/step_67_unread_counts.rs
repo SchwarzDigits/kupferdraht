@@ -7,7 +7,7 @@
 //! Pins `docs/plan/archive/67-unread-counts.md`: a device-local read marker
 //! (`room_read_markers`), inbound-only counting with the honest
 //! no-marker default (everything inbound counts), a marker that
-//! advances even when `ReceiptMode::Off` suppresses the outbound
+//! advances even when `ReadReceiptSetting::Off` suppresses the outbound
 //! confirmation, and a grouped bulk query for room lists.
 
 use httpmock::Method::{GET, POST};

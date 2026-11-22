@@ -6,7 +6,7 @@
 //! through while ConsumableNotifications is upstream-disabled
 //! (observations §68).
 //!
-//! The route is *passive*: no acks, no sync marker, no redelivery — a
+//! The route is *passive*: no acks, no sync token, no redelivery — a
 //! push it does not deliver is gone. So the socket is only a
 //! **doorbell** for the REST queue (ADR-0030):
 //!

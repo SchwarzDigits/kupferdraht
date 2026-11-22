@@ -366,7 +366,7 @@ mod tests {
         );
     }
 
-    /// Standard P-256 backend-removal-key placeholder used by every
+    /// Standard P-256 external-sender-key placeholder used by every
     /// `create_group` call in this module's tests. Group construction
     /// only checks length; signature verification only triggers if a
     /// Remove proposal arrives — the tests don't exercise that path.

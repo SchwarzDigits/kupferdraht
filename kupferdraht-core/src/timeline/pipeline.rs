@@ -13,8 +13,8 @@
 //!
 //! Those helpers live here so the per-interaction orchestrators
 //! (`super::text`, `super::reaction`, `super::confirmation`,
-//! `super::delete`, `super::knock`, `super::location`,
-//! `super::ephemeral`) stay focused on
+//! `super::delete`, `super::ping`, `super::location`,
+//! `super::disappearing`) stay focused on
 //! each pipeline's spine, and the receive handlers in
 //! [`crate::sync::dispatch`] stay focused on the per-content-variant
 //! dispatch table. No public-API symbols.
@@ -176,14 +176,14 @@ impl Client {
     }
 
     /// Compute the new full reaction set for `(canonical_id,
-    /// self_user_id)` after toggling `emoji`: existing + emoji on a
+    /// own_user_id)` after toggling `emoji`: existing + emoji on a
     /// fresh add, existing - emoji on a remove. Returns the resulting
     /// set ordered as the rows came back from storage.
     pub(crate) async fn toggle_user_reaction_set(
         &self,
         room_id: &str,
         canonical_id: &str,
-        self_user_id: &str,
+        own_user_id: &str,
         emoji: &str,
     ) -> Result<Vec<String>, KupferdrahtError> {
         let Some(store) = self.store_handle() else {
@@ -192,7 +192,7 @@ impl Client {
         let rows = store.load_reactions_for_room(room_id).await?;
         let mut current: Vec<String> = rows
             .into_iter()
-            .filter(|r| r.message_id == canonical_id && r.sender_user_id == self_user_id)
+            .filter(|r| r.message_id == canonical_id && r.sender_user_id == own_user_id)
             .map(|r| r.emoji)
             .collect();
         if current.iter().any(|e| e == emoji) {

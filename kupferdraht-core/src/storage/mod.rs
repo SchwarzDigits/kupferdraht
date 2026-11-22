@@ -37,11 +37,11 @@ pub use browser::{
 pub use engine::StorageEngineInfo;
 pub use global::{AccountEntry, GlobalStore, open_default_global_store};
 pub use records::{
-    AttachmentRecord, BackendMlsKey, DeliveryReceiptRecord, DeviceRecord, ExpiredMessageRecord,
-    FeatureConfigEntry, MentionRecord, MessageEditRecord, ReactionRecord, ReadReceiptRecord,
-    ReadStateRecord, RecoveryStateRecord, ResentTimes, RoomMemberRecord, RoomRecord,
-    SEND_KEY_RETENTION_MS, SelfUserRecord, SendKeyRecord, ServerConfigRecord, SessionRecord, Store,
-    SyncStateRecord, TaskRecord, TimelineEventRecord, UserPropertyEntry,
+    AccountDataEntry, AttachmentRecord, DeliveryReceiptRecord, DeviceRecord, ExpiredMessageRecord,
+    ExternalSenderKey, MentionRecord, MessageEditRecord, OwnUserRecord, ReactionRecord,
+    ReadReceiptRecord, ReadStateRecord, RecoveryStateRecord, ResentTimes, RoomMemberRecord,
+    RoomRecord, SEND_KEY_RETENTION_MS, SendKeyRecord, ServerConfigRecord, ServerSetting,
+    SessionRecord, Store, SyncStateRecord, TaskRecord, TimelineEventRecord,
 };
 pub use sqlite::SqliteStore;
 

@@ -88,13 +88,12 @@ impl MlsClient {
                 group_id_bytes,
                 "remove_members_commit: group not in storage (call create_group / join_room first)",
             )?;
-            let self_user =
-                user_id_of(&self.credential_with_key().credential).ok_or_else(|| {
-                    KupferdrahtError::Generic(
-                        "remove_members_commit: own credential identity is malformed".into(),
-                    )
-                })?;
-            let indices = resolve_target_leaf_indices(&group, user_ids, &self_user)?;
+            let own_user = user_id_of(&self.credential_with_key().credential).ok_or_else(|| {
+                KupferdrahtError::Generic(
+                    "remove_members_commit: own credential identity is malformed".into(),
+                )
+            })?;
+            let indices = resolve_target_leaf_indices(&group, user_ids, &own_user)?;
             debug!(
                 group_id_len = group_id_bytes.len(),
                 removes = indices.len(),
@@ -112,15 +111,15 @@ impl MlsClient {
 }
 
 /// Map the caller-supplied user-ids to leaf indices in `group`.
-/// Rejects an attempt to remove `self_user` (Kupferdraht does not yet
+/// Rejects an attempt to remove `own_user` (Kupferdraht does not yet
 /// support self-kick) and rejects the call when no leaf matches.
 fn resolve_target_leaf_indices(
     group: &MlsGroup,
     user_ids: &[String],
-    self_user: &str,
+    own_user: &str,
 ) -> Result<Vec<LeafNodeIndex>, KupferdrahtError> {
     let target_users: HashSet<&str> = user_ids.iter().map(String::as_str).collect();
-    if target_users.contains(self_user) {
+    if target_users.contains(own_user) {
         return Err(KupferdrahtError::InvalidInput(
             "remove_members_commit: removing self is not supported in Step 6d \
              (use logout / device-revocation flows once they exist)"
@@ -252,7 +251,7 @@ mod tests {
         );
     }
 
-    /// Standard P-256 backend-removal-key placeholder used by every
+    /// Standard P-256 external-sender-key placeholder used by every
     /// `create_group` call in this module's tests.
     const REMOVAL_KEY_PLACEHOLDER: [u8; 65] = [0x04u8; 65];
 

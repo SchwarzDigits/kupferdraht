@@ -64,7 +64,7 @@ pub enum MessageBody {
         task: super::timeline::TaskMeta,
     },
     /// Full case snapshot (ADR-0018). Step 72b. `sender_authorized`
-    /// = the sender was a conversation admin at receive time.
+    /// = the sender was a room admin at receive time.
     Case {
         case: crate::timeline::CaseSnapshot,
         sender_authorized: bool,

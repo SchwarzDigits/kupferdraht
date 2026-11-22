@@ -41,13 +41,13 @@ const VIEW_DECLARATIONS: [(&str, &str); 12] = [
     ("AttachmentMeta", "AttachmentMeta"),
     ("DeviceInfoView", "DeviceInfo"),
     ("DeviceView", "RoomDevice"),
-    ("FeatureConfigView", "FeatureConfig"),
     ("LocationView", "TimelineItem"),
     ("MemberView", "Member"),
     ("MessageView", "MessageEvent_"),
     ("ReadStateChange", "ReadStateChange"),
     ("ResendSummaryView", "ResendSummary"),
     ("RoomView", "Room"),
+    ("ServerSettingView", "ServerSetting"),
     ("TimelineItemView", "TimelineItem"),
 ];
 

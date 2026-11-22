@@ -61,8 +61,8 @@ impl RoomType {
     }
 }
 
-/// A member's conversation-level role (Step 72a, ADR-0018). Wire
-/// knows exactly two — the conversation creator and anyone promoted
+/// A member's room-level role (Step 72a, ADR-0018). Wire
+/// knows exactly two — the room's creator and anyone promoted
 /// is an administrator, everyone else a member; Kupferdraht maps any
 /// other server role name to `Member`. matrix-rust-sdk analog:
 /// `RoomMemberRole::Administrator` / `User` (power-level derived);
@@ -100,7 +100,7 @@ impl RoomMemberRole {
 /// One participant in a `Room`. Cycle 2b fills in the `<uuid>@<domain>`
 /// `user_id` and the `is_own` flag only; `display_name` and
 /// `username` are populated by cycle 2c's `POST /v14/list-users`
-/// resolution; `role` comes from the conversation metadata
+/// resolution; `role` comes from the room metadata
 /// (Step 72a).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RoomMember {
@@ -124,7 +124,7 @@ impl RoomMember {
     }
 }
 
-/// A single conversation. A snapshot from the last `Client::sync_metadata`
+/// A single room. A snapshot from the last `Client::sync_metadata`
 /// or `Client::load_rooms_from_store` call, augmented with a [`Weak`]
 /// back-reference to the owning [`Client`] so instance methods like
 /// [`Room::join`] can drive `Client::join_room` without the caller
@@ -195,7 +195,7 @@ impl Room {
 
     /// For `RoomType::DirectMessage` with exactly one other
     /// participant, the counterpart. `None` for groups, channels,
-    /// self-rooms, or DMs with an unexpected member count.
+    /// personal rooms, or DMs with an unexpected member count.
     #[must_use]
     pub fn counterpart(&self) -> Option<RoomMember> {
         self.counterpart.clone()
@@ -250,7 +250,7 @@ impl Room {
     ///
     /// # Errors
     /// * `KupferdrahtError::InvalidInput` if the owning `Client` is gone,
-    ///   the caller is not a conversation administrator, or the room
+    ///   the caller is not a room administrator, or the room
     ///   has no local MLS group.
     /// * Encode / MLS / transport / storage errors from the send.
     pub async fn set_case(
@@ -362,7 +362,7 @@ impl Room {
     /// device-local read marker. **No marker → everything inbound
     /// counts**; `Timeline::mark_as_read`
     /// advances the marker. Device-local — the cross-device read
-    /// position rides the self-conversation in a later step.
+    /// position rides the own user's private room in a later step.
     ///
     /// matrix-rust-sdk analog: `Room::unread_notification_counts`
     /// (Kupferdraht: a single total, no notification/mention split yet).
@@ -572,7 +572,7 @@ impl Room {
         client.failed_sends(&self.id).await
     }
 
-    /// Remove the caller's own leaf from this conversation's MLS
+    /// Remove the caller's own leaf from this room's MLS
     /// group via a self-Remove commit. Delegates to
     /// [`Client::leave_room`]. After return, the local openmls group
     /// state has been discarded and `Client::rooms()` no longer
@@ -593,16 +593,16 @@ impl Room {
         client.leave_room(&self.id).await
     }
 
-    /// Delete this conversation for **all** members (a team-admin
+    /// Delete this room for **all** members (a team-admin
     /// action, distinct from [`Room::leave`]). Delegates to
     /// [`Client::delete_room`], which deletes via
     /// `DELETE /v{N}/teams/{tid}/conversations/{cid}`. Only valid for
-    /// team conversations; a 1:1 or non-team group yields `InvalidInput`
+    /// team rooms; a 1:1 or non-team group yields `InvalidInput`
     /// (leave those instead).
     ///
     /// # Errors
     /// * `InvalidInput` if the owning `Client` has been dropped or the
-    ///   room is not a team conversation.
+    ///   room is not a team room.
     /// * Backend / network errors from `Client::delete_room`.
     pub async fn delete(&self) -> Result<(), KupferdrahtError> {
         let client = self.client.upgrade().ok_or_else(|| {
@@ -613,7 +613,7 @@ impl Room {
         client.delete_room(&self.id).await
     }
 
-    /// Rename this conversation server-side via
+    /// Rename this room server-side via
     /// `PUT /v{N}/conversations/{domain}/{id}/name`. Delegates to
     /// [`Client::rename_room`]. Wire emits a `conversation.rename`
     /// event to all other members.
@@ -669,13 +669,13 @@ impl Room {
     }
 
     /// Issue (or fetch the existing) reusable guest-link for this
-    /// conversation via `POST /v{N}/conversations/{cnv}/code` — Step 8.
+    /// room via `POST /v{N}/conversations/{cnv}/code` — Step 8.
     /// `password` is `None` for an open link or `Some("…")` (≥ 8 chars)
     /// for a password-protected one. Delegates to
     /// [`Client::create_join_link`].
     ///
-    /// Returns the Kupferdraht-public projection of Wire's
-    /// `ConversationCodeInfo`: `JoinLink::url` is the `uri` field;
+    /// Returns the Kupferdraht-public projection of Wire's guest-link
+    /// response: `JoinLink::url` is the `uri` field;
     /// `JoinLink::password_protected` echoes `has_password`.
     ///
     /// # Errors
@@ -695,7 +695,7 @@ impl Room {
         client.create_join_link(&self.id, password.as_deref()).await
     }
 
-    /// Fetch the conversation's current guest link via
+    /// Fetch the room's current guest link via
     /// `GET /v{N}/conversations/{cnv}/code` — Step 8. `Ok(None)` when
     /// no link is on file (Wire returns `404 no-conversation-code`).
     /// Delegates to [`Client::current_join_link`].
@@ -714,7 +714,7 @@ impl Room {
         client.current_join_link(&self.id).await
     }
 
-    /// Revoke the conversation's current guest link via
+    /// Revoke the room's current guest link via
     /// `DELETE /v{N}/conversations/{cnv}/code` — Step 8. Idempotent:
     /// revoking a non-existent code is `Ok(())`. Delegates to
     /// [`Client::revoke_join_link`].
@@ -755,7 +755,7 @@ impl Room {
     ///
     /// # Errors
     /// * `InvalidInput` if the owning `Client` has been dropped or
-    ///   Wire doesn't return a conversation for this room id.
+    ///   Wire doesn't return a room for this id.
     /// * `BackendRejected` / `Network` / `Encoding` from the HTTP
     ///   layer.
     pub async fn access(&self) -> Result<RoomAccess, KupferdrahtError> {
@@ -843,8 +843,8 @@ pub(crate) fn with_epoch(mut room: Room, new_epoch: u64) -> Room {
 }
 
 /// Adapt Wire's `OwnConversation` wire-shape into a `Room`. Returns
-/// `None` when the conversation's protocol is `"proteus"` — Kupferdraht
-/// is MLS-only (ADR-0001) and Proteus conversations are filtered at
+/// `None` when the room's protocol is `"proteus"` — Kupferdraht
+/// is MLS-only (ADR-0001) and Proteus rooms are filtered at
 /// this boundary so no Wire-terminology leaks past it.
 ///
 /// `client` is a weak back-reference used by instance methods like
@@ -854,10 +854,10 @@ pub(crate) fn room_from_conversation(conv: OwnConversation, client: Weak<Client>
     if matches!(conv.protocol, Protocol::Proteus) {
         return None;
     }
-    // Step 95c: a conversation without an id or domain is unaddressable
+    // Step 95c: a room without an id or domain is unaddressable
     // (`@domain` fails every per-room endpoint) — skipped.
     if conv.qualified_id.id.is_empty() || conv.qualified_id.domain.is_empty() {
-        tracing::warn!("conversation without an id or domain skipped");
+        tracing::warn!("room without an id or domain skipped");
         return None;
     }
     let room_type = room_type_for(conv.conv_type, conv.group_conv_type.as_deref());
@@ -878,7 +878,7 @@ pub(crate) fn room_from_conversation(conv: OwnConversation, client: Weak<Client>
 }
 
 /// The room type from Wire's `type` and `group_conv_type` (Step 132 item
-/// 9): a channel is a regular conversation flagged `group_conv_type:
+/// 9): a channel is a regular room flagged `group_conv_type:
 /// "channel"`; `type` 3 is the pending-connection 1:1 (observations §95).
 fn room_type_for(conv_type: ConvType, group_conv_type: Option<&str>) -> RoomType {
     match conv_type {
@@ -941,7 +941,7 @@ fn qualify(qid: &QualifiedId) -> String {
 }
 
 /// Parse a qualified `<uuid>@<domain>` room id into a `QualifiedId` for
-/// Wire requests that address a conversation by its federated parts.
+/// Wire requests that address a room by its federated parts.
 /// Returns `None` for a malformed string. (User ids go through
 /// [`UserId`](crate::identity::UserId), not this function.)
 pub(crate) fn parse_room_id(room_id: &str) -> Option<QualifiedId> {
@@ -1210,7 +1210,7 @@ mod tests {
     }
 
     /// Step 132 item 9: the channel signal is `group_conv_type: "channel"`
-    /// on a regular conversation; `"group_conversation"` stays a group.
+    /// on a regular room; `"group_conversation"` stays a group.
     #[test]
     fn group_conv_type_channel_makes_a_channel() {
         for (flag, expected) in [

@@ -22,7 +22,7 @@ impl Timeline {
     /// Send a task into this room (ADR-0014). `with_fallback` selects
     /// the encoding mode: `Some(true)` (normal chats) also sets the
     /// `Text` oneof as human-readable fallback for official Wire
-    /// clients; `Some(false)` (dedicated task-list conversations)
+    /// clients; `Some(false)` (dedicated task-list rooms)
     /// leaves the oneof unset. `None` derives the default from the
     /// room's task-list marker (Step 75, ADR-0020): marked rooms
     /// suppress the fallback, unmarked rooms keep it. An explicit

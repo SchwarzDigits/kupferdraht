@@ -7,14 +7,14 @@
 //! another user (`sync/dispatch/authorize.rs`), so `Timeline::edit` and
 //! `Timeline::redact` refuse one before anything is uploaded — otherwise
 //! the local row would diverge from every other client's. Any device of
-//! the self user counts as "own". A target the local store does not know
+//! the own user counts as "own". A target the local store does not know
 //! cannot be checked and goes out as before.
 
 use crate::client::Client;
 use crate::error::KupferdrahtError;
 
 impl Client {
-    /// `Ok(())` when `target_id` in `room_id` is the self user's message
+    /// `Ok(())` when `target_id` in `room_id` is the own user's message
     /// or unknown locally; `InvalidInput` when another user sent it, or it
     /// is a room event's item (Step 145).
     ///

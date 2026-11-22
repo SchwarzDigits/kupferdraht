@@ -407,7 +407,7 @@ export class ClientProxy extends HandleProxy {
   invite(roomId, userIds) { return this.#call('invite', [roomId, userIds]); }
   kick(roomId, userIds) { return this.#call('kick', [roomId, userIds]); }
   leave(roomId) { return this.#call('leave', [roomId]); }
-  featureConfigs() { return this.#call('featureConfigs', []); }
+  serverSettings() { return this.#call('serverSettings', []); }
   fileSharing() { return this.#call('fileSharing', []); }
   serviceToken(audience) { return this.#call('serviceToken', [audience]); }
   logout(options) { return this.#call('logout', [options]); }

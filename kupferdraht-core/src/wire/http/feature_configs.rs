@@ -39,7 +39,7 @@ use serde_json::Value;
 use tracing::debug;
 
 use crate::error::KupferdrahtError;
-use crate::storage::FeatureConfigEntry;
+use crate::storage::ServerSetting;
 
 use super::{HttpClient, reject_from_response};
 
@@ -49,7 +49,7 @@ use super::{HttpClient, reject_from_response};
 /// names (`fileSharing`, `mls`, `mlsE2EId`, …) and whose values are
 /// per-feature objects of shape `{status, config}`. 10a's HTTP layer
 /// parses the envelope only — typed per-feature interpretation
-/// (`FileSharingPolicy`, `ReceiptMode`, …) lives in 10e.
+/// (`FileSharingPolicy`, `ReadReceiptSetting`, …) lives in 10e.
 #[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone)]
 pub struct RawFeatureConfigs {
@@ -102,9 +102,9 @@ impl RawFeatureConfigs {
     /// same `last_synced_at_ms` so a single login fetch produces a
     /// coherent timestamp across rows.
     #[must_use]
-    pub fn into_entries(self, last_synced_at_ms: i64) -> Vec<FeatureConfigEntry> {
+    pub fn into_entries(self, last_synced_at_ms: i64) -> Vec<ServerSetting> {
         self.iter()
-            .map(|(name, status, config)| FeatureConfigEntry {
+            .map(|(name, status, config)| ServerSetting {
                 name: name.to_string(),
                 status: status.map(str::to_string),
                 config_json: config.map_or_else(empty_config_json, Value::to_string),

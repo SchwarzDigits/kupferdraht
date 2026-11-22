@@ -110,7 +110,8 @@ object identity)
   `set_display_name`, `set_username`, `request_email_change`, `change_password`, `devices`,
   `delete_device(device_id, password?)` — `None` for an account without a password, an
   SSO user's (Step 164),
-  `feature_configs`, `file_sharing`, `receipt_mode`, …); avatars (Step 144:
+  `server_settings`, `server_setting(name)`, `account_data`, `account_data_entry(key)`,
+  `file_sharing`, `read_receipt_setting`, …); avatars (Step 144:
   `avatar(user_id, size) -> Avatar?`, `avatar_version(user_id)`, `team_avatar()`,
   `upload_avatar(image)`, `remove_avatar()`; the rules are in
   [library.md](library.md)); sync + observers (below).
@@ -163,8 +164,8 @@ foreign-implemented `RoomDevicesListener` sits with the other observers),
 and `Message` carry `expires_at_ms: Option<i64>` since Step 89 — set
 only for a disappearing message), `AttachmentMeta`,
 `MessageHandle`, `Mention`, `OutgoingContent` (Step 130a — the content
-of `send_keyed`), `ReactionGroup`, `DeviceInfo` (with `DeviceKind`, Step 163d), `FeatureConfigEntry`,
-`UserPropertyEntry`, `FileSharingPolicy`, `ReceiptMode`, `AccountEntry`,
+of `send_keyed`), `ReactionGroup`, `DeviceInfo` (with `DeviceKind`, Step 163d), `ServerSetting`,
+`AccountDataEntry`, `FileSharingPolicy`, `ReadReceiptSetting` (Step 163e), `AccountEntry`,
 `ServerConfig`, `SyncSettings`, `SyncTransport` (Step 62 — selects the
 receive transport; `WebSocket` also switches `start_sync` to the push
 runner. UniFFI records carry no enum defaults, so Kotlin and Swift name
@@ -806,7 +807,7 @@ Since Step 110 (ADR-0035):
   know; the next `markAsRead` of the room clears it. Both fire
   `onRoomsChanged` afterwards. A UI shows a room as needing attention
   while `unreadCount > 0 || markedUnread`.
-- Server-administered config (Step 98d): `featureConfigs()`,
+- Server settings (Step 98d): `serverSettings()`,
   `fileSharing() -> {policy}` (`"disabled" | "enabled"`).
 - Devices (Step 95d): `roomDevices(roomId) -> {userId, deviceId,
   credential: "basic"|"x509", thumbprint}[]` (one per MLS leaf;

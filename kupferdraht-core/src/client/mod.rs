@@ -49,8 +49,8 @@ mod room_changes;
 mod room_freshness;
 mod rooms;
 mod sent_signal;
-mod server_configs;
-pub(crate) use server_configs::ensure_default_ciphersuite;
+mod server_settings;
+pub(crate) use server_settings::ensure_default_ciphersuite;
 mod session;
 mod sso_login;
 mod sync;
@@ -64,7 +64,7 @@ pub use builder::{ClientBuilder, ServerConfig};
 pub use device::{DeviceInfo, DeviceKind};
 pub use pending::PendingClient;
 pub use pending_login::PendingLogin;
-pub use server_configs::{FileSharingPolicy, ReceiptMode};
+pub use server_settings::{FileSharingPolicy, ReadReceiptSetting};
 
 /// Outcome tally from [`Client::join_all_rooms`]. The values are
 /// flattened counters (not per-room pairs) for the common case where
@@ -76,7 +76,7 @@ pub struct JoinSummary {
     /// already joined locally.
     pub attempted: u32,
     /// Rooms that needed an external commit and successfully joined
-    /// during this call — including the self conversation this call
+    /// during this call — including the own user's private room this call
     /// established from epoch 0 (Step 86).
     pub joined: u32,
     /// Rooms whose `group_id` was already known to the local openmls

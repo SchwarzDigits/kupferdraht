@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Avatars on the client (Step 144): where whose images are, the cached images
-//! written anew, and setting the own. The own source is the `self_user` row's,
-//! with the login's snapshot where there is no row (the Step 126 pattern): an
-//! upload changes it.
+//! written anew, and setting the own. The own source is the own user's
+//! persisted row, with the login's snapshot where there is no row (the Step
+//! 126 pattern): an upload changes it.
 
 use std::sync::PoisonError;
 

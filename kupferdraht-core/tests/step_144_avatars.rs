@@ -858,7 +858,7 @@ async fn a_profile_write_keeps_the_avatar_source() {
 
     let store = session.client.store().expect("login attached a store");
     let row = store
-        .load_self_user(QUALIFIED)
+        .load_own_user(QUALIFIED)
         .await
         .expect("load_self_user")
         .expect("self_user row present");

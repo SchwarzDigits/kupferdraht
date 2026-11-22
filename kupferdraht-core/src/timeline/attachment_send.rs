@@ -583,7 +583,7 @@ impl Client {
 impl Client {
     /// `POST /v14/assets` with the in-memory ciphertext and its
     /// `Content-MD5`; an empty `filename` is sent as none. Wire requires the
-    /// conversation reference in the audit metadata when the team has attachment
+    /// room reference in the audit metadata when the team has attachment
     /// audit logging enabled (`400 missing-audit-metadata` otherwise);
     /// `room_id` is the qualified `<uuid>@<domain>`.
     async fn upload_bytes_blob(

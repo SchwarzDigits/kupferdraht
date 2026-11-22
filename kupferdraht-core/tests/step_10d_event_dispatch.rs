@@ -57,7 +57,7 @@ async fn feature_config_update_event_triggers_refetch_and_replace() {
 
     let (client, store) = common::run_login(&server).await;
 
-    let initial = store.list_feature_configs().await.expect("initial list");
+    let initial = store.list_server_settings().await.expect("initial list");
     assert_eq!(initial.len(), 2, "login populated 2 entries");
     fc_mock.assert_calls(1);
 
@@ -69,7 +69,7 @@ async fn feature_config_update_event_triggers_refetch_and_replace() {
     fc_mock.assert_calls(2);
     notifications_mock.assert_calls(1);
     let updated = store
-        .list_feature_configs()
+        .list_server_settings()
         .await
         .expect("post-update list");
     assert_eq!(
@@ -124,7 +124,7 @@ async fn user_properties_set_event_refetches_value_and_upserts_row() {
 
     let (client, store) = common::run_login(&server).await;
     let initial = store
-        .get_user_property("WIRE_RECEIPT_MODE")
+        .get_account_data_entry("WIRE_RECEIPT_MODE")
         .await
         .expect("initial");
     assert_eq!(initial.expect("present").value, "1");
@@ -137,7 +137,7 @@ async fn user_properties_set_event_refetches_value_and_upserts_row() {
     // 1 hit from login fetch_property_value, 1 hit from event refetch.
     pv_mock.assert_calls(2);
     let after = store
-        .get_user_property("WIRE_RECEIPT_MODE")
+        .get_account_data_entry("WIRE_RECEIPT_MODE")
         .await
         .expect("after")
         .expect("still present");
@@ -192,7 +192,7 @@ async fn user_properties_delete_event_removes_local_row_without_wire_delete() {
     });
 
     let (client, store) = common::run_login(&server).await;
-    let initial = store.list_user_properties().await.expect("initial");
+    let initial = store.list_account_data().await.expect("initial");
     assert_eq!(initial.len(), 1);
 
     client
@@ -200,7 +200,7 @@ async fn user_properties_delete_event_removes_local_row_without_wire_delete() {
         .await
         .expect("sync_once");
 
-    let after = store.list_user_properties().await.expect("after");
+    let after = store.list_account_data().await.expect("after");
     assert!(
         after.is_empty(),
         "user.properties-delete must wipe the local row; got {after:?}"

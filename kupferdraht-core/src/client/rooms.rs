@@ -38,7 +38,7 @@ fn local_room_id<'a>(room_id: &'a str, op: &str) -> Result<&'a str, KupferdrahtE
 
 impl Client {
     /// `PUT /v{N}/conversations/{domain}/{id}/name` — rename a
-    /// conversation. Wire emits a `conversation.rename` event to all
+    /// room. Wire emits a `conversation.rename` event to all
     /// members; the receive path will see it on the next sync.
     /// matrix-rust-sdk equivalent: `Room::set_name`.
     ///
@@ -85,17 +85,17 @@ impl Client {
     }
 
     /// `DELETE /v{N}/teams/{tid}/conversations/{cid}` — delete a team
-    /// conversation for **all** members (a team-admin action, distinct
+    /// room for **all** members (a team-admin action, distinct
     /// from `leave_room`). The owning team id comes from the
-    /// conversation's `team` field, falling back to the signed-in user's
-    /// own team (`GET /self`) when Wire's conversation-list response
+    /// room's `team` field, falling back to the signed-in user's
+    /// own team (`GET /self`) when Wire's room-list response
     /// omits it. An account that belongs to no team yields
     /// `InvalidInput`. On success the local cache is refreshed, so the
     /// room drops out.
     ///
     /// # Errors
     /// * `InvalidInput` if `room_id` has no `@<domain>`, Wire doesn't return
-    ///   the conversation, or neither the conversation nor the account
+    ///   the room, or neither the room nor the account
     ///   has an owning team.
     /// * `BackendRejected` on `403` (insufficient role). A `404`
     ///   (already gone) is treated as idempotent success.
@@ -112,12 +112,12 @@ impl Client {
             .await?;
         let conv = resp.found.into_iter().next().ok_or_else(|| {
             KupferdrahtError::InvalidInput(format!(
-                "delete_room: Wire did not return a conversation for {room_id}"
+                "delete_room: Wire did not return a room for {room_id}"
             ))
         })?;
-        // Wire's conversation-list response often omits the owning
+        // Wire's room-list response often omits the owning
         // `team`; fall back to the signed-in user's own team (the team
-        // whose conversations they can administer) when it's absent.
+        // whose rooms they can administer) when it's absent.
         // An empty team is no team (Step 95c — it would be the empty
         // segment of the team-scoped DELETE path).
         let team_id = match conv.team.filter(|t| !t.is_empty()) {
@@ -131,7 +131,7 @@ impl Client {
                 .ok_or_else(|| {
                     KupferdrahtError::InvalidInput(format!(
                         "delete_room: {room_id} has no owning team and the account is not in \
-                         a team — only team conversations can be deleted (use leave_room)"
+                         a team — only team rooms can be deleted (use leave_room)"
                     ))
                 })?,
         };
@@ -148,7 +148,7 @@ impl Client {
 
     /// Remove a room from the in-memory cache by room id; returns
     /// `true` if one was removed. Used by the inbound
-    /// `conversation.delete` handler so a conversation another admin
+    /// `conversation.delete` handler so a room another admin
     /// deleted drops out immediately, without waiting for the next
     /// metadata refresh. The persisted snapshot self-corrects on the
     /// next `sync_metadata`. Step 23.
@@ -159,7 +159,7 @@ impl Client {
         rooms.len() != before
     }
 
-    /// Issue (or fetch) a reusable guest-link for the conversation
+    /// Issue (or fetch) a reusable guest-link for the room
     /// at `room_id` (`<uuid>@<domain>`). The Kupferdraht-public
     /// entrypoint `Room::create_join_link` delegates here. Step 8.
     ///
@@ -170,8 +170,8 @@ impl Client {
     /// # Errors
     /// * `InvalidInput` if `room_id` has no `@<domain>` or `password`
     ///   is `Some("")`.
-    /// * `BackendRejected` / `Network` / `Encoding` from
-    ///   `HttpClient::create_conversation_code`.
+    /// * `BackendRejected` / `Network` / `Encoding` from the HTTP
+    ///   layer.
     pub async fn create_join_link(
         &self,
         room_id: &str,
@@ -198,9 +198,9 @@ impl Client {
         })
     }
 
-    /// Fetch the conversation's current guest link or `Ok(None)`
-    /// when none is on file. Step 8. Delegates to
-    /// `HttpClient::get_conversation_code`.
+    /// Fetch the room's current guest link or `Ok(None)`
+    /// when none is on file. Step 8. Delegates to the HTTP
+    /// client's guest-link lookup.
     ///
     /// # Errors
     /// * `InvalidInput` if `room_id` has no `@<domain>`.
@@ -221,9 +221,9 @@ impl Client {
         }))
     }
 
-    /// Revoke the conversation's current guest link. Idempotent:
+    /// Revoke the room's current guest link. Idempotent:
     /// revoking a non-existent code is `Ok(())`. Step 8. Delegates
-    /// to `HttpClient::delete_conversation_code`.
+    /// to the HTTP client's guest-link deletion.
     ///
     /// # Errors
     /// * `InvalidInput` if `room_id` has no `@<domain>`.
@@ -300,7 +300,7 @@ impl Client {
             .await?;
         let conv = resp.found.into_iter().next().ok_or_else(|| {
             KupferdrahtError::InvalidInput(format!(
-                "list_room_access: Wire did not return a conversation for {room_id}"
+                "list_room_access: Wire did not return a room for {room_id}"
             ))
         })?;
         Ok(RoomAccess::from_wire(&conv.access, &conv.access_role))
@@ -311,9 +311,9 @@ impl Client {
     /// the link's URL — the [`JoinLink::url`](crate::rooms::JoinLink)
     /// `Room::create_join_link` hands out:
     ///
-    /// 1. `GET /v{N}/conversations/join` — the conversation the link names
+    /// 1. `GET /v{N}/conversations/join` — the room the link names
     ///    (its id). A redeem only ever reaches the own backend's
-    ///    conversations (`open.md` §74).
+    ///    rooms (`open.md` §74).
     /// 2. `POST /v{N}/conversations/join` with the link and the password —
     ///    the backend adds the caller to the room's members (`204`: a
     ///    member already).
@@ -342,7 +342,7 @@ impl Client {
         self.sync_metadata().await?;
         let missing = || {
             KupferdrahtError::Generic(format!(
-                "join_via_link: joined conversation {conversation}, but the room list lacks it"
+                "join_via_link: joined room {conversation}, but the room list lacks it"
             ))
         };
         let room = self
@@ -362,7 +362,7 @@ impl Client {
         self.room(&room_id).await.ok_or_else(missing)
     }
 
-    /// Steps 1 and 2 of [`Self::join_via_link`]: the conversation the link
+    /// Steps 1 and 2 of [`Self::join_via_link`]: the room the link
     /// names (its id without the domain), then the redeem.
     async fn redeem_link(
         &self,
@@ -502,7 +502,7 @@ impl Client {
     /// yet joined. matrix-rust-sdk analog: `Client::invited_rooms()`.
     ///
     /// Kupferdraht does not materialize pending invitations as `Room`
-    /// objects today: `sync_once` only surfaces conversations the
+    /// objects today: `sync_once` only surfaces rooms the
     /// user is already a member of, and inbound
     /// `conversation.create` / `conversation.member-join` events
     /// are log-and-skipped. This method therefore returns an empty
@@ -548,7 +548,7 @@ impl Client {
             .collect()
     }
 
-    /// Create a new MLS conversation on Wire and the matching
+    /// Create a new MLS room on Wire and the matching
     /// local MLS group. Returns the freshly-cached `Arc<Room>`.
     /// Step 6a — zero-invitee path only; with-invitees support
     /// (which requires uploading an initial commit-bundle that
@@ -556,7 +556,7 @@ impl Client {
     ///
     /// Pipeline:
     /// 1. `POST /v14/conversations` with `protocol="mls"` and
-    ///    no other members — Wire registers the conversation
+    ///    no other members — Wire registers the room
     ///    envelope and assigns both a room id and an MLS
     ///    `group_id`.
     /// 2. `MlsClient::create_group` builds the local MLS group at
@@ -615,7 +615,7 @@ impl Client {
             guard.create_group(&group_id, &self.external_sender_key)?;
         }
         self.establish_group(mls, &group_id, "create_room").await?;
-        // Re-sync to put the new conversation into the cache and the
+        // Re-sync to put the new room into the cache and the
         // persistent `rooms` table at its established (epoch 1) state.
         self.sync_metadata().await?;
         let room_id = conv.qualified_id.to_string();
@@ -661,13 +661,13 @@ impl Client {
     /// analog over Wire's first-class 1:1 endpoint.
     ///
     /// Wire models 1:1s as a dedicated `ConvType::DirectMessage`
-    /// conversation rather than a "group with `is_direct` flag"
+    /// room rather than a "group with `is_direct` flag"
     /// (Matrix's model). The endpoint is idempotent on the server
     /// side: calling `create_dm` against a peer with whom a 1:1
-    /// already exists returns the existing conversation rather than
+    /// already exists returns the existing room rather than
     /// erroring out. There is at most one DM per (self, peer) pair.
     ///
-    /// The fetch only reserves the conversation — live against
+    /// The fetch only reserves the room — live against
     /// wire-server (2026-08, observations §66) an MLS 1:1 stays
     /// hidden from `list-ids` until a member uploads the establishing
     /// commit. Hence the three-way branch after the fetch:
@@ -689,7 +689,7 @@ impl Client {
     ///
     /// # Errors
     /// * `KupferdrahtError::InvalidInput` if `peer` is malformed, the
-    ///   client has no MLS state, or the conversation is missing from
+    ///   client has no MLS state, or the room is missing from
     ///   the cache after the establish + sync round-trip.
     /// * `KupferdrahtError::BackendRejected` if the peer's key-package
     ///   pool is exhausted or Wire rejects the commit bundle.
@@ -703,7 +703,7 @@ impl Client {
         })?);
         let mls = self.mls_client_required("create_dm")?;
         // Wire's 1:1 endpoint is a single idempotent GET — the server
-        // creates the conversation on the first invocation against
+        // creates the room on the first invocation against
         // a fresh `(self, peer)` pair, and returns the existing one
         // on subsequent invocations. No request body. The swagger
         // also lists a POST path; live Wire v14 backends do not
@@ -742,24 +742,24 @@ impl Client {
                 self.establish_dm(&group_id, peer).await?;
             } else {
                 // Established elsewhere → the server already lists the
-                // conversation; sync so `join_room` finds it cached.
+                // room; sync so `join_room` finds it cached.
                 self.sync_metadata().await?;
                 self.join_room(&room_id).await?;
             }
         }
         // Refresh the rooms cache — after the establishing commit the
-        // server lists the conversation.
+        // server lists the room.
         self.sync_metadata().await?;
         self.room(&room_id).await.ok_or_else(|| {
             KupferdrahtError::InvalidInput(format!(
                 "create_dm: {room_id} not listed after establish — \
-                 server still hides the conversation"
+                 server still hides the room"
             ))
         })
     }
 
     /// Epoch-0 bootstrap for [`Self::create_dm`]: create the local
-    /// group under the conversation's `group_id`, then commit the
+    /// group under the room's `group_id`, then commit the
     /// peer in via [`Self::commit_dm_peer`]. Any failure after the
     /// local create **discards the group** (Step-66 pattern) — an
     /// unestablished leftover would short-circuit the next
@@ -804,7 +804,7 @@ impl Client {
         .await
     }
 
-    /// Local-cache lookup for the 1:1 conversation with the named
+    /// Local-cache lookup for the 1:1 room with the named
     /// peer. Step 14a — matrix-rust-sdk's `Client::get_dm_room`
     /// analog (renamed to drop the `get_` prefix per Rust API
     /// Guidelines C-GETTER and CHANGELOG.md §41's verb taxonomy).
@@ -834,7 +834,7 @@ impl Client {
     }
 
     /// "Look up first, create if missing" convenience for 1:1
-    /// conversations. Step 14a Wire-extension — matrix-rust-sdk
+    /// rooms. Step 14a Wire-extension — matrix-rust-sdk
     /// has no analog because Matrix' DM model is `is_direct`-flagged
     /// room state, not a first-class server endpoint.
     ///

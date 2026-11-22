@@ -235,8 +235,8 @@ export interface MessageEvent_ {
   replyToId: string | null; sentAtMs: number; receivedAtMs: number; expiresAtMs: number | null;
 }
 export interface TypingEvent_ { roomId: string; typingUsers: string[] }
-/** A server-administered feature config (Step 98d); `configJson` stays raw. */
-export interface FeatureConfig { name: string; status: string | null; configJson: string; lastSyncedAtMs: number }
+/** A server setting (Step 98d); `configJson` stays raw. */
+export interface ServerSetting { name: string; status: string | null; configJson: string; lastSyncedAtMs: number }
 /** The team's file-sharing policy (Step 98d). */
 export interface FileSharing { policy: 'disabled' | 'enabled' }
 /** How a user can join a room (Step 163c): `joinLink` by the room's join link (`createJoinLink`); `link` by one the backend defines. */
@@ -245,7 +245,7 @@ export type JoinRule = 'private' | 'invite' | 'link' | 'joinLink';
 export type Joiner = 'teamMembers' | 'nonTeamMembers' | 'guests' | 'services';
 /** Who may join a room and how (Step 98b, typed by Step 163c). */
 export interface RoomAccess { joinRules: JoinRule[]; allowed: Joiner[] }
-/** A conversation's reusable guest link (Step 98b). */
+/** A room's reusable guest link (Step 98b). */
 export interface JoinLink { url: string; passwordProtected: boolean }
 /** What kind of device a registered device is (Step 163d). */
 export type DeviceKind = 'phone' | 'tablet' | 'desktop' | 'legalHold' | 'other';
@@ -410,7 +410,7 @@ export class ClientProxy {
   invite(roomId: string, userIds: string[]): Promise<Room>;
   kick(roomId: string, userIds: string[]): Promise<Room>;
   leave(roomId: string): Promise<void>;
-  featureConfigs(): Promise<FeatureConfig[]>;
+  serverSettings(): Promise<ServerSetting[]>;
   fileSharing(): Promise<FileSharing>;
   /**
    * A token of the token exchange for the embedder's own service (Step 139, ADR-0036 revision 1.1): `{ token, expiresIn }`

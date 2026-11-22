@@ -61,7 +61,7 @@ use crate::wire::tls::TrustAnchors;
 ///
 /// **Field selection — exactly three are sufficient:**
 /// - `api_base_url` — prefixed to every HTTP request in the
-///   `wire/http` modules (login, register, MLS, conversations, attachments…).
+///   `wire/http` modules (login, register, MLS, rooms, attachments…).
 /// - `websocket_url` — host where `GET /v14/events` is served;
 ///   Wire deploys it on a different host than the REST API, so
 ///   one URL cannot stand in for both.
@@ -272,7 +272,7 @@ impl ClientBuilder {
             initial_device_display_name,
         )
         .await?;
-        let (login_outcome, self_user) = pipeline
+        let (login_outcome, own_user) = pipeline
             .authenticate(&email, &password, second_factor_code.as_deref())
             .await?;
         assemble_pending_login(
@@ -281,7 +281,7 @@ impl ClientBuilder {
             &keystore,
             pipeline,
             login_outcome,
-            self_user,
+            own_user,
             email,
             Some(Zeroizing::new(password)),
             device_ops_http,
@@ -343,17 +343,17 @@ impl ClientBuilder {
             self.initial_device_display_name.clone(),
         )
         .await?;
-        let (login_outcome, self_user) = pipeline
+        let (login_outcome, own_user) = pipeline
             .authenticate_with_session_cookie(session_cookie)
             .await?;
-        let email = self_user.email.clone().unwrap_or_default();
+        let email = own_user.email.clone().unwrap_or_default();
         assemble_pending_login(
             self.storage_provider,
             home,
             &keystore,
             pipeline,
             login_outcome,
-            self_user,
+            own_user,
             email,
             None,
             device_ops_http,
@@ -372,7 +372,7 @@ impl ClientBuilder {
     ///
     /// # Errors
     /// * `KupferdrahtError::InvalidInput` if no storage config is set, if the
-    ///   store has no persisted session / device / `self_user` /
+    ///   store has no persisted session / device / own user /
     ///   `server_config` / external sender key, or if `device.mls_public_key`
     ///   is missing or not base64.
     /// * `KupferdrahtError::Network` / `BackendRejected` from the
@@ -394,7 +394,7 @@ impl ClientBuilder {
         let home = open_home(base_dir, account_keys)?;
         // The account must be named explicitly (`account(id)`); open its
         // READY per-account store via the provider, and read tokens /
-        // external sender key / `self_user.email` from it. mls.db is opened with
+        // external sender key / the own user's email from it. mls.db is opened with
         // its own separate key (`kupferdraht.<home-id>.account-<id>-mls`).
         let account_id = resume_account(requested_account)?;
         let store =
@@ -696,12 +696,12 @@ async fn assemble_pending_login(
     keystore: &Arc<dyn SecureKeyStore>,
     mut pipeline: LoginPipeline,
     login_outcome: LoginOutcome,
-    self_user: SelfUser,
+    own_user: SelfUser,
     email: String,
     password: Option<Zeroizing<String>>,
     device_ops_http: HttpClient,
 ) -> Result<Arc<PendingLogin>, KupferdrahtError> {
-    let account_id = self_user.qualified_id.to_string();
+    let account_id = own_user.qualified_id.to_string();
     let open = opens_at_login(home.as_ref());
     let mut mls_db_key = None;
     if open {
@@ -711,7 +711,7 @@ async fn assemble_pending_login(
         mls_db_key = key;
     }
     Ok(new_pending_login(
-        self_user,
+        own_user,
         email,
         login_outcome,
         pipeline,

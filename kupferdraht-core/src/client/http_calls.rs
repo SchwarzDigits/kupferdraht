@@ -97,10 +97,10 @@ impl Client {
     }
 
     /// Crate-scoped wrapper for `GET /v14/feature-configs` driven from
-    /// `sync::dispatch::dispatch_feature_config_update`. Wire ships
+    /// `sync::dispatch::dispatch_server_setting_update`. Wire ships
     /// the `feature-config.update` event without the new value, so
     /// the dispatcher must re-fetch the whole-team response.
-    pub(crate) async fn http_fetch_feature_configs(
+    pub(crate) async fn http_fetch_server_settings(
         &self,
     ) -> Result<crate::wire::http::feature_configs::RawFeatureConfigs, KupferdrahtError> {
         self.http
@@ -109,7 +109,7 @@ impl Client {
     }
 
     /// Crate-scoped wrapper for `GET /v14/properties/{key}` driven
-    /// from `sync::dispatch::dispatch_user_property_set`. Wire ships
+    /// from `sync::dispatch::dispatch_account_data_set`. Wire ships
     /// the `user.properties-set` event with the affected `key` only,
     /// so the dispatcher refetches the value to upsert.
     pub(crate) async fn http_fetch_property_value(

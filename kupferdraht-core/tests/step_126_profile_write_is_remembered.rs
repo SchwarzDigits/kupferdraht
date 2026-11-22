@@ -6,7 +6,7 @@
 //!
 //! `set_username` / `set_display_name` send the change and keep nothing, and
 //! nothing else refreshes the account: `Account` is immutable, built at login
-//! from `GET /self` and at `resume` from the persisted `self_user` row, which
+//! from `GET /self` and at `resume` from the persisted `own_user` row, which
 //! only the post-login persistence writes. So a changed username is invisible
 //! until the next login. These pin that a write the backend accepted lands
 //! in the row `resume` reads.
@@ -49,7 +49,7 @@ async fn logged_in(server: &MockServer, home: &TempDir) -> Arc<kupferdraht::Clie
 }
 
 #[tokio::test]
-async fn set_username_is_remembered_in_the_self_user_row() {
+async fn set_username_is_remembered_in_the_own_user_row() {
     let home = TempDir::new().expect("tempdir");
     let server = MockServer::start();
     let client = logged_in(&server, &home).await;
@@ -62,7 +62,7 @@ async fn set_username_is_remembered_in_the_self_user_row() {
 
     let store = client.store().expect("login attached a store");
     let row = store
-        .load_self_user(QUALIFIED)
+        .load_own_user(QUALIFIED)
         .await
         .expect("load_self_user")
         .expect("self_user row present");
@@ -83,7 +83,7 @@ async fn set_username_is_remembered_in_the_self_user_row() {
 }
 
 #[tokio::test]
-async fn set_display_name_is_remembered_in_the_self_user_row() {
+async fn set_display_name_is_remembered_in_the_own_user_row() {
     let home = TempDir::new().expect("tempdir");
     let server = MockServer::start();
     let client = logged_in(&server, &home).await;
@@ -99,7 +99,7 @@ async fn set_display_name_is_remembered_in_the_self_user_row() {
 
     let store = client.store().expect("login attached a store");
     let row = store
-        .load_self_user(QUALIFIED)
+        .load_own_user(QUALIFIED)
         .await
         .expect("load_self_user")
         .expect("self_user row present");
@@ -136,7 +136,7 @@ async fn two_profile_writes_in_one_session_both_survive() {
 
     let store = client.store().expect("login attached a store");
     let row = store
-        .load_self_user(QUALIFIED)
+        .load_own_user(QUALIFIED)
         .await
         .expect("load_self_user")
         .expect("self_user row present");

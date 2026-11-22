@@ -84,7 +84,7 @@ end-to-end encrypted with MLS (RFC 9420):
   - AES-GCM attachments tolerated on receive
 - **Tasks / todos**
   - assignee, due date, priority, status changes, re-assignment
-  - manual ordering inside any conversation
+  - manual ordering inside any room
   - per-room and cross-room views ("my open work" / "what I delegated")
   - event-sourced over MLS — the server never sees task content; Wire's official clients render a plain-text fallback
 - **Sync**
@@ -94,7 +94,7 @@ end-to-end encrypted with MLS (RFC 9420):
   - live push receive over WebSocket — the default on native targets (ADR-0033; `SyncTransport::Polling` / `sync-stream --transport polling` opt out), and the browser's live sync — the socket auto-negotiates per connection between `/v14/events` and Wire's legacy `/await` route (ADR-0019), so push works on wire-server deployments where ConsumableNotifications is disabled; without a socket the loop keeps draining
   - in-order commit processing, stale-epoch retry, and auto-commit of external proposals
 - **Server-administered config**
-  - read-only awareness of team feature configs and user properties (e.g. file-sharing policy, receipt mode)
+  - read-only awareness of the server's settings and the account data (e.g. file-sharing policy, read-receipt setting)
   - refreshed at login and via events
 - **Security**
   - MLS (RFC 9420) only, with no security-disabling options
@@ -184,7 +184,7 @@ cargo build --workspace
 # log in against your self-hosted wire-server (password prompted on the TTY)
 cargo run -q -p kupferdraht-cli -- login --api-url https://nginz-https.example.com -e <email>
 
-# pull conversations + events, then list the rooms
+# pull the room list + events, then list the rooms
 cargo run -q -p kupferdraht-cli -- sync
 cargo run -q -p kupferdraht-cli -- rooms
 

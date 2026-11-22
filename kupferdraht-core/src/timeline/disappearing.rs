@@ -23,7 +23,7 @@
 //!    expiry network-wide while the SENDER only marks its own copy and
 //!    waits for exactly that delete to purge it. An own row therefore
 //!    stays local-only. The one official-client step Kupferdraht cannot
-//!    mirror yet is the `DeleteForMe` into the self-conversation for
+//!    mirror yet is the `DeleteForMe` into the own user's private room for
 //!    the receiver's other devices (Step 86).
 //! 3. **Timers** — a native `tokio` task per stamp
 //!    ([`Client::arm_disappearing_timer`]) fires the sweep on time for
@@ -53,7 +53,7 @@ use crate::timeline::{DeliveryStatus, MessageHandle, Timeline};
 use crate::wire::proto::build_ephemeral_text_generic_message;
 
 /// Smallest TTL Kupferdraht accepts on the send side. Wire's official
-/// clients bound the conversation timer to the same range
+/// clients bound the room timer to the same range
 /// (1 s … 1 year, observations §74); a zero TTL would be a message
 /// deleted before it can be read.
 pub(crate) const DISAPPEARING_TTL_MIN: Duration = Duration::from_secs(1);

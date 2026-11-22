@@ -70,7 +70,7 @@ impl Client {
         Ok(readers)
     }
 
-    /// Crate-private helper: load `delivered_to` (the list of confirmer
+    /// Crate-private helper: load `delivered_to` (the list of reader
     /// user ids that have DELIVERED-confirmed this message) for one
     /// message. Step 25b. Mirror of [`Self::load_read_by_for_message`].
     pub(crate) async fn load_delivered_to_for_message(
@@ -86,14 +86,14 @@ impl Client {
             return Ok(Vec::new());
         };
         let rows = store.load_delivery_receipts_for_room(room_id).await?;
-        let mut confirmers: Vec<String> = rows
+        let mut readers: Vec<String> = rows
             .into_iter()
             .filter(|r| r.message_id == message_id)
-            .map(|r| r.confirmer_user_id)
+            .map(|r| r.reader_user_id)
             .collect();
-        confirmers.sort();
-        confirmers.dedup();
-        Ok(confirmers)
+        readers.sort();
+        readers.dedup();
+        Ok(readers)
     }
 
     /// Crate-private helper: load a single `timeline_events` row.

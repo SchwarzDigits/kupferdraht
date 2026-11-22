@@ -241,6 +241,58 @@ where it has a term, otherwise a plain English name.
     (TLS / RFC 9420). The check's word "ephemeral" (Wire's ephemeral
     messages, 163b) must not hit the cryptographic term (an HPKE ephemeral
     key): the matcher learns that before 163e relies on it.
+  - **Done 2026-11-22 (Volker: "as proposed; the raw accessor stays public; the
+    matcher reads prose word pairs; `purpose` is kept"):**
+    - Server settings: `Client::server_settings()` / `server_setting(name)` and
+      the record `ServerSetting` (same fields as `FeatureConfigEntry`); the raw
+      accessor stays public, beside the typed `file_sharing()`. The module
+      `client/server_configs.rs` is `server_settings.rs`.
+    - Account data: `Client::account_data()` / `account_data_entry(key)` and
+      `AccountDataEntry` (same fields as `UserPropertyEntry`); matrix-rust-sdk's
+      `Client::account().account_data::<T>()` is the nearest concept.
+    - `ReadReceiptSetting { Off, On }` and `Client::read_receipt_setting()`
+      replace `ReceiptMode` / `receipt_mode()`. `file_sharing()`,
+      `FileSharingPolicy` and `server_supports_push_events()` stay.
+    - The store contract: `ExternalSenderKey` (MLS's term, RFC 9420's
+      `external_senders`; the field `purpose` stays) replaces `BackendMlsKey`,
+      `OwnUserRecord` replaces `SelfUserRecord`, `SyncStateRecord.sync_token`
+      replaces `sync_marker_uuid`, `DeliveryReceiptRecord.reader_user_id`
+      replaces `confirmer_user_id`; the `Store` methods follow
+      (`save_` / `load_external_sender_key`, `save_` / `load_own_user`,
+      `replace_server_settings` / `upsert_server_setting` /
+      `list_server_settings` / `get_server_setting`, `replace_account_data` /
+      `upsert_account_data_entry` / `delete_account_data_entry` /
+      `list_account_data` / `get_account_data_entry`). The records' serde names
+      follow the Rust names (BREAKING for a custom store that persists the
+      JSON); the SQL tables and columns (`feature_configs`, `user_properties`,
+      `backend_mls_keys`, `self_user`, `sync_state.sync_marker_uuid`,
+      `delivery_receipts.confirmer_user_id`) keep their names, nothing migrates.
+    - FFI: the same method names, the records `ServerSetting` and
+      `AccountDataEntry`, the enum `ReadReceiptSetting`. Browser:
+      `serverSettings()`, the `.d.ts` interface `ServerSetting`, the tabs
+      protocol and proxy.
+    - CLI: `settings [--name <key>]` (was `features`), `account-data [--key
+      <key>]` (was `properties`).
+    - The error texts of `MlsGroupMissing` and `MlsStaleMessage` and the
+      JSDoc say "room" where they said "conversation".
+    - The check: its temporary list is empty; the matcher finds a
+      multi-segment word written with a space in prose too ("feature config"),
+      treats "ephemeral key" (HPKE) as the cryptographic term, not Wire's
+      ephemeral message, and reads a backticked Rust path (`Self::room`) as
+      code, not prose.
+    - Prose: the doc comments, help texts and consumer docs (`docs/library.md`,
+      `docs/cli.md`, README) say "room" where they said "conversation", and
+      the internal names follow (`own_user_id`, `sync_token`, `reader`, the
+      settings dispatch handlers); Wire's event types, endpoint paths and DTO
+      field names stay as citations.
+    - Pins: `tests/step_163e_settings_names.rs` (8), the two matcher tests and
+      the empty-list test in `tests/public_vocabulary.rs`;
+      `tests/step_98d_wasm_feature_configs.rs` is
+      `step_98d_wasm_server_settings.rs`.
+    - Smoke on server 4 (Wire 5.38.9), 2026-11-22: the regular smoke, the 163d
+      block and the 163b–e block (ping, a disappearing text, room access and a
+      join link joined by external commit, the personal room, the settings and
+      the account data), 48 ok, 0 failed; both devices purged.
 - **Every sub-step:**
   - FFI and browser parity, the tabs `index.d.ts`, the Kotlin and Swift binding
     tests, and the CLI verbs (`knock`, `self-room`, `room-access`, `join-via-link`,

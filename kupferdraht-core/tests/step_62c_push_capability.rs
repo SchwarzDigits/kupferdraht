@@ -18,7 +18,7 @@ use httpmock::MockServer;
 
 mod common;
 
-fn mount_login_with_feature_configs(server: &MockServer, body: &str) {
+fn mount_login_with_server_settings(server: &MockServer, body: &str) {
     common::mount_full_login_flow(server);
     let body = body.to_string();
     server.mock(move |when, then| {
@@ -32,7 +32,7 @@ fn mount_login_with_feature_configs(server: &MockServer, body: &str) {
 #[tokio::test]
 async fn push_support_enabled_when_feature_enabled() {
     let server = MockServer::start();
-    mount_login_with_feature_configs(
+    mount_login_with_server_settings(
         &server,
         r#"{"consumableNotifications":{"status":"enabled","lockStatus":"unlocked","ttl":"unlimited"}}"#,
     );
@@ -52,7 +52,7 @@ async fn push_support_disabled_when_feature_disabled() {
     // wire-server default (root Helm flag `consumableNotifications:
     // false` renders as a locked, disabled team feature).
     let server = MockServer::start();
-    mount_login_with_feature_configs(
+    mount_login_with_server_settings(
         &server,
         r#"{"consumableNotifications":{"lockStatus":"locked","status":"disabled","ttl":"unlimited"}}"#,
     );
@@ -71,7 +71,7 @@ async fn push_support_defaults_to_false_when_entry_absent() {
     // A backend that predates consumable notifications never reports
     // the key at all — the conservative default is "poll".
     let server = MockServer::start();
-    mount_login_with_feature_configs(&server, r#"{"fileSharing":{"status":"enabled"}}"#);
+    mount_login_with_server_settings(&server, r#"{"fileSharing":{"status":"enabled"}}"#);
     let (client, _) = common::run_login(&server).await;
     assert!(
         !client

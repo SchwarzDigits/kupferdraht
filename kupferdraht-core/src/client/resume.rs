@@ -50,19 +50,18 @@ const ACCESS_TOKEN_MAX_AGE_MS: i64 = 14 * 60 * 1000;
 /// ([`LoginPipeline::register_and_rebind`] /
 /// [`LoginPipeline::reuse_existing_device_if_valid`]) and the MLS
 /// identity step, the pipeline calls
-/// [`LoginPipeline::fetch_server_configs`] to seed the V18
-/// `feature_configs` and `user_properties` tables. Errors there are
-/// warn-and-continue per ADR-0012 — feature-configs are an
-/// enrichment, not a login blocker.
+/// [`LoginPipeline::fetch_server_configs`] to seed the persisted server
+/// settings and account data. Errors there are warn-and-continue per
+/// ADR-0012 — the settings are an enrichment, not a login blocker.
 pub(super) async fn establish_device_identity(
     pipeline: &LoginPipeline,
     login_outcome: &LoginOutcome,
-    self_user: &SelfUser,
+    own_user: &SelfUser,
     password: Option<&str>,
     mls_key: Option<&DbKey>,
 ) -> Result<DeviceIdentity, KupferdrahtError> {
     let decision = pipeline
-        .reuse_existing_device_if_valid(login_outcome, self_user)
+        .reuse_existing_device_if_valid(login_outcome, own_user)
         .await?;
     // Captured before the `if let` moves the `Reused` payload out of `decision`.
     let is_replaced = matches!(decision, DeviceReuse::Replaced);
@@ -71,7 +70,7 @@ pub(super) async fn establish_device_identity(
             .fetch_server_configs(&registration.access_token)
             .await?;
         let mls_identity = pipeline
-            .resume_existing_mls_state(self_user, &registration, mls_key)
+            .resume_existing_mls_state(own_user, &registration, mls_key)
             .await?;
         return Ok(DeviceIdentity {
             registration,
@@ -86,7 +85,7 @@ pub(super) async fn establish_device_identity(
         .fetch_server_configs(&registration.access_token)
         .await?;
     let mls_identity = pipeline
-        .upload_initial_key_packages(self_user, &registration, mls_key)
+        .upload_initial_key_packages(own_user, &registration, mls_key)
         .await?;
     if is_replaced {
         // A prior device for this account was gone from Wire: this new device
@@ -240,7 +239,7 @@ pub(super) fn assemble_resumed_client(
     mls_public_key: Vec<u8>,
     kupferdraht_home: Option<KupferdrahtHome>,
 ) -> Result<Arc<Client>, KupferdrahtError> {
-    let account = account_from_row(&parts.self_user)?;
+    let account = account_from_row(&parts.own_user)?;
     let user_id = account.user_id().clone();
     Ok(Client::new(
         user_id,
@@ -261,23 +260,23 @@ pub(super) fn assemble_resumed_client(
 }
 
 /// Build the [`Account`] view used by `resume` from the persisted
-/// `SelfUserRecord` (whose `id` is the `<localpart>@<domain>` user id since
+/// `OwnUserRecord` (whose `id` is the `<localpart>@<domain>` user id since
 /// Step 19).
 pub(super) fn account_from_row(
-    self_user: &crate::storage::SelfUserRecord,
+    own_user: &crate::storage::OwnUserRecord,
 ) -> Result<Arc<Account>, KupferdrahtError> {
-    let user_id = UserId::parse(&self_user.id)?;
+    let user_id = UserId::parse(&own_user.id)?;
     Ok(Account::new(
         user_id,
-        self_user.name.clone(),
-        self_user.username.clone(),
-        self_user.email.clone(),
+        own_user.name.clone(),
+        own_user.username.clone(),
+        own_user.email.clone(),
         OwnTeam {
-            id: self_user.team_id.clone(),
-            name: self_user.team_name.clone(),
-            avatar_version: self_user.team_avatar_version.clone(),
+            id: own_user.team_id.clone(),
+            name: own_user.team_name.clone(),
+            avatar_version: own_user.team_avatar_version.clone(),
         },
-        self_user.avatar_source.clone(),
+        own_user.avatar_source.clone(),
     ))
 }
 
@@ -312,8 +311,8 @@ pub(super) struct ResumeState {
     pub(super) session: crate::storage::SessionRecord,
     pub(super) server_cfg: crate::storage::ServerConfigRecord,
     pub(super) device: crate::storage::DeviceRecord,
-    pub(super) self_user: crate::storage::SelfUserRecord,
-    pub(super) external_sender_key: crate::storage::BackendMlsKey,
+    pub(super) own_user: crate::storage::OwnUserRecord,
+    pub(super) external_sender_key: crate::storage::ExternalSenderKey,
 }
 
 pub(super) async fn load_resume_state(
@@ -331,19 +330,16 @@ pub(super) async fn load_resume_state(
         )
     })?;
     let device = load_resume_device(store, &session).await?;
-    let self_user = store
-        .load_self_user(&session.user_id)
+    let own_user = store
+        .load_own_user(&session.user_id)
         .await?
         .ok_or_else(|| {
-            KupferdrahtError::InvalidInput(format!(
-                "no persisted self_user for {}",
-                session.user_id
-            ))
+            KupferdrahtError::InvalidInput(format!("no persisted own user for {}", session.user_id))
         })?;
     // Step 95c: an empty persisted key (writable by pre-95c release
     // builds) counts as missing — it would reach `create_group`.
     let external_sender_key = store
-        .load_backend_mls_key("removal", "ecdsa_secp256r1_sha256")
+        .load_external_sender_key("removal", "ecdsa_secp256r1_sha256")
         .await?
         .filter(|key| !key.public_key.is_empty())
         .ok_or_else(|| {
@@ -355,7 +351,7 @@ pub(super) async fn load_resume_state(
         session,
         server_cfg,
         device,
-        self_user,
+        own_user,
         external_sender_key,
     })
 }

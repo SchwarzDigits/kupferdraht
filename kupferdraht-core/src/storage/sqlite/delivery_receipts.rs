@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! `delivery_receipts` table CRUD. Step 25b. One row per
-//! `(message_id, confirmer_user_id)` ack from a Wire
+//! `(message_id, reader_user_id)` ack from a Wire
 //! `Confirmation { type: DELIVERED }` event. Composite PK lets a
 //! redelivered confirmation `INSERT OR IGNORE` cleanly. Mirror of
 //! [`super::read_receipts`].
@@ -17,7 +17,7 @@ use super::SqliteStore;
 pub(super) fn apply_delivery_receipts(
     store: &SqliteStore,
     room_id: &str,
-    confirmer_user_id: &str,
+    reader_user_id: &str,
     message_ids: &[String],
     confirmed_at_ms: i64,
 ) -> Result<usize, KupferdrahtError> {
@@ -34,7 +34,7 @@ pub(super) fn apply_delivery_receipts(
                 "INSERT OR IGNORE INTO delivery_receipts (
                     message_id, room_id, confirmer_user_id, confirmed_at_ms
                  ) VALUES (?1, ?2, ?3, ?4)",
-                params![message_id, room_id, confirmer_user_id, confirmed_at_ms],
+                params![message_id, room_id, reader_user_id, confirmed_at_ms],
             )
             .map_err(|e| {
                 KupferdrahtError::Storage(format!(
@@ -68,7 +68,7 @@ pub(super) fn load_delivery_receipts_for_room(
             Ok(DeliveryReceiptRecord {
                 message_id: row.get(0)?,
                 room_id: row.get(1)?,
-                confirmer_user_id: row.get(2)?,
+                reader_user_id: row.get(2)?,
                 confirmed_at_ms: row.get(3)?,
             })
         })

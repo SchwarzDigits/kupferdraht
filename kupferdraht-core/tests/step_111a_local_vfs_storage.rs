@@ -422,13 +422,13 @@ async fn run_counter_persists_with_a_persistent_profile() {
         .await
         .expect("open probe store");
     let before: i64 = store
-        .get_user_property("runs")
+        .get_account_data_entry("runs")
         .await
         .expect("read runs")
         .and_then(|p| p.value.parse().ok())
         .unwrap_or(0);
     store
-        .upsert_user_property(&kupferdraht::storage::UserPropertyEntry {
+        .upsert_account_data_entry(&kupferdraht::storage::AccountDataEntry {
             key: "runs".into(),
             value: (before + 1).to_string(),
             last_synced_at_ms: 0,

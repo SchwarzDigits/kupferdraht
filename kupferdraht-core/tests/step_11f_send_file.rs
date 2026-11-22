@@ -43,7 +43,7 @@ const ROOM_DOMAIN: &str = "example.test";
 async fn send_file_disabled_policy_rejects_without_any_wire_call() {
     let server = MockServer::start();
     common::mount_full_login_flow(&server);
-    mount_feature_configs(&server, r#"{"fileSharing":{"status":"disabled"}}"#);
+    mount_server_settings(&server, r#"{"fileSharing":{"status":"disabled"}}"#);
     mount_sync_metadata_with_one_room(&server);
     // No /v14/assets mock — accidental call would surface as
     // BackendRejected, but the gate must short-circuit first.
@@ -78,7 +78,7 @@ async fn send_file_disabled_policy_rejects_without_any_wire_call() {
 async fn send_file_upload_5xx_returns_error_without_persisting_attachment() {
     let server = MockServer::start();
     common::mount_full_login_flow(&server);
-    mount_feature_configs(
+    mount_server_settings(
         &server,
         r#"{"fileSharing":{"status":"enabled","config":{}}}"#,
     );
@@ -160,7 +160,7 @@ async fn run_login_setup_and_join(server: &MockServer) -> (Arc<Client>, Arc<dyn 
     (client, store)
 }
 
-fn mount_feature_configs(server: &MockServer, body: &str) {
+fn mount_server_settings(server: &MockServer, body: &str) {
     server.mock(|when, then| {
         when.method(GET).path("/v14/feature-configs");
         then.status(200).body(body);

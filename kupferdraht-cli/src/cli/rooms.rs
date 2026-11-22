@@ -130,7 +130,7 @@ pub(crate) async fn room_members(room_id: String) -> Result<(), KupferdrahtError
             .as_deref()
             .map(|h| format!(" @{h}"))
             .unwrap_or_default();
-        // Step 72a: surface the conversation role — the case-fold
+        // Step 72a: surface the room role — the case-fold
         // gate (ADR-0018) keys off it.
         let role = match m.role {
             kupferdraht::RoomMemberRole::Administrator => "  [admin]",

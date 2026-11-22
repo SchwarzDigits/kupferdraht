@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Schwarz Digits KG
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! FFI wrappers for the account-admin / server-config / utility tail
+//! FFI wrappers for the account-admin / server-settings / utility tail
 //! (Step 20c-7).
 //!
 //! `JoinSummary` / `ResyncSummary` are mirrored because the core types
 //! carry a `Vec<(String, String)>` tuple field `UniFFI` can't marshal — the
 //! mirror reshapes it to `Vec<FailedJoin>`. The leaf types (`DeviceInfo`,
-//! `FeatureConfigEntry`, `UserPropertyEntry`, `FileSharingPolicy`,
-//! `ReceiptMode`) are FFI-shaped and derive on the core type.
+//! `ServerSetting`, `AccountDataEntry`, `FileSharingPolicy`,
+//! `ReadReceiptSetting`) are FFI-shaped and derive on the core type.
 
 use std::sync::Arc;
 
@@ -16,11 +16,11 @@ use super::Client;
 use super::room::Room;
 use super::timeline::TimelineItem;
 use crate::client::{
-    DeviceInfo, FileSharingPolicy, JoinSummary as CoreJoinSummary, ReceiptMode,
+    DeviceInfo, FileSharingPolicy, JoinSummary as CoreJoinSummary, ReadReceiptSetting,
     ResyncSummary as CoreResyncSummary,
 };
 use crate::error::KupferdrahtError;
-use crate::storage::{FeatureConfigEntry, UserPropertyEntry};
+use crate::storage::{AccountDataEntry, ServerSetting};
 use crate::timeline::Mention;
 
 /// One per-room failure in a [`JoinSummary`] / [`ResyncSummary`].
@@ -194,42 +194,42 @@ impl Client {
         self.inner.rename_device(device_id, display_name).await
     }
 
-    /// Snapshot of every team-feature config (read-only).
+    /// Snapshot of every server setting (read-only).
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn feature_configs(&self) -> Result<Vec<FeatureConfigEntry>, KupferdrahtError> {
-        self.inner.feature_configs().await
+    pub async fn server_settings(&self) -> Result<Vec<ServerSetting>, KupferdrahtError> {
+        self.inner.server_settings().await
     }
 
-    /// One feature config by Wire's exact key.
+    /// One server setting by the backend's exact name.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn feature_config(
+    pub async fn server_setting(
         &self,
         name: &str,
-    ) -> Result<Option<FeatureConfigEntry>, KupferdrahtError> {
-        self.inner.feature_config(name).await
+    ) -> Result<Option<ServerSetting>, KupferdrahtError> {
+        self.inner.server_setting(name).await
     }
 
-    /// Snapshot of every user-property entry (read-only).
+    /// Snapshot of every account-data entry (read-only).
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn user_properties(&self) -> Result<Vec<UserPropertyEntry>, KupferdrahtError> {
-        self.inner.user_properties().await
+    pub async fn account_data(&self) -> Result<Vec<AccountDataEntry>, KupferdrahtError> {
+        self.inner.account_data().await
     }
 
-    /// One user property by Wire's exact key.
+    /// One account-data entry by the backend's exact key.
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn user_property(
+    pub async fn account_data_entry(
         &self,
         key: &str,
-    ) -> Result<Option<UserPropertyEntry>, KupferdrahtError> {
-        self.inner.user_property(key).await
+    ) -> Result<Option<AccountDataEntry>, KupferdrahtError> {
+        self.inner.account_data_entry(key).await
     }
 
     /// The team file-sharing policy (typed projection).
@@ -240,12 +240,12 @@ impl Client {
         self.inner.file_sharing().await
     }
 
-    /// The user's read-receipt mode (typed projection).
+    /// The user's read-receipt setting (typed projection).
     ///
     /// # Errors
     /// See `KupferdrahtError`.
-    pub async fn receipt_mode(&self) -> Result<ReceiptMode, KupferdrahtError> {
-        self.inner.receipt_mode().await
+    pub async fn read_receipt_setting(&self) -> Result<ReadReceiptSetting, KupferdrahtError> {
+        self.inner.read_receipt_setting().await
     }
 
     /// Remaining unclaimed MLS key packages for this device (Step 63).
@@ -268,7 +268,7 @@ impl Client {
     }
 
     /// Whether the server's `/v14/events` push delivery is operational
-    /// (`consumableNotifications` feature, typed projection — Step
+    /// (`consumableNotifications` server setting, typed projection — Step
     /// 62c). The transport-choice input for `SyncTransport`.
     ///
     /// # Errors

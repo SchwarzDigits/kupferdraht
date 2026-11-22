@@ -61,14 +61,14 @@ fn apply_timeline_overlays(
     readers.sort();
     readers.dedup();
     item.read_by = readers;
-    let mut confirmers: Vec<String> = delivery_rows
+    let mut readers: Vec<String> = delivery_rows
         .iter()
         .filter(|r| r.message_id == item.item_id)
-        .map(|r| r.confirmer_user_id.clone())
+        .map(|r| r.reader_user_id.clone())
         .collect();
-    confirmers.sort();
-    confirmers.dedup();
-    item.delivered_to = confirmers;
+    readers.sort();
+    readers.dedup();
+    item.delivered_to = readers;
     let mentions: Vec<crate::timeline::Mention> = mention_rows
         .iter()
         .filter(|m| m.message_id == item.item_id)

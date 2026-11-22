@@ -391,7 +391,7 @@ fn skipped_reason(target: Option<&TimelineItemKind>) -> &'static str {
             | TimelineItemKind::RoomNameChange { .. }
             | TimelineItemKind::RoomCreated { .. },
         ) => "a room event, not a message",
-        _ => "WIRE_RECEIPT_MODE = Off",
+        _ => "read-receipt setting = Off",
     }
 }
 
@@ -540,8 +540,8 @@ mod tests {
             skipped_reason(Some(&room_event)),
             "a room event, not a message"
         );
-        assert_eq!(skipped_reason(Some(&message)), "WIRE_RECEIPT_MODE = Off");
-        assert_eq!(skipped_reason(None), "WIRE_RECEIPT_MODE = Off");
+        assert_eq!(skipped_reason(Some(&message)), "read-receipt setting = Off");
+        assert_eq!(skipped_reason(None), "read-receipt setting = Off");
     }
 
     #[test]

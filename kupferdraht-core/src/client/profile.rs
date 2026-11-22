@@ -10,14 +10,14 @@
 //! matrix-rust-sdk analogs live on `Account`.
 //!
 //! The two that change a field this SDK also stores — the username and the
-//! display name — are transport **plus** the persisted `self_user` row
+//! display name — are transport **plus** the persisted own user's row
 //! (Step 126) and, since Step 152, the live `Account` the getters read
 //! (`own_account.rs`).
 
 #![allow(clippy::doc_markdown)]
 
 use crate::error::KupferdrahtError;
-use crate::storage::{SelfUserRecord, Store};
+use crate::storage::{OwnUserRecord, Store};
 
 use super::Client;
 
@@ -76,17 +76,17 @@ impl Client {
             .await
     }
 
-    /// The `self_user` row, or one from the account snapshot when there is
+    /// The own user's row, or one from the account snapshot when there is
     /// none yet: a write of this session is in the row, not in the snapshot.
     pub(super) async fn current_self_row(
         &self,
         store: &dyn Store,
-    ) -> Result<SelfUserRecord, KupferdrahtError> {
+    ) -> Result<OwnUserRecord, KupferdrahtError> {
         let account = self.account();
         let id = account.user_id().as_str().to_string();
         debug_assert!(!id.is_empty(), "a logged-in client has a user id");
         Ok(store
-            .load_self_user(&id)
+            .load_own_user(&id)
             .await?
             .unwrap_or_else(|| super::own_account::row_of(&account)))
     }

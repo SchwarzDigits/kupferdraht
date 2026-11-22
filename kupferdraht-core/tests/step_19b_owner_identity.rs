@@ -6,11 +6,11 @@
 //!
 //! Proves the bare/qualified seam is closed on the owner side: after login,
 //! `Client::user_id()` is the qualified `<localpart>@<domain>`, and the
-//! persisted owner rows (`session` / `self_user`) store that same qualified
+//! persisted owner rows (`session` / `own_user`) store that same qualified
 //! id — not the bare uuid plus a separate (nullable) domain column.
 //!
 //! Uses `Kupferdraht::login` (not the lower-level `ClientBuilder::login`) because
-//! the device manager is what persists the session / self_user rows.
+//! the device manager is what persists the session / own_user rows.
 
 use std::sync::Arc;
 
@@ -64,10 +64,10 @@ async fn owner_rows_store_the_qualified_user_id() {
         .expect("session row present under the qualified id");
     assert_eq!(session.user_id, QUALIFIED);
 
-    let self_user = store
-        .load_self_user(QUALIFIED)
+    let own_user = store
+        .load_own_user(QUALIFIED)
         .await
         .expect("load_self_user")
         .expect("self_user row present under the qualified id");
-    assert_eq!(self_user.id, QUALIFIED);
+    assert_eq!(own_user.id, QUALIFIED);
 }

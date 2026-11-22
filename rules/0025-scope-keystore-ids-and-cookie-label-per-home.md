@@ -18,7 +18,7 @@ home lock) and ADR-0021 (one raw key per database under its own id).
 - **Read it once when the home is resolved** (`KupferdrahtHome::open`), hold
   it on `KupferdrahtHome`; the ids come from the one `keystore::key_id`
   family taking the home id (open, adoption and the Step-78 purge alike);
-  the label from `KupferdrahtHome::cookie_label`. A builder without a home
+  the label from `KupferdrahtHome::session_label`. A builder without a home
   uses an ephemeral label.
 - **Adopt legacy keys once, and only for an existing database:** under
   the same lock, namespaced id absent → legacy id present → the database
@@ -29,9 +29,9 @@ home lock) and ADR-0021 (one raw key per database under its own id).
 - **wasm:** the same code path; `home.id` is a raw file in the OPFS pool
   (`/kupferdraht/home.id`), no lock (ADR-0023); the per-origin namespace is
   redundant there and kept for the single contract.
-- The login persists its label in `SessionRecord.cookie_label`; the
-  public surface is `Kupferdraht::home_id` / `Kupferdraht::cookie_label` (FFI and
+- The login persists its label in `SessionRecord.session_label`; the
+  public surface is `Kupferdraht::home_id` / `Kupferdraht::session_label` (FFI and
   wasm mirrors). **Don't** copy a home directory — the copy clones the
   id and shares keys and label with the original.
-- The public name `cookie_label` is Wire's term and leaves with Step 163d
-  (ADR-0009 revision 1.2); the label itself and its per-home scope stay.
+- The public name is `session_label` (Step 163d, ADR-0009 part 4): the backend's
+  "cookie label" stays inside `wire/`; the label itself and its per-home scope stay.

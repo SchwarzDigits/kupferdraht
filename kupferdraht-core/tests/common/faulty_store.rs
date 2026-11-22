@@ -17,11 +17,11 @@ use async_trait::async_trait;
 use kupferdraht::KupferdrahtError;
 use kupferdraht::keystore::SecureKeyStore;
 use kupferdraht::storage::{
-    AttachmentRecord, BackendMlsKey, DeliveryReceiptRecord, DeviceRecord, ExpiredMessageRecord,
-    FeatureConfigEntry, GlobalStore, MentionRecord, MessageEditRecord, ReactionRecord,
-    ReadReceiptRecord, RecoveryStateRecord, RoomMemberRecord, RoomRecord, SelfUserRecord,
-    ServerConfigRecord, SessionRecord, StorageEngineInfo, StorageProvider, Store, SyncStateRecord,
-    TaskRecord, TimelineEventRecord, UserPropertyEntry, open_default_global_store,
+    AccountDataEntry, AttachmentRecord, DeliveryReceiptRecord, DeviceRecord, ExpiredMessageRecord,
+    ExternalSenderKey, GlobalStore, MentionRecord, MessageEditRecord, OwnUserRecord,
+    ReactionRecord, ReadReceiptRecord, RecoveryStateRecord, RoomMemberRecord, RoomRecord,
+    ServerConfigRecord, ServerSetting, SessionRecord, StorageEngineInfo, StorageProvider, Store,
+    SyncStateRecord, TaskRecord, TimelineEventRecord, open_default_global_store,
     open_default_store,
 };
 
@@ -189,19 +189,22 @@ impl Store for FaultyStore {
         self.inner.load_device(user_id, device_id).await
     }
 
-    async fn save_backend_mls_key(&self, key: &BackendMlsKey) -> Result<(), KupferdrahtError> {
+    async fn save_external_sender_key(
+        &self,
+        key: &ExternalSenderKey,
+    ) -> Result<(), KupferdrahtError> {
         self.gate("save_backend_mls_key").await?;
-        self.inner.save_backend_mls_key(key).await
+        self.inner.save_external_sender_key(key).await
     }
 
-    async fn load_backend_mls_key(
+    async fn load_external_sender_key(
         &self,
         purpose: &str,
         signature_scheme: &str,
-    ) -> Result<Option<BackendMlsKey>, KupferdrahtError> {
+    ) -> Result<Option<ExternalSenderKey>, KupferdrahtError> {
         self.gate("load_backend_mls_key").await?;
         self.inner
-            .load_backend_mls_key(purpose, signature_scheme)
+            .load_external_sender_key(purpose, signature_scheme)
             .await
     }
 
@@ -327,20 +330,18 @@ impl Store for FaultyStore {
     async fn unread_count_for_room(
         &self,
         room_id: &str,
-        self_user_id: &str,
+        own_user_id: &str,
     ) -> Result<u32, KupferdrahtError> {
         self.gate("unread_count_for_room").await?;
-        self.inner
-            .unread_count_for_room(room_id, self_user_id)
-            .await
+        self.inner.unread_count_for_room(room_id, own_user_id).await
     }
 
     async fn unread_counts(
         &self,
-        self_user_id: &str,
+        own_user_id: &str,
     ) -> Result<HashMap<String, u32>, KupferdrahtError> {
         self.gate("unread_counts").await?;
-        self.inner.unread_counts(self_user_id).await
+        self.inner.unread_counts(own_user_id).await
     }
 
     async fn mark_delivery_received(
@@ -475,13 +476,13 @@ impl Store for FaultyStore {
     async fn apply_delivery_receipts(
         &self,
         room_id: &str,
-        confirmer_user_id: &str,
+        reader_user_id: &str,
         message_ids: &[String],
         confirmed_at_ms: i64,
     ) -> Result<usize, KupferdrahtError> {
         self.gate("apply_delivery_receipts").await?;
         self.inner
-            .apply_delivery_receipts(room_id, confirmer_user_id, message_ids, confirmed_at_ms)
+            .apply_delivery_receipts(room_id, reader_user_id, message_ids, confirmed_at_ms)
             .await
     }
 
@@ -581,14 +582,14 @@ impl Store for FaultyStore {
         self.inner.load_recovery_state().await
     }
 
-    async fn save_self_user(&self, user: &SelfUserRecord) -> Result<(), KupferdrahtError> {
+    async fn save_own_user(&self, user: &OwnUserRecord) -> Result<(), KupferdrahtError> {
         self.gate("save_self_user").await?;
-        self.inner.save_self_user(user).await
+        self.inner.save_own_user(user).await
     }
 
-    async fn load_self_user(&self, id: &str) -> Result<Option<SelfUserRecord>, KupferdrahtError> {
+    async fn load_own_user(&self, id: &str) -> Result<Option<OwnUserRecord>, KupferdrahtError> {
         self.gate("load_self_user").await?;
-        self.inner.load_self_user(id).await
+        self.inner.load_own_user(id).await
     }
 
     async fn save_server_config(
@@ -604,67 +605,64 @@ impl Store for FaultyStore {
         self.inner.load_server_config().await
     }
 
-    async fn replace_feature_configs(
+    async fn replace_server_settings(
         &self,
-        entries: &[FeatureConfigEntry],
+        entries: &[ServerSetting],
     ) -> Result<(), KupferdrahtError> {
         self.gate("replace_feature_configs").await?;
-        self.inner.replace_feature_configs(entries).await
+        self.inner.replace_server_settings(entries).await
     }
 
-    async fn upsert_feature_config(
-        &self,
-        entry: &FeatureConfigEntry,
-    ) -> Result<(), KupferdrahtError> {
+    async fn upsert_server_setting(&self, entry: &ServerSetting) -> Result<(), KupferdrahtError> {
         self.gate("upsert_feature_config").await?;
-        self.inner.upsert_feature_config(entry).await
+        self.inner.upsert_server_setting(entry).await
     }
 
-    async fn list_feature_configs(&self) -> Result<Vec<FeatureConfigEntry>, KupferdrahtError> {
+    async fn list_server_settings(&self) -> Result<Vec<ServerSetting>, KupferdrahtError> {
         self.gate("list_feature_configs").await?;
-        self.inner.list_feature_configs().await
+        self.inner.list_server_settings().await
     }
 
-    async fn get_feature_config(
+    async fn get_server_setting(
         &self,
         name: &str,
-    ) -> Result<Option<FeatureConfigEntry>, KupferdrahtError> {
+    ) -> Result<Option<ServerSetting>, KupferdrahtError> {
         self.gate("get_feature_config").await?;
-        self.inner.get_feature_config(name).await
+        self.inner.get_server_setting(name).await
     }
 
-    async fn replace_user_properties(
+    async fn replace_account_data(
         &self,
-        entries: &[UserPropertyEntry],
+        entries: &[AccountDataEntry],
     ) -> Result<(), KupferdrahtError> {
         self.gate("replace_user_properties").await?;
-        self.inner.replace_user_properties(entries).await
+        self.inner.replace_account_data(entries).await
     }
 
-    async fn upsert_user_property(
+    async fn upsert_account_data_entry(
         &self,
-        entry: &UserPropertyEntry,
+        entry: &AccountDataEntry,
     ) -> Result<(), KupferdrahtError> {
         self.gate("upsert_user_property").await?;
-        self.inner.upsert_user_property(entry).await
+        self.inner.upsert_account_data_entry(entry).await
     }
 
-    async fn delete_user_property(&self, key: &str) -> Result<(), KupferdrahtError> {
+    async fn delete_account_data_entry(&self, key: &str) -> Result<(), KupferdrahtError> {
         self.gate("delete_user_property").await?;
-        self.inner.delete_user_property(key).await
+        self.inner.delete_account_data_entry(key).await
     }
 
-    async fn list_user_properties(&self) -> Result<Vec<UserPropertyEntry>, KupferdrahtError> {
+    async fn list_account_data(&self) -> Result<Vec<AccountDataEntry>, KupferdrahtError> {
         self.gate("list_user_properties").await?;
-        self.inner.list_user_properties().await
+        self.inner.list_account_data().await
     }
 
-    async fn get_user_property(
+    async fn get_account_data_entry(
         &self,
         key: &str,
-    ) -> Result<Option<UserPropertyEntry>, KupferdrahtError> {
+    ) -> Result<Option<AccountDataEntry>, KupferdrahtError> {
         self.gate("get_user_property").await?;
-        self.inner.get_user_property(key).await
+        self.inner.get_account_data_entry(key).await
     }
 
     async fn insert_attachment(&self, record: &AttachmentRecord) -> Result<(), KupferdrahtError> {

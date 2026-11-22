@@ -121,7 +121,7 @@ and what it depends on.
 | Command(s)                     | Layer            | What it does                                                                                       | Wire endpoints                                                                            |
 |--------------------------------|------------------|----------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
 | `sync`                         | **Metadata**     | Fetches Wire's room list + member profiles. Updates the in-memory cache + `rooms` / `room_members`. **Does not touch MLS.** | `POST /v{N}/conversations/list-ids` + `POST /v{N}/conversations/list` + `POST /v{N}/list-users` |
-| `rooms-join-all`               | **MLS bootstrap** | For each cached room *without* local MLS state → join via external commit; the never-established personal room (epoch 0) is **established** from this device instead (Step 86). Idempotent (skips rooms whose MLS group already exists). | `GET /v{N}/conversations/{d}/{id}/groupinfo` + `POST /v{N}/mls/commit-bundles` per room; self room at epoch 0: self-claim `POST /v{N}/mls/key-packages/claim/{d}/{u}` + `POST /v{N}/mls/commit-bundles` |
+| `rooms-join-all`               | **MLS bootstrap** | For each cached room *without* local MLS state → join via external commit; the never-established personal room (epoch 0) is **established** from this device instead (Step 86). Idempotent (skips rooms whose MLS group already exists). | `GET /v{N}/conversations/{d}/{id}/groupinfo` + `POST /v{N}/mls/commit-bundles` per room; personal room at epoch 0: self-claim `POST /v{N}/mls/key-packages/claim/{d}/{u}` + `POST /v{N}/mls/commit-bundles` |
 | `rejoin-all`                   | **MLS recovery** | For each cached room *with* local MLS state whose `own_leaf` belongs to a **prior** `device_id` → re-join via external commit (Step 7e). | same as `rooms-join-all`, but only for stale rooms                                        |
 | `sync` / `sync-stream`         | **One iteration / loop** | `sync` drives one `Client::sync_once` — rooms-metadata refresh + one notifications drain + cursor advance, in a single iteration. `sync-stream` runs the same loop continuously with `--idle-backoff` between empty drains, refreshing the rooms metadata only on its first iteration, after an event changed the room list, and when it is older than 5 minutes (Step 118); `--transport websocket` (Steps 62/73) switches it to live push — the concrete socket is negotiated per connection (`/v14/events` when the server enables ConsumableNotifications, the legacy `/await` socket otherwise, whose frames only trigger a REST drain (ADR-0030); the startup banner prints the choice). | `GET /v{N}/notifications` · `GET /v{N}/events` or legacy `GET /await` (WS, `--transport websocket`, negotiated per ADR-0019) |
 | `send` / `room-create` / etc.  | **App actions**  | Encrypt + POST a `GenericMessage` (`send`); create / invite / kick / leave / rename rooms.        | various                                                                                   |
@@ -135,7 +135,7 @@ Several commands therefore call `sync_once` internally
 ```
        ┌─────────────────────────────────────────────┐
        │  Wire Server (truth)                        │
-       │  - Conversation membership (REST)           │
+       │  - Room membership (REST)                   │
        │  - MLS GroupInfo per room (REST)            │
        │  - Notifications stream (REST polling)      │
        └─────────────────────────────────────────────┘
@@ -403,7 +403,7 @@ Drives `Client::sync_once(SyncSettings::default())`:
 
 1. Refreshes the access token via `POST /v{N}/access` using the
    persisted refresh cookie.
-2. Lists conversation IDs (`POST /v{N}/conversations/list-ids`)
+2. Lists room IDs (`POST /v{N}/conversations/list-ids`)
    and fetches their metadata
    (`POST /v{N}/conversations/list`).
 3. Resolves member display names / usernames
@@ -443,7 +443,7 @@ each device's MLS thumbprint) — see `room-devices`.
 ### `sync-metadata`
 
 Lightweight metadata-only refresh. Drives `Client::sync_metadata()`:
-runs the conversations list-ids → list → list-users round-trip
+runs the rooms list-ids → list → list-users round-trip
 and replaces the local `rooms` + `room_members` snapshot,
 **without** draining `/v{N}/notifications`. The
 per-event MLS-decrypt loop that `sync` performs is skipped.
@@ -535,7 +535,7 @@ The `*` prefix marks the local device. For DMs, an extra
 
 ### `room-create`
 
-Create a new MLS conversation (Step 6a, zero-invitee). The group is
+Create a new MLS room (Step 6a, zero-invitee). The group is
 registered server-side via `POST /v{N}/conversations` and the local
 MLS state is built at epoch 0 with Wire's backend removal key in the
 `external_senders` extension.
@@ -559,7 +559,7 @@ Create — and **establish** — the Wire MLS 1:1 with a peer
 (Steps 14a + 68). `GET /v{N}/one2one-conversations/{d}/{u}`
 reserves Wire's first-class 1:1 — idempotent server-side, so
 calling against an existing 1:1 returns it rather than erroring.
-The reservation alone leaves the conversation hidden from
+The reservation alone leaves the room hidden from
 `list-ids` (`docs/wire/api-notes.md`), so the command then
 branches: `epoch == 0` → claim the peer's key packages and upload
 the establishing Add-commit; `epoch > 0` → join via external
@@ -597,7 +597,7 @@ kupferdraht-cli dm-show --peer c0ffee02-…@example.com
 ### `dm-with`
 
 "Look up first, create if missing" convenience for 1:1
-conversations (Step 14a). Cache hit prints the existing `room_id`
+rooms (Step 14a). Cache hit prints the existing `room_id`
 without any HTTP traffic; cache miss falls through to `dm-create`.
 Concurrent invocations against the same peer de-duplicate the POST.
 
@@ -665,7 +665,7 @@ Wire's current `GroupInfo` and advances the epoch by one (live
 the idempotent form: it skips rooms whose group is already in openmls
 storage.
 
-**Self conversation (Step 86):** when `--id` names the user's self
+**Personal room (Step 86):** when `--id` names the user's personal
 room and the snapshot shows `epoch: 0`, Wire has no `GroupInfo` yet
 (`404 mls-missing-group-info`, live 2026-09-24) — the command
 **establishes** the group from this device instead: local group
@@ -687,7 +687,7 @@ kupferdraht-cli rooms-join-all
 ```
 
 No flags. Use this after a fresh `login` to bootstrap into every
-conversation Kupferdraht can see. The personal room is healed on the
+room Kupferdraht can see. The personal room is healed on the
 same pass (Step 86): established when it is still at epoch 0,
 external-joined when another own device got there first — both
 count under `joined`.
@@ -761,7 +761,7 @@ room-members
     8d1f2c34-…@example.com — Bob Example @bob
 ```
 
-The `*` prefix marks the local device; `[admin]` marks conversation
+The `*` prefix marks the local device; `[admin]` marks room
 administrators (Step 72a — the ADR-0018 case-fold gate keys off this
 role).
 
@@ -1034,8 +1034,8 @@ that names no kind, or one this release does not know).
 
 Show this device's server-side MLS key-package pool (Step 63,
 `GET /v{N}/mls/key-packages/self/{client}/count`). Every peer that
-adds this device to a conversation claims one package; an empty pool
-means the device can no longer be added to new conversations. The
+adds this device to a room claims one package; an empty pool
+means the device can no longer be added to new rooms. The
 sync loop tops the pool back up automatically (below 50 → refill to
 100, checked at most once per 24 h); `--replenish` forces the top-up
 now.
@@ -1216,7 +1216,7 @@ change-password ok
 
 ### `room-rename`
 
-Rename a conversation server-side (Step 2g)
+Rename a room server-side (Step 2g)
 (`PUT /v{N}/conversations/{domain}/{id}/name`). Wire emits a
 `conversation.rename` event to all members; their clients show
 the new name on their next sync.
@@ -1228,7 +1228,7 @@ kupferdraht-cli room-rename --id <room>@<domain> -n "New room name"
 | Flag         | Required | Description                          |
 |--------------|----------|--------------------------------------|
 | `--id`       | yes      | Room id.                   |
-| `-n`, `--name` | yes    | New conversation name.               |
+| `-n`, `--name` | yes    | New room name.                       |
 
 Output:
 
@@ -1240,7 +1240,7 @@ room-rename ok
 
 Common errors:
 - `403 invalid-op` — the calling user lacks the role to rename
-  the conversation (e.g. read-only member). Surfaced as
+  the room (e.g. read-only member). Surfaced as
   `BackendRejected`.
 - `404 no-conversation` — `room_id` doesn't exist or the user
   is not a member.
@@ -1610,7 +1610,7 @@ Per-room case state (Step 72c, ADR-0018). `case-set`
 patches the folded state — unset flags keep their values — bumps
 `revision`, and sends the resulting **full** `CasePayload` snapshot
 (no text fallback; plain Wire clients see nothing). Requires the
-caller to be a conversation administrator; the receive-side fold
+caller to be a room administrator; the receive-side fold
 ignores non-admin snapshots either way. `case-show` prints the
 folded state (latest admin-authorized core + display-only
 extensions).
@@ -1680,7 +1680,7 @@ timeline ok
   room_id:  <room>@<domain>
   drained:  K       # notifications drained from /v{N}/notifications this call
   items:    N
-    [<sent_at rfc3339>] → <self_user_id> (<message_id>)  <body>
+    [<sent_at rfc3339>] → <own_user_id> (<message_id>)  <body>
     [<sent_at rfc3339>] ← <peer_user_id> (<message_id>)  <body>
     ...
 ```
@@ -1933,7 +1933,7 @@ Common errors:
 
 ### `room-leave`
 
-Leave a conversation (Step 6e-1). Issues
+Leave a room (Step 6e-1). Issues
 `DELETE /v{N}/conversations/{domain}/{id}/members/{self_d}/{self_uuid}`
 to Wire — the **server** then produces the MLS Remove commit on the
 leaver's behalf via its external-sender authority (observations.md §31,
@@ -1963,7 +1963,7 @@ room-leave ok
 
 Common errors:
 - `403 invalid-op` — the calling user lacks the role to leave
-  this conversation.
+  this room.
 - `404 no-conversation` — `room_id` is unknown or the user is
   not a member.
 
@@ -1971,11 +1971,11 @@ Common errors:
 
 ### `room-delete`
 
-Delete a team conversation for **everyone** (Step 23) — a team-admin
+Delete a team room for **everyone** (Step 23) — a team-admin
 action, distinct from `room-leave` (which only removes you). Issues
 `DELETE /v{N}/teams/{tid}/conversations/{cid}`; the owning team id is
-read from the conversation's `team` field, falling back to your own team
-(`GET /self`) since Wire's conversation-list response often omits it. An
+read from the room's `team` field, falling back to your own team
+(`GET /self`) since the backend's room-list response often omits it. An
 account in no team is rejected. A `404` (already gone) is treated as
 idempotent success. On success the cache is re-synced so the room drops
 out of `rooms`.
@@ -1996,7 +1996,7 @@ room-delete ok
 ```
 
 Common errors:
-- `InvalidInput` — `room_id` is not a team conversation (no owning
+- `InvalidInput` — `room_id` is not a team room (no owning
   team); use `room-leave` instead.
 - `403` — the calling user lacks the team-admin role.
 
@@ -2050,7 +2050,7 @@ turned on in a room's settings: `invite,join-link` for
 ### join-link-generate (Step 8)
 
 Issue (or fetch the existing) reusable guest-link for a
-conversation. Sends
+room. Sends
 `POST /v{N}/conversations/{cnv}/code`. Prints the link the backend
 issues (`https://account.<operator>/conversation-join/?key=…&code=…`)
 and whether the link is password-protected.
@@ -2069,7 +2069,7 @@ kupferdraht-cli join-link-generate --id <room-id> -p   # password-protected (TTY
 
 ### join-link-current (Step 8)
 
-Fetch the conversation's current guest link via
+Fetch the room's current guest link via
 `GET /v{N}/conversations/{cnv}/code`. Prints `(no link issued)`
 when none is on file.
 
@@ -2079,7 +2079,7 @@ kupferdraht-cli join-link-current --id <room-id>
 
 ### join-link-revoke (Step 8)
 
-Revoke the conversation's current guest link via
+Revoke the room's current guest link via
 `DELETE /v{N}/conversations/{cnv}/code`. Idempotent: revoking a
 non-existent code prints success.
 
@@ -2115,26 +2115,26 @@ room. Step 163c replaced `--code` / `--key-stdin` by the URL.
   supplied for a protected link).
 - `404 no-conversation-code` — link revoked, never issued, or of
   another operator (a redeem reaches only the own backend's
-  conversations); nothing was redeemed.
+  rooms); nothing was redeemed.
 - `409 guest-links-disabled` — Wire team has the feature off.
 
-### features (Step 10c)
+### settings (Step 10c)
 
-List Wire's team-feature configs as persisted at the last successful
-login or `feature-config.update` event. Reads from the local store
-only — no network call. Empty when login has not yet populated the
-V18 `feature_configs` table.
+List the server's settings (the team-level ones) as persisted at
+the last successful login or `feature-config.update` event. Reads from
+the local store only — no network call. Empty when login has not yet
+populated the V18 `feature_configs` table.
 
 ```bash
-kupferdraht-cli features                   # list every persisted entry
-kupferdraht-cli features --name fileSharing  # detail for one entry
+kupferdraht-cli settings                   # list every persisted entry
+kupferdraht-cli settings --name fileSharing  # detail for one entry
 ```
 
 **Brief listing format:** `<name>  <status>  <config_json>` per row,
 sorted alphabetically by name.
 
 **Detail format:** four lines — `name`, `status` (`—` when null),
-`last_synced_at` (RFC 3339), raw `config_json`. Use this for configs whose
+`last_synced_at` (RFC 3339), raw `config_json`. Use this for settings whose
 brief `config_json` is too long to read inline.
 
 **Typical output for a full-plan team:** 30+ entries on a full team
@@ -2146,19 +2146,19 @@ on the team's plan and Wire-side feature flags. Trimmed-down team
 plans may show fewer.
 
 **Note:** Kupferdraht does not yet *react* to most of these — typed getters
-(`Client::file_sharing` for Step 11, `Client::receipt_mode` for
+(`Client::file_sharing` for Step 11, `Client::read_receipt_setting` for
 Step 6-II-f gating) land in 10e. The brief listing is the diagnostic
 surface for "what does the server say about this team?".
 
-### properties (Step 10c)
+### account-data (Step 10c)
 
-List the authenticated user's properties as persisted at the last
+List the authenticated user's account data as persisted at the last
 login or `user.properties-set` event. Reads from the local store
 only — no network call.
 
 ```bash
-kupferdraht-cli properties                       # list every property
-kupferdraht-cli properties --key WIRE_RECEIPT_MODE  # detail for one
+kupferdraht-cli account-data                       # list every entry
+kupferdraht-cli account-data --key WIRE_RECEIPT_MODE  # detail for one
 ```
 
 **Brief listing format:** `<key>  <value-or-truncated>` per row,
@@ -2172,7 +2172,7 @@ blob can be multiple KB and is the most common offender.
 **Out of scope (V1):** `PUT /v{N}/properties/{key}` and
 `DELETE /v{N}/properties/{key}` are intentionally not implemented per
 ADR-0012 §Out of scope. Kupferdraht reads only; the user sets and clears
-properties via Wire's other clients. The next sync cycle picks the
+account data via Wire's other clients. The next sync cycle picks the
 new value up via the `user.properties-set` event (Step 10d).
 
 ### send-file (Step 11h)
