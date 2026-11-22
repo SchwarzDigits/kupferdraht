@@ -1,8 +1,8 @@
-# Step 163 — The public API without Wire's vocabulary
+# Step 163 — The public API in matrix-rust-sdk's vocabulary
 
 **Status: commissioned 2026-11-17** (Volker), from an audit of the public API the same
-day. ADR-0009 and its rule say Wire's names never reach the public API: matrix-rust-sdk
-concepts outside `wire/`, Wire field names only inside it. The audit found about
+day. ADR-0009 and its rule say the public API speaks matrix-rust-sdk's language: its
+concepts outside `wire/`, Wire's field names inside it. The audit found about
 fourteen families of public names (Rust, UniFFI, browser) that carry Wire's words or
 Wire's raw values. Most of them are recorded in `docs/api-mapping-matrix-rust-sdk.md`
 as "Wire extension" or "Drift", some were settled by ADRs (0004, 0011, 0012, 0025).

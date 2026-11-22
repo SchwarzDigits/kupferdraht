@@ -209,28 +209,33 @@ PLAN.md's "Kalium prior art" tables are removed. Individual
 Wire API details that previously cited Kalium files now cite
 the Wire Swagger endpoint instead.
 
-### 4. No Wire vocabulary in the public surface (revision 1.2)
+### 4. The public surface speaks matrix-rust-sdk's language (revision 1.2, wording 1.3)
 
 Part 1 named Wire's field names only, and nothing checked it. Where
 matrix-rust-sdk lacks a concept, Wire's words came in as "Wire extension"
 rows, and ADR-0004, ADR-0011, ADR-0012 and ADR-0025 fixed some on purpose;
-an audit on 2026-11-17 found about fourteen such families. The line holds
-for every public name and value, and is checked:
+an audit on 2026-11-17 found about fourteen such families. The rule is a
+preference, stated once for everything a consumer sees: the public surface says
+what matrix-rust-sdk says, plain English where matrix has no such concept, and
+Wire's words stay with the backend in `wire/`. It holds for every public name
+and value, and is checked:
 
 - **Names.** Every public name — Rust items outside `wire/`, the UniFFI
   surface, the browser exports and `index.d.ts`, the CLI's verbs and flags,
   the custom-store contract — takes matrix-rust-sdk's term where matrix has
   the concept and a plain English name where it has not. A concept only Wire
   has gets a neutral name too.
-- **Values.** No Wire raw value is part of the public contract: no Wire
-  string as an accepted or returned value (access modes and roles, feature
-  keys, property keys), no Wire locator or key material in a public record.
-  `wire/` maps them; a raw accessor exists only behind a typed projection.
+- **Values.** A public value is a typed projection: a join rule, a setting,
+  a record's field is a type or plain English, and `wire/` maps the backend's
+  strings (access modes and roles, feature keys, property keys), locators and
+  key material to and from it. A raw accessor exists only behind a typed
+  projection.
 - **Prose.** Doc comments, help texts and error texts a consumer reads use
-  the same terms. Wire's terms go ("conversation", "client_id", "qualified
-  id", "knock"); the backend's name "Wire" may stay where a text explains
-  the backend's behaviour, and so may a citation of Wire's interface in
-  backticks — an endpoint path, an event type, a status label.
+  the same terms: a room, a device id, a user id, a ping, where the backend
+  says "conversation", "client_id", "qualified id", "knock". The backend's
+  name "Wire" may stay where a text explains the backend's behaviour, and so
+  may a citation of Wire's interface in backticks — an endpoint path, an
+  event type, a status label.
 - **Where compatibility binds, Wire's names stay — approved and marked.**
   Inside `wire/` (Wire's REST API, its event JSON) and in the Protobuf schema
   `proto/generic_message.proto` with the types generated from it, Wire's
@@ -241,7 +246,7 @@ for every public name and value, and is checked:
   `Wire compatibility (ADR-0009)` that names the interface, and an entry in
   the check's list of approved exceptions.
 - **The check.** `kupferdraht-core/tests/public_vocabulary.rs` pins the
-  words against the public surface. Its temporary list holds today's
+  backend's words against the public surface. Its temporary list holds today's
   occurrences, by the Step 163 sub-step that removes them, and is empty
   after 163e; the approved compatibility spots are listed apart and stay.
   An exception is never added to make the test pass.
@@ -356,3 +361,4 @@ for every public name and value, and is checked:
 | 1.0 | 2026-04-22 | Initial ADR |
 | 1.1 | 2026-10-07 | Amendment, not a supersession: "API protocol observation" (JSON shapes) widened to "protocol observation" (what an endpoint expects, what an event means), with the duty to record every observation with its source. Why: this is what the project practised and documented from the start — edit chains, leave semantics, the events protocol — so the rule now states the practice instead of a narrower claim. The rule names any Wire repository, not Kalium alone: proteus (the prekey wire format), wire-server, wire-webapp and wire-android were read the same way. The Context's "Apache-2.0-compatible delivery" was the posture of April 2026; ADR-0016 (2026-07-23) chose GPL-3.0-only. The decision — matrix-rust-sdk as the model, Kalium never one — is unchanged. |
 | 1.2 | 2026-11-18 | Amendment, not a supersession: part 4 — the line covers concepts matrix-rust-sdk lacks, Wire's raw values and the prose a consumer reads; Wire's names stay only where an interface to Wire binds them, approved beforehand and marked; `tests/public_vocabulary.rs` checks it, with a temporary list that Step 163's sub-steps empty. Why: part 1 named field names only and had no check, so Wire's words came back through every concept matrix lacks, four ADRs among them (0004, 0011, 0012, 0025, each with a revision entry pointing here). Decided by Volker on 2026-11-17 (Step 163: neutral names also for Wire-only concepts) and 2026-11-18 (the check, the prose rule, the approved and marked exceptions). |
+| 1.3 | 2026-11-22 | Wording, not a change of substance: part 4, its rule, the check's texts and Step 163's title say what the public surface speaks — matrix-rust-sdk's language, plain English where matrix has no such concept, Wire's words with the backend in `wire/` — instead of what it avoids. Why: read as a prohibition of a word, the rule hid its reason, the one API model of part 1; a preference states it. Decided by Volker on 2026-11-22. |

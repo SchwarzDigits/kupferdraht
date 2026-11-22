@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #![cfg(not(target_arch = "wasm32"))]
-//! The public surface carries no Wire vocabulary (ADR-0009, revision 1.2).
+//! The public surface speaks matrix-rust-sdk's language (ADR-0009, part 4).
 //!
 //! A lexical check over what a consumer sees: the public Rust items outside
 //! `wire/` with their docs (the core, the FFI, the browser exports and their
@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 /// The comment that marks an approved compatibility spot on the next line.
 const MARK: &str = "Wire compatibility (ADR-0009)";
 
-/// A Wire word as identifier segments (`snake_case` and `camelCase` split
+/// A backend word as identifier segments (`snake_case` and `camelCase` split
 /// alike). Every segment but the last must equal the found one; the last
 /// may be its start (`config` finds `configs`).
 struct Word {
@@ -54,9 +54,10 @@ const fn code_word(
     }
 }
 
-/// Wire's words the public surface must not carry (ADR-0009, part 4). A
-/// standard's term is no Wire word where Wire took it over: MLS's (RFC 9420)
-/// and RFC 7638's `thumbprint` stay.
+/// The backend's words: a place that says one of them has yet to speak
+/// matrix-rust-sdk's language (ADR-0009, part 4). A standard's term Wire took
+/// over is the standard's, not the backend's: MLS's (RFC 9420) and RFC 7638's
+/// `thumbprint` stay.
 const WORDS: &[Word] = &[
     word("knock", &["knock"], "163b"),
     word("ephemeral", &["ephemeral"], "163b"),
@@ -481,13 +482,14 @@ fn rows(tally: &Tally) -> String {
 // ---- the tests --------------------------------------------------------
 
 #[test]
-fn the_public_surface_carries_only_the_listed_wire_words() {
+fn the_public_surface_speaks_matrix_terms_but_for_the_listed_spots() {
     let (loose, marked) = surface_tally();
     let temporary = listed(TEMPORARY.iter().copied());
     assert!(
         loose == temporary,
-        "Wire words on the public surface differ from TEMPORARY (ADR-0009). \
-         Rename instead of listing; a row goes when its sub-step lands. Now:\n{}",
+        "The backend's words on the public surface differ from TEMPORARY (ADR-0009). \
+         Say it in matrix-rust-sdk's terms instead of listing; a row goes when its \
+         sub-step lands. Now:\n{}",
         rows(&loose)
     );
     let approved = listed(APPROVED.iter().map(|&(f, w, n, _)| (f, w, n)));
@@ -579,10 +581,11 @@ fn adr_0009_states_the_line_and_its_check() {
         std::fs::read_to_string(workspace().join("docs/adrs/0009-matrix-rust-sdk-as-api-model.md"))
             .expect("ADR-0009");
     assert!(
-        adr.contains("### 4. No Wire vocabulary in the public surface"),
+        adr.contains("### 4. The public surface speaks matrix-rust-sdk's language"),
         "ADR-0009 part 4"
     );
     assert!(adr.contains("| 1.2 |"), "ADR-0009 revision 1.2");
+    assert!(adr.contains("| 1.3 |"), "ADR-0009 revision 1.3");
     let rule =
         std::fs::read_to_string(workspace().join("rules/0009-matrix-rust-sdk-as-api-model.md"))
             .expect("rules/0009");
