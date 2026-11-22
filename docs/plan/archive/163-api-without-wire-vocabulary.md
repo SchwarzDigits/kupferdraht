@@ -1,6 +1,24 @@
 # Step 163 — The public API in matrix-rust-sdk's vocabulary
 
-**Status: commissioned 2026-11-17** (Volker), from an audit of the public API the same
+**Status: MERGED 2026-11-22**, in five sub-steps, each its own branch, commit and PR:
+163a `9565c8b` (PR #106, `abfcd58`, 2026-11-18: ADR-0009 revision 1.2 and the check
+`tests/public_vocabulary.rs`); 163b `a32a6f0` with the fix-ups `5f1d4b7` and `f82f90c`
+(PR #110, `851e546`, 2026-11-18: the message kinds); 163c `18e88b3` (PR #111,
+`b309403`, 2026-11-18: the rooms); 163d `2b10240` (PR #112, `d99cd31`, 2026-11-22:
+identity, devices, the session; smoke on server 4 the same day, 33 ok over two runs);
+163e `01c0b26` (PR #116, `9d73096`, 2026-11-22: the server's settings, the account
+data, the store contract; locally fmt, 0 build warnings, clippy all targets, the full
+core and CLI suite with CI's profile — 175 binaries, 1798 passed — and the pins 8/8 +
+9/9; CI green on the first run). The smoke after 163b–e ran on server 4 (Wire 5.38.9)
+on 2026-11-22: the regular smoke, the 163d block and the 163b–e block (ping, a
+disappearing text, room access and a join link joined by external commit, the
+personal room, the settings, the account data), 48 ok, 0 failed. BREAKING across
+Rust, FFI, browser, the store contract and the CLI, listed in the CHANGELOG; the
+check's temporary list is empty. Retrospectives: LEARNINGS 5.104 (163b, 163c), 5.105
+(163d), 5.106 (163e). ADR-0009's part 4 was reworded as a preference on 2026-11-22
+(revision 1.3, PR #115).
+
+Commissioned 2026-11-17 (Volker), from an audit of the public API the same
 day. ADR-0009 and its rule say the public API speaks matrix-rust-sdk's language: its
 concepts outside `wire/`, Wire's field names inside it. The audit found about
 fourteen families of public names (Rust, UniFFI, browser) that carry Wire's words or

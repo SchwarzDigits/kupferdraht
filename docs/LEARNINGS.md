@@ -3390,3 +3390,40 @@ touched it.
   scratchpad goes with the session; the smoke scripts written there were lost twice
   before they moved next to the hand-off notes. Anything a later session, or another
   machine, must run again is written there from the start.
+
+### 5.106 Pins that caught the neighbour, a doc link read as prose, and a disk the suite filled (Step 163e)
+
+- **A pin on a bare substring catches the neighbour it did not mean.** The pin
+  `feature_configs(` for the client's accessor also matched the backend layer's
+  `fetch_feature_configs(`, a call the step keeps. A pin on a name takes the
+  shape of a call or a definition (`.name(`, `fn name(`), not the bare word.
+- **Prose read as one token stream gains a false positive: the doc link.**
+  `[`Self::room`]` read as prose became "self room". A backticked Rust path is
+  code, whose words the code lines already carry, and leaves the prose like
+  the endpoint citations before it. Every widening of the matcher's reach
+  comes with its exemption and a test for both.
+- **Protecting strings keeps SQL safe and hides the pins written as strings.**
+  Replacing identifiers outside string literals left the SQL columns and the
+  backend's keys untouched — and skipped `"FeatureConfigView"` in a view table
+  and `js_name = featureConfigs` in a source pin, which only the full suite
+  found. After a scripted rename, grep the tests' string literals for the old
+  names before the suite does.
+- **A rule file is a doc home of the name it mentions.** 163d renamed
+  `cookie_label` and left `rules/0025` saying the name "leaves with Step 163d";
+  163e's docs pass found it. Phase 7's map pairs an ADR with its rule when the
+  ADR changes; the pair applies as well when a step lands a name an ADR or a
+  rule names.
+- **A full dev suite needs CI's profile on a small disk.** 160 test binaries
+  with debug info plus the incremental cache took 84 GB and filled the 126 GB
+  disk; a changed `CARGO_INCREMENTAL` then rebuilt every binary beside the old
+  ones and filled it again. `CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0`,
+  as `ci.yml` sets them, and `cargo clean -p` before switching a profile.
+- **`pkill -f` matches the shell that runs it.** The command line that carried
+  the pattern was killed by it; a bracket in the pattern (`cl[i]`) keeps the
+  pattern out of its own argv.
+- **Identifiers by script and compiler, prose by eyes with the check as the
+  oracle.** The identifier pass took minutes with `cargo check` as the net;
+  two agents reworded some 350 comment and doc lines against the mapping and
+  the check's remaining list, and the review changed none of their wording.
+  The check's temporary list stays, empty: a row in it is a conscious
+  transition, and the test that pins it empty makes it one.
