@@ -31,8 +31,8 @@ Three layers. Diagram, module layout, and the matrix-rust-sdk ↔ Kupferdraht sy
 
 - Public API is matrix-rust-sdk-shaped (`Client`, `Room`, `Timeline`, `SyncService`, `EventHandler`); backend speaks Wire v14. Replacing the backend changes only the bottom layer.
 - `kupferdraht-core/src/wire/`: Wire field names verbatim, transport only, no business logic.
-- `kupferdraht-core` outside `wire/`: matrix-rust-sdk naming, no Wire names.
-- Public API surface (UDL + bindings): matrix-rust-sdk concepts, never Wire terminology.
+- `kupferdraht-core` outside `wire/`: matrix-rust-sdk naming; Wire's names belong to `wire/`.
+- Public API surface (UDL + bindings): matrix-rust-sdk concepts, plain English where matrix has none; Wire's terminology stays in the backend layer.
 - Crypto (openmls) and transport (HTTP) must not share a function — `timeline/` calls into `wire/`, never makes HTTP calls directly.
 
 ## Wire API: v14 Only (ADR-0008)

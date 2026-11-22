@@ -3368,12 +3368,12 @@ touched it.
 ### 5.105 A standard's word, a matcher that reads identifiers, and a smoke that passed around a gap (Step 163d)
 
 - **A word Wire uses can be a standard's.** The plan listed `thumbprint` with the
-  Wire words and the implementation renamed it to `fingerprint`; Volker objected after
-  the fact: it is RFC 7638's JWK Thumbprint, which Wire took over, and neither MLS nor
-  openmls name the computation. The rename was reverted, the word left the check's
-  list, and the check's doc says so now. Before a rename for ADR-0009, grep the openmls
-  fork, RFC 9420 and the RFC the field cites; a term a standard owns stays, however
-  often Wire says it.
+  backend's words to translate and the implementation renamed it to `fingerprint`;
+  Volker objected after the fact: it is RFC 7638's JWK Thumbprint, which Wire took
+  over, and neither MLS nor openmls name the computation. The rename was reverted, the
+  word left the check's list, and the check's doc says so now. Before a rename for
+  ADR-0009, grep the openmls fork, RFC 9420 and the RFC the field cites; a term a
+  standard owns is the standard's, not the backend's, and stays.
 - **The vocabulary check reads identifiers, not prose.** `tokens()` splits a line at
   every character that is not alphanumeric or `_`, and a word's segments must sit in
   one token: `cookie_label` and `cookieLabel` are found, "cookie label" in a doc

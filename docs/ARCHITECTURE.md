@@ -70,8 +70,8 @@ speaks Wire v14. Only the bottom layer changes if the backend ever does
 
 | Layer | Owns | Vocabulary | Rule |
 |---|---|---|---|
-| **Public API** | `Client`, `Room`, `Timeline`, `SyncService`, `EventHandler`, `Kupferdraht`, `Account` | matrix-rust-sdk | never Wire-specific terms |
-| **Kupferdraht Core** | MLS, storage, sync, timeline, rooms, keystore, identity | matrix-rust-sdk-ish | all application logic; no Wire field names |
+| **Public API** | `Client`, `Room`, `Timeline`, `SyncService`, `EventHandler`, `Kupferdraht`, `Account` | matrix-rust-sdk | matrix-rust-sdk's terms, plain English where matrix has none; Wire's stay in `wire/` |
+| **Kupferdraht Core** | MLS, storage, sync, timeline, rooms, keystore, identity | matrix-rust-sdk-ish | all application logic; matrix-rust-sdk naming, Wire's field names stay in `wire/` |
 | **Wire layer** (`wire::*`) | HTTP transport, request/response DTOs | verbatim Wire | transport only, no business logic |
 
 The separation is a hard rule (ADR-0009, `rules/0009-matrix-rust-sdk-as-api-model.md`):
