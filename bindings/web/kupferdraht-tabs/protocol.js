@@ -23,7 +23,7 @@ export const PROTOCOL_VERSION = 1;
  * do not mix: the leader announces its release, every request carries the
  * asking tab's, and either side refuses another with `VersionMismatch`.
  */
-export const KUPFERDRAHT_VERSION = '0.5.1';
+export const KUPFERDRAHT_VERSION = '0.6.0';
 /** Requests, events and leader announcements — one channel per origin. */
 export const REQUEST_CHANNEL = 'kupferdraht:tabs';
 /** Responses go to the requesting tab only. */
