@@ -196,7 +196,7 @@ Dual-licensed; used here under the Apache License 2.0.
   only) — https://github.com/clap-rs/clap
 - console_error_panic_hook 0.1.7 (browser target only) — Nick Fitzgerald —
   https://github.com/rustwasm/console_error_panic_hook
-- cookie 0.18.2 (native targets only) — Sergio Benitez; Alex Crichton —
+- cookie 0.18.3 (native targets only) — Sergio Benitez; Alex Crichton —
   https://github.com/SergioBenitez/cookie-rs
 - cookie_store 0.22.1 (native targets only) — Patrick Fernie —
   https://github.com/pfernie/cookie_store
