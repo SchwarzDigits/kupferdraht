@@ -15,9 +15,10 @@ IPHONEOS_DEPLOYMENT_TARGET = { value = "15.0", force = true }
 
 # Step 91 (ADR-0022): one SQLite3MC amalgamation on every target. On
 # wasm32-unknown-unknown the engine is compiled by `sqlite-wasm-rs`, which
-# reads its C source from this directory instead of its bundled copy (the
-# two are byte-identical at 2.5.1 — the pin is the config, not the
-# coincidence). Resolved relative to the workspace root → vendor/sqlite3mc/,
+# reads its C source from this directory instead of its bundled copy (that
+# copy is ahead of the vendored 2.5.1 since sqlite-wasm-rs 0.6.3 and is
+# never compiled; the pin is the config, not a coincidence). Resolved
+# relative to the workspace root → vendor/sqlite3mc/,
 # the same PROVENANCE-pinned file the native stand-in compiles. The
 # wasm-capable C compiler is NOT configured here (machine-specific): export
 # CC_wasm32_unknown_unknown / AR_wasm32_unknown_unknown in the shell — see

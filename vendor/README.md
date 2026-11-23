@@ -32,8 +32,8 @@ linked vanilla SQLite and wrote plaintext databases without an error.
 On `wasm32-unknown-unknown` the fork's sys crate re-exports
 `sqlite-wasm-rs`, which compiles the amalgamation for wasm from THIS
 directory: the root `.cargo/config.toml` sets `SQLITE_WASM_RS_SOURCE_DIR`
-to `vendor/sqlite3mc/` (the crate's bundled copy is byte-identical at
-2.5.1 but never the pin).
+to `vendor/sqlite3mc/` (the crate's bundled copy, ahead of the vendored
+2.5.1 since sqlite-wasm-rs 0.6.3, is never compiled and never the pin).
 
 This directory stays the pin for both: `kupferdraht-core/tests/step_90_sqlite3mc_engine.rs`
 asserts the SHA-256 of both files against `PROVENANCE.txt`, that the
@@ -61,9 +61,9 @@ control and the at-rest byte layout.
    arm), tag, then the refinery and openmls branches as in 1. Kupferdraht
    stays on rusqlite 0.37 until `openmls_sqlite_storage` moves (0.3.0
    pins 0.37; openmls `main` is on 0.40, unreleased).
-3. **sqlite-wasm-rs bump** — re-verify that the crate's bundled
-   amalgamation still matches `sqlite3mc/` (or that
-   `SQLITE_WASM_RS_SOURCE_DIR` is still honoured) and that
+3. **sqlite-wasm-rs bump** — re-verify that its `build.rs` still honours
+   `SQLITE_WASM_RS_SOURCE_DIR` (the crate's bundled copy is ahead of
+   `sqlite3mc/` since 0.6.3) and that
    `sqlite3mc_vfs_create` is still in its bindings; bump it in the fork's
    `libsqlite3-sys/Cargo.toml` too; run `scripts/wasm-test.sh`.
 4. **Never** pass `SQLITE_EXTRA_INIT=sqlite3mc_initialize` (2.5.x registers
