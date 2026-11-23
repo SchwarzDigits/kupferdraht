@@ -119,7 +119,8 @@ fn rust_sources(dir: &Path) -> Vec<(String, String)> {
 }
 
 /// `sqlite-wasm-rs` compiles the vendored, PROVENANCE-pinned amalgamation —
-/// not its bundled copy (byte-identical today, but the pin is the config).
+/// not its bundled copy (ahead of the vendored 2.5.1 since 0.6.3; the pin is
+/// the config).
 #[test]
 fn cargo_config_points_the_wasm_engine_at_the_vendored_amalgamation() {
     let config = workspace_file(".cargo/config.toml");
@@ -149,7 +150,7 @@ fn lockfile_pins_the_wasm_engine_and_vfs_lines() {
     };
     assert!(
         version_of("sqlite-wasm-rs").starts_with("0.6."),
-        "sqlite-wasm-rs 0.6.x bundles SQLite3MC 2.5.1 and honours SQLITE_WASM_RS_SOURCE_DIR"
+        "sqlite-wasm-rs 0.6.x honours SQLITE_WASM_RS_SOURCE_DIR; its bundled engine is not the pin"
     );
     // Step 113: v0.2.0 heals a database in place after an outage; Step 119:
     // v0.3.0 reports a takeover as an event; Step 120: v0.4.0 has the slot;
