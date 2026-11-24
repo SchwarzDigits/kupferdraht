@@ -41,6 +41,19 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **The whole-database encryption engine is SQLite3 Multiple Ciphers 2.7.1
+  on SQLite 3.54.1** (Step 165; before: 2.5.1 on 3.53.4). The `chacha20`
+  scheme, the raw 32-byte key and the file format are unchanged: a database
+  an earlier Kupferdraht wrote opens as before, and `StorageEngineInfo.version`
+  and the CLI's `status` line report `2.7.1`. 2.6.0 and 2.6.1 were skipped:
+  their hardware-accelerated ChaCha20 could decrypt a page silently wrong
+  when the other code path read it. A Rust consumer that names the
+  SchwarzDigits fork tags in its own manifest moves to rusqlite
+  `v0.37.0-sqlite3mc-2.7.1`, refinery `v0.9.1-sqlite3mc-2.7.1` and openmls
+  `openmls-v0.9.2-schwarzdigits.2` (`docs/library.md`, "Consuming from
+  Rust"). The third-party notices name libsodium (ISC), whose ChaCha20 and
+  Poly1305 code the engine embeds since 2.6.0.
+
 ### Deprecated
 
 ### Removed
@@ -48,6 +61,11 @@ is no skill for it — it is this short procedure:
 ### Fixed
 
 ### Security
+
+- **SQLite3MC 2.7.0's hardening reaches every local database** (Step 165): an
+  encryption error on writing is reported instead of dropped, a partial page
+  read is an error, the hot journal of an encrypted database is recognised
+  and kept, and SQLite 3.54.1 fixes a heap-buffer overflow on 32-bit builds.
 
 ## [0.6.0] - 2026-11-22
 

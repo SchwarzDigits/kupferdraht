@@ -2476,7 +2476,7 @@ dependencies = [
 [[package]]
 name = "libsqlite3-sys"
 version = "0.35.0"
-source = "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.5.1#0a490c3f1622b63cb2057d447887a57482c9f3f2"
+source = "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.7.1#fdfc1d8ab02486c0127f929a79cf04ab1b53afba"
 dependencies = [
  "cc",
  "pkg-config",
@@ -2726,7 +2726,7 @@ dependencies = [
 [[package]]
 name = "openmls_basic_credential"
 version = "0.6.0"
-source = "git+https://github.com/SchwarzDigits/openmls?tag=openmls-v0.9.2-schwarzdigits.1#9a228e8e9a76eab336ba75d6625e27fa96ca5357"
+source = "git+https://github.com/SchwarzDigits/openmls?tag=openmls-v0.9.2-schwarzdigits.2#f69b9b96a4254785553c65cc6bf6b5caadbd7d7f"
 dependencies = [
  "ed25519-dalek 3.0.0",
  "getrandom 0.4.3",
@@ -2755,7 +2755,7 @@ dependencies = [
 [[package]]
 name = "openmls_rust_crypto"
 version = "0.6.0"
-source = "git+https://github.com/SchwarzDigits/openmls?tag=openmls-v0.9.2-schwarzdigits.1#9a228e8e9a76eab336ba75d6625e27fa96ca5357"
+source = "git+https://github.com/SchwarzDigits/openmls?tag=openmls-v0.9.2-schwarzdigits.2#f69b9b96a4254785553c65cc6bf6b5caadbd7d7f"
 dependencies = [
  "aes-gcm 0.11.1",
  "chacha20poly1305",
@@ -2792,7 +2792,7 @@ dependencies = [
 [[package]]
 name = "openmls_sqlite_storage"
 version = "0.3.0"
-source = "git+https://github.com/SchwarzDigits/openmls?tag=openmls-v0.9.2-schwarzdigits.1#9a228e8e9a76eab336ba75d6625e27fa96ca5357"
+source = "git+https://github.com/SchwarzDigits/openmls?tag=openmls-v0.9.2-schwarzdigits.2#f69b9b96a4254785553c65cc6bf6b5caadbd7d7f"
 dependencies = [
  "openmls_traits",
  "refinery",
@@ -3474,7 +3474,7 @@ dependencies = [
 [[package]]
 name = "refinery"
 version = "0.9.1"
-source = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc#538b722ea1115f66fc0187fd0bb28493f38034c1"
+source = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc-2.7.1#47b0abd6380d2806e4f3e40404be0e7ab58c4996"
 dependencies = [
  "refinery-core",
  "refinery-macros",
@@ -3483,7 +3483,7 @@ dependencies = [
 [[package]]
 name = "refinery-core"
 version = "0.9.1"
-source = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc#538b722ea1115f66fc0187fd0bb28493f38034c1"
+source = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc-2.7.1#47b0abd6380d2806e4f3e40404be0e7ab58c4996"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -3502,7 +3502,7 @@ dependencies = [
 [[package]]
 name = "refinery-macros"
 version = "0.9.1"
-source = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc#538b722ea1115f66fc0187fd0bb28493f38034c1"
+source = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc-2.7.1#47b0abd6380d2806e4f3e40404be0e7ab58c4996"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -3641,7 +3641,7 @@ dependencies = [
 [[package]]
 name = "rusqlite"
 version = "0.37.0"
-source = "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.5.1#0a490c3f1622b63cb2057d447887a57482c9f3f2"
+source = "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.7.1#fdfc1d8ab02486c0127f929a79cf04ab1b53afba"
 dependencies = [
  "bitflags",
  "fallible-iterator",

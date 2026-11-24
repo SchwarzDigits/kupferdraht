@@ -324,6 +324,10 @@ forks; the next bump — when `openmls_sqlite_storage` releases on rusqlite
 rusqlite ≥ 0.38 can retire the fork's wasm arm for its own
 `ffi-sqlite-wasm-rs`. (The first Rust embedder dropped its own
 `[patch.crates-io]` entry on 2026-11-01.)
+The first engine bump went that route on 2026-11-23 (Step 165, SQLite3MC
+2.7.1): rusqlite `v0.37.0-sqlite3mc-2.7.1` → refinery `v0.9.1-sqlite3mc-2.7.1`
+→ openmls `openmls-v0.9.2-schwarzdigits.2`; a refinery tag names the engine
+release from now on, and the earlier tags stay for the releases that pin them.
 
 ## 83) The login path does not enter the manager's client cache (2026-11-01)
 

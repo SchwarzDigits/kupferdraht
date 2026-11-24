@@ -13,7 +13,7 @@
 pub struct StorageEngineInfo {
     /// The engine as it names itself (`SQLite3 Multiple Ciphers`).
     pub engine: String,
-    /// The engine release (`2.5.1`).
+    /// The engine release (`2.7.1`).
     pub version: String,
     /// The cipher scheme in effect on the connection (`chacha20`).
     pub cipher: String,

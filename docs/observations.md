@@ -2488,3 +2488,86 @@ Smoke `smoke164.sh` (outside the repository): 10 ok, 0 failed. Running it from t
 Mac first failed with "No route to host" for every address of the machine: the app the
 session ran in lacked macOS's Local Network permission, which holds back every process
 it starts; granted, the smoke went through.
+
+## 109) SQLite3MC 2.7.1 vendored: what the release changes for Kupferdraht's use, and the notice libsodium's code lacks (2026-11-23)
+
+Step 165 moved the vendored engine from SQLite3 Multiple Ciphers 2.5.1 (SQLite
+3.53.4, Step 90) to 2.7.1 (SQLite 3.54.1), skipping 2.6.0 and 2.6.1 — the first
+engine release moved through the fork chain of ADR-0042 (open.md §82). Read
+against Kupferdraht's use of the engine (the `chacha20` scheme with the
+compile-time defaults, a raw 32-byte key by `PRAGMA key = "x'…'"` after
+`PRAGMA cipher` and `PRAGMA plaintext_header_size = 32`, WAL natively and the
+rollback journal in the browser, `secure_delete` on, temporary data in memory
+through the fork's `SQLITE_TEMP_STORE=2`, `sqlite3mc_version()` the only
+SQLite3MC function called):
+
+- **2.6.0 and 2.6.1 were never shipped and are skipped.** Upstream's caution
+  on both releases: the hardware-accelerated ChaCha20 (code adopted from
+  libsodium in 2.6.0) carries the 32-bit block-counter overflow into the first
+  nonce word where the scalar code wraps the counter (RFC 8439), so a page whose
+  random counter start lies within the last blocks below 2^32 decrypts
+  silently wrong when the other code path reads it — the Poly1305 tag is over
+  the ciphertext and still verifies. About 1 in 67 million 4 KiB page writes;
+  the first 64 bytes of a page and its reserved bytes are never affected. 2.7.0
+  prevents the overflow, so every implementation encrypts alike.
+- **What 2.7.0 fixes that reaches this use:** an encryption error on writing
+  is propagated (before: dropped), a partial page read is an error (before:
+  silently dropped), the hot journal of an encrypted database is recognised
+  and no longer removed, a deadlock with sorter worker threads and several
+  mutex and out-of-memory defects are gone, the backup API check is corrected
+  (#280). Not this use: key setup errors through URI parameters or `ATTACH`
+  that left a database silently unencrypted (Kupferdraht keys by `PRAGMA` and
+  attaches nothing), Argon2's unchecked return code (no passphrase here), VLE,
+  `aes256cbc`'s `kdf_iter`, rekeying (#309 in 2.7.1; Step 161 is parked), the
+  64-bit wasm RNG abort (#308; wasm32 is unaffected).
+- **2.7.0's compatibility notes, checked:** the raw key notation `x'…'` is
+  unchanged (the new `raw:hex:` / `raw:bin:` prefixes are additions); the
+  removed "WAL legacy mode" was never set; "enable encryption before a
+  temporary database is used" holds, the key is the first statement on every
+  connection; `SQLITE_ENABLE_ATOMIC_WRITE` is not set; `sqlite3mc_config` and
+  `sqlite3mc_codec_data` becoming direct-only touches nothing here.
+- **Self-registration persists:** in 2.7.1 as in 2.5.1 `sqlite3_initialize`
+  calls `sqlite3mc_initialize(0)` itself and uses `SQLITE_EXTRA_INIT` only as
+  a hook for a further function, so `SQLITE_EXTRA_INIT=sqlite3mc_initialize`
+  stays forbidden (rules/0021, `vendor/README.md` recipe 4: a second
+  registration fails initialization).
+- **The file format is unchanged:** the Step-91 fixture, written under 2.5.1
+  and never regenerated, opens under 2.7.1 natively
+  (`native_fixture_is_committed_and_readable`) and in the browser suite; the
+  compile-time default cipher stays `chacha20`. The at-rest pins of Step 90
+  (plaintext header, 32 reserved bytes, ciphertext payload, wrong key fails at
+  open) hold on 2.7.1.
+- **The browser compiles it too:** `sqlite-wasm-rs` 0.6.3 compiled the
+  vendored 2.7.1 for wasm32-unknown-unknown without a change (its own bundled
+  copy is 2.6.1 and is never compiled, `SQLITE_WASM_RS_SOURCE_DIR`); the wasm
+  clippy line is clean. 2.7.0's wasm fixes (#286) concern the WASI entropy
+  source, not this target.
+- **Embedded third-party code, read file by file:** 2.7.1 adds twenty source
+  sections against 2.5.1. SQLite3MC's own `hwcheck.c` (MIT) and
+  `csprng_entropy.c`, SQLite's `btreecopyfile.c` (public domain), and
+  libsodium's ChaCha20 / Poly1305 files for the hardware-accelerated paths
+  (`crypto_stream_chacha20.h`, `export.h`, `private/common.h`,
+  `src/stream_chacha20.c`, `src/onetimeauth_poly1305.c`, `sse2/poly1305_sse2.c`,
+  `donna/poly1305_donna.c` with its 32- and 64-bit headers,
+  `ref/chacha20_ref.c`). libsodium is ISC-licensed (Copyright (c) 2013-2026
+  Frank Denis); the amalgamation reproduces none of that notice — the only
+  header among those files is D. J. Bernstein's "Public domain" on
+  `chacha-merged.c`. ISC asks for its copyright and permission notice in all
+  copies, so `THIRD-PARTY-NOTICES`, `about.hbs` (and with it the HTML report)
+  and `PROVENANCE.txt`'s `embedded-licenses` name libsodium with the notice,
+  as the SHA-2 BSD notice is carried. Whether upstream should carry the notice
+  in the amalgamation is a report to utelle, not a Kupferdraht matter.
+- **Verification of the release**, as in 2026-09 (§75): the zip's SHA-256
+  equals its `SHA256SUMS` line; the sums file's Sigstore signature verifies
+  with `openssl dgst -sha256 -verify` against the certificate's public key
+  ("Verified OK"; serial 74B05ED601CAB26012800102F1C4DA8DF88731D7, issued
+  2026-11-15 for ten minutes to the repository's `build-reusable.yml` on
+  `main`); the chain to Fulcio and the Rekor inclusion stay unverified here
+  (no cosign). `LICENSE` at v2.7.1 is byte-identical to v2.5.1's.
+- **The fork chain, first time through:** rusqlite `v0.37.0-sqlite3mc-2.7.1`
+  (the four files, `sqlite-wasm-rs` requirement 0.6.3, `build.rs` unchanged),
+  refinery `v0.9.1-sqlite3mc-2.7.1` (a refinery tag names the engine release
+  from now on), openmls `openmls-v0.9.2-schwarzdigits.2`; each tag names the
+  previous, so the pushes go in that order and Kupferdraht's manifest cannot
+  resolve until the last one exists — the local gate before that point ran
+  with the manifest parked on the old tags.

@@ -816,9 +816,9 @@ fn a_wrong_target_marker_is_named() {
 
 fn outside_graph_sources() -> [String; 5] {
     [
-        "- SQLite3 Multiple Ciphers 2.5.1 — embeds SQLite 3.53.4 — SHA-2, AEGIS. Copyright (C) Olivier Gay\nall rights\n- sqlite-remote-vfs 0.6.0 and sqlite-remote-protocol 0.6.0 — Schwarz Digits".to_owned(),
-        "<h3>SQLite3 Multiple Ciphers 2.5.1 (SQLite 3.53.4)</h3> SHA-2, AEGIS. Copyright (C) Olivier Gay\nall rights <h3>sqlite-remote-vfs 0.6.0 and sqlite-remote-protocol 0.6.0</h3>".to_owned(),
-        "sqlite3mc-version: 2.5.1\nsqlite-version: 3.53.4\nembedded-licenses: BSD-3-Clause (SHA-2); MIT (AEGIS)\n".to_owned(),
+        "- SQLite3 Multiple Ciphers 2.7.1 — embeds SQLite 3.54.1 — SHA-2, AEGIS. Copyright (C) Olivier Gay\nall rights\n- sqlite-remote-vfs 0.6.0 and sqlite-remote-protocol 0.6.0 — Schwarz Digits".to_owned(),
+        "<h3>SQLite3 Multiple Ciphers 2.7.1 (SQLite 3.54.1)</h3> SHA-2, AEGIS. Copyright (C) Olivier Gay\nall rights <h3>sqlite-remote-vfs 0.6.0 and sqlite-remote-protocol 0.6.0</h3>".to_owned(),
+        "sqlite3mc-version: 2.7.1\nsqlite-version: 3.54.1\nembedded-licenses: BSD-3-Clause (SHA-2); MIT (AEGIS)\n".to_owned(),
         "[[package]]\nname = \"sqlite-remote-vfs\"\nversion = \"0.6.0\"\n\n[[package]]\nname = \"sqlite-remote-protocol\"\nversion = \"0.6.0\"\n".to_owned(),
         " * Copyright (C) Olivier Gay\n * all rights\n */\n".to_owned(),
     ]
@@ -847,7 +847,7 @@ fn the_components_outside_the_graph_are_checked_in_both_files() {
         );
 
         let mut stale_engine = outside_graph_sources();
-        stale_engine[index] = stale_engine[index].replace("2.5.1", "2.5.0");
+        stale_engine[index] = stale_engine[index].replace("2.7.1", "2.7.0");
         assert!(
             !differences_of(&stale_engine).is_empty(),
             "stale SQLite3MC in file {index}"

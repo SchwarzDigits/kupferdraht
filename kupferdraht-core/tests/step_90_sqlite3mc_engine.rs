@@ -72,6 +72,19 @@ fn provenance_value(provenance: &str, key: &str) -> String {
         .unwrap_or_else(|| panic!("`{key}:` missing in vendor/sqlite3mc/PROVENANCE.txt"))
 }
 
+/// `major.minor.release` at or above `floor`.
+fn version_at_least(version: &str, floor: [u32; 3]) -> bool {
+    let mut parts = version
+        .split('.')
+        .map(|part| part.parse::<u32>().expect("numeric version part"));
+    let got = [
+        parts.next().expect("major"),
+        parts.next().expect("minor"),
+        parts.next().unwrap_or(0),
+    ];
+    got >= floor
+}
+
 /// `(sqlite3mc version, sqlite version)` as pinned by the provenance record.
 fn pinned_versions() -> (String, String) {
     let provenance = workspace_file("vendor/sqlite3mc/PROVENANCE.txt");
@@ -174,10 +187,11 @@ fn lock_block(lock: &str, package: &str) -> String {
 /// The git sources of the SQLite3MC build line (ADR-0042): the SchwarzDigits
 /// forks, by tag. The lockfile completes each with the resolved commit.
 const RUSQLITE_SOURCE: &str =
-    "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.5.1";
-const REFINERY_SOURCE: &str = "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc";
+    "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.7.1";
+const REFINERY_SOURCE: &str =
+    "git+https://github.com/SchwarzDigits/refinery?tag=v0.9.1-sqlite3mc-2.7.1";
 const OPENMLS_STORAGE_SOURCE: &str =
-    "git+https://github.com/SchwarzDigits/openmls?tag=openmls-v0.9.2-schwarzdigits.1";
+    "git+https://github.com/SchwarzDigits/openmls?tag=openmls-v0.9.2-schwarzdigits.2";
 
 /// `libsqlite3-sys` is the SchwarzDigits rusqlite fork's sys crate, reached
 /// through rusqlite as a git dependency by tag — never crates.io's vanilla
@@ -380,6 +394,38 @@ fn engine_identity_is_the_vendored_sqlite3mc() {
         .query_row("SELECT sqlite_version()", [], |r| r.get(0))
         .expect("sqlite_version()");
     assert_eq!(sqlite_version, sqlite);
+}
+
+/// The floor under the engine release, independent of the equality
+/// `PROVENANCE.txt` pins: SQLite3MC 2.7.0 propagates encryption errors on
+/// writing, keeps the hot journal of an encrypted database and no longer
+/// drops a partial page read; 2.6.0 and 2.6.1 are out for their ChaCha20
+/// counter defect (a page written past the counter's wrap decrypted
+/// silently wrong on the other code path). SQLite 3.54.1 is the release
+/// 2.7.1 embeds; it fixes a heap-buffer overflow on 32-bit builds.
+#[test]
+fn engine_release_is_at_least_2_7_1() {
+    let (_dir, path) = fresh_path();
+    let store = SqliteStore::open(&path, &key_a()).expect("open");
+    let conn = store.lock().expect("lock");
+    let banner: String = conn
+        .query_row("SELECT sqlite3mc_version()", [], |r| r.get(0))
+        .expect("sqlite3mc_version()");
+    let release = banner
+        .rsplit(' ')
+        .next()
+        .expect("the release ends the banner");
+    assert!(
+        version_at_least(release, [2, 7, 1]),
+        "SQLite3MC {release}: 2.7.1 is the floor, 2.6.x excluded"
+    );
+    let sqlite: String = conn
+        .query_row("SELECT sqlite_version()", [], |r| r.get(0))
+        .expect("sqlite_version()");
+    assert!(
+        version_at_least(&sqlite, [3, 54, 1]),
+        "SQLite {sqlite}: 3.54.1 is the floor"
+    );
 }
 
 /// The compile-time default cipher is chacha20 — so the explicit

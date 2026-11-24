@@ -1,31 +1,39 @@
-SQLite3 Multiple Ciphers — vendored amalgamation provenance (Step 90, ADR-0021)
+SQLite3 Multiple Ciphers — vendored amalgamation provenance (Step 90, ADR-0021; release moved by Step 165)
 
-sqlite3mc-version: 2.5.1
-sqlite-version: 3.53.4
-release: https://github.com/utelle/SQLite3MultipleCiphers/releases/tag/v2.5.1 (published 2026-08-27)
-asset: sqlite3mc-2.5.1-sqlite-3.53.4-amalgamation.zip
-asset-sha256: 4125f8ff275ea953dabb3289331b20a0e76d4fc060f57148f4a5df3bf3b0d5e0
-sqlite3mc_amalgamation.c sha256: 59e30889a7b0106152e6d4fc3c18ac1592f252cb4defbb0a7e618fdecf1a221c
-sqlite3mc_amalgamation.h sha256: 034c22a23268735059850aa22ea79333865c093c90c32287cc03cc606dcbc177
-license: MIT (LICENSE next to this file, from the v2.5.1 tag); SQLite itself is public domain
-embedded-licenses: BSD-3-Clause (SHA-2); MIT (AEGIS, miniz); Unlicense (a part of miniz); CC0-1.0 (fastpbkdf2, Base64); CC0-1.0 OR Apache-2.0 (Argon2); public domain (MD5, SHA-1, Rijndael, ChaCha20 and Poly1305, Ascon)
+sqlite3mc-version: 2.7.1
+sqlite-version: 3.54.1
+release: https://github.com/utelle/SQLite3MultipleCiphers/releases/tag/v2.7.1 (published 2026-11-15)
+asset: sqlite3mc-2.7.1-sqlite-3.54.1-amalgamation.zip
+asset-sha256: d6bc59678e015c5ac6d3ec5d7b657c351230b36c8052b185e446c9d52ba01af0
+sqlite3mc_amalgamation.c sha256: 065561274c387230cb32443e830b2da0bb91f3c92f495b39308e416464488a4d
+sqlite3mc_amalgamation.h sha256: 9404d6d1974fc29fdb67089dc396ae84f89e5e85cd5ba07e94cae459a51c872b
+license: MIT (LICENSE next to this file, from the v2.7.1 tag — byte-identical to the v2.5.1 text); SQLite itself is public domain
+embedded-licenses: BSD-3-Clause (SHA-2); MIT (AEGIS, miniz); Unlicense (a part of miniz); CC0-1.0 (fastpbkdf2, Base64); CC0-1.0 OR Apache-2.0 (Argon2); ISC (libsodium); public domain (MD5, SHA-1, Rijndael, ChaCha20 and Poly1305, Ascon)
 
-Verification performed at vendoring (2026-09-24):
-- asset-sha256 recomputed locally (`shasum -a 256`) equals the asset's line in the
-  release's `sqlite3mc-2.5.1-SHA256SUMS`.
-- The SHA256SUMS signature (`sqlite3mc-2.5.1-SHA256SUMS.sig`, Sigstore keyless:
+Verification performed at vendoring (2026-11-23):
+- asset-sha256 recomputed locally (`sha256sum`) equals the asset's line in the
+  release's `sqlite3mc-2.7.1-SHA256SUMS`.
+- The SHA256SUMS signature (`sqlite3mc-2.7.1-SHA256SUMS.sig`, Sigstore keyless:
   base64-encoded DER ECDSA) verifies with `openssl dgst -sha256 -verify` against the
-  public key of the accompanying certificate (`sqlite3mc-2.5.1-SHA256SUMS.pem`,
+  public key of the accompanying certificate (`sqlite3mc-2.7.1-SHA256SUMS.pem`,
   base64-encoded PEM): "Verified OK". Certificate: issuer O=sigstore.dev,
-  CN=sigstore-intermediate; serial 44DFC0C5A4707D0335EF13E047598F1C1D72F851;
-  validity 2026-08-27T16:50:03Z – 17:00:03Z; SAN URI
+  CN=sigstore-intermediate; serial 74B05ED601CAB26012800102F1C4DA8DF88731D7;
+  validity 2026-11-15T10:57:16Z – 11:07:16Z; SAN URI
   https://github.com/utelle/SQLite3MultipleCiphers/.github/workflows/build-reusable.yml@refs/heads/main;
-  SHA-256 fingerprint 4A:21:6C:D3:55:F9:6B:3E:92:C3:2A:81:15:EE:2B:39:28:4C:03:8F:16:7E:9B:BD:25:6E:B0:7A:33:7F:E2:2E.
+  SHA-256 fingerprint 7A:9C:D4:00:37:05:74:66:DB:B7:9F:B9:5B:7D:AE:96:67:45:5E:38:0B:1F:74:E0:38:6E:B9:A7:21:C2:71:E2.
 - NOT verified locally (no cosign on the vendoring machine): the certificate chain to
   the Fulcio root and the Rekor transparency-log inclusion. `cosign verify-blob` on a
   machine that has it closes that gap.
 - Both files are vendored byte-for-byte from the zip. Not vendored (not build inputs):
   shell3mc_amalgamation.c, sqlite3.h, sqlite3ext.h, README.md.
+- The embedded license headers were read file by file. Since 2.6.0 the
+  hardware-accelerated ChaCha20 and Poly1305 paths are libsodium's source
+  (ISC, Copyright (c) 2013-2026 Frank Denis): the amalgamation carries none of
+  libsodium's notice (only D. J. Bernstein's "Public domain" on chacha-merged.c), so
+  THIRD-PARTY-NOTICES and about.hbs carry it. 2.6.0 and 2.6.1 were skipped: their
+  hardware-accelerated ChaCha20 carried a block-counter overflow into the nonce where
+  the scalar code wraps it, so a page written past the wrap decrypted silently wrong
+  on the other code path; 2.7.0 prevents the overflow.
 
 Re-vendoring (an SQLite3MC release bump): download the new amalgamation zip plus
 SHA256SUMS / .sig / .pem, verify as above, replace the two files, read the amalgamation's
