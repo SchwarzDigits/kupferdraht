@@ -46,7 +46,7 @@ its own SQLite database beside Kupferdraht takes `rusqlite` from the same
 fork, at the same tag Kupferdraht names in `kupferdraht-core/Cargo.toml`:
 
 ```toml
-rusqlite = { git = "https://github.com/SchwarzDigits/rusqlite", tag = "v0.37.0-sqlite3mc-2.5.1", version = "0.37", features = ["bundled"] }
+rusqlite = { git = "https://github.com/SchwarzDigits/rusqlite", tag = "v0.37.0-sqlite3mc-2.7.1", version = "0.37", features = ["bundled"] }
 ```
 
 A crates.io `rusqlite` in the same graph fails the build with Cargo's
@@ -2105,7 +2105,7 @@ engine (before Step 90) are not migrated — start from a fresh home.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct StorageEngineInfo {
     pub engine: String,             // "SQLite3 Multiple Ciphers"
-    pub version: String,            // "2.5.1"
+    pub version: String,            // "2.7.1"
     pub cipher: String,             // "chacha20"
     pub plaintext_header_size: u32, // 32
 }

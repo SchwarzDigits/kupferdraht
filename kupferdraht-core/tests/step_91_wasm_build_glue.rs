@@ -119,8 +119,8 @@ fn rust_sources(dir: &Path) -> Vec<(String, String)> {
 }
 
 /// `sqlite-wasm-rs` compiles the vendored, PROVENANCE-pinned amalgamation —
-/// not its bundled copy (ahead of the vendored 2.5.1 since 0.6.3; the pin is
-/// the config).
+/// not its bundled copy (another release than the vendored one since 0.6.3;
+/// the pin is the config).
 #[test]
 fn cargo_config_points_the_wasm_engine_at_the_vendored_amalgamation() {
     let config = workspace_file(".cargo/config.toml");
@@ -202,7 +202,7 @@ fn resolved_manifest_dir(package: &str, source: &str) -> PathBuf {
 fn the_forks_sys_crate_carries_the_wasm_arm() {
     let sys_dir = resolved_manifest_dir(
         "libsqlite3-sys",
-        "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.5.1",
+        "git+https://github.com/SchwarzDigits/rusqlite?tag=v0.37.0-sqlite3mc-2.7.1",
     );
     let read = |rel: &str| {
         let path = sys_dir.join(rel);
@@ -374,7 +374,9 @@ async fn generate_step_91_fixture() {
 
 /// The committed fixture: readable magic, rollback-journal header bytes,
 /// the chacha20 reserve, ciphertext payload — and the native store reads
-/// it back under the fixture key.
+/// it back under the fixture key. The bytes were written under SQLite3MC
+/// 2.5.1 and are never regenerated, so every later engine release that
+/// reads them proves the `chacha20` file format unchanged (Step 165).
 #[tokio::test]
 async fn native_fixture_is_committed_and_readable() {
     let path = fixture_path();

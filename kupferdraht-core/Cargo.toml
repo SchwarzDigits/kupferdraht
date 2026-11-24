@@ -61,9 +61,9 @@ async-trait = "0.1"
 # compiles the SAME vendored amalgamation for the browser. refinery and
 # openmls_sqlite_storage come from the sibling forks: the graph holds one
 # rusqlite (`links = "sqlite3"`), so every site names the same tag.
-rusqlite = { git = "https://github.com/SchwarzDigits/rusqlite", tag = "v0.37.0-sqlite3mc-2.5.1", version = "0.37", features = ["bundled"] }
+rusqlite = { git = "https://github.com/SchwarzDigits/rusqlite", tag = "v0.37.0-sqlite3mc-2.7.1", version = "0.37", features = ["bundled"] }
 # Schema migrations (Step 1+); one file per step under storage/migrations/.
-refinery = { git = "https://github.com/SchwarzDigits/refinery", tag = "v0.9.1-sqlite3mc", version = "0.9", features = ["rusqlite"] }
+refinery = { git = "https://github.com/SchwarzDigits/refinery", tag = "v0.9.1-sqlite3mc-2.7.1", version = "0.9", features = ["rusqlite"] }
 # Persistent openmls state backed by the shared `rusqlite` (Step 1c.5) —
 # `mls.db` on native and, over sqlite-remote-vfs, in the browser (Step 91,
 # Step 111). The openmls fork's branch `schwarzdigits/openmls-0.9` carries
@@ -72,7 +72,7 @@ refinery = { git = "https://github.com/SchwarzDigits/refinery", tag = "v0.9.1-sq
 # migrations in one transaction (Step 142, the backport of
 # openmls/openmls#2323), the two crypto crates below are upstream's 0.6.0
 # on the p256 0.14 line (Step 128).
-openmls_sqlite_storage = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.2-schwarzdigits.1", version = "0.3" }
+openmls_sqlite_storage = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.2-schwarzdigits.2", version = "0.3" }
 # Step 1c: MLS (RFC 9420). Wire targets ciphersuite 0x0002
 # (MLS_128_DHKEMP256_AES128GCM_SHA256_P256) with ECDSA_SECP256R1_SHA256
 # signatures so iOS clients can back keys with Secure Enclave (LEARNINGS §1.2).
@@ -91,8 +91,8 @@ openmls_traits = "0.6"
 # 0.14, `hpke-rs` 0.8) ahead of an openmls release, so `crypto-bigint` 0.5
 # (RUSTSEC-2026-0387) is out of the graph. Code upstream's, manifests only;
 # `openmls_traits` resolves to the crates.io crate the line above names.
-openmls_rust_crypto = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.2-schwarzdigits.1", version = "0.6" }
-openmls_basic_credential = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.2-schwarzdigits.1", version = "0.6" }
+openmls_rust_crypto = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.2-schwarzdigits.2", version = "0.6" }
+openmls_basic_credential = { git = "https://github.com/SchwarzDigits/openmls", tag = "openmls-v0.9.2-schwarzdigits.2", version = "0.6" }
 tls_codec = { version = "0.5", features = ["derive"] }
 # Step 4: Wire's text-message envelope is a Protobuf
 # `GenericMessage`. `prost` + the build-time `prost-build` plugin
@@ -304,7 +304,7 @@ tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "test-u
 # tests to `openmls_sqlite_storage` internals. Same source and feature as
 # the dependency site — the fork's sys crate is one build. `hooks`: the
 # Step-97c tests count commits per MLS operation (`commit_hook`).
-rusqlite = { git = "https://github.com/SchwarzDigits/rusqlite", tag = "v0.37.0-sqlite3mc-2.5.1", version = "0.37", features = ["bundled", "hooks"] }
+rusqlite = { git = "https://github.com/SchwarzDigits/rusqlite", tag = "v0.37.0-sqlite3mc-2.7.1", version = "0.37", features = ["bundled", "hooks"] }
 
 [build-dependencies]
 # Step 4: compile `proto/generic_message.proto` into Rust at build

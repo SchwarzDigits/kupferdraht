@@ -751,7 +751,7 @@ Since Step 110 (ADR-0035):
   location} | null` (async) — what the app-data store's encryption
   engine reports about itself, read off the live connection (the browser
   flavor of `Client::storage_engine`; `SQLite3 Multiple Ciphers` /
-  `2.5.1` / `chacha20` / `32` on today's build); `location` (Step 122)
+  `2.7.1` / `chacha20` / `32` on today's build); `location` (Step 122)
   is `"server"` for databases on the storage server, else `"local"`.
 - `pushState() -> "connected" | "polling" | "stopped"` (Step 122) —
   whether sync runs on push: the sync loop has an open socket, runs

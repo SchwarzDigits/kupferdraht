@@ -550,13 +550,13 @@ mod tests {
     fn storage_line_names_engine_cipher_and_header_mode() {
         let info = StorageEngineInfo {
             engine: "SQLite3 Multiple Ciphers".into(),
-            version: "2.5.1".into(),
+            version: "2.7.1".into(),
             cipher: "chacha20".into(),
             plaintext_header_size: 32,
         };
         assert_eq!(
             storage_line(Some(&info)),
-            "storage: SQLite3 Multiple Ciphers 2.5.1 · chacha20 · plaintext header 32"
+            "storage: SQLite3 Multiple Ciphers 2.7.1 · chacha20 · plaintext header 32"
         );
     }
 

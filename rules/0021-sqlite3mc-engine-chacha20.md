@@ -28,7 +28,8 @@ tree with Step 90 (engine swap, 2026-09-24).
   upstream's `bundled` flags + `SQLITE_TEMP_STORE=2`; current rule:
   `rules/0042-sqlite3mc-via-forked-rusqlite-not-a-root-patch.md`. **Don't**
   bring the `[patch.crates-io]` stand-in back.
-  **Don't** pass `SQLITE_EXTRA_INIT=sqlite3mc_initialize` on 2.5.x.
+  **Don't** pass `SQLITE_EXTRA_INIT=sqlite3mc_initialize` on 2.5.x and later
+  (2.7.1 verified, observations §109).
   **Don't** reintroduce vendored OpenSSL. **Don't** use libsqlite3-sys's
   non-bundled `SQLITE3_LIB_DIR` route (`openmls_sqlite_storage` forces
   `bundled`; the route probes pkg-config first).

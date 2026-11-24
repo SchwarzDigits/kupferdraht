@@ -36,7 +36,7 @@ directory:
 | `sync.lock`   | per `accounts/<id>/` (Step 97d, ADR-0031): one sync dispatch per account at a time across processes — held while a fetched page is processed, waited for up to 5 s. Same mechanics as `kupferdraht.lock`. |
 
 `kupferdraht-cli status` prints the engine actually linked and in effect as
-its last line, e.g. `storage: SQLite3 Multiple Ciphers 2.5.1 · chacha20 ·
+its last line, e.g. `storage: SQLite3 Multiple Ciphers 2.7.1 · chacha20 ·
 plaintext header 32`. Databases written before Step 90 (SQLCipher format)
 are not migrated — start from a fresh `KUPFERDRAHT_HOME`.
 
@@ -337,7 +337,7 @@ login label in effect for this home, `kupferdraht-<home-id>`) and
 shared label on Wire's side until its next `login`) — followed by one
 `storage:` line naming the whole-DB encryption engine, cipher scheme
 and header mode read off the open store (`storage: SQLite3 Multiple
-Ciphers 2.5.1 · chacha20 · plaintext header 32`; a custom
+Ciphers 2.7.1 · chacha20 · plaintext header 32`; a custom
 `StorageProvider` that reports no engine prints `storage: (engine not
 reported by this backend)`).
 
@@ -356,7 +356,7 @@ session:
   home_id:                   0123456789abcdef0123456789abcdef
   stored_session_label:      kupferdraht-0123456789abcdef0123456789abcdef
   stored_session_label:      kupferdraht-0123456789abcdef0123456789abcdef
-storage: SQLite3 Multiple Ciphers 2.5.1 · chacha20 · plaintext header 32
+storage: SQLite3 Multiple Ciphers 2.7.1 · chacha20 · plaintext header 32
 ```
 
 A `stored_session_label` that differs from `session_label` (or shows `—`) is a
