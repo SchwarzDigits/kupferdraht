@@ -149,7 +149,8 @@ public-domain entries are unchanged.
    `step_91_wasm_build_glue`, `third_party_notices`, the storage unit tests),
    the wasm32 check (the wasm engine compiles the changed vendor directory).
    CI half: the full suite, `cargo deny`, the wasm job with the browser
-   tests (the fixture opened by the browser's 2.7.1), the compliance scans.
+   tests (the browser's own databases under 2.7.1; the 2.5.1 fixture is
+   read natively only), the compliance scans.
 5. **Smoke on server 4** (valid client flows only): a home created with the
    v0.6.0 CLI (engine 2.5.1, a login and a room with a message), then the
    same home opened by this branch's CLI: `status` names 2.7.1, the rooms

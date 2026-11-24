@@ -2532,9 +2532,10 @@ SQLite3MC function called):
   stays forbidden (rules/0021, `vendor/README.md` recipe 4: a second
   registration fails initialization).
 - **The file format is unchanged:** the Step-91 fixture, written under 2.5.1
-  and never regenerated, opens under 2.7.1 natively
-  (`native_fixture_is_committed_and_readable`) and in the browser suite; the
-  compile-time default cipher stays `chacha20`. The at-rest pins of Step 90
+  and never regenerated, opens under 2.7.1
+  (`native_fixture_is_committed_and_readable`; no browser test reads it — the
+  browser suite proves the 2.7.1 build writes and reads its own databases);
+  the compile-time default cipher stays `chacha20`. The at-rest pins of Step 90
   (plaintext header, 32 reserved bytes, ciphertext payload, wrong key fails at
   open) hold on 2.7.1.
 - **The browser compiles it too:** `sqlite-wasm-rs` 0.6.3 compiled the
