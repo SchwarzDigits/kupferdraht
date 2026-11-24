@@ -1,10 +1,22 @@
 # Step 165 — SQLite3MC 2.7.1: the engine leaves 2.5.1, skipping 2.6
 
-**Status: in progress** — commissioned 2026-11-23 (Volker), from the review
-of Dependabot's lockfile group of 2026-11-22: sqlite-wasm-rs 0.6.3 began to
-bundle SQLite3MC 2.6.1, which raised the question of the vendored engine's
-own age. Branch `step/165-sqlite3mc-2.7.1` off `main` `b380398`. No new
-public symbol, no CLI command (`status` already prints the engine).
+**Status: MERGED 2026-11-24** — commit `f24d6dc` with the docs fix-up `860f8b4`
+(PR #121, `9bcaf52`, 2026-11-24). The fork chain the same day, in order and
+signed: rusqlite `v0.37.0-sqlite3mc-2.7.1` (`fdfc1d8`), refinery
+`v0.9.1-sqlite3mc-2.7.1` (`47b0abd`), openmls `openmls-v0.9.2-schwarzdigits.2`
+(`f69b9b9`). Locally fmt, 0 build warnings, clippy native, 203 tests in the
+step's five targets, the wasm32 check, wasm clippy `--lib` and CI's line, the
+CLI's `storage_line` tests, `cargo metadata --locked`; CI green on both runs.
+Smoke on server 4 (Wire 5.38.9) on 2026-11-24: two homes written by main's
+CLI (engine 2.5.1), opened by this branch's CLI — `status` names 2.7.1, the
+2.5.1-written timeline reads, a message each way on the 2.5.1-written MLS
+state, both devices purged; 18 ok, 0 failed. Retrospective: LEARNINGS 5.107.
+
+Commissioned 2026-11-23 (Volker), from the review of Dependabot's lockfile
+group of 2026-11-22: sqlite-wasm-rs 0.6.3 began to bundle SQLite3MC 2.6.1,
+which raised the question of the vendored engine's own age. Branch
+`step/165-sqlite3mc-2.7.1` off `main` `b380398`. No new public symbol, no CLI
+command (`status` already prints the engine).
 
 ## Problem
 

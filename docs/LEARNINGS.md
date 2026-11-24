@@ -3427,3 +3427,52 @@ touched it.
   the check's remaining list, and the review changed none of their wording.
   The check's temporary list stays, empty: a row in it is a conscious
   transition, and the test that pins it empty makes it one.
+
+### 5.107 A fork workspace with two tag sites, a script's line that never ran, and a suite credited with a test it has not got (Step 165)
+
+- **A fork workspace names the tag at more sites than the one its consumer
+  reads.** The refinery fork's `refinery_core/Cargo.toml` was moved; its
+  `examples/Cargo.toml` names the same rusqlite tag, and cargo resolves the
+  workspace as one graph: two tags are two `libsqlite3-sys` with the same
+  `links` value, and the check stops. Before a retag, grep the whole fork
+  workspace for the old tag; the `links` conflict is the symptom, not the
+  cause.
+- **A hand-off script runs the lines it carries, not the lines the gate ran.**
+  The gate ran `cargo test -p kupferdraht-cli storage_line`; the script said
+  `--lib storage_line` on a crate without a library, and `-p refinery_core`
+  for a package called `refinery-core`. Both failed on Volker's run, not on
+  mine. A script's cargo lines are run once as written before the hand-off,
+  or the script is the gate.
+- **A sentence that credits a suite with a proof names the test, or it is
+  a guess.** Observations §109 said the browser suite opens the 2.5.1
+  fixture under 2.7.1; no browser test reads the fixture — the native
+  `native_fixture_is_committed_and_readable` does, and the browser suite
+  proves the 2.7.1 build on databases of its own. The sentence was written
+  from what the suite ought to cover; `grep` for the fixture's path would
+  have taken a second. Found while reading the CI log after the green run,
+  fixed before the merge.
+- **A release three versions behind is read release by release.** 2.7.0's
+  changelog names the 2.6.x ChaCha20 counter defect; the 2.7.1 notes do not.
+  Had only the newest notes been read, 2.6.x would have looked like an
+  ordinary skipped minor. Every intermediate changelog is read when an engine
+  moves more than one release.
+- **An amalgamation can drop a notice its release notes never mention.** The
+  2.7.1 amalgamation embeds libsodium's ChaCha20 and Poly1305 files (since
+  2.6.0) under ISC, and reproduces none of libsodium's notice; the only
+  header among them is Bernstein's public-domain line. Step 150's duty, the
+  file-by-file reading of vendored third-party code, found it; the notices
+  now carry the text, and the notices test reads PROVENANCE's
+  `embedded-licenses` line so a future release cannot drop a component
+  silently.
+- **A manifest on tags that do not exist yet blocks every cargo command.**
+  Until the three forks were pushed in order, `kupferdraht-core/Cargo.toml`
+  named tags cargo could not fetch, and `fmt`, `test` and `metadata` all
+  stopped at resolution. The tag diff was parked (`git diff > patch`,
+  checkout, run, `git apply`) twice; the lockfile moved only once, after
+  the last tag, by `cargo metadata` without `--locked` — eight source lines,
+  no version.
+- **An upgrade smoke needs the previous binary.** The engine's promise is
+  that files written under 2.5.1 open under 2.7.1; the only way to write
+  such files on the day is main's CLI, built in a worktree with its own
+  target directory (1.2 GB, removed after the run). A kept release binary
+  would serve the next engine bump.
