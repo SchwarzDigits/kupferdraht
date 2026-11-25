@@ -3476,3 +3476,43 @@ touched it.
   such files on the day is main's CLI, built in a worktree with its own
   target directory (1.2 GB, removed after the run). A kept release binary
   would serve the next engine bump.
+
+### 5.108 A position on a device's clock, a doc pin on a word, and a smoke whose second run met a room that outlived its devices (Step 129a)
+
+- **A position kept on this device's clock cannot travel.** Step 151 made the
+  read marker an `arrived_at_ms` on the device's own clock, deliberately, so a
+  message delivered late is unread. Step 129a had to carry a position to another
+  device, and the only time both devices share is the backend's (`sent_at_ms`,
+  what Kalium writes into `LastRead`). The mapping — the latest arrival among
+  the room's rows sent by then — went into the store as one query. A design
+  that keeps two clocks must say which one leaves the device; the plan's phase 1
+  asked exactly that question, and the answer shaped the store before the tests
+  were written.
+- **A doc pin on a word catches the next entry that uses the word.** Step 138's
+  test finds the first CHANGELOG section containing `ReceiptType` and demands
+  `BREAKING` in it; the Step 129a entry said "with either `ReceiptType`" under
+  `[Unreleased]` and the Step 138 test went red. The entry was reworded ("with
+  or without a receipt"). A pin that must survive later entries names the
+  change it guards (the sentence, not a type's name), or looks in the release
+  section that shipped it.
+- **A smoke's second run meets the state its first run left.** The first run
+  found the personal room at epoch 0 on wire-ref: the first device established
+  it and Added the second through the self-claim, the second absorbed the
+  Welcome in `sync` and read the `LastRead`. Both devices were purged at the
+  end; the room stayed at its epoch. The second run's first device
+  external-joined, nobody Added the second, and every receive check on it
+  failed while the sends from it passed (its own read joined it first, Step
+  86's inheritance). The script now joins both devices explicitly, and the
+  docs say when a device receives positions. A fixture that creates state on a
+  shared server is run twice before it is called green.
+- **Captures in a static outlive the test that made them.** httpmock reuses
+  addresses within a process (§5.13 already), so a `find` over all captures of
+  a host returned an earlier test's Welcome and `join_via_welcome` panicked
+  three tests deep. The most recent match and a per-test start offset for the
+  upload count fixed it; the Step 86 file's `latest_capture` had said so.
+- **A reading before the design, by a subagent with pinned revisions, held.**
+  The Kalium/proto readings (32, 33) were fetched at pinned commits and
+  recorded with permalinks before the rule was fixed; the line anchors are
+  ±2 (the raw files carry no numbers), the function names are exact. The
+  plan's claim "Wire's clients send and honour `LastRead`" became a cited fact
+  before any test depended on it.

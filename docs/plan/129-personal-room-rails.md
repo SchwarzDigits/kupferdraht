@@ -11,6 +11,11 @@ measured there against `4f30f02`) and split into sub-steps (Volker):
   the personal room, behind the browser surface of Step 138 unchanged. It
   reports through Step 146's `changed_rooms` / `changedRooms`. A received
   `LastRead` clears the device-local unread flag like a local read does.
+  **MERGED 2026-11-25**: commit `40d61e3` (PR #124, merge `bfa7961`); smoke
+  on server 4 (Wire 5.38.9) on 2026-11-25, two devices of one account and
+  a counterpart, 33 ok, 0 failed (observations §110); 13 integration and
+  10 unit tests; the readings are `docs/wire/kalium-readings.md` 32 and
+  33. Retrospective: LEARNINGS 5.108.
 - **129b — the hide marker**: Step 89's hide-on-own-devices marker
   (`MessageHide`) through the personal room, with ADR-0014's revision
   note on the personal task list. After 129a, no fixed slot.
