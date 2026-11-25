@@ -1,6 +1,10 @@
 # Step 166 — The backend specification corrected and ahead of the code
 
-**Status: commissioned 2026-11-25** (Volker). Docs only, no change of behaviour; the
+**Status: MERGED 2026-11-25** — commit `176a9f2` (PR #127, merge `88aedd0`); no smoke
+(docs); doc-pin tests green; A-11 and A-14 decided like Wire the same day; the Rust
+server's coordinator closes its decision 24. Retrospective: LEARNINGS 5.109.
+
+**Commissioned 2026-11-25** (Volker). Docs only, no change of behaviour; the
 first of the steps cut from the coordinator's review of Kupferdraht 0.6.0 against the
 Rust server and Wire 5.38.9 (its decision 24 and the galley plan's §8 list the
 contradictions). It goes first so that Steps 167–174 start from a spec that is right.

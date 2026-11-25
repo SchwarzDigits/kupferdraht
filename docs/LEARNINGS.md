@@ -3516,3 +3516,23 @@ touched it.
   ±2 (the raw files carry no numbers), the function names are exact. The
   plan's claim "Wire's clients send and honour `LastRead`" became a cited fact
   before any test depended on it.
+
+### 5.109 A specification written from the code's reading, and two findings that were one question (Step 166)
+
+- **A label the code never switched on was written from memory, and stayed
+  wrong for months.** `backend-spec.md` said `404` where Wire answers
+  `403 not-connected` for an unknown 1:1 peer, required the team `admin`
+  role for a delete that Wire gates by the conversation role, and let a
+  `PrivateMessage` commit through in W-2 while §10.2 refused it. None of
+  it had broken Kupferdraht, because the client folds every non-2xx into
+  `BackendRejected` and switches on four labels only. The correction came
+  from the Rust server's golden recordings of the reference server — a
+  table of route, case and answer — not from reading code again. A spec's
+  error section is written from recorded answers, or it marks the entries
+  it has not seen.
+- **Two findings that touch one flow are one question.** A-14 (Kupferdraht's
+  groups have no team) and A-11 (whether the team delete route checks the
+  team) read as independent items; together, decided one way, they would
+  have made `delete_room` fail for every room Kupferdraht creates. Asking
+  them as one question, with the interplay named, got one decision — both
+  as Wire does it — and no code step.
