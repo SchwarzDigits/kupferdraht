@@ -1435,6 +1435,46 @@ route (the versioned `/v{N}/await` variants 404 at nginx; verified
   socket registered, and a frame moving the cursor would make a
   missed push permanent.
 
+## Step 166 discovery: the labels of the conversation routes on Wire 5.38.9
+
+Read from the Rust server's golden recordings of the reference VM (Wire
+5.38.9, `wire-server-rs/tests/stack/golden/galley/*.json`, recorded with
+throwaway accounts on 2026-11-24/25), for the routes Kupferdraht uses. The
+specification's label catalogue (§3.3) and its sections follow them.
+
+| Route | Case | Answer |
+|---|---|---|
+| `GET /conversations/{d}/{c}` | not a member | `403 access-denied` |
+| the same | unknown, or deleted | `404 no-conversation` |
+| `PUT …/name` | not a member | `404 no-conversation` |
+| `PUT …/name` | too long | `400 client-error` |
+| `POST …/typing` | not a member | `404 no-conversation` |
+| `GET …/groupinfo` | before the first commit (the self conversation) | `404 mls-missing-group-info` |
+| `GET …/groupinfo` | an unestablished 1:1 reservation; not a member | `404 no-conversation` |
+| `PUT …/access` | without the role; the self conversation; a private room; team members only outside a team | `403 invalid-op` |
+| `PUT …/access` | not a member | `404 no-conversation` |
+| `POST /conversations` | with `qualified_users` | `400 non-empty-member-list` |
+| `POST /conversations` | in a team without access roles | `403 access-denied` |
+| `POST /conversations` | in a team as an outsider | `403 no-team-member` |
+| `DELETE /teams/{t}/conversations/{c}` | again; not a member | `404 no-conversation` |
+| `DELETE /teams/{t}/conversations/{c}` | the self conversation | `403 invalid-op` |
+| `GET /one2one-conversations/{d}/{u}` | not connected; oneself without a team; an unknown user | `403 not-connected` |
+| `DELETE …/members/{d}/{u}` | another member (MLS) | `403 invalid-op` |
+| `DELETE …/members/{d}/{u}` | leaving again | `404 no-conversation` |
+| `DELETE …/members/{d}/{u}` | the self conversation | `403 invalid-op` |
+| `POST /conversations/{c}/code` | a member without the right | `403 access-denied` |
+| `POST /conversations/{c}/code` | with a password while a link exists | `409 create-conv-code-conflict` |
+| `POST /conversations/{c}/code` | the first link; again | `201` with `conversation.code-update`; `200` with the code envelope |
+| `GET /conversations/{c}/code`, `DELETE` | no link | `404 no-conversation-code` |
+| `GET /conversations/join` | wrong code; a revoked link | `404 no-conversation-code` |
+| `POST /conversations/join` | wrong or missing password | `403 invalid-conversation-password` |
+| `POST /conversations/join` | a short password | `400 bad-request` |
+| `POST /conversations/join` | the room's `access` without `code` | `403 access-denied` |
+| `POST /conversations/join` | a member already | `204` |
+
+A rename of the self conversation is allowed (`200`); it cannot be left or
+deleted (`403 invalid-op`).
+
 ## Step 129a discovery: the read position rides the self conversation
 
 Wire keeps no read position on the server. Its clients carry it between a

@@ -53,6 +53,19 @@ is no skill for it — it is this short procedure:
 
 ### Changed
 
+- **The backend specification is corrected and runs ahead of the code**
+  (Step 166, docs only): the 1:1 type is `2`; a commit is a `PublicMessage`
+  and a `PrivateMessage` commit is refused (W-2); every `404` and `403` of
+  the conversation routes carries its label — `no-conversation` for
+  unknown or not a member, `invalid-op` for rights, `not-connected` for an
+  unknown or unreachable 1:1 peer, `mls-missing-group-info` before the
+  first commit — from Wire 5.38.9's recorded answers; the member-remove
+  route refuses another member and serves self-leave alone; the access and
+  join-link routes are specified as the code uses them; `qualified_users`
+  may be omitted; the four room events' payloads are spelled out; the
+  second-factor code is requested with `POST /verification-code/send`, for
+  the login and for `POST /clients`. Section 17 holds the planned
+  behaviour of Steps 167 to 174, each paragraph naming its step.
 - **The whole-database encryption engine is SQLite3 Multiple Ciphers 2.7.1
   on SQLite 3.54.1** (Step 165; before: 2.5.1 on 3.53.4). The `chacha20`
   scheme, the raw 32-byte key and the file format are unchanged: a database
