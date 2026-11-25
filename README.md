@@ -67,8 +67,9 @@ end-to-end encrypted with MLS (RFC 9420):
   - replies / quotes and @-mentions; a quote carries the hash Wire's clients verify
   - edits and delete-for-everyone (tombstoned, reply chains stay renderable)
   - emoji reactions
-  - read receipts and delivery status; a device-local read position with a
-    private read (no receipt) and a hand-set unread flag
+  - read receipts and delivery status; a read position that follows the account
+    across devices (Wire's `LastRead` in the personal room), a private read (no
+    receipt) and a device-local hand-set unread flag
   - ping and location messages
   - room events in the timeline: a room's creation, renames, joins and leaves, as data for the embedder to word
   - disappearing text with a sender-chosen timer — Wire's official clients show the countdown; inbound ones self-redact locally when the timer elapses

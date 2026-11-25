@@ -1435,6 +1435,45 @@ route (the versioned `/v{N}/await` variants 404 at nginx; verified
   socket registered, and a frame moving the cursor would make a
   missed push permanent.
 
+## Step 129a discovery: the read position rides the self conversation
+
+Wire keeps no read position on the server. Its clients carry it between a
+user's devices as the `GenericMessage` variant `LastRead` (field 6) sent into
+the self conversation — Kupferdraht's personal room — as the README of
+wireapp/generic-message-proto says of `LastRead` and `MessageHide`: "Internal
+message, sent on self conversation to notify other clients (belonging to the
+same user)". Read in Kalium at `818b3419` on 2026-11-25
+(`docs/wire/kalium-readings.md` 32 and 33):
+
+- **Sending.** A read enqueues the conversation with the time of the message
+  read; a 3 s debounce keeps the newest time per conversation. Unless the
+  stored read date is newer, Kalium persists the date locally and sends
+  `LastRead { conversation_id (legacy, unqualified), qualified_conversation_id,
+  last_read_timestamp }` — epoch milliseconds — as a signalling message into
+  **every** self conversation it has: the Proteus one, and the MLS one when an
+  MLS client is registered. Kupferdraht's personal room is the MLS self
+  conversation, the only one it sends into.
+- **Receiving.** A `LastRead` counts only when the sender is the self user
+  **and** the carrying message arrived in a self conversation; anything else
+  is dropped without a log. Accepted positions apply forward-only, in memory
+  (`content.time > current`) and in SQL (`UPDATE … WHERE last_read_date <
+  :last_read_date`), and the unread events up to the time go. An unknown
+  conversation is a no-op: the UPDATE touches no row.
+- **Ids.** On receive the qualified id wins; a message with the legacy
+  `conversation_id` alone names a conversation of the own backend's domain.
+- **Whose time.** Kalium reads and writes the message's `date`, the backend's
+  time (Kupferdraht's `sent_at_ms`, Step 151), never a device clock.
+  Kupferdraht's own position is `arrived_at_ms` on this device's clock, so a
+  received time is mapped onto the latest arrival among the room's rows sent
+  by then (`Store::latest_arrival_sent_at_or_before`), and a sent `LastRead`
+  carries the read item's `sent_at_ms`.
+- **`MessageHide`** (field 12, Step 129b): "delete for me" sends
+  `MessageHide { conversation_id, qualified_conversation_id, message_id }`
+  into every self conversation and tombstones the row locally (an ephemeral
+  one is hard-deleted); a received one is applied when it arrived in a self
+  conversation — Kalium checks no sender there — and hard-deletes the named
+  row. Kupferdraht will require the sender too, as it does for `LastRead`.
+
 ## Step 151 discovery: whose time a message has
 
 The Swagger requires `time` on an `Event` and on `MLSMessageSendingStatus`, the answer to

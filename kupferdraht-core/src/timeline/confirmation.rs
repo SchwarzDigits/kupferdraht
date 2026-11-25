@@ -50,8 +50,10 @@ impl Timeline {
     ///
     /// An item unknown locally anchors no position: the marker stays,
     /// the flag still clears — the caller's "this room is read" holds.
-    /// The position and the flag are device-local; the cross-device read
-    /// position is a later step.
+    /// A known item's read also goes to the account's other devices, as
+    /// Wire's `LastRead` in the personal room (Step 129a, best effort,
+    /// either receipt type): their position follows; the flag stays
+    /// device-local.
     ///
     /// matrix-rust-sdk analog: `Timeline::send_single_receipt`.
     ///
@@ -70,7 +72,11 @@ impl Timeline {
         }
         // The local read position first — the receipt gate below governs
         // the outbound wire signal, not the position (Step 67).
-        self.advance_read_position(&item_id).await?;
+        if let Some(sent_at_ms) = self.advance_read_position(&item_id).await? {
+            self.client
+                .share_read_position(&self.room_id, sent_at_ms)
+                .await;
+        }
         if receipt == ReceiptType::ReadPrivate
             || self
                 .client
@@ -91,22 +97,25 @@ impl Timeline {
 
     /// Move the device-local marker to `item_id`'s position when the item
     /// is known locally (the store's upsert keeps it forward-only and
-    /// clears the flag), else clear the flag alone (Step 138).
-    async fn advance_read_position(&self, item_id: &str) -> Result<(), KupferdrahtError> {
+    /// clears the flag), else clear the flag alone (Step 138). Returns the
+    /// known item's backend time, what the other devices are told
+    /// (Step 129a).
+    async fn advance_read_position(&self, item_id: &str) -> Result<Option<i64>, KupferdrahtError> {
         let Some(store) = self.client.store_handle() else {
-            return Ok(());
+            return Ok(None);
         };
-        match self
+        let known = self
             .client
             .lookup_timeline_event(&self.room_id, item_id)
-            .await?
-        {
-            Some(record) => {
-                store
-                    .set_read_marker(&self.room_id, record.arrived_at_ms)
-                    .await
-            }
-            None => store.set_unread_flag(&self.room_id, false).await,
+            .await?;
+        if let Some(record) = known {
+            store
+                .set_read_marker(&self.room_id, record.arrived_at_ms)
+                .await?;
+            Ok(Some(record.sent_at_ms))
+        } else {
+            store.set_unread_flag(&self.room_id, false).await?;
+            Ok(None)
         }
     }
 }

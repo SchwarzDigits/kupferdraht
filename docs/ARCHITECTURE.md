@@ -374,7 +374,13 @@ transport (see `docs/library.md`, "Choosing the receive transport").
   commit: own other devices Added, self-update when solo) and
   external-joins from every later one; `join_all_rooms` inherits the
   branch, `Client::personal_room` is the lookup (Step 86,
-  `client/personal_room.rs`).
+  `client/personal_room.rs`). Since Step 129a it carries the account's
+  read position: `Timeline::mark_as_read` sends Wire's `LastRead` there
+  (`timeline/read_position.rs`), and `sync/dispatch/read_position.rs`
+  applies one from another own device onto this device's `arrived_at_ms`
+  position (`Store::latest_arrival_sent_at_or_before`, then
+  `advance_read_marker`, forward only) and names the room in
+  `changed_rooms`.
 
 ### 5.5 File attachments — the two-channel flow
 

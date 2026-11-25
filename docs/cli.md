@@ -1253,7 +1253,14 @@ flag clears. Wire-side emits a `Confirmation { type: READ,
 first_message_id }` carrying just the supplied id. Recipients stamp
 `(message_id, reader_user_id)` into `read_receipts`; Wire web shows a
 "read" indicator next to the original message. With `--no-receipt` the
-read is private: the position moves, nothing leaves the device.
+read is private: the position moves, the room learns nothing.
+
+Since Step 129a the read also reaches the account's other devices: a
+`LastRead` for the room goes into the personal room, with or without
+`--no-receipt`, and their read position follows — Wire's own apps included.
+A device not yet in the personal room joins it first. The upload is best
+effort: a refusal is logged, the local read stands, the output does not
+change.
 
 **Step 10f gate**: when the user has read receipts disabled
 (`WIRE_RECEIPT_MODE = 0` — toggled via Wire-Web → Settings →
