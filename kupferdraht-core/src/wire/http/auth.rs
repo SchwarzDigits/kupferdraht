@@ -372,6 +372,31 @@ impl HttpClient {
         self.send_no_body(req, "update_self_handle").await
     }
 
+    /// `PUT /v{api_version}/self/supported-protocols` — declare the protocols
+    /// this account's clients speak (Step 167). brig keeps the list per user
+    /// and starts a new account with `["proteus"]`; Wire's clients take the
+    /// intersection of two accounts' lists for a 1:1's protocol.
+    ///
+    /// # Errors
+    /// * `BackendRejected` on non-2xx statuses.
+    /// * `Network` for transport failures.
+    pub async fn update_self_supported_protocols(
+        &self,
+        api_version: u32,
+        access_token: &str,
+        protocols: &[&str],
+    ) -> Result<(), KupferdrahtError> {
+        debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
+        debug_assert!(!protocols.is_empty(), "a protocol list names at least one");
+        let path = format!("/v{api_version}/self/supported-protocols");
+        let url = self.url(&path)?;
+        let body = serde_json::json!({ "supported_protocols": protocols });
+        debug!(%url, ?protocols, "PUT self/supported-protocols");
+        let req = self.client.put(url).bearer_auth(access_token).json(&body);
+        self.send_no_body(req, "update_self_supported_protocols")
+            .await
+    }
+
     /// `PUT /v{api_version}/access/self/email` — request a change of the
     /// authenticated user's email. Wire treats this as a **verification
     /// flow**: it sends a confirmation mail to the new address and

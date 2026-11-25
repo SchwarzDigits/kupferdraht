@@ -77,6 +77,11 @@ pub struct OwnUserRecord {
     /// The version marker of the team's icon as of the last login: the id
     /// of its image (Step 144).
     pub team_avatar_version: Option<String>,
+    /// The protocols the backend lists for the account as of the last login
+    /// (Step 167): `["mls"]` once declared; empty for a row of an earlier
+    /// login, until the next one.
+    #[serde(default)]
+    pub supported_protocols: Vec<String>,
 }
 
 /// The `ServerConfig` values Kupferdraht booted with, persisted so

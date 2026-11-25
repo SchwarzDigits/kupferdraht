@@ -108,6 +108,10 @@ pub struct Account {
     /// The team's name as of the last login, `None` too when the login could
     /// not fetch it (Step 143).
     pub team_name: Option<String>,
+    /// The protocols the backend lists for the account as of the last login
+    /// (Step 167): `["mls"]` once the login declared it, else what the backend
+    /// said; empty for a session logged in before.
+    pub supported_protocols: Vec<String>,
 }
 
 impl From<&CoreAccount> for Account {
@@ -119,6 +123,7 @@ impl From<&CoreAccount> for Account {
             email: account.email().map(str::to_owned),
             team_id: account.team_id().map(str::to_owned),
             team_name: account.team_name().map(str::to_owned),
+            supported_protocols: account.supported_protocols().to_vec(),
         }
     }
 }
@@ -227,8 +232,10 @@ mod tests {
                 avatar_version: None,
             },
             crate::avatar::AvatarSource::default(),
+            vec!["mls".to_owned()],
         );
         let record = Account::from(core.as_ref());
+        assert_eq!(record.supported_protocols, ["mls"]);
         assert_eq!(record.user_id.localpart, "user-uuid");
         assert_eq!(record.user_id.domain, "example.test");
         assert_eq!(record.display_name, "Alice");
@@ -247,8 +254,10 @@ mod tests {
             None,
             crate::client::OwnTeam::default(),
             crate::avatar::AvatarSource::default(),
+            Vec::new(),
         );
         let record = Account::from(core.as_ref());
+        assert!(record.supported_protocols.is_empty(), "no list stays empty");
         assert!(record.username.is_none(), "missing username stays None");
         assert!(record.email.is_none(), "missing email stays None");
         assert!(record.team_id.is_none(), "missing team stays None");

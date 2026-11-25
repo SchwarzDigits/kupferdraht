@@ -587,6 +587,7 @@ async fn persist_session(
             team_name: account.team_name().map(str::to_string),
             avatar_source: account.avatar_source().clone(),
             team_avatar_version: account.team_avatar_version().map(str::to_string),
+            supported_protocols: account.supported_protocols().to_vec(),
         })
         .await?;
     store

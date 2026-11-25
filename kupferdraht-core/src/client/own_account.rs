@@ -122,6 +122,8 @@ fn fill_from_backend(row: &mut OwnUserRecord, own_user: &SelfUser, team: Option<
     row.team_id = team.map(|(id, _)| id.clone());
     row.team_name = team.map(|(_, team)| team.name.clone());
     row.team_avatar_version = team.and_then(|(_, team)| team_avatar_version(team));
+    row.supported_protocols
+        .clone_from(&own_user.supported_protocols);
 }
 
 /// The row an account would be stored as.
@@ -135,5 +137,6 @@ pub(super) fn row_of(account: &Arc<Account>) -> OwnUserRecord {
         team_name: account.team_name().map(str::to_owned),
         avatar_source: account.avatar_source().clone(),
         team_avatar_version: account.team_avatar_version().map(str::to_owned),
+        supported_protocols: account.supported_protocols().to_vec(),
     }
 }

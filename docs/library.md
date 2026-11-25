@@ -2003,6 +2003,7 @@ account.team_id();        // Option<&str>  — lowercase; None for a personal ac
 account.team_name();      // Option<&str>
 account.team_avatar_version(); // Option<&str>  — the team icon's version marker
 account.avatar_source();  // &AvatarSource — where the own avatar's images are (Step 152)
+account.supported_protocols(); // &[String] — the backend's list for the account, ["mls"] after the login's declaration (Step 167)
 
 client.refresh_account().await?; // Step 152: GET /self, GET /teams/{tid}, all or nothing
 ```
@@ -2019,6 +2020,18 @@ room list stale, so the own `members()` row follows at the next pass. A login
 fetches the team name once, and any failure is a warning: the login stands,
 with `team_id` set and `team_name` `None` until a refresh fills it.
 
+**A login declares MLS (Step 167).** brig keeps `supported_protocols` per
+user and starts a new account with `["proteus"]`; Wire's clients take the
+intersection of two accounts' lists for a 1:1's protocol, so an undeclared
+Kupferdraht user looked Proteus-only to the webapp (observations §94). After the
+device is established, a login sends `PUT /v14/self/supported-protocols` with
+`["mls"]` unless `GET /self` lists exactly that already; `proteus` never
+enters the list (NG-6). Like the feature configs, an enrichment: a refusal is
+logged and the login stands, and `supported_protocols()` then shows the
+backend's list until the next login. The value is a snapshot of the last
+login (`resume` reads it back); `refresh_account` reads the backend's list
+again without declaring.
+
 Field-name mapping Wire ↔ matrix-rust-sdk:
 
 | Wire DTO (`/self`)     | `Account` getter   | matrix-rust-sdk |
@@ -2029,6 +2042,7 @@ Field-name mapping Wire ↔ matrix-rust-sdk:
 | `email`                | `email()`          | (3PID, separate flow) |
 | `team`                 | `team_id()`        | (none) |
 | `name` of `GET /teams/{tid}` | `team_name()` | (none) |
+| `supported_protocols`  | `supported_protocols()` | (none — Matrix has one protocol) |
 
 `Account::domain() -> &str` is not a separate Wire DTO field — it
 projects `self.user_id().domain()`, i.e. the Wire deployment domain

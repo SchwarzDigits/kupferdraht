@@ -69,6 +69,9 @@ pub(super) async fn establish_device_identity(
         pipeline
             .fetch_server_configs(&registration.access_token)
             .await?;
+        let supported_protocols = pipeline
+            .declare_mls_protocol(own_user, &registration.access_token)
+            .await;
         let mls_identity = pipeline
             .resume_existing_mls_state(own_user, &registration, mls_key)
             .await?;
@@ -76,6 +79,7 @@ pub(super) async fn establish_device_identity(
             registration,
             mls_identity,
             replaced: false,
+            supported_protocols,
         });
     }
     let registration = pipeline
@@ -84,6 +88,9 @@ pub(super) async fn establish_device_identity(
     pipeline
         .fetch_server_configs(&registration.access_token)
         .await?;
+    let supported_protocols = pipeline
+        .declare_mls_protocol(own_user, &registration.access_token)
+        .await;
     let mls_identity = pipeline
         .upload_initial_key_packages(own_user, &registration, mls_key)
         .await?;
@@ -97,6 +104,7 @@ pub(super) async fn establish_device_identity(
         registration,
         mls_identity,
         replaced: is_replaced,
+        supported_protocols,
     })
 }
 
@@ -107,6 +115,8 @@ pub(super) struct DeviceIdentity {
     pub(super) registration: RegistrationOutcome,
     pub(super) mls_identity: MlsIdentityArtifacts,
     pub(super) replaced: bool,
+    /// The account's protocol list after the login's declaration (Step 167).
+    pub(super) supported_protocols: Vec<String>,
 }
 
 /// When the persisted access token has aged past its ~15-min TTL,
@@ -277,6 +287,7 @@ pub(super) fn account_from_row(
             avatar_version: own_user.team_avatar_version.clone(),
         },
         own_user.avatar_source.clone(),
+        own_user.supported_protocols.clone(),
     ))
 }
 
