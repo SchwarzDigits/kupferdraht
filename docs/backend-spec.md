@@ -139,7 +139,8 @@ out-of-band (admin account management).
 
 - All endpoints except those listed below are served under the path
   prefix `/v14`. The backend MUST accept exactly version 14;
-  `CLIENT_SUPPORTED = &[14]` on the Kupferdraht side.
+  `CLIENT_SUPPORTED = &[14]` on the Kupferdraht side (v18 joins it with
+  Step 169, §17).
 - Unversioned endpoints (matching Kupferdraht's call sites):
   `GET /api-version`, `POST /register`, `POST /activate`,
   `POST /activate/send`.
@@ -188,7 +189,7 @@ labels apply where; this table is the closed set:
 | Label | Status | Meaning | Defined in |
 |---|---|---|---|
 | `invalid-credentials` | 403 | Bad email/password, wrong `old_password`, or dead/superseded `zuid` | §5.2, §5.7, §5.3 |
-| `code-authentication-required` | 403 | 2FA required, `verification_code` absent (code emailed) | §5.2 |
+| `code-authentication-required` | 403 | 2FA required, `verification_code` absent; the code is requested separately (`POST /verification-code/send`) | §5.2, §7.1 |
 | `code-authentication-failed` | 403 | 2FA code wrong/expired | §5.2 |
 | `invalid-code` | 404 | Activation code wrong/expired | §6.1 |
 | `invalid-email` | 400 | Syntactically invalid email | §5.6 |
@@ -199,9 +200,17 @@ labels apply where; this table is the closed set:
 | `mls-protocol-error` | 400 | MLS validation failure (bad bundle, wrong ciphersuite, identity/key-package/lifetime, missing MLS key — W-9) | §8.2, §10.2, §10.3 |
 | `mls-stale-message` | 409 | Commit/message at a superseded epoch (retry) | §10.2, §10.3 |
 | `mls-client-mismatch` | 409 | Add-commit lacks full-device coverage of an added user | §10.2 |
-| `not-connected` | 403 | Reach policy denies contact (1:1 / claim) | §9.5 |
-| `no-conversation` | 404 | Unknown conversation, or caller not a member | §9.6 |
-| `invalid-op` | 403 | Permission denied (role/policy) or cross-domain reference | §3.4, §9.4, §9.7 |
+| `not-connected` | 403 | Reach policy denies contact (1:1 / claim), or the 1:1 peer is unknown — Wire answers the same for both (A-13) | §9.5 |
+| `no-conversation` | 404 | Unknown conversation, or caller not a member — every conversation route answers the same for both | §9.3, §9.4, §9.6, §9.7, §10.4 |
+| `invalid-op` | 403 | Permission denied (role/policy), cross-domain reference, another member's removal through the route (A-33), an operation on the self conversation it refuses | §3.4, §9.4, §9.7, §9.8 |
+| `mls-missing-group-info` | 404 | No `GroupInfo` on file yet: no commit bundle received (the self conversation before a device establishes it) | §9.8, §10.4 |
+| `access-denied` | 403 | A join link issued or redeemed without the right, or on a conversation whose `access` lacks `code`; a non-member reads a conversation | §9.3, §9.4 |
+| `no-conversation-code` | 404 | No join link issued, or the link's key and code unknown or revoked | §9.4 |
+| `invalid-conversation-password` | 403 | The join link is password-protected and the password is wrong or missing | §9.4 |
+| `create-conv-code-conflict` | 409 | A password-protected join link asked for while a link exists | §9.4 |
+| `non-empty-member-list` | 400 | `qualified_users` given on an MLS creation | §9.2 |
+| `operation-denied` | 403 | A team-scoped action without the team role it needs | §16 |
+| `no-team-member` | 403 | The caller is not a member of the team named | §9.2, §16 |
 
 A `422` (unprocessable) is returned for structurally malformed MLS
 bodies that fail to deserialize at all (vs. `400 mls-protocol-error`
@@ -274,8 +283,8 @@ A **tenant is a team** within the deployment:
   endpoint (§9.7). Kupferdraht resolves the team for `delete_room` via
   `conversation.team` with fallback to `self.team` (Step 23).
 - Team membership carries a role: `admin` or `member` (§16.2). Team
-  admins manage the team's users and configuration; the `admin` role
-  also gates delete-for-everyone (§9.7).
+  admins manage the team's users and configuration; delete-for-everyone
+  is gated by the conversation role, not the team role (§9.7, A-11).
 - **Handles (`@handle`) MUST be unique per deployment** (= per domain).
   This is what `qualified_handles` lookup and @-mention resolution
   require, and — together with visible team membership — what prevents
@@ -406,9 +415,13 @@ Responses:
 - `403 invalid-credentials` — unknown email or wrong password. The
   backend MUST NOT distinguish the two cases.
 - `403 code-authentication-required` — the account's team requires a
-  second factor (§4.4) and `verification_code` was absent. The backend MUST send the code to
-  the account email upon this rejection (Wire behavior: the client
-  retries login with the code).
+  second factor (§4.4) and `verification_code` was absent. The rejection
+  itself sends nothing: the client requests the code with
+  `POST /v14/verification-code/send` and `{"action":"login","email":"…"}`,
+  the backend mails it, and the client repeats the login with
+  `verification_code` (Wire's flow; the client half is Kupferdraht
+  Step 170). The same code is accepted by `POST /clients` (§7.1) while it
+  is valid.
 - `403 code-authentication-failed` — code present but wrong/expired.
 
 Accounts in `pending-activation` state MUST NOT be able to log in
@@ -450,9 +463,13 @@ Returns `200`.
     "qualified_id": {"id": "...", "domain": "..."},
     "name": "...", "handle": "...|null", "email": "...",
     "accent_id": 0, "assets": [], "locale": "...",
-    "team": "<uuid of the user's team, never null — §4.1>"
+    "team": "<uuid of the user's team, never null — §4.1>",
+    "supported_protocols": ["proteus"]
   }
   ```
+  `supported_protocols` is the account's protocol list, `["proteus"]` on
+  a new account (Wire's default); Kupferdraht ignores it today and sets it
+  to `["mls"]` with Step 167 (§17).
 - `PUT /v14/self` with `{"name": "..."}` → `200`. Name length 1–128.
 - `PUT /v14/self/handle` with `{"handle": "..."}` → `200`;
   `409 handle-exists` if taken within the deployment (§4.1). Handle
@@ -668,6 +685,10 @@ actual behavior, not just the Swagger.
   a stale one (`DELETE /v14/clients/{id}`), and retrying — all existing
   endpoints; no new backend surface.
 - Wrong/missing `password` where required → `403 invalid-credentials`.
+- `403 code-authentication-required` — the account's team requires a
+  second factor and the body carries no `verification_code`; the code
+  comes from `POST /verification-code/send` (§5.2) and goes into the body
+  as `verification_code` (Kupferdraht Step 170).
 
 Client IDs MUST be unique per user, generated server-side, lowercase
 hex, and stable for the client's lifetime.
@@ -838,7 +859,7 @@ The shape Kupferdraht parses (subset of Wire's `Conversation`):
   },
   "group_conv_type": "group_conversation|null",
   "access": ["invite"], "access_role": ["team_member", "non_team_member"],
-  "team": "<owning team uuid (creator's team) — SHOULD be set; MAY be null>",
+  "team": "<the team named at creation, else null — Kupferdraht names none, so its groups have no team (A-14)>",
   "message_timer": null,
   "receipt_mode": 0,
   "last_event": "0.0", "last_event_time": "1970-01-01T00:00:00.000Z"
@@ -855,13 +876,16 @@ and report it consistently here and in group info.
 `POST /v14/conversations` — Bearer.
 
 Request (Kupferdraht's shape):
-`{ "name": "...", "protocol": "mls", "group_conv_type": "group_conversation", "qualified_users": [] }`
+`{ "name": "...", "protocol": "mls", "group_conv_type": "group_conversation" }`
 
 - `201` → conversation object. Backend generates `qualified_id` and a
   unique `group_id`, sets `epoch: 0`, membership = creator only
-  (role `wire_admin`), owning `team` = the creator's team.
-- `qualified_users` MUST be empty for MLS creation (members join via
-  MLS commits); non-empty → `400`.
+  (role `wire_admin`). `team` is set only when the request names one
+  (Wire; A-14): Kupferdraht names none, so its groups have no owning
+  team, and a team-scoped view counts them by their creator.
+- `qualified_users` MAY be omitted or empty for MLS creation (members
+  join via MLS commits; Kupferdraht omits it); non-empty →
+  `400 non-empty-member-list`.
 - The MLS group itself is created client-side; at creation time the
   backend knows the group only administratively. The group becomes
   cryptographically real when the first commit bundle arrives (§10.2).
@@ -907,33 +931,70 @@ reserved):
 - `200` if the caller's role grants `modify_conversation_name` (i.e.
   `wire_admin` by default). Emits `conversation.rename` (§12.3).
 - `403 invalid-op` if the caller is a member without the action.
-- `404` if the caller is not a member.
+- `404 no-conversation` if the caller is not a member or the
+  conversation is unknown (Wire does not tell them apart).
 
-**Membership** — `DELETE /v14/conversations/{cd}/{c}/members/{ud}/{u}`
-→ `200` (`204` if the user is already absent):
+**Membership** — `DELETE /v14/conversations/{cd}/{c}/members/{ud}/{u}`:
 - Removing **self** = leaving; granted by `leave_conversation` (every
-  member, including `wire_member`).
-- Removing **another member** requires `remove_conversation_member`
-  (`wire_admin` by default); `403 invalid-op` otherwise.
-- This `DELETE` endpoint always drives the **backend-initiated**
-  removal path (§10.5 path 2): the backend emits an external-sender
-  Remove **proposal**, which a remaining member auto-commits — clients
-  cannot self-remove in MLS (observations.md §31), and even an admin kick goes
-  through the proposal path here because the kicked member is not the
-  caller's own leaf to commit synchronously in this REST call. (A
-  client that wants to kick by building its own commit uses
-  `POST /mls/commit-bundles` directly, §10.5 path 1.) The `DELETE`
-  returns once the proposal is queued; the membership change
-  materializes asynchronously via the resulting member commit's
-  `conversation.mls-message-add` (§10.5), so it is eventually
-  consistent, not synchronous.
+  member, including `wire_member`). `200` with the
+  `conversation.member-leave` event, `204` if already absent;
+  `404 no-conversation` for a non-member; `403 invalid-op` on the self
+  conversation (§9.8), which cannot be left.
+- Removing **another member** through this route is refused on an MLS
+  conversation with `403 invalid-op`, whatever the caller's role (Wire's
+  `protocolValidAction`; A-33). A kick is a Remove **commit** the
+  `wire_admin` builds and uploads itself (`POST /mls/commit-bundles`,
+  §10.5 path 1); `remove_conversation_member` is checked there.
+- Leaving drives the **backend-initiated** removal path (§10.5 path 2):
+  the backend emits an external-sender Remove **proposal**, which a
+  remaining member auto-commits — a client cannot self-remove in MLS
+  (observations.md §31). The `DELETE` returns once the proposal is
+  queued; the membership change materializes asynchronously via the
+  resulting member commit's `conversation.mls-message-add`, so it is
+  eventually consistent, not synchronous.
+
+**Access** — `PUT /v14/conversations/{cd}/{c}/access` with
+`{"access": [...], "access_role": [...]}`, both non-empty (Kupferdraht
+Steps 117 and 163c):
+- `200` with the `conversation.access-update` event (`data: {access,
+  access_role, access_role_v2}`, emitted to every member device) when
+  the caller's role grants `modify_conversation_access`.
+- `403 invalid-op` without the action, on the self conversation, and for
+  a combination Wire refuses (a private room; team members only outside
+  a team); `404 no-conversation` for a non-member.
+
+**Join links** — unqualified routes, every one on the caller's own
+backend (`docs/wire/api-notes.md`, "Step 122 discovery"; Kupferdraht
+Steps 8, 117, 122, 163c):
+- `POST /v14/conversations/{c}/code` with `{}` or `{"password": "…"}`
+  → `201` with the `conversation.code-update` event; `200` with the code
+  envelope `{ "uri", "key", "code", "has_password" }` when a link exists
+  already and no password is asked for; `409 create-conv-code-conflict`
+  when a password is asked for while a link exists; `403 access-denied`
+  when the caller may not issue links or the conversation's `access`
+  lacks `code`; `404 no-conversation`. The `uri` is
+  `…/conversation-join/?key=<key>&code=<code>` on the account host.
+- `GET /v14/conversations/{c}/code` → `200` the code envelope;
+  `404 no-conversation-code` when none is issued.
+- `DELETE /v14/conversations/{c}/code` → `200` with the
+  `conversation.code-delete` event; `404 no-conversation-code` when none
+  is issued (Kupferdraht treats it as done).
+- `GET /v14/conversations/join?key=<key>&code=<code>` → `200`
+  `{ "id", "name"?, "has_password" }` (the cover view, `id` unqualified);
+  `404 no-conversation-code` for an unknown or revoked link.
+- `POST /v14/conversations/join` with `{"key", "code", "password"?}` →
+  `200` with the `conversation.member-join` event, `204` for a member
+  already; `403 invalid-conversation-password` when the password is
+  wrong or missing; `403 access-denied` when the conversation's `access`
+  lacks `code`; `404 no-conversation-code`. The joiner then
+  external-joins the MLS group (§10.2).
 
 ### 9.5 1:1 conversations
 
 `GET /v14/one2one-conversations/{peer_domain}/{peer_uuid}` — Bearer.
 
 - Idempotent-create: the first call by either party creates the
-  conversation (type `1`, deterministic per user pair); every later
+  conversation (type `2`, deterministic per user pair); every later
   call by either party returns the same object.
 - The create is a **reservation**: while the MLS group is
   unestablished (`epoch == 0`, no `GroupInfo` on file) the
@@ -945,9 +1006,10 @@ reserved):
   ```json
   { "conversation": <conversation object>, "public_keys": <same shape as §8.1> }
   ```
-- `404` — peer unknown in this deployment.
 - `403 not-connected` — the reach check (§4.3) denies the caller
-  contact with the peer.
+  contact with the peer, **or the peer is unknown in this deployment**:
+  Wire answers the same for both and so gives away no account's
+  existence (A-13).
 - No connection-request workflow is in scope: Kupferdraht never calls Wire's
   connection endpoints. The reach policy (§4.3) replaces it — within
   one team (or where `contactable_by` allows it) any user may open a
@@ -977,17 +1039,23 @@ Request: `{ "status": "started" | "stopped" }`
 
 `DELETE /v14/teams/{team_id}/conversations/{conv_id}` — Bearer.
 `team_id` and `conv_id` are **unqualified** UUIDs (Wire's team scope;
-Kupferdraht Step 23). `team_id` MUST equal the conversation's owning team
-(§9.1); any other value → `404`.
+Kupferdraht Step 23). `team_id` is **ignored** (Wire; A-11): the route
+checks the caller's conversation role and, when the conversation has a
+team, the caller's membership in that team — a conversation without a
+team (every Kupferdraht group, §9.2) is deletable through it. Kupferdraht
+puts the room's `team` or the account's own team into the path.
 
 - `200` — conversation deleted for all members.
-- `403` (`invalid-op`) — caller lacks the required role (§ below).
-- `404` — conversation unknown. Kupferdraht treats this as idempotent
-  success; the backend MUST keep returning plain `404` for already
-  deleted conversations (no tombstone special-casing needed).
-- Authorization (resolves former Open Question Q10, matching Wire):
-  the caller MUST hold the `admin` role (§4.1) in the conversation's
-  owning team. Conversation-level `wire_admin` alone does NOT suffice.
+- `403 invalid-op` — the caller is not `wire_admin` in the conversation,
+  or the conversation is the self conversation.
+- `404 no-conversation` — conversation unknown, or the caller not a
+  member. Kupferdraht treats this as idempotent success; the backend MUST
+  keep answering it for already deleted conversations (no tombstone
+  special-casing needed).
+- Authorization (matching Wire, A-11; the former reading of Q10 that
+  required the `admin` role in the owning team is withdrawn): the
+  caller MUST be `wire_admin` in the conversation (§9.4) and, when the
+  conversation has a `team`, a member of it.
 - Effect, atomic in this order of observability:
   1. Emit `conversation.delete` (§12.2) to every member device
      (durable, queued).
@@ -998,9 +1066,8 @@ Kupferdraht Step 23). `team_id` MUST equal the conversation's owning team
      `/mls/messages` for its group, rename, typing) → `404`; MLS
      messages for the deleted `group_id` → `404` or
      `400 mls-protocol-error`.
-- 1:1 and self-conversations are NOT deletable this way (`403`) —
-  Wire's surface is team-group-scoped; Kupferdraht offers `delete_room` for
-  group conversations only.
+- The self conversation is NOT deletable this way (`403 invalid-op`);
+  Kupferdraht offers `delete_room` for group conversations only.
 
 ---
 
@@ -1025,7 +1092,9 @@ channel (personal task list, read position, drafts).
   the device is alone, exactly as for a freshly created group — and
   advance the epoch. Every other device then joins by external commit
   (§10.2).
-- Not deletable (§9.7).
+- Wire's clients find it by `GET /v14/conversations/mls-self`; Kupferdraht
+  will too (Step 168, §17).
+- Not deletable (§9.7); not leavable (`403 invalid-op`, §9.4).
 
 ## 10. MLS Messaging
 
@@ -1150,7 +1219,9 @@ Body: one TLS-serialized `MlsMessage(PrivateMessage)`.
   fetches group info to build external commits. Access rule: any
   authenticated user of the deployment who is listed in the conversation's
   administrative roster (§9.1) — external joins of non-members are only
-  reachable via guest links (deferred, §17). Non-members → `404`.
+  reachable through a join link (§9.4). Non-members → `404
+  no-conversation`, and so does the unestablished 1:1 reservation
+  (§9.5) while it is hidden.
 - `404 mls-missing-group-info` if the group has no GroupInfo yet (no
   commit bundle received) — the self conversation (§9.8) sits in this
   state for every user until one of their devices establishes it.
@@ -1175,7 +1246,9 @@ no member is committing on its own: self-leave via
 `DELETE …/members/{self}` (§9.4; the leaver cannot commit their own
 removal — openmls rejects `CannotRemoveSelf`, observations.md §31, and has
 already discarded the group locally), client deletion (§7.3), user
-deletion / suspension (§6.3).
+deletion / suspension (§6.3). The `DELETE …/members/{other}` route never
+takes this path: it refuses another member's removal with
+`403 invalid-op` (A-33, §9.4).
 
 The external sender is a **non-member**: under RFC 9420 it MAY sign
 *proposals* but MUST NOT author commits (commits are members-only).
@@ -1295,7 +1368,7 @@ in-order byte concatenation of complete `MLSMessage` structures (parsed
 sequentially per §10.6):
 
 ```
-commit     : MLSMessage(public_message | private_message)   (required)
+commit     : MLSMessage(public_message)                     (required — a private_message commit is refused, §10.2)
 group_info : MLSMessage(group_info)                          (required — WRAPPED, unlike W-1)
 welcome    : MLSMessage(welcome)                             (optional; present on Add-commits)
 ```
@@ -1622,6 +1695,18 @@ not process itself) instead of on every sync pass: a backend that omits
 them leaves room names, member lists and new rooms without a Welcome
 stale for up to 5 minutes (Kupferdraht's safety-net refresh).
 
+**Their payloads** (measured on the Rust stack, 2026-11-09; `docs/wire/api-notes.md`,
+"Step 145 discovery"). Every one carries `qualified_conversation`,
+`qualified_from`, `from`, `time` and `via: user`; the acting device
+receives its own event:
+
+| Event | `data` |
+|---|---|
+| `conversation.create` | the whole conversation object (§9.1), `name` in it; to the creator's devices alone |
+| `conversation.rename` | `{ "name": "..." }`; a rename to the same name emits another, with its own `time` |
+| `conversation.member-join` | `{ "add_type": "internal_add", "user_ids": [...], "users": [ { "id", "qualified_id", "conversation_role" } ] }`; also for a joiner by link (`add_type` stays `internal_add`) and for the two users of a new 1:1, which emits no `conversation.create` |
+| `conversation.member-leave` | `{ "qualified_user_ids": [...], "user_ids": [...], "reason": "left" \| "removed" \| "user-deleted" }`; a deleted user's leave names that user as the actor |
+
 **`conversation.member-join` / `conversation.member-leave` are
 ADVISORY for MLS conversations (Q9).** Wire emits them alongside the
 MLS commit (`conversation.mls-message-add`); the backend SHOULD do the
@@ -1816,7 +1901,7 @@ by Kupferdraht** — namespaced under `/admin/v1`. Two principal kinds:
   teams.
 - **Team admin** — a messaging user holding the `admin` role in their
   team (§4.1). Team admins manage their own team's users and
-  configuration; the same role gates delete-for-everyone (§9.7). How a
+  configuration; delete-for-everyone is gated by the conversation role (§9.7). How a
   team admin authenticates to `/admin/v1` is an implementation choice.
 
 This section specifies required capabilities, not final JSON shapes
@@ -1881,40 +1966,84 @@ is the compatibility-frozen part).
 
 ---
 
-## 17. Deferred Surface (planned by Kupferdraht, specify-later)
+## 17. Planned behaviour (the Kupferdraht steps that implement it)
 
-These are referenced by `PLAN.md` but blocked or deferred on the Kupferdraht
-side. They are listed so path/shape decisions don't paint us into a
-corner; they are NOT part of the initial backend scope:
+What Kupferdraht will do next, as the contract will read once each step
+has landed; the step named in each paragraph turns it into the present
+tense and moves its detail into the section it belongs to. A backend
+built to this specification serves these today without a change unless
+a paragraph says otherwise. Decided with the review of 0.6.0 against the
+Rust server and Wire 5.38.9 (2026-11-25).
 
-- Invite-based registration client path (§6.1b): thread `team_code`
-  through `ClientBuilder::register` and add an active-on-register
-  `PendingClient` variant. Backend contract already frozen (§6.1b,
-  §16.2); a future Kupferdraht step (analogous to Step 27) supplies the
-  client half. No plan file opened yet — kept open per Q3.
-- Conversation-role awareness (§9.4): parse Wire's per-member
-  `conversation_role` into `RoomMember` (today only `qualified_id` is
-  decoded) and expose it, so a client can pre-check `modify_*` actions
-  (e.g. hide rename for `wire_member`) instead of relying on the
-  backend `403`. UX-only; backend authorization is already complete
-  per Q5. No plan file opened.
-- **WebSocket event stream (§11.2/§11.3/§11.5) — implemented in Kupferdraht
-  Step 62 (2026-08).** The reference client connects `GET /v14/events`
-  on native targets when the consumer opts into
-  `SyncTransport::WebSocket` (`wire/websocket.rs`, `sync/push/`);
-  the default remains the pull drain of `GET /v14/notifications` with
-  a persisted `since` cursor, and the wasm build is pull-only. A
-  backend without the WebSocket endpoint still passes §20 conformance
-  for pull-only consumers, but push mode — including receiving
-  `conversation.typing` (transient, socket-only — §11.1) — requires
-  the §11.2 surface.
-- Guest links: `POST/DELETE /v14/conversations/{id}/code`,
-  `POST /v14/conversations/join` (Kupferdraht Step 8 redeem pending).
-- Key backup (Kupferdraht's Step 12 was dropped 2026-11-10, NG-30: no v14
-  endpoints exist). The Dehydrated Device (Step 13) was dropped 2026-09-25.
-- SAML/SSO (Kupferdraht Step 17).
-- MLS subconversations (`subconv` is delivered as `null` in §12.2;
-  no subconversation endpoints).
+- **The account declares MLS (Step 167).** After a login, before any room
+  is created or joined, the client sends `PUT /v14/self/supported-protocols`
+  with `{"supported_protocols":["mls"]}` unless `GET /self` already
+  answers exactly `["mls"]`; a failure is logged and does not fail the
+  login; `proteus` is never in the list (NG-6). The backend MUST store the
+  list and answer it at `GET /users/{id}/supported-protocols`; Wire's
+  clients take the intersection of both users' lists for a 1:1's
+  protocol, so a user who speaks Proteus alone gets no 1:1 with a
+  Kupferdraht user — the intended outcome.
+- **The self conversation by its route (Step 168).** The client asks
+  `GET /v14/conversations/mls-self` for the self conversation (§9.8) before
+  it reads the list; a `404` or another error falls back to the list's
+  type-`1` room. The backend MUST answer the conversation object there.
+- **API v14 and v18 (Step 169).** `CLIENT_SUPPORTED` becomes `[14, 18]`;
+  `GET /api-version` picks the highest version both sides support, v14 is
+  the fallback; every route carries the negotiated version. A backend
+  MUST serve both; the differences of the routes Kupferdraht uses are
+  listed in `docs/wire/api-v14-v18-differences.md` once read. ADR-0008 is
+  revised with it.
+- **The second-factor code (Step 170).** On `403 code-authentication-required`
+  from `POST /login` or `POST /clients` the client requests the code
+  (`POST /v14/verification-code/send`, `{"action":"login","email":…}`),
+  asks the user for it and repeats the call with `verification_code`
+  (§5.2, §7.1); `code-authentication-failed`, too many attempts and the
+  send route's rate limit are told apart; SSO accounts are never asked.
+- **e2ei refused visibly, one cipher suite (Step 171).** Kupferdraht
+  supports no e2ei: a message, commit or Welcome from a device with an
+  X.509 credential is not processed, and the first one per device and
+  room puts a room event into the timeline and a log line; a team whose
+  `mls` feature enables `mlsE2EId` raises one notice. The sync keeps
+  running. Kupferdraht speaks cipher suite 2 alone (W-6, §10.7): a team
+  feature naming another default or allowed set raises one notice, and a
+  room of another suite is not joined. The backend's feature config is
+  the source (§14.1).
+- **Message kinds (Step 172).** `Ephemeral` wraps `Asset`, `Knock` and
+  `Location` as it wraps `Text`; `Text.link_preview` is declared and
+  carried unchanged through an edit, a quote and a forward, never
+  generated (NG-4); `Composite` and `Multipart` are shown by their text
+  part, marked partial, never sent. No backend change.
+- **Key material renewed (Step 173).** Every device commits an update
+  path in every group it has not updated for an interval (Wire's
+  clients' interval, else 30 days; configurable), spread over sync
+  passes, serialised with its other commits; key packages are replaced
+  before they expire (§8.2). The backend MUST accept an update-path
+  commit like any commit (§10.2) and MUST NOT hand out expired key
+  packages at `/mls/key-packages/claim` (§8.3) — measured as part of the
+  step.
+- **Conversation settings (Step 174, after the Rust server's task Q).**
+  `expects_read_confirmation` on sent content follows the user's receipt
+  setting (`WIRE_RECEIPT_MODE`, read, never set — NG-8), and a READ
+  goes out only when the message expects it and the setting allows; MLS
+  conversations have no `receipt_mode` (`PUT …/receipt-mode` answers
+  `403 mls-receipts-not-allowed`). `message_timer` is read and set
+  (`PUT …/message-timer`, event `conversation.message-timer-update`), a
+  set timer makes every send ephemeral; `otr_muted_status` and
+  `otr_archived` are read and set (`PUT …/self`, event
+  `conversation.member-update`) and honoured in the room list; roles are
+  set (`PUT …/members/{user}`) where room admins are offered;
+  `member-update`, `access-update`, `receipt-mode-update`,
+  `message-timer-update` and `protocol-update` update the room and add
+  a room event each (§12.3).
+
+Still deferred, no step opened:
+
+- Invite-based registration client path (§6.1b): `team_code` through
+  `ClientBuilder::register` and an active-on-register `PendingClient`
+  variant; the backend contract is frozen (§6.1b, §16.2).
+- MLS subconversations (`subconv` is delivered as `null` in §12.2; no
+  subconversation endpoints) — a non-goal with calling.
 
 ---
 
@@ -2009,9 +2138,12 @@ before or during the implementation step.
   accounts get an ordinary initial password (§6.2) which the user
   replaces after first login; no forced-change flag, no self-service
   "forgot password" reset (admin reset per §16.2 covers recovery).
-- **Q10 — Delete-for-everyone authorization.** RESOLVED: requires the
-  team `admin` role in the conversation's owning team (§9.7), matching
-  Wire's team-admin gating now that real team roles exist (§4.1).
+- **Q10 — Delete-for-everyone authorization.** RESOLVED, revised
+  2026-11-25 (A-11, Step 166): the route checks the conversation role
+  `wire_admin` and, where the conversation has a team, membership in it;
+  `team_id` is ignored and no team role is required (§9.7) — Wire's
+  behaviour, as recorded; the earlier reading (team `admin` role) is
+  withdrawn.
 - **Q3 — Invite mechanism.** RESOLVED: adopt Wire's full mechanism
   rather than the simplified email-allowlist — stay Wire-compatible and
   keep future options open. A team admin creates an invitation (§16.2),
@@ -2250,3 +2382,21 @@ changes below are status prose, not contract changes.
 - Steps 29/30/32/33 (module decompositions), 38 (in-order commit
   processing), 40 (device-reuse key fix), 41/42 (build config, KMP
   bindings) verified contract-neutral: no wire-layer surface change.
+
+Revision note (2026-11-25, Step 166): corrected against the code and
+Wire 5.38.9 after the Rust server's review of Kupferdraht 0.6.0 — §9.5 the
+1:1 type is `2` and an unknown peer answers `403 not-connected` (A-13);
+§10.2/W-2 a commit is a `PublicMessage`, a `PrivateMessage` commit is
+refused; §3.3 gains `mls-missing-group-info`, the join-link labels,
+`non-empty-member-list`, `operation-denied`, `no-team-member`, and every
+`404`/`403` of §9 and §10 names its label from Wire's recorded answers
+(`docs/wire/api-notes.md`, "Step 166 discovery"); §9.4 the member-remove
+route refuses another member (A-33) and serves self-leave alone, the
+access and join-link routes are specified as the code uses them; §9.2
+`qualified_users` may be omitted; §12.3 spells out the four room events'
+payloads; §5.2 and §7.1 the second-factor code is requested with `POST
+/verification-code/send` (P-9); §9.2 and §9.7 `team` is set only from
+the request and the team delete route ignores `team_id`, checking the
+conversation role and, where the conversation has a team, its membership
+(A-14, A-11 — decided like Wire, 2026-11-25). §17 now holds the planned
+behaviour of Steps 167–174 as the contract will read.
