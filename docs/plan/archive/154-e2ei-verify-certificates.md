@@ -1,6 +1,11 @@
 # Step 154 — e2ei, reading: check the certificates of other members' devices
 
-**Status: parked 2026-11-16** (Volker) until an e2ei test environment exists. Phase 1
+**Status: DROPPED 2026-11-25** (Volker): Kupferdraht supports no e2ei — neither its own
+certificates nor the verification of others' — and the Rust server keeps `mlsE2EId` off and
+locked as Wire does. Step 171 records the decision as a non-goal and makes the refusal of
+X.509 devices visible. The prose below is the plan as it stood when it was parked.
+
+**Formerly: parked 2026-11-16** (Volker) until an e2ei test environment exists. Phase 1
 began on 2026-11-12 and stopped at its first finding: no backend here can issue or carry
 an e2ei certificate (`docs/observations.md` §104). The requirements went to the team
 behind the Wire Rust Server on 2026-11-12, phrased as outcomes, in two stages: first the

@@ -1,7 +1,11 @@
 # Step 155 — e2ei, enrollment: a certificate for Kupferdraht's own devices
 
-**Status: parked 2026-11-16** (Volker) with Step 154, until the e2ei test environment
-exists (`docs/plan/154-e2ei-verify-certificates.md`).
+**Status: DROPPED 2026-11-25** (Volker), with Step 154: Kupferdraht supports no e2ei; Step
+171 records the decision as a non-goal. The prose below is the plan as it stood when it was
+parked.
+
+**Formerly: parked 2026-11-16** (Volker) with Step 154, until the e2ei test environment
+exists (`docs/plan/archive/154-e2ei-verify-certificates.md`).
 
 **Commissioned 2026-11-10** (Volker), with Step 154. It starts only after
 Step 154 and when it is needed: when a team requires every device to be verified, or
