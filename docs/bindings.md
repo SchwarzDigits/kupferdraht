@@ -124,8 +124,9 @@ object identity)
   `null`/`nil` = everything), `failed_sends()` (the room's `Failed`
   rows, oldest first — Step 79), `devices() -> [RoomDevice]` (Step 95d —
   one per MLS leaf with identity and MLS thumbprint), `read_marker()`,
-  `set_unread_flag(flag)`, `is_marked_unread()` (Step 138 — the
-  device-local read position and the hand-set unread flag).
+  `set_unread_flag(flag)`, `is_marked_unread()` (Step 138 — the read
+  position, which follows the account across devices since Step 129a, and
+  the device-local hand-set unread flag).
 - `Timeline` — `room_id()`, `items()`, send (`send_text`,
   `send_text_auto_join`, `send_reply`, `edit`, `redact`,
   `toggle_reaction`, `mark_as_read(item_id, receipt: ReceiptType)` — `Read`
@@ -778,8 +779,9 @@ Since Step 110 (ADR-0035):
   `{changedRooms, eventsDispatched}` summary. `syncOnce()` runs one pass and
   returns `{changedRooms, eventsDispatched}`.
 - Rooms: `rooms() -> {roomId, name, unreadCount, lastReadAtMs,
-  markedUnread}[]` (Step 138 — the device-local read state of every room
-  from two grouped queries; `lastReadAtMs` is `null` for a room never
+  markedUnread}[]` (Step 138 — the read state of every room from two
+  grouped queries; `lastReadAtMs` follows the account across devices since
+  Step 129a, `markedUnread` is this device's; `lastReadAtMs` is `null` for a room never
   read; every method that returns a room returns the same row),
   `createRoom(name)`,
   `createDm(peer)`, `members(roomId)`, `invite(roomId, userIds)`,
@@ -797,15 +799,20 @@ Since Step 110 (ADR-0035):
   external commit — `url` is the link as `createJoinLink` answers it,
   secret included, and the link names the room; Step 122 dropped `domain`,
   Step 163c the `code`/`key` pair, both BREAKING).
-- Read state (Step 138): `markAsRead(roomId, itemId, options?)` moves the
-  device-local read position to `itemId` and clears the room's unread
-  flag; `options.sendReceipt` (default `true`) tells the room, `false` is
-  a private read — the position moves, nothing leaves the device.
+- Read state (Steps 138, 129a): `markAsRead(roomId, itemId, options?)` moves
+  the read position to `itemId`, clears the room's unread flag and tells
+  the account's other devices (Wire's `LastRead` in the personal room, best
+  effort); `options.sendReceipt` (default `true`) tells the room, `false`
+  is a private read — the room learns nothing, the other devices still do.
   `markAsUnread(roomId)` flags a room unread by hand — device-local (Wire
-  carries no message for it, no other tab's device and no other client
-  learns of it), idempotent, `InvalidInput` for a room the client does not
-  know; the next `markAsRead` of the room clears it. Both fire
-  `onRoomsChanged` afterwards. A UI shows a room as needing attention
+  carries no message for it; no other device learns of it, though a read
+  on any device of the account clears it), idempotent, `InvalidInput` for
+  a room the client does not know; the next `markAsRead` of the room
+  clears it. Both fire `onRoomsChanged` afterwards. A position another
+  device moved arrives through sync once this device is in the personal
+  room — the account's first device establishes it and Adds the others, a
+  later device gets there with its first read (Step 86's join inheritance):
+  `changedRooms` names the room, `rooms()` shows it. A UI shows a room as needing attention
   while `unreadCount > 0 || markedUnread`.
 - Server settings (Step 98d): `serverSettings()`,
   `fileSharing() -> {policy}` (`"disabled" | "enabled"`).

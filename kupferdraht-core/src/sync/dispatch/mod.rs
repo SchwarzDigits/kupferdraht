@@ -10,7 +10,7 @@
 //! - `sync/dispatch.rs` (this file) carries the per-event handlers:
 //!   the `GenericMessage`-variant ones from Step 6-II
 //!   (`dispatch_inbound_text` / `_confirmation` / `_reaction` / `_delete`
-//!   / `_edit`) plus the Step-10d server-settings arms
+//!   / `_edit`, Step 129a's `_read_position`) plus the Step-10d server-settings arms
 //!   (`dispatch_server_setting_update`, `dispatch_account_data_set`,
 //!   `dispatch_account_data_delete`).
 //!
@@ -29,6 +29,7 @@ mod location;
 mod marker;
 mod ping;
 mod reaction;
+mod read_position;
 mod room_event;
 pub(super) mod task;
 mod text;

@@ -2572,3 +2572,31 @@ SQLite3MC function called):
   previous, so the pushes go in that order and Kupferdraht's manifest cannot
   resolve until the last one exists — the local gate before that point ran
   with the manifest parked on the old tags.
+
+## 110) The read position between two Kupferdraht devices on Wire 5.38.9 (2026-11-25)
+
+Step 129a's smoke on the reference VM (wire-ref, Haskell 5.38.9), two devices of
+user 2 and user 3 as the counterpart, the CLI built from the step branch:
+
+- **Both ways of getting into the personal room carry the position.** In the
+  first run user 2's personal room stood at epoch 0: the first device
+  established it, the self-claim returned the second device's key package,
+  the Add-commit's Welcome reached the second device through `sync`, and the
+  first device's private read (`mark-read --no-receipt`) arrived there as a
+  `LastRead` — `sync` named the room, `rooms` showed `unread: 0`. The devices
+  were purged at the end; the room kept its epoch. In the next run the first
+  device external-joined, and the second device read nothing until it had
+  external-joined as well (`rooms-join-all`); its own read would have joined
+  it (Step 86's inheritance), which is why the sends from it passed while the
+  receives failed. The smoke now joins both.
+- **A read with receipt and one without behave alike toward the other device;
+  the receipt goes to the room.** A flag set by hand on the second device
+  went when the first device read with receipt: `unread: 0`, no "flagged by
+  hand".
+- **An older read moves nothing.** A re-read of the first message after the
+  fourth left the other device at `unread: 0`.
+- **nginz rate-limits logins of one account.** Four logins of user 2 within a
+  quarter of an hour (two runs with two devices each, both purged) and the
+  fifth answered `rate-limited by the backend`; the run after a four-minute
+  pause went through. Successful logins count, not only rejected ones (§82
+  side findings named the rejected case).

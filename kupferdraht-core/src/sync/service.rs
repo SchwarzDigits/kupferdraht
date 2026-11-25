@@ -543,6 +543,47 @@ impl SyncService {
         }
     }
 
+    /// Route a message about an earlier message of the room — an edit, a
+    /// delete, a reaction or a receipt — to its handler; all four are keyed
+    /// by the room, the MLS-authenticated sender and the carrying message's
+    /// id. Split out of [`Self::dispatch_content_variant`] when Step 129a's
+    /// `LastRead` arm pushed that match past the line budget.
+    async fn dispatch_about_earlier_message(
+        &self,
+        client: &Arc<Client>,
+        origin: InboundOrigin<'_>,
+        message_id: &str,
+        content: generic_message::Content,
+    ) -> Result<(), KupferdrahtError> {
+        let (room_id, sender_user_id) = (origin.room_id, origin.sender_user_id);
+        match content {
+            generic_message::Content::Reaction(reaction) => {
+                self.dispatch_inbound_reaction(
+                    client,
+                    room_id,
+                    sender_user_id,
+                    message_id,
+                    reaction,
+                )
+                .await
+            }
+            generic_message::Content::Confirmation(conf) => {
+                self.dispatch_inbound_confirmation(
+                    client,
+                    room_id,
+                    sender_user_id,
+                    message_id,
+                    conf,
+                )
+                .await
+            }
+            other => {
+                self.dispatch_target_op(client, room_id, sender_user_id, message_id, other)
+                    .await
+            }
+        }
+    }
+
     /// Route a decoded `GenericMessage` content variant to its
     /// per-interaction handler (Step 6-II). Split out of
     /// [`Self::dispatch_generic_message`] when the Step 60a task fast-path
@@ -553,43 +594,18 @@ impl SyncService {
         origin: InboundOrigin<'_>,
         generic: GenericMessage,
     ) -> Result<(), KupferdrahtError> {
-        let (room_id, sender_user_id) = (origin.room_id, origin.sender_user_id);
         match generic.content {
             Some(generic_message::Content::Text(t)) => {
                 self.dispatch_inbound_text(client, origin, t).await
             }
             Some(
                 content @ (generic_message::Content::Edited(_)
-                | generic_message::Content::Deleted(_)),
+                | generic_message::Content::Deleted(_)
+                | generic_message::Content::Reaction(_)
+                | generic_message::Content::Confirmation(_)),
             ) => {
-                self.dispatch_target_op(
-                    client,
-                    room_id,
-                    sender_user_id,
-                    &generic.message_id,
-                    content,
-                )
-                .await
-            }
-            Some(generic_message::Content::Reaction(reaction)) => {
-                self.dispatch_inbound_reaction(
-                    client,
-                    room_id,
-                    sender_user_id,
-                    &generic.message_id,
-                    reaction,
-                )
-                .await
-            }
-            Some(generic_message::Content::Confirmation(conf)) => {
-                self.dispatch_inbound_confirmation(
-                    client,
-                    room_id,
-                    sender_user_id,
-                    &generic.message_id,
-                    conf,
-                )
-                .await
+                self.dispatch_about_earlier_message(client, origin, &generic.message_id, content)
+                    .await
             }
             Some(generic_message::Content::Asset(attachment)) => {
                 self.dispatch_inbound_attachment(client, origin, attachment)
@@ -597,6 +613,10 @@ impl SyncService {
             }
             Some(generic_message::Content::Knock(ping)) => {
                 self.dispatch_inbound_ping(client, origin, ping).await
+            }
+            Some(generic_message::Content::LastRead(last_read)) => {
+                self.dispatch_inbound_read_position(client, origin, last_read)
+                    .await
             }
             Some(generic_message::Content::Location(location)) => {
                 self.dispatch_inbound_location(client, origin, location)

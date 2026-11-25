@@ -840,7 +840,8 @@ pub trait Store: MaybeSendSync {
     }
 
     /// Persist the device-local read marker for a room (Step 67):
-    /// everything with `sent_at_ms <= at_ms` counts as read. The marker
+    /// everything that arrived up to `at_ms` (`arrived_at_ms`, Step 151)
+    /// counts as read. The marker
     /// only moves forward, and moving it clears the room's hand-set
     /// unread flag (Step 138) — a read is the user's "this room is
     /// read". Default no-op keeps a custom `Store` compiling
@@ -917,6 +918,39 @@ pub trait Store: MaybeSendSync {
         &self,
     ) -> Result<std::collections::HashMap<String, ReadStateRecord>, KupferdrahtError> {
         Ok(std::collections::HashMap::new())
+    }
+
+    /// Move a room's read marker to `at_ms` when that is further than the
+    /// marker stands (Step 129a — a read position another device of the
+    /// account reported). Returns whether it moved; a move clears the
+    /// hand-set unread flag as a local read does (Step 138), a position at
+    /// or behind the marker changes nothing, the flag included. Default
+    /// `Ok(false)` (custom-store pattern).
+    ///
+    /// # Errors
+    /// `KupferdrahtError::Storage` on backend failure.
+    async fn advance_read_marker(
+        &self,
+        _room_id: &str,
+        _at_ms: i64,
+    ) -> Result<bool, KupferdrahtError> {
+        Ok(false)
+    }
+
+    /// The position (`arrived_at_ms`, Step 151) up to which `room_id` is
+    /// read when everything the backend took until `sent_at_ms` counts as
+    /// read: the latest arrival among the room's rows with `sent_at_ms` at
+    /// or before that time, `None` when no row qualifies (Step 129a).
+    /// Default `Ok(None)` (custom-store pattern).
+    ///
+    /// # Errors
+    /// `KupferdrahtError::Storage` on backend failure.
+    async fn latest_arrival_sent_at_or_before(
+        &self,
+        _room_id: &str,
+        _sent_at_ms: i64,
+    ) -> Result<Option<i64>, KupferdrahtError> {
+        Ok(None)
     }
 
     /// Upgrade a `submitted` row to `received` when the Wire echo of

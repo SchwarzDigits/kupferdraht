@@ -49,13 +49,13 @@ one.
 | `Text` | 2 | emit + receive — optional `mentions` and a `quote` (reply) | — |
 | `ImageAsset` | 3 | — | **yes** — deprecated by Wire, replaced by `Asset` (11) |
 | `Knock` | 4 | emit + receive (Step 26) — nudge / "ping"; `hot_knock` marks a repeat | — |
-| `LastRead` | 6 | — | no — open: cross-device read position; rides the self-conversation once Step 86 lands |
+| `LastRead` | 6 | emit + receive (Step 129a) — the read position of a room, sent into the personal room; applied from the account's own devices there only | — |
 | `Cleared` | 7 | — | no — open: history-cleared marker synced via the self-conversation; no step planned |
 | `External` | 8 | — | **yes** — Proteus-era large-payload indirection (payload AES-encrypted once, key fanned out per session); an MLS group produces a single ciphertext, the mechanism has no MLS use |
 | `ClientAction` | 9 | — | **yes** — Proteus session reset; Kupferdraht never performs Proteus encryption (CLAUDE.md "What NOT to do") |
 | `Calling` | 10 | — | **yes** — no calling, ever (charter) |
 | `Asset` | 11 | emit (AES-CBC) + receive (Step 11, ADR-0011); inbound AES-GCM tolerated read-only as "unsupported asset" | — |
-| `MessageHide` | 12 | — | no — open: hide-on-own-devices marker synced via the self-conversation; no step planned |
+| `MessageHide` | 12 | — | no — open: hide-on-own-devices marker through the personal room; Step 129b |
 | `Location` | 13 | emit + receive (Step 26) — required `longitude`/`latitude`, optional `name`/`zoom` | — |
 | `MessageDelete` | 14 | emit + receive — deletes a prior message by `message_id`; also the receiver-side expiry broadcast for `Ephemeral` (Step 89) | — |
 | `MessageEdit` | 15 | emit + receive — **text-only** | partial — text edits in scope; `Composite`/`Multipart` edits follow fields 20/27 |
@@ -189,13 +189,28 @@ admin gate, no revision. Declares a room a dedicated task list
 mode a, and the inviter re-broadcasts marker + every task's folded
 state to late joiners (the ADR-0020 MUST).
 
+**`LastRead` — the read position between a user's devices (Step 129a).**
+`conversation_id` is the legacy unqualified id, `qualified_conversation_id`
+the one that counts; `last_read_timestamp` is epoch milliseconds of the
+backend's time of the message read (Kupferdraht's `sent_at_ms`, Step 151).
+Kupferdraht sends both ids and the read item's `sent_at_ms` into the personal
+room on every `mark_as_read` outside it, with either `ReceiptType`; Wire's own
+clients do the same into their self conversations
+(`docs/wire/kalium-readings.md` 32). A received `LastRead` counts only from
+the account's own user inside the personal room, moves the position forward
+only — onto the latest arrival among the room's rows sent by its time — and
+clears the hand-set unread flag as a local read does; a room this device
+does not know, or one with nothing sent by then, changes nothing. The
+message is signalling: it leaves no timeline row.
+
 ## Where handled in code
 
 Outbound variants are built in the per-interaction send files under
 `timeline/` (text, reaction, confirmation, delete, knock, location, asset,
-task, task-list marker, ephemeral); inbound variants are decoded and routed by the `sync/dispatch/`
+task, task-list marker, ephemeral, the read position); inbound variants are decoded and routed by the `sync/dispatch/`
 handlers (one per interaction; `dispatch/disappearing.rs` unwraps the
-field-18 wrapper and reuses the text tail). See `docs/ARCHITECTURE.md` §3 (module map) and §5
+field-18 wrapper and reuses the text tail; `dispatch/read_position.rs`
+applies a `LastRead` without a timeline row). See `docs/ARCHITECTURE.md` §3 (module map) and §5
 (data flows). All sends funnel through one chokepoint
 (`Client::encrypt_and_upload`), which is what gives every variant epoch
 self-healing for free.

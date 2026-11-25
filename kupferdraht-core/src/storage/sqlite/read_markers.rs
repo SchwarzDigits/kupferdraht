@@ -123,6 +123,50 @@ pub(super) fn read_states(
     Ok(states)
 }
 
+/// Move the marker to `at_ms` when that is further on, clearing the flag
+/// with the move; a position at or behind the marker leaves row and flag
+/// as they are. Returns whether the marker moved (Step 129a).
+pub(super) fn advance_read_marker(
+    store: &SqliteStore,
+    room_id: &str,
+    at_ms: i64,
+) -> Result<bool, KupferdrahtError> {
+    let conn = store.lock()?;
+    // The upsert's WHERE keeps an older or equal position and, with it, the
+    // flag: nothing changes, `changes()` stays 0.
+    let changed = conn
+        .execute(
+            "INSERT INTO room_read_markers (room_id, last_read_at_ms, marked_unread)
+             VALUES (?1, ?2, 0)
+             ON CONFLICT (room_id) DO UPDATE SET
+                last_read_at_ms = excluded.last_read_at_ms,
+                marked_unread = 0
+             WHERE last_read_at_ms IS NULL OR last_read_at_ms < excluded.last_read_at_ms",
+            params![room_id, at_ms],
+        )
+        .map_err(|e| KupferdrahtError::Storage(format!("advance_read_marker: {e}")))?;
+    debug_assert!(changed <= 1, "room_id is the primary key");
+    Ok(changed == 1)
+}
+
+/// The latest `arrived_at_ms` among the room's rows whose `sent_at_ms` is
+/// at or before `sent_at_ms` — where a read position another device
+/// reported in the backend's time lands on this device (Step 129a).
+pub(super) fn latest_arrival_sent_at_or_before(
+    store: &SqliteStore,
+    room_id: &str,
+    sent_at_ms: i64,
+) -> Result<Option<i64>, KupferdrahtError> {
+    let conn = store.lock()?;
+    conn.query_row(
+        "SELECT MAX(arrived_at_ms) FROM timeline_events
+         WHERE room_id = ?1 AND sent_at_ms <= ?2",
+        params![room_id, sent_at_ms],
+        |row| row.get::<_, Option<i64>>(0),
+    )
+    .map_err(|e| KupferdrahtError::Storage(format!("latest_arrival_sent_at_or_before: {e}")))
+}
+
 pub(super) fn unread_count_for_room(
     store: &SqliteStore,
     room_id: &str,
@@ -230,6 +274,114 @@ mod tests {
                 last_read_at_ms: Some(2_000),
                 marked_unread: false,
             })
+        );
+    }
+}
+
+#[cfg(test)]
+mod read_position_tests {
+    use super::super::fresh_store;
+    use super::*;
+    use crate::storage::{Store as _, TimelineEventRecord};
+
+    fn row(
+        room_id: &str,
+        message_id: &str,
+        sent_at_ms: i64,
+        arrived_at_ms: i64,
+    ) -> TimelineEventRecord {
+        TimelineEventRecord {
+            message_id: message_id.into(),
+            room_id: room_id.into(),
+            sender_user_id: "bob@d".into(),
+            kind: "text".into(),
+            body: message_id.into(),
+            sent_at_ms,
+            arrived_at_ms,
+            delivery_status: "received".into(),
+            ..TimelineEventRecord::default()
+        }
+    }
+
+    /// A reported position further on moves the marker and clears the flag;
+    /// one at or behind it changes nothing, the flag included.
+    #[test]
+    fn advance_moves_forward_only_and_clears_the_flag_only_when_it_moves() {
+        let (_dir, store) = fresh_store();
+        assert!(advance_read_marker(&store, "r@d", 2_000).expect("first position"));
+        assert_eq!(read_marker(&store, "r@d").expect("marker"), Some(2_000));
+
+        set_unread_flag(&store, "r@d", true).expect("flag");
+        assert!(!advance_read_marker(&store, "r@d", 1_000).expect("older position"));
+        assert_eq!(read_marker(&store, "r@d").expect("marker"), Some(2_000));
+        assert!(
+            is_marked_unread(&store, "r@d").expect("flag"),
+            "an older position leaves the flag"
+        );
+        assert!(!advance_read_marker(&store, "r@d", 2_000).expect("same position"));
+        assert!(
+            is_marked_unread(&store, "r@d").expect("flag"),
+            "the same position leaves the flag"
+        );
+
+        assert!(advance_read_marker(&store, "r@d", 3_000).expect("newer position"));
+        assert_eq!(read_marker(&store, "r@d").expect("marker"), Some(3_000));
+        assert!(
+            !is_marked_unread(&store, "r@d").expect("flag"),
+            "a move clears the flag"
+        );
+    }
+
+    /// A room flagged before it was ever read has a row without a position;
+    /// the first reported position moves into it.
+    #[test]
+    fn advance_fills_a_flagged_row_without_a_position() {
+        let (_dir, store) = fresh_store();
+        set_unread_flag(&store, "r@d", true).expect("flag");
+        assert!(advance_read_marker(&store, "r@d", 500).expect("position"));
+        assert_eq!(read_marker(&store, "r@d").expect("marker"), Some(500));
+        assert!(!is_marked_unread(&store, "r@d").expect("flag"));
+    }
+
+    /// A backend time lands on the latest arrival among the rows sent by
+    /// then: a message sent earlier but arriving later (Step 151) counts.
+    #[tokio::test]
+    async fn the_latest_arrival_sent_by_then_is_the_position() {
+        let (_dir, store) = fresh_store();
+        for (id, sent, arrived) in [
+            ("m1", 1_000, 1_000),
+            ("m2", 2_000, 2_000),
+            ("late", 1_500, 2_500),
+            ("m3", 3_000, 3_000),
+        ] {
+            store
+                .insert_timeline_event(&row("r@d", id, sent, arrived))
+                .await
+                .expect("seed");
+        }
+        store
+            .insert_timeline_event(&row("other@d", "o1", 1_000, 1_000))
+            .await
+            .expect("seed other room");
+
+        assert_eq!(
+            latest_arrival_sent_at_or_before(&store, "r@d", 2_000).expect("position"),
+            Some(2_500),
+            "the late arrival of a message sent by then is the furthest position"
+        );
+        assert_eq!(
+            latest_arrival_sent_at_or_before(&store, "r@d", 1_000).expect("position"),
+            Some(1_000)
+        );
+        assert_eq!(
+            latest_arrival_sent_at_or_before(&store, "r@d", 999).expect("position"),
+            None,
+            "nothing sent by then anchors no position"
+        );
+        assert_eq!(
+            latest_arrival_sent_at_or_before(&store, "ghost@d", 5_000).expect("position"),
+            None,
+            "an unknown room has no position"
         );
     }
 }

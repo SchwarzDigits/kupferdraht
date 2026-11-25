@@ -519,6 +519,56 @@ pub(crate) fn build_reaction_generic_message(
     Ok((event_id, bytes))
 }
 
+/// Build a `GenericMessage` whose content is a `LastRead` for `room_id`
+/// (`<uuid>@<domain>`): the read position of that room, everything the
+/// backend took up to `last_read_timestamp_ms` (the backend's time), sent
+/// into the personal room for the user's other devices (Step 129a). Both
+/// the legacy `conversation_id` and the qualified id are set, as Wire's
+/// clients do. Returns `(message_id, prost_encoded_bytes)`.
+///
+/// # Errors
+/// `KupferdrahtError::InvalidInput` when `room_id` has no `@domain`;
+/// `Encoding` if `prost::Message::encode` fails.
+pub(crate) fn build_last_read_generic_message(
+    room_id: &str,
+    last_read_timestamp_ms: i64,
+) -> Result<(String, Vec<u8>), KupferdrahtError> {
+    let (id, domain) = room_id
+        .split_once('@')
+        .filter(|(id, domain)| !id.is_empty() && !domain.is_empty())
+        .ok_or_else(|| {
+            KupferdrahtError::InvalidInput(format!("LastRead: room id {room_id} is not qualified"))
+        })?;
+    let message_id = Uuid::new_v4().to_string();
+    let msg = GenericMessage {
+        task: None,
+        case: None,
+        task_list_marker: None,
+        message_id: message_id.clone(),
+        content: Some(generic_message::Content::LastRead(LastRead {
+            conversation_id: id.to_string(),
+            last_read_timestamp: last_read_timestamp_ms,
+            qualified_conversation_id: Some(QualifiedConversationId {
+                id: id.to_string(),
+                domain: domain.to_string(),
+            }),
+        })),
+    };
+    let bytes = encode_generic_message(&msg, "LastRead")?;
+    Ok((message_id, bytes))
+}
+
+/// The room a received `LastRead` names, as Kupferdraht's `<uuid>@<domain>`:
+/// the qualified id wins; a message carrying only the legacy
+/// `conversation_id` names a room of the own backend (`own_domain`), as
+/// Wire's clients read it (Step 129a).
+pub(crate) fn last_read_room_id(last_read: &LastRead, own_domain: &str) -> String {
+    match &last_read.qualified_conversation_id {
+        Some(qualified) => format!("{}@{}", qualified.id, qualified.domain),
+        None => format!("{}@{own_domain}", last_read.conversation_id),
+    }
+}
+
 /// Build a `GenericMessage` whose content is `MessageDelete`
 /// retiring `target_message_id`. Returns
 /// `(delete_event_message_id, prost_encoded_bytes)`. Step 6-II-d.
@@ -1380,6 +1430,63 @@ mod task_tests {
             parsed.task.expect("payload").status(),
             TaskStatus::Open,
             "unknown status wire value must decode as Open"
+        );
+    }
+}
+
+#[cfg(test)]
+mod last_read_tests {
+    use super::*;
+
+    #[test]
+    fn build_last_read_round_trips_the_qualified_room_and_the_time() {
+        let (message_id, bytes) =
+            build_last_read_generic_message("room-a@example.test", 2_000).expect("build");
+        assert_eq!(message_id.len(), 36);
+        let parsed = GenericMessage::decode(bytes.as_slice()).expect("decode");
+        assert_eq!(parsed.message_id, message_id);
+        match parsed.content {
+            Some(generic_message::Content::LastRead(last_read)) => {
+                assert_eq!(last_read.conversation_id, "room-a");
+                assert_eq!(last_read.last_read_timestamp, 2_000);
+                let qualified = last_read
+                    .qualified_conversation_id
+                    .expect("the qualified id rides along");
+                assert_eq!(qualified.id, "room-a");
+                assert_eq!(qualified.domain, "example.test");
+            }
+            other => panic!("expected Content::LastRead, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_last_read_rejects_an_unqualified_room() {
+        let err = build_last_read_generic_message("room-a", 1).expect_err("no domain");
+        assert!(matches!(err, KupferdrahtError::InvalidInput(_)), "{err:?}");
+    }
+
+    #[test]
+    fn last_read_room_id_prefers_the_qualified_id_and_falls_back_to_the_own_domain() {
+        let qualified = LastRead {
+            conversation_id: "room-a".into(),
+            last_read_timestamp: 1,
+            qualified_conversation_id: Some(QualifiedConversationId {
+                id: "room-a".into(),
+                domain: "other.test".into(),
+            }),
+        };
+        assert_eq!(
+            last_read_room_id(&qualified, "example.test"),
+            "room-a@other.test"
+        );
+        let legacy = LastRead {
+            conversation_id: "room-b".into(),
+            last_read_timestamp: 1,
+            qualified_conversation_id: None,
+        };
+        assert_eq!(
+            last_read_room_id(&legacy, "example.test"),
+            "room-b@example.test"
         );
     }
 }

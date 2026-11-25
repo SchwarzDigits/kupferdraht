@@ -46,6 +46,7 @@ mod own_target;
 mod ping;
 mod pipeline;
 mod reaction;
+mod read_position;
 mod resend;
 mod resend_payload;
 pub(crate) mod room_event;

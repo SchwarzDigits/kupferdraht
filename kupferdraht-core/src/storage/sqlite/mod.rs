@@ -400,6 +400,23 @@ impl Store for SqliteStore {
         read_markers::read_states(self)
     }
 
+    async fn advance_read_marker(
+        &self,
+        room_id: &str,
+        at_ms: i64,
+    ) -> Result<bool, KupferdrahtError> {
+        let _permit = self.write_permit().await;
+        read_markers::advance_read_marker(self, room_id, at_ms)
+    }
+
+    async fn latest_arrival_sent_at_or_before(
+        &self,
+        room_id: &str,
+        sent_at_ms: i64,
+    ) -> Result<Option<i64>, KupferdrahtError> {
+        read_markers::latest_arrival_sent_at_or_before(self, room_id, sent_at_ms)
+    }
+
     async fn unread_count_for_room(
         &self,
         room_id: &str,

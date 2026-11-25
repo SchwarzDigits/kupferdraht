@@ -26,7 +26,8 @@
 // whose notice is reproduced above. Modification dates (GPL-3.0 §5(a)):
 // 2026-04-22 subset transcribed; 2026-07-17 `task` (262000) added;
 // 2026-08-21 `case` (262001) added; 2026-08-26 `task_list_marker`
-// (262002) added; comments revised through 2026-10. Changes against
+// (262002) added; comments revised through 2026-10; 2026-11-25 `lastRead`
+// (6) and `QualifiedConversationId` added. Changes against
 // Wire's file:
 //
 //   - only the messages and enums Kupferdraht emits or decodes are
@@ -61,6 +62,7 @@ message GenericMessage {
     oneof content {
         Text text = 2;
         Knock knock = 4; // nudge / ping
+        LastRead lastRead = 6; // the read position of a room, sent into the personal room
         Asset asset = 11; // off-MLS file reference (ADR-0011)
         Location location = 13; // shared map point
         MessageDelete deleted = 14; // delete for everyone
@@ -198,6 +200,23 @@ message Text {
 // A nudge ("ping"). `hot_knock` marks a repeated nudge.
 message Knock {
     required bool hot_knock = 1 [default = false];
+}
+
+// A conversation named across backends: its id and its backend's domain.
+message QualifiedConversationId {
+    required string id = 1;
+    required string domain = 2;
+}
+
+// The read position of one room, carried between a user's own devices
+// through the personal room (Step 129a): everything the backend took up
+// to `last_read_timestamp` (milliseconds since the epoch, the backend's
+// time) counts as read there. `conversation_id` alone is the legacy
+// unqualified form; `qualified_conversation_id` wins where present.
+message LastRead {
+    required string conversation_id = 1;
+    required int64 last_read_timestamp = 2;
+    optional QualifiedConversationId qualified_conversation_id = 3;
 }
 
 // A shared map point. `name` is a human-readable label, `zoom` the map

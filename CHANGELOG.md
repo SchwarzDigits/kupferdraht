@@ -39,6 +39,18 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **The read position follows the account across devices** (Step 129a):
+  `Timeline::mark_as_read` — with or without a receipt — also sends Wire's
+  `LastRead` into the personal room, and a `LastRead` from another device
+  of the account, Kupferdraht's or Wire's own apps, moves this device's
+  `Room::read_marker` forward only, onto the latest arrival among the
+  room's messages sent by its time, and clears the hand-set unread flag as
+  a local read does. A sync pass that applies one names the room in
+  `changed_rooms` / `changedRooms`; `rooms()`, `unreadCount` and
+  `lastReadAtMs` follow. The flag itself stays device-local. The upload is
+  best effort: a refused one is logged and the local read stands; a device
+  not yet in the personal room joins it first (Step 86).
+
 ### Changed
 
 - **The whole-database encryption engine is SQLite3 Multiple Ciphers 2.7.1
