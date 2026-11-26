@@ -39,6 +39,15 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **The personal room is found by its own route** (Step 168): the rooms
+  refresh (`sync_once`, `sync_metadata`) asks the backend's route for the
+  personal room first, the way Wire's clients do, and takes that object into
+  the snapshot in place of the rooms list's entry; a `404` or any other
+  error is logged and the list's entry stands, so a refresh never fails on
+  the route. New `Client::personal_room_source()` (FFI mirror, enum
+  `PersonalRoomSource { Route, List }`) says which way the last refresh
+  found it, `None` before the first. The CLI's `personal-room` now refreshes
+  the snapshot first and prints `found: by route` / `from the list`.
 - **The account tells the backend it speaks MLS** (Step 167): after the
   device is established, a login sends `PUT /self/supported-protocols` with
   `["mls"]` unless `GET /self` lists exactly that already — `proteus` never

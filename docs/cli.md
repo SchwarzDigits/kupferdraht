@@ -625,9 +625,12 @@ first-class 1:1 endpoint.
 Look up the caller's personal room (Step 86) — the
 notes-to-self room, an MLS group of the user's own devices and the
 private cross-device channel (personal task list, read position,
-drafts later ride it). Strict local-cache lookup: no network, no
-authentication. Prints `room_id` + `epoch` when the last `sync`'s
-snapshot carries it; exits with status 2 otherwise.
+drafts later ride it). Since Step 168 the command refreshes the rooms
+snapshot from the backend first (`Client::sync_metadata`, so it needs
+the network and a live session) and says which way the room was
+found: `by route` — the backend's own route for it, the way Wire's
+clients ask — or `from the list`, the rooms list's entry when the route
+answered `404` or failed. Exits with status 2 when neither has one.
 
 ```bash
 kupferdraht-cli personal-room
@@ -639,6 +642,7 @@ No flags. Output:
 personal-room ok
   room_id: <uuid>@<domain>
   epoch:   0
+  found:   by route
   note:    not established yet — `rooms-join-all` establishes it from this device
 ```
 
@@ -2339,7 +2343,7 @@ kupferdraht-cli status                              # confirm session persisted
 kupferdraht-cli sync                                # populate rooms cache
 kupferdraht-cli rooms                               # see what's there
 kupferdraht-cli rooms-join-all                      # bootstrap into every room (establishes the personal room, Step 86)
-kupferdraht-cli personal-room                       # your notes-to-self room: room_id + epoch
+kupferdraht-cli personal-room                       # your notes-to-self room: room_id, epoch, how it was found
 kupferdraht-cli room-members --id <some-room>       # verify membership
 kupferdraht-cli send --id <some-room> -m "hello"    # send your first message
 ```

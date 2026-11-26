@@ -1101,8 +1101,12 @@ channel (personal task list, read position, drafts).
   the device is alone, exactly as for a freshly created group — and
   advance the epoch. Every other device then joins by external commit
   (§10.2).
-- Wire's clients find it by `GET /v14/conversations/mls-self`; Kupferdraht
-  will too (Step 168, §17).
+- Wire's clients find it by `GET /v14/conversations/mls-self`, and so does
+  Kupferdraht (Step 168): the rooms refresh asks the route before it reads
+  the list and takes the answer as the self conversation's object; a `404`
+  or another error falls back to the list's type-`1` row. The backend MUST
+  answer the conversation object there (the shape of one `found` entry of
+  `/conversations/list`), `404 no-conversation` when the user has none.
 - Not deletable (§9.7); not leavable (`403 invalid-op`, §9.4).
 
 ## 10. MLS Messaging
@@ -1984,10 +1988,6 @@ built to this specification serves these today without a change unless
 a paragraph says otherwise. Decided with the review of 0.6.0 against the
 Rust server and Wire 5.38.9 (2026-11-25).
 
-- **The self conversation by its route (Step 168).** The client asks
-  `GET /v14/conversations/mls-self` for the self conversation (§9.8) before
-  it reads the list; a `404` or another error falls back to the list's
-  type-`1` room. The backend MUST answer the conversation object there.
 - **API v14 and v18 (Step 169).** `CLIENT_SUPPORTED` becomes `[14, 18]`;
   `GET /api-version` picks the highest version both sides support, v14 is
   the fallback; every route carries the negotiated version. A backend
