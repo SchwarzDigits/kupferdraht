@@ -737,6 +737,9 @@ while `sent_at_ms` becomes the backend's time; `V34__step_144_avatars.sql` — `
 `room_members` and `self_user`, `team_avatar_key` on `self_user`: the image keys a
 profile names and the team's icon; `V33__step_143_own_team.sql` — `team_id` and `team_name` on `self_user`, the
 own team as of the last login, read back by `build_resume_account`;
+`V39__step_167_supported_protocols.sql` — `supported_protocols` on `self_user`, the
+backend's protocol list for the account as of the last login (a JSON array,
+NULL before the next login writes it);
 `V32__step_130a_send_keys.sql` — `send_keys`, see "Idempotency keys"
 below; V31 the unread flag, below; V30
 `V30__step_112_recovery_state.sql` — `recovery_state`, one row: when the

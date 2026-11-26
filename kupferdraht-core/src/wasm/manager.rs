@@ -894,6 +894,15 @@ impl Client {
         self.inner.account().team_name().map(str::to_owned)
     }
 
+    /// The protocols the backend lists for the account as of the last login
+    /// (Step 167): `["mls"]` once the login declared it, else what the backend
+    /// said; `[]` for a session logged in before.
+    #[wasm_bindgen(getter, js_name = supportedProtocols)]
+    #[must_use]
+    pub fn supported_protocols(&self) -> Vec<String> {
+        self.inner.account().supported_protocols().to_vec()
+    }
+
     /// Whether sync runs on push (Step 122): `"connected"` while the sync
     /// loop has an open socket, `"polling"` while it runs without one,
     /// `"stopped"` without a running loop (`startSync`).
@@ -1587,8 +1596,8 @@ impl Client {
     }
 
     /// Read the own account and team again (Step 152): when the promise
-    /// resolves, `displayName`, `username`, `email`, `teamId`, `teamName` and
-    /// `teamAvatar()` answer the new values; on any failure it rejects and
+    /// resolves, `displayName`, `username`, `email`, `teamId`, `teamName`,
+    /// `supportedProtocols` and `teamAvatar()` answer the new values; on any failure it rejects and
     /// nothing changes. Nothing calls it by itself: the embedder decides
     /// when, for instance at the start and on window focus.
     #[wasm_bindgen(js_name = refreshAccount)]

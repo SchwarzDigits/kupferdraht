@@ -1435,6 +1435,26 @@ route (the versioned `/v{N}/await` variants 404 at nginx; verified
   socket registered, and a frame moving the cursor would make a
   missed push permanent.
 
+## Step 167 discovery: the account's protocol list, declared
+
+Measured on the reference VM (Wire 5.38.9) and on the Rust stack on 2026-11-25:
+
+- `GET /v14/self` carries `supported_protocols`; an account no Kupferdraht had
+  declared answered `["proteus"]` on both backends (Wire's default for a new
+  account, brig-rs the same) — the state behind observations §94, where the
+  webapp showed the MLS 1:1 with a Kupferdraht user read-only.
+- `PUT /v14/self/supported-protocols` with `{"supported_protocols":["mls"]}`
+  answered `200` on both; `GET /self` of a plain login afterwards listed
+  `["mls"]`, and a second Kupferdraht device of the account read `["mls"]`
+  without declaring.
+- The per-user read is the qualified route,
+  `GET /v14/users/{domain}/{uuid}/supported-protocols`; the unqualified path
+  takes the id for a domain (`400`, "Invalid domain name: cannot be dotless
+  domain").
+
+**Kupferdraht usage:** `client/login_pipeline.rs` (`declare_mls_protocol`,
+`DECLARED_PROTOCOLS`), `wire/http/auth.rs` (`update_self_supported_protocols`).
+
 ## Step 166 discovery: the labels of the conversation routes on Wire 5.38.9
 
 Read from the Rust server's golden recordings of the reference VM (Wire

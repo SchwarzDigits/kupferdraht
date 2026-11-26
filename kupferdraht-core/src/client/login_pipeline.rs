@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 
 use base64::Engine as _;
 use openmls_sqlite_storage::Connection;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::avatar::AvatarSource;
 use crate::client::{Account, Client, OwnTeam, ServerConfig};
@@ -139,6 +139,10 @@ fn open_mls_connection(
 
 /// Stateful pipeline carrying the transport handle and the negotiated
 /// API version across the authentication phases.
+/// The protocols Kupferdraht declares for its account (Step 167): MLS alone,
+/// never `proteus` (ADR-0010, NG-6).
+pub(crate) const DECLARED_PROTOCOLS: [&str; 1] = ["mls"];
+
 pub(super) struct LoginPipeline {
     http: HttpClient,
     server: ServerConfig,
@@ -717,6 +721,44 @@ impl LoginPipeline {
         }
     }
 
+    /// Declare that this account speaks MLS (Step 167): unless `GET /self`
+    /// already lists exactly [`DECLARED_PROTOCOLS`], `PUT
+    /// /self/supported-protocols` with it. An enrichment like the feature
+    /// configs (ADR-0012): a refusal is logged and the login stands. Returns
+    /// the list the account has afterwards — the declared one, or what the
+    /// backend said when the declaration failed.
+    pub(super) async fn declare_mls_protocol(
+        &self,
+        own_user: &SelfUser,
+        access_token: &str,
+    ) -> Vec<String> {
+        debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
+        if own_user.supported_protocols == DECLARED_PROTOCOLS {
+            return own_user.supported_protocols.clone();
+        }
+        match self
+            .http
+            .update_self_supported_protocols(self.api_version, access_token, &DECLARED_PROTOCOLS)
+            .await
+        {
+            Ok(()) => {
+                info!(
+                    before = ?own_user.supported_protocols,
+                    "declared the account's protocols: MLS alone"
+                );
+                DECLARED_PROTOCOLS.iter().map(|p| (*p).to_owned()).collect()
+            }
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    before = ?own_user.supported_protocols,
+                    "PUT /self/supported-protocols failed; the account keeps the backend's list until the next login"
+                );
+                own_user.supported_protocols.clone()
+            }
+        }
+    }
+
     /// Assemble the final `Client`. Consumes the pipeline to signal the
     /// end of the flow. The per-account `home` is echoed onto `Client` so
     /// a subsequent `ClientBuilder::resume` call (or any future rebuild)
@@ -731,6 +773,7 @@ impl LoginPipeline {
         external_sender_key: Vec<u8>,
         mls_identity: MlsIdentityArtifacts,
         home: Option<KupferdrahtHome>,
+        supported_protocols: Vec<String>,
     ) -> Arc<Client> {
         let localpart = login.user;
         let user_id = UserId::new(&localpart, &own_user.qualified_id.domain);
@@ -742,6 +785,7 @@ impl LoginPipeline {
             own_user.email,
             own_team,
             avatar_source,
+            supported_protocols,
         );
         Client::new(
             user_id,

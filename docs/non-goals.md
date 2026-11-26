@@ -17,7 +17,7 @@ limitations".
 - **NG-3** Upload retention = `persistent` only. ADR-0011.
 - **NG-4** No link-preview generation — `Text.link_preview` echoed verbatim, never fetched. CLAUDE.md.
 - **NG-5** No voice / video / calling — `GenericMessage::Calling` skipped. CLAUDE.md.
-- **NG-6** No Proteus encryption / decryption — prekeys generated + uploaded (Wire registration contract), never used. ADR-0001.
+- **NG-6** No Proteus encryption / decryption — prekeys generated + uploaded (Wire registration contract), never used; and the account says so: a login declares `supported_protocols = ["mls"]` to the backend (Step 167), so Wire's clients open a 1:1 with a Kupferdraht user over MLS and a Proteus-only user gets none — `proteus` never enters the list, not transitionally. ADR-0001, ADR-0010.
 - **NG-7** No e2ei certificate enrollment — leaves advertise `X509` (W-7) but Kupferdraht never enrolls; BasicCredentials path only. CLAUDE.md.
 - **NG-8** No user-property writes — `GET /properties` only; config awareness is read-only. ADR-0012.
 - **NG-9** No login refusal on hostile feature policy — feature-config fetch is warn-and-continue. ADR-0012.

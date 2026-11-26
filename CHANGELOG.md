@@ -39,6 +39,17 @@ is no skill for it — it is this short procedure:
 
 ### Added
 
+- **The account tells the backend it speaks MLS** (Step 167): after the
+  device is established, a login sends `PUT /self/supported-protocols` with
+  `["mls"]` unless `GET /self` lists exactly that already — `proteus` never
+  enters the list. Wire's clients take the intersection of two accounts'
+  lists for a 1:1's protocol, so the webapp now writes in a 1:1 with a
+  Kupferdraht user instead of showing it read-only. A refusal is logged and
+  the login stands. New `Account::supported_protocols()` (FFI: the
+  `Account` record's `supported_protocols`; browser: `supportedProtocols`),
+  the backend's list as of the last login, read back at `resume`
+  (`self_user.supported_protocols`, V39); the CLI's `login` and `status`
+  show it.
 - **The read position follows the account across devices** (Step 129a):
   `Timeline::mark_as_read` — with or without a receipt — also sends Wire's
   `LastRead` into the personal room, and a `LastRead` from another device

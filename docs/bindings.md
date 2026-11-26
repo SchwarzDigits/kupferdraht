@@ -740,10 +740,15 @@ Since Step 110 (ADR-0035):
 - Getters `teamId`, `teamName` (Step 143): the user's team, `undefined` for a
   personal account; `teamName` is `undefined` too when the login could not
   fetch it, until `refreshAccount()` does.
+- Getter `supportedProtocols` (Step 167): the protocols the backend lists for
+  the account as of the last login — `["mls"]` once the login declared it,
+  the backend's list when the declaration was refused, `[]` for a session
+  logged in before. The FFI `Account` record carries the same list as
+  `supported_protocols`.
 - `refreshAccount(): Promise<void>` (Step 152): reads `GET /self` and, for a
   team member, `GET /teams/{tid}` again, and resolves when `displayName`,
-  `username`, `email`, `teamId`, `teamName` and `teamAvatar()` answer the new
-  values. All or nothing: on any failure it rejects and nothing changes, a
+  `username`, `email`, `teamId`, `teamName`, `supportedProtocols` and
+  `teamAvatar()` answer the new values. All or nothing: on any failure it rejects and nothing changes, a
   stored team name included. Nothing calls it by itself — `team.update`
   reaches only a team's admins and is not stored, so no event could do it —
   so call it when it suits the app, for instance at the start and on window

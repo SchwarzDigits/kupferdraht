@@ -27,7 +27,7 @@ from the intersection of both users' lists; webapp `{proteus, mls}` ∩ Kupferdr
    `client/login_pipeline.rs` beside the other post-login steps.
 3. **No new public call.** The CLI's `login` and `status` show the account's
    protocols; `kupferdraht-smoke.sh` (in the Rust server's repository) gains the
-   check `GET /users/{id}/supported-protocols` → `["mls"]`.
+   check `GET /users/{domain}/{id}/supported-protocols` → `["mls"]`.
 4. **Docs:** `docs/backend-spec.md` (the Step 166 paragraph becomes the present
    tense), `docs/non-goals.md` NG-6 (why the list says MLS alone), `docs/wire/
    api-notes.md` (the route and the webapp's protocol choice), `docs/cli.md`,

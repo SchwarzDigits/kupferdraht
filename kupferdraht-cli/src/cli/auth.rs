@@ -46,8 +46,22 @@ fn print_session(command: &str, client: &Client) {
         team_line(account.team_name(), account.team_id())
     );
     println!("  name:        {}", account.display_name());
+    println!(
+        "  protocols:   {}",
+        protocols_line(account.supported_protocols())
+    );
     println!("  api_version: {}", client.api_version());
     println!("  server:      {}", client.server_title());
+}
+
+/// The account's protocol list as the backend holds it after the login's
+/// declaration (Step 167); `—` for a session logged in before.
+fn protocols_line(protocols: &[String]) -> String {
+    if protocols.is_empty() {
+        "—".to_owned()
+    } else {
+        protocols.join(", ")
+    }
 }
 
 /// `sso url` (Step 162) — print the URL that starts an SSO login; the
@@ -233,6 +247,7 @@ pub(crate) async fn persist_session_state(
             team_name: account.team_name().map(str::to_string),
             avatar_source: account.avatar_source().clone(),
             team_avatar_version: account.team_avatar_version().map(str::to_string),
+            supported_protocols: account.supported_protocols().to_vec(),
         })
         .await?;
     store
@@ -440,6 +455,10 @@ pub(crate) async fn status() -> Result<(), KupferdrahtError> {
     println!(
         "  team:                      {}",
         team_line(account.team_name(), account.team_id())
+    );
+    println!(
+        "  protocols:                 {}",
+        protocols_line(account.supported_protocols())
     );
     println!("  api_version:               {}", client.api_version());
     println!("  access_token_prefix:       {}", prefix(&access_token, 12));

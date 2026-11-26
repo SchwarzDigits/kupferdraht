@@ -535,6 +535,11 @@ pub struct SelfUser {
     pub team: Option<String>,
     #[serde(default)]
     pub assets: Vec<UserAsset>,
+    /// The protocols the account's clients speak, as brig keeps them
+    /// (`["proteus"]` on a new account); a login declares `["mls"]`
+    /// (Step 167). Absent on an answer without the field.
+    #[serde(default)]
+    pub supported_protocols: Vec<String>,
 }
 
 /// Response body of `GET /v{N}/teams/{tid}` (Step 143). Wire's `Team` carries

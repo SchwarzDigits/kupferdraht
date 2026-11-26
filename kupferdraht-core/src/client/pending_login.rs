@@ -270,6 +270,7 @@ async fn finalize_into_client(
         registration,
         mls_identity,
         replaced,
+        supported_protocols,
     } = identity;
     let external_sender_key = state
         .pipeline
@@ -294,6 +295,7 @@ async fn finalize_into_client(
         external_sender_key,
         mls_identity,
         home,
+        supported_protocols,
     );
     if replaced {
         client.mark_device_replaced();

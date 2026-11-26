@@ -39,6 +39,7 @@ pub struct Account {
     email: Option<String>,
     team: OwnTeam,
     avatar_source: AvatarSource,
+    supported_protocols: Vec<String>,
 }
 
 impl Account {
@@ -49,6 +50,7 @@ impl Account {
         email: Option<String>,
         team: OwnTeam,
         avatar_source: AvatarSource,
+        supported_protocols: Vec<String>,
     ) -> Arc<Self> {
         Arc::new(Self {
             user_id,
@@ -57,6 +59,7 @@ impl Account {
             email,
             team,
             avatar_source,
+            supported_protocols,
         })
     }
 
@@ -111,6 +114,15 @@ impl Account {
     #[must_use]
     pub fn team_avatar_version(&self) -> Option<&str> {
         self.team.avatar_version.as_deref()
+    }
+
+    /// The protocols the backend lists for this account as of the last
+    /// login (Step 167): `["mls"]` once the login declared it, else what
+    /// `GET /self` said. Wire's clients take the intersection of two
+    /// accounts' lists for a 1:1's protocol.
+    #[must_use]
+    pub fn supported_protocols(&self) -> &[String] {
+        &self.supported_protocols
     }
 
     /// Where the own avatar's images are (Step 144). Since Step 152 the

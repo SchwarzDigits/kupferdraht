@@ -197,6 +197,12 @@ Authenticate with email + password, register a new device on Wire,
 upload Proteus prekeys + the MLS public key, generate the initial
 KeyPackage pool, and persist the session.
 
+Since Step 167 a login also declares the account's protocol to the backend:
+`PUT /v14/self/supported-protocols` with `["mls"]`, unless `GET /self` lists
+exactly that already. A refusal is logged and the login stands. The output's
+`protocols:` line shows the backend's list afterwards (`mls` once declared);
+`status` shows the same, `—` for a session logged in before.
+
 ```bash
 kupferdraht-cli login --api-url https://nginz-https.example.com -e <email>
 kupferdraht-cli login --api-url https://nginz-https.example.com -e you@example.com --password-stdin   # piped
@@ -350,6 +356,7 @@ session:
   user_id:                   f7da3466-…@example.com
   device_id:                 3a1f…
   team:                      Acme (6ba7b810-…)
+  protocols:                 mls
   api_version:               14
   access_token_prefix:       eyJhbGciOiJI…
   mls_public_key_prefix:     MCowBQYDK2VwAy…

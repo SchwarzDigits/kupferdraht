@@ -468,8 +468,17 @@ Returns `200`.
   }
   ```
   `supported_protocols` is the account's protocol list, `["proteus"]` on
-  a new account (Wire's default); Kupferdraht ignores it today and sets it
-  to `["mls"]` with Step 167 (§17).
+  a new account (Wire's default). After every login that finds another
+  list, Kupferdraht declares its own:
+- `PUT /v14/self/supported-protocols` with `{"supported_protocols": ["mls"]}`
+  → `200`. The backend MUST store the list per user and answer it at
+  `GET /v14/users/{domain}/{id}/supported-protocols` (the qualified form;
+  the unqualified path takes the id for a domain and fails) and in
+  `/self`. Wire's clients
+  take the intersection of both users' lists for a 1:1's protocol, so a
+  user who speaks Proteus alone gets no 1:1 with a Kupferdraht user — the
+  intended outcome (Step 167; NG-6). A refusal is logged on the client,
+  the login stands.
 - `PUT /v14/self` with `{"name": "..."}` → `200`. Name length 1–128.
 - `PUT /v14/self/handle` with `{"handle": "..."}` → `200`;
   `409 handle-exists` if taken within the deployment (§4.1). Handle
@@ -1975,15 +1984,6 @@ built to this specification serves these today without a change unless
 a paragraph says otherwise. Decided with the review of 0.6.0 against the
 Rust server and Wire 5.38.9 (2026-11-25).
 
-- **The account declares MLS (Step 167).** After a login, before any room
-  is created or joined, the client sends `PUT /v14/self/supported-protocols`
-  with `{"supported_protocols":["mls"]}` unless `GET /self` already
-  answers exactly `["mls"]`; a failure is logged and does not fail the
-  login; `proteus` is never in the list (NG-6). The backend MUST store the
-  list and answer it at `GET /users/{id}/supported-protocols`; Wire's
-  clients take the intersection of both users' lists for a 1:1's
-  protocol, so a user who speaks Proteus alone gets no 1:1 with a
-  Kupferdraht user — the intended outcome.
 - **The self conversation by its route (Step 168).** The client asks
   `GET /v14/conversations/mls-self` for the self conversation (§9.8) before
   it reads the list; a `404` or another error falls back to the list's
