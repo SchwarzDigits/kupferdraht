@@ -3562,3 +3562,33 @@ touched it.
   suite went red. Before a field joins a `pub` record or a wasm getter is
   added, `grep` the tests for the type's name and the tab proxy's table —
   the pins say where the surface is written down twice.
+
+### 5.111 A route the clients ask, a refresh that must not fail on it, and a cache-only command that had to go online (Step 168)
+
+- **A route nobody exercised stayed unproven for two servers.** `GET
+  /conversations/mls-self` was in the Swagger, in Wire's clients and in
+  galley-rs, and Kupferdraht read the self conversation from the list alone
+  (Step 86: "not needed"). The server review (Auftrag P) named the gap; the
+  route is now the first ask of every rooms refresh, and the smoke reads it
+  beside the CLI with a plain GET. A route the reference clients use is
+  worth asking even where the list carries the same object: it is the
+  contract both sides test.
+- **An enrichment must not fail the refresh.** The route's answer replaces
+  the list's entry; a `404`, a transport error or an answer of another kind
+  leave the list's entry standing and are logged. Server data is never
+  asserted (the "another kind of room" case is a warning, not a
+  `debug_assert!`), while the merge's own invariant — one personal entry
+  after it — is.
+- **`sync_once` refreshes only a stale list.** The red test "every refresh
+  asks once" first called `sync_once` twice and saw one request: since Step
+  118 a second pass skips a fresh list. The test now names the refresh it
+  means (`sync_metadata`); the semantics approved did not change, the
+  statement did.
+- **A cache-only CLI command went online.** `personal-room` was a strict
+  local lookup; to say `found: by route` it has to ask the backend, so it
+  refreshes first (`sync_metadata`) and its doc says so. Decided in the
+  approval, not after.
+- **The grep before the field.** After Step 167's lesson, the surfaces this
+  step touched were grepped for pins first (FFI `Client`, `cli.md`, the
+  matrix, the tab proxy); thirteen pin suites ran green beside the gate, and
+  CI found nothing new.

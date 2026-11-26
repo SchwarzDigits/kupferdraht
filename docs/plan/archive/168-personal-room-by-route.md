@@ -1,6 +1,13 @@
 # Step 168 — The personal room found by its route: `GET /conversations/mls-self`
 
-**Status: commissioned 2026-11-25** (Volker). Small; after Step 167.
+**Status: MERGED 2026-11-26** — commit `59c868f` (PR #131, merge `a37ce75`); smoke on
+2026-11-26 on server 4 (Wire 5.38.9, 11 ok) and on the Rust stack with a throwaway team
+(11 ok): `personal-room` says `found: by route`, a plain GET of the route beside the CLI
+names the same room and epoch, the list carries it once, a second device sees it by route;
+five integration tests, Step 86 green beside them; `docs/wire/api-notes.md` "Step 168
+discovery". Retrospective: LEARNINGS 5.111.
+
+**Commissioned 2026-11-25** (Volker). Small; after Step 167.
 
 ## Problem
 
