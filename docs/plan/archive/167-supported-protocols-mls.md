@@ -1,6 +1,12 @@
 # Step 167 — The account says it speaks MLS: `supported_protocols = ["mls"]`
 
-**Status: commissioned 2026-11-25** (Volker). Small; after Step 166. The principle it
+**Status: MERGED 2026-11-26** — commits `a3300cf` + `f1991be` (PR #129, merge `46d3b00`); smoke on
+2026-11-25 on server 4 (Wire 5.38.9, 13 ok — an account read `["proteus"]` before and
+`["mls"]` after one login) and on the Rust stack with a throwaway team (13 ok); six
+integration tests, the column round trip, the FFI record, the migration pin (V39);
+`docs/wire/api-notes.md` "Step 167 discovery". Retrospective: LEARNINGS 5.110.
+
+**Commissioned 2026-11-25** (Volker). Small; after Step 166. The principle it
 enforces (Volker, 2026-11-25): Kupferdraht speaks MLS only, never Proteus, not even in
 part; it talks to clients and rooms that speak MLS.
 
