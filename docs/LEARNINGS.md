@@ -3536,3 +3536,29 @@ touched it.
   have made `delete_room` fail for every room Kupferdraht creates. Asking
   them as one question, with the interplay named, got one decision — both
   as Wire does it — and no code step.
+
+### 5.110 A default the client never read, and a smoke that proved the flip with a second login (Step 167)
+
+- **A backend default about the client, which the client never read, stayed
+  wrong for every account.** brig lists `["proteus"]` for a new account and
+  Kupferdraht ignored the field, so every Kupferdraht user told Wire's clients
+  the opposite of the truth, and the webapp's read-only 1:1 (observations §94)
+  had looked like a cipher-suite matter. A field the backend keeps *about* the
+  client is read at login and, where it is the client's to say, set.
+- **The proof of a state change needs a reader the code under test does not
+  own.** The CLI's `protocols:` line after the login shows what the client
+  believes; a plain `POST /login` plus `GET /self` beside it showed the
+  backend's list before (`["proteus"]`) and after (`["mls"]`) — a second
+  device's login reading `["mls"]` without declaring said the same inside
+  the code's own vocabulary. Both are in the smoke.
+- **A route's shape is read from the server, not the brief.** The per-user
+  read is `GET /users/{domain}/{uuid}/supported-protocols`; the unqualified
+  form takes the id for a domain. One curl settled it before the spec said
+  otherwise.
+- **A field added to a pinned surface is found by CI, not by the step's own
+  tests.** Four pins of other steps hold the FFI `Account` record's field
+  list, the `OwnUserRecord` round trip and the wasm getters' twins in the
+  tab proxy; the local gate ran the step's tests and went green, CI's full
+  suite went red. Before a field joins a `pub` record or a wasm getter is
+  added, `grep` the tests for the type's name and the tab proxy's table —
+  the pins say where the surface is written down twice.

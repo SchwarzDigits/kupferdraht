@@ -2289,6 +2289,16 @@ this. The driver now answers from the leader change a tab already dispatched
 worker of run 94 is a separate matter.
 
 
+**2026-11-26: the never-started worker, a third CI hit, on a docs-only commit** (PR #130's
+run 45779456785, `the_leader_names_its_version_to_a_tab_that_already_follows_it`). The
+report reads like run 94: the fresh tab's hello went out at 1191 ms and nothing followed —
+`state=electing leader=none`, nothing dispatched, `lease held=0 queued=0`, no lease
+request from its worker; the sightings before it are the two earlier scenarios' leaders
+(epoch 1 each, both gone). The next scenario's tab (hello at 9194 ms) stalled the same
+way, then the runner stopped ("Failed to detect test as having been run"). Three hits in
+about 230 CI runs of the suite; none locally. Still unmeasured which of the runner's
+`Worker` wrapper's steps (above) stalls.
+
 ## 103) Wire's nginz compresses JSON answers on request; Kupferdraht's native builds never ask (2026-11-16)
 
 Read in wire-server `develop` at `7efe9b4c` and Kalium at `d803b51b` (the same day),
