@@ -103,7 +103,7 @@ object identity)
   `own_device_thumbprint()` and `subscribe_device_changes(listener:
   RoomDevicesListener) -> Subscription` (Step 95d — this device's MLS
   thumbprint; one callback per room whose device set changed);
-  rooms (`rooms`, `room`, `create_dm`, `dm_with`, `personal_room`, `join_room`,
+  rooms (`rooms`, `room`, `create_dm`, `dm_with`, `personal_room`, `personal_room_source` (Step 168, the enum `PersonalRoomSource`), `join_room`,
   `leave_room`, `delete_room`, `rename_room`, `join_via_link`,
   `find_message_room`, `find_message_by_id`, `resync_room`,
   `resync_existing_rooms`, …); admin (`logout`,

@@ -17,6 +17,7 @@
 //! `Client::join_room` branches on exactly that (`membership.rs`).
 
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use tracing::{info, warn};
 
@@ -25,7 +26,55 @@ use crate::rooms::{Room, RoomType};
 
 use super::Client;
 
+/// How the last rooms refresh found the personal room (Step 168): by its own
+/// route, or as the type-1 entry of the rooms list when the route answered
+/// nothing. matrix-rust-sdk has no analog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PersonalRoomSource {
+    /// The route answered; its object is the room in the snapshot.
+    Route,
+    /// The route answered `404` or failed; the list's entry stands.
+    List,
+}
+
+impl PersonalRoomSource {
+    /// The atomic's encoding: `0` is no source yet.
+    fn encode(source: Option<Self>) -> u8 {
+        match source {
+            None => 0,
+            Some(Self::Route) => 1,
+            Some(Self::List) => 2,
+        }
+    }
+
+    fn decode(code: u8) -> Option<Self> {
+        match code {
+            1 => Some(Self::Route),
+            2 => Some(Self::List),
+            _ => None,
+        }
+    }
+}
+
 impl Client {
+    /// Which way the last rooms refresh found the personal room; `None`
+    /// before the first refresh of this client (Step 168).
+    #[must_use]
+    pub fn personal_room_source(&self) -> Option<PersonalRoomSource> {
+        PersonalRoomSource::decode(self.personal_room_source.load(Ordering::Acquire))
+    }
+
+    /// The rooms refresh records how it found the personal room (Step 168).
+    pub(super) fn record_personal_room_source(&self, source: Option<PersonalRoomSource>) {
+        self.personal_room_source
+            .store(PersonalRoomSource::encode(source), Ordering::Release);
+        debug_assert_eq!(
+            self.personal_room_source(),
+            source,
+            "the encoding round-trips"
+        );
+    }
+
     /// Local-cache lookup of the caller's personal room
     /// (`RoomType::Personal`). Strictly local; never hits the network.
     /// `None` before the first `sync_once` / `load_rooms_from_store`

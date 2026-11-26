@@ -26,9 +26,9 @@ use crate::rooms::{
 };
 use crate::storage::{RoomMemberRecord, RoomRecord};
 use crate::time::now_ms;
-use crate::wire::dto::{QualifiedId, UserProfile};
+use crate::wire::dto::{ConvType, OwnConversation, QualifiedId, UserProfile};
 
-use super::Client;
+use super::{Client, PersonalRoomSource};
 
 /// One polling iteration: `Ok(None)` after a `429` that was waited out
 /// (the caller loops again), every other error passes through. Step 103.
@@ -136,8 +136,10 @@ impl Client {
     /// write guard, which is itself a bug.
     pub async fn sync_metadata(&self) -> Result<(), KupferdrahtError> {
         let before = self.known_room_list().await?;
+        let by_route = self.fetch_personal_room_by_route().await;
         let all_ids = self.collect_room_ids().await?;
-        let conversations = self.list_conversations_chunked(&all_ids).await?;
+        let mut conversations = self.list_conversations_chunked(&all_ids).await?;
+        self.record_personal_room_source(merge_personal_room(&mut conversations, by_route));
         let rooms = if conversations.is_empty() {
             Vec::new()
         } else {
@@ -557,6 +559,28 @@ impl Client {
             .collect())
     }
 
+    /// Step 168: the personal room by its own route, the way Wire's clients
+    /// find it. `None` when the route answers nothing or fails — logged, the
+    /// list's entry stands — so a refresh never fails on the route.
+    async fn fetch_personal_room_by_route(&self) -> Option<OwnConversation> {
+        match self
+            .http
+            .get_mls_self_conversation(self.api_version, &self.current_access_token())
+            .await
+        {
+            Ok(found) => {
+                if found.is_none() {
+                    tracing::debug!("personal room: the route names none; the list's entry stands");
+                }
+                found
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "personal room: the route failed; the list's entry stands");
+                None
+            }
+        }
+    }
+
     /// Fetch the metadata of `ids` in requests of at most Wire's cap
     /// (Step 95c: an account in more than 1000 rooms used to
     /// send one oversized request, rejected on every cycle).
@@ -739,4 +763,38 @@ impl Client {
             ExternalRemovalOutcome::Nothing => Ok(()),
         }
     }
+}
+
+/// Step 168: the route's object replaces the list's personal entry, or joins
+/// the list when it carries none; without a route answer the list's entry
+/// stands. Says which way the personal room was found, `None` when neither
+/// had one. An answer that is not a personal room is server data gone wrong:
+/// logged, the list stands.
+fn merge_personal_room(
+    conversations: &mut Vec<OwnConversation>,
+    by_route: Option<OwnConversation>,
+) -> Option<PersonalRoomSource> {
+    let is_personal = |c: &OwnConversation| matches!(c.conv_type, ConvType::SelfConversation);
+    let from_list = conversations
+        .iter()
+        .any(is_personal)
+        .then_some(PersonalRoomSource::List);
+    let Some(route) = by_route else {
+        return from_list;
+    };
+    if !is_personal(&route) {
+        tracing::warn!(
+            kind = ?route.conv_type,
+            "personal room: the route answered another kind of room; the list's entry stands"
+        );
+        return from_list;
+    }
+    conversations.retain(|c| !is_personal(c));
+    conversations.push(route);
+    debug_assert_eq!(
+        conversations.iter().filter(|c| is_personal(c)).count(),
+        1,
+        "exactly one personal room after the merge"
+    );
+    Some(PersonalRoomSource::Route)
 }

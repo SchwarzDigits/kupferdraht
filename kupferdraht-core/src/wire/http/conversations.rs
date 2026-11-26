@@ -87,6 +87,45 @@ impl HttpClient {
             .await
     }
 
+    /// `GET /v{api_version}/conversations/mls-self` — the user's MLS self
+    /// conversation as one `OwnConversation` (Step 168), the route Wire's own
+    /// clients ask. `Ok(None)` when the backend answers `404` (no self
+    /// conversation yet, or a backend without the route); every other non-2xx
+    /// surfaces as `BackendRejected`. The caller falls back to the type-1
+    /// entry of `conversations/list`.
+    ///
+    /// # Errors
+    /// * `BackendRejected` on non-2xx (other than the 404).
+    /// * `Network` for transport failures.
+    /// * `Encoding` for a malformed response body.
+    pub async fn get_mls_self_conversation(
+        &self,
+        api_version: u32,
+        access_token: &str,
+    ) -> Result<Option<OwnConversation>, KupferdrahtError> {
+        debug_assert!(!access_token.is_empty(), "access_token must be non-empty");
+        let path = format!("/v{api_version}/conversations/mls-self");
+        let url = self.url(&path)?;
+        debug!(%url, "GET conversations/mls-self");
+        let resp = self
+            .client
+            .get(url)
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|e| KupferdrahtError::Network(format!("GET {path}: {e}")))?;
+        if resp.status().as_u16() == 404 {
+            return Ok(None);
+        }
+        if !resp.status().is_success() {
+            return Err(reject_from_response(resp, "get_mls_self_conversation").await);
+        }
+        let conv = crate::answer_bound::read_json::<OwnConversation>(resp)
+            .await
+            .map_err(|e| e.into_error("conversations/mls-self body", KupferdrahtError::Encoding))?;
+        Ok(Some(conv))
+    }
+
     /// `POST /v{api_version}/conversations` — register a new MLS
     /// conversation envelope on Wire. The 201 response body has the
     /// same shape as one entry of `conversations/list`'s `found`

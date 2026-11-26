@@ -380,6 +380,13 @@ impl Client {
     pub fn personal_room(&self) -> Option<Arc<Room>> {
         self.inner.personal_room().map(Room::wrap)
     }
+
+    /// Which way the last rooms refresh found the personal room; `None`
+    /// before the first refresh (Step 168).
+    #[must_use]
+    pub fn personal_room_source(&self) -> Option<crate::client::PersonalRoomSource> {
+        self.inner.personal_room_source()
+    }
 }
 
 #[uniffi::export(async_runtime = "tokio")]

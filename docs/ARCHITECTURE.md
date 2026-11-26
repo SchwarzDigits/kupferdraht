@@ -374,7 +374,12 @@ transport (see `docs/library.md`, "Choosing the receive transport").
   commit: own other devices Added, self-update when solo) and
   external-joins from every later one; `join_all_rooms` inherits the
   branch, `Client::personal_room` is the lookup (Step 86,
-  `client/personal_room.rs`). Since Step 129a it carries the account's
+  `client/personal_room.rs`). The rooms refresh (`sync_metadata`) asks the
+  backend's own route for it first (`wire/http/conversations.rs`,
+  `get_mls_self_conversation`) and takes that object into the snapshot in
+  place of the list's type-1 entry; a `404` or any error leaves the list's
+  entry standing, and `Client::personal_room_source` says which way the
+  last refresh found it (Step 168). Since Step 129a it carries the account's
   read position: `Timeline::mark_as_read` sends Wire's `LastRead` there
   (`timeline/read_position.rs`), and `sync/dispatch/read_position.rs`
   applies one from another own device onto this device's `arrived_at_ms`

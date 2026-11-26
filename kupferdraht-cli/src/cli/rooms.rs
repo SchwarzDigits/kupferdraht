@@ -3,7 +3,7 @@
 
 //! `kupferdraht-cli` room + DM command handlers.
 
-use kupferdraht::{KupferdrahtError, SyncSettings};
+use kupferdraht::{KupferdrahtError, PersonalRoomSource, SyncSettings};
 
 use super::{resume_client, resume_client_and_store};
 
@@ -239,19 +239,23 @@ pub(crate) async fn dm_with(peer: String) -> Result<(), KupferdrahtError> {
 
 pub(crate) async fn personal_room() -> Result<(), KupferdrahtError> {
     let client = resume_client().await?;
-    // `Client::personal_room` reads the in-memory rooms cache — hydrate
-    // it from the persisted snapshot first (no network), exactly like
-    // `dm-show`. `kupferdraht-cli sync` populates the snapshot.
-    client.load_rooms_from_store().await?;
+    // Step 168: refresh the rooms snapshot from the backend first, so the
+    // command can say which way the room was found — by its own route, or
+    // from the rooms list. `Client::personal_room` then reads the cache.
+    client.sync_metadata().await?;
     let Some(room) = client.personal_room() else {
-        eprintln!(
-            "personal-room: no personal room in the cache — run `kupferdraht-cli sync` first"
-        );
+        eprintln!("personal-room: no personal room — neither by its route nor in the rooms list");
         std::process::exit(2);
+    };
+    let found = match client.personal_room_source() {
+        Some(PersonalRoomSource::Route) => "by route",
+        Some(PersonalRoomSource::List) => "from the list",
+        None => "—",
     };
     println!("personal-room ok");
     println!("  room_id: {}", room.id());
     println!("  epoch:   {}", room.epoch());
+    println!("  found:   {found}");
     if room.epoch() == 0 {
         println!(
             "  note:    not established yet — `rooms-join-all` establishes it from this device"

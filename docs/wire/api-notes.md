@@ -881,6 +881,23 @@ cycle. A `found` entry whose `qualified_id` has an empty `id` or
 `/v{N}/conversations/list` as a regular versioned path. Kupferdraht
 already uses the v5+ form.
 
+
+#### `GET /v14/conversations/mls-self`
+
+The user's MLS self conversation as one `Conversation` object (the shape of
+one `found` entry of `conversations/list`) — the route Wire's own clients
+ask. Kupferdraht's rooms refresh asks it before it reads the list and takes
+the answer as the personal room's object in place of the list's type-1 entry
+(Step 168); `404` (`no-conversation`) or any other error is logged and the
+list's entry stands.
+
+**Response 200:** one `Conversation`; **404** `no-conversation` when the
+user has none.
+
+**Kupferdraht usage:**
+`kupferdraht-core/src/wire/http/conversations.rs::get_mls_self_conversation`
+(`Client::sync_metadata`, `Client::personal_room_source`).
+
 ---
 
 #### `GET /v14/conversations/{cnv_domain}/{cnv}/groupinfo`
@@ -1273,9 +1290,6 @@ For completeness, the following appear in the v14 Swagger under
 
 - `GET /v14/conversations/{domain}/{id}/groupinfo` (already
   covered under Step 2b/1).
-- `GET /v14/conversations/mls-self` — the user's MLS self
-  conversation as an `OwnConversation`. Not needed: `list-ids` +
-  `list` already carry it, epoch 0 included (Step 86).
 - `POST /v14/mls/reset-conversation` — membership reset edge
   case; not in Kupferdraht's scope.
 - `GET /v14/teams/{tid}/features/mls` — team MLS-enablement
@@ -1454,6 +1468,26 @@ Measured on the reference VM (Wire 5.38.9) and on the Rust stack on 2026-11-25:
 
 **Kupferdraht usage:** `client/login_pipeline.rs` (`declare_mls_protocol`,
 `DECLARED_PROTOCOLS`), `wire/http/auth.rs` (`update_self_supported_protocols`).
+
+
+## Step 168 discovery: the self conversation by its route, on both servers
+
+Live on 2026-11-26 against Wire 5.38.9 (the reference VM) and the Rust
+server (galley-rs), each with two devices of one user:
+
+- `GET /v14/conversations/mls-self` answers `200` with one `Conversation`
+  object of `type: 1` — the same `qualified_id` and the same `epoch` as the
+  list's entry (`list-ids` + `list`), read beside the CLI with a plain login
+  and a plain GET. Kupferdraht's rooms refresh takes that object; the list
+  carries the room once afterwards (no duplicate from the merge).
+- A second device of the same user reads the same room by the route. On the
+  Rust stack the user was fresh (a throwaway team, no device had established
+  the group), so the route answers at epoch 0 as well; galley-rs creates the
+  self conversation server-side on first use, Wire 5.38.9 lists it from the
+  first sync on (Step 86).
+- The `404` of a user without a self conversation was not reached on either
+  server. Kupferdraht treats any `404` of the route as "none" and falls
+  back to the list (tested with httpmock, `step_168_personal_room_by_route`).
 
 ## Step 166 discovery: the labels of the conversation routes on Wire 5.38.9
 

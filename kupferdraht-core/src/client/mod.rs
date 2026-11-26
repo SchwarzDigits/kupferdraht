@@ -64,6 +64,7 @@ pub use builder::{ClientBuilder, ServerConfig};
 pub use device::{DeviceInfo, DeviceKind};
 pub use pending::PendingClient;
 pub use pending_login::PendingLogin;
+pub use personal_room::PersonalRoomSource;
 pub use server_settings::{FileSharingPolicy, ReadReceiptSetting};
 
 /// Outcome tally from [`Client::join_all_rooms`]. The values are
@@ -266,6 +267,9 @@ pub struct Client {
     /// store; `rooms()` hydrates a never-filled cache (Step 132 item 10),
     /// an emptied one (every room left or discarded) stays empty.
     rooms_loaded: std::sync::atomic::AtomicBool,
+    /// How the last rooms refresh found the personal room (Step 168), as
+    /// [`PersonalRoomSource`] encodes it; `0` before the first.
+    personal_room_source: std::sync::atomic::AtomicU8,
     /// Step 146: the rooms that changed since the previous summary.
     changed_rooms: StdMutex<std::collections::BTreeSet<String>>,
     /// Step 97a: message ids of the own sends whose upload is in flight
@@ -378,6 +382,7 @@ impl Client {
                 pending_removal_flushes: StdMutex::new(std::collections::HashSet::new()),
                 removal_queue_rebuilt: std::sync::atomic::AtomicBool::new(false),
                 rooms_loaded: std::sync::atomic::AtomicBool::new(false),
+                personal_room_source: std::sync::atomic::AtomicU8::new(0),
                 changed_rooms: StdMutex::default(),
                 in_flight_sends: crate::timeline::InFlightSends::default(),
                 device_replaced: std::sync::atomic::AtomicBool::new(false),
