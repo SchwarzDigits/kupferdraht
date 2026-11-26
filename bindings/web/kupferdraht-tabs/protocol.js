@@ -146,6 +146,7 @@ export const GETTERS = Object.freeze([
   ["Client", "username"],
   ["Client", "teamId"],
   ["Client", "teamName"],
+  ["Client", "supportedProtocols"],
   ["Client", "deviceReplaced"],
   ["Client", "storageState"],
 ]);

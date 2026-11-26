@@ -329,7 +329,8 @@ fn the_store_records_read_and_write_the_plain_names() {
         "team_id": null,
         "team_name": null,
         "avatar_source": { "thumbnail": "t", "full": "f" },
-        "team_avatar_version": "icon"
+        "team_avatar_version": "icon",
+        "supported_protocols": ["mls"]
     }));
     round_trip::<SyncStateRecord>(&json!({
         "sync_token": "11111111-2222-3333-4444-555555555555",

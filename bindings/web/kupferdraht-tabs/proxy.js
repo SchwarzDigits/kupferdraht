@@ -328,6 +328,7 @@ export class ClientProxy extends HandleProxy {
   get username() { return this.getters.username; }
   get teamId() { return this.getters.teamId; }
   get teamName() { return this.getters.teamName; }
+  get supportedProtocols() { return this.getters.supportedProtocols; }
   get deviceReplaced() { return this.getters.deviceReplaced; }
   /** A new leader's handle for this account (internal to the failover). */
   reopen() { return this.transport.call(null, 'Kupferdraht', 'resume', [this.getters.userId]); }

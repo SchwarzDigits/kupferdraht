@@ -330,6 +330,8 @@ export class ClientProxy {
   readonly teamId: string | undefined;
   /** The team's name as of the last login; `undefined` for a personal account, or when the login could not fetch it (Step 143). */
   readonly teamName: string | undefined;
+  /** The protocols the backend lists for the account as of the last login: `["mls"]` once declared, `[]` for a session logged in before (Step 167). */
+  readonly supportedProtocols: string[];
   /** The recorded device was gone, so this login registered a new one (older messages are gone). */
   readonly deviceReplaced: boolean;
   /** Snapshot when the handle was returned; `startSync`'s `onStorage` reports each change (Step 113). */

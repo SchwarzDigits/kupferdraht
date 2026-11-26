@@ -373,7 +373,8 @@ fn the_username_is_read_and_set_by_its_name() {
             "username",
             "email",
             "team_id",
-            "team_name"
+            "team_name",
+            "supported_protocols"
         ]
     );
     for rel in [
@@ -527,7 +528,8 @@ fn the_store_records_carry_the_plain_names() {
         "team_id": null,
         "team_name": null,
         "avatar_source": { "thumbnail": "t", "full": "f" },
-        "team_avatar_version": "icon"
+        "team_avatar_version": "icon",
+        "supported_protocols": ["mls"]
     }));
 }
 
